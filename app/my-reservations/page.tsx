@@ -1,0 +1,323 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { supabase } from "../../lib/supabase";
+
+type Reservation = {
+  id: string;
+  reservation_date: string;
+  start_time: string;
+  end_time: string;
+  price: number;
+  reservation_status: string;
+  payment_status: string;
+  shooting_lanes: {
+    name: string;
+  } | null;
+};
+
+function translateReservationStatus(status: string) {
+  if (status === "confirmed") return "Potwierdzona";
+  if (status === "cancelled") return "Anulowana";
+  if (status === "completed") return "Zrealizowana";
+  if (status === "no_show") return "Nieobecny";
+  return status;
+}
+
+function translatePaymentStatus(status: string) {
+  if (status === "pay_on_site") return "Płatność na miejscu";
+  if (status === "paid_on_site") return "Opłacone na miejscu";
+  return status;
+}
+
+function getStatusClass(status: string) {
+  if (status === "confirmed") {
+    return "rounded-full bg-green-950 px-3 py-1 text-xs font-semibold text-green-400";
+  }
+
+  if (status === "completed") {
+    return "rounded-full bg-blue-950 px-3 py-1 text-xs font-semibold text-blue-300";
+  }
+
+  if (status === "cancelled") {
+    return "rounded-full bg-red-950 px-3 py-1 text-xs font-semibold text-red-300";
+  }
+
+  if (status === "no_show") {
+    return "rounded-full bg-yellow-950 px-3 py-1 text-xs font-semibold text-yellow-300";
+  }
+
+  return "rounded-full bg-zinc-950 px-3 py-1 text-xs font-semibold text-zinc-300";
+}
+
+function getMessageClass(message: string) {
+  if (message.includes("anulowana")) {
+    return "mb-6 rounded-xl border border-green-800 bg-green-950 p-4 text-sm font-semibold text-green-300";
+  }
+
+  return "mb-6 rounded-xl border border-red-800 bg-red-950 p-4 text-sm font-semibold text-red-300";
+}
+
+function canCancelReservation(reservationDate: string, startTime: string) {
+  const reservationDateTime = new Date(`${reservationDate}T${startTime}`);
+  const now = new Date();
+
+  const differenceInMilliseconds =
+    reservationDateTime.getTime() - now.getTime();
+
+  const differenceInHours = differenceInMilliseconds / (1000 * 60 * 60);
+
+  return differenceInHours > 12;
+}
+
+export default function MyReservationsPage() {
+  const [reservations, setReservations] = useState<Reservation[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [userId, setUserId] = useState("");
+  const [message, setMessage] = useState("");
+
+  useEffect(() => {
+    async function loadReservations() {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      if (!user) {
+        setIsLoggedIn(false);
+        setLoading(false);
+        return;
+      }
+
+      setIsLoggedIn(true);
+      setUserId(user.id);
+
+      const { data, error } = await supabase
+        .from("reservations")
+        .select(
+          `
+          id,
+          reservation_date,
+          start_time,
+          end_time,
+          price,
+          reservation_status,
+          payment_status,
+          shooting_lanes (
+            name
+          )
+        `
+        )
+        .eq("user_id", user.id)
+        .order("reservation_date", { ascending: true })
+        .order("start_time", { ascending: true });
+
+      if (error) {
+        setMessage(`Błąd pobierania rezerwacji: ${error.message}`);
+        setLoading(false);
+        return;
+      }
+
+      setReservations((data ?? []) as Reservation[]);
+      setLoading(false);
+    }
+
+    loadReservations();
+  }, []);
+
+  async function cancelReservation(reservation: Reservation) {
+    setMessage("");
+
+    const allowedToCancel = canCancelReservation(
+      reservation.reservation_date,
+      reservation.start_time
+    );
+
+    if (!allowedToCancel) {
+      setMessage(
+        "Nie można anulować rezerwacji później niż 12 godzin przed terminem. Skontaktuj się z obsługą strzelnicy."
+      );
+      return;
+    }
+
+    const confirmed = window.confirm(
+      "Czy na pewno chcesz anulować tę rezerwację?"
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    const { error } = await supabase
+      .from("reservations")
+      .update({
+        reservation_status: "cancelled",
+      })
+      .eq("id", reservation.id)
+      .eq("user_id", userId);
+
+    if (error) {
+      setMessage(`Błąd anulowania rezerwacji: ${error.message}`);
+      return;
+    }
+
+    setReservations((currentReservations) =>
+      currentReservations.map((item) =>
+        item.id === reservation.id
+          ? { ...item, reservation_status: "cancelled" }
+          : item
+      )
+    );
+
+    setMessage("Rezerwacja została anulowana.");
+  }
+
+  return (
+    <main className="min-h-screen bg-zinc-950 text-white">
+      <section className="mx-auto max-w-5xl px-6 py-12">
+        <p className="mb-4 text-sm uppercase tracking-[0.35em] text-green-500">
+          CSK Booking
+        </p>
+
+        <h1 className="mb-3 text-3xl font-bold">Moje rezerwacje</h1>
+
+        <p className="mb-8 text-zinc-400">
+          Tutaj widzisz rezerwacje przypisane do Twojego konta. Rezerwację
+          możesz anulować samodzielnie najpóźniej 12 godzin przed terminem.
+        </p>
+
+        {loading && (
+          <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-6 text-zinc-400">
+            Ładowanie rezerwacji...
+          </div>
+        )}
+
+        {!loading && !isLoggedIn && (
+          <div className="rounded-2xl border border-red-800 bg-red-950 p-8 text-center">
+            <h2 className="mb-3 text-2xl font-bold text-red-200">
+              Logowanie wymagane
+            </h2>
+
+            <p className="mx-auto mb-6 max-w-xl text-red-100">
+              Aby zobaczyć swoje rezerwacje, musisz najpierw zalogować się na
+              konto użytkownika albo utworzyć nowe konto.
+            </p>
+
+            <div className="flex flex-col gap-3 sm:flex-row sm:justify-center">
+              <a
+                href="/login"
+                className="rounded-xl bg-green-700 px-5 py-3 font-semibold text-white transition hover:bg-green-600"
+              >
+                Zaloguj się
+              </a>
+
+              <a
+                href="/register"
+                className="rounded-xl border border-red-300 px-5 py-3 font-semibold text-red-100 transition hover:bg-red-900"
+              >
+                Utwórz konto
+              </a>
+            </div>
+          </div>
+        )}
+
+        {!loading && isLoggedIn && message && (
+          <div className={getMessageClass(message)}>{message}</div>
+        )}
+
+        {!loading && isLoggedIn && reservations.length === 0 && (
+          <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-6 text-zinc-400">
+            Nie masz jeszcze żadnych rezerwacji.
+          </div>
+        )}
+
+        {!loading && isLoggedIn && reservations.length > 0 && (
+          <div className="space-y-4">
+            {reservations.map((reservation) => {
+              const allowedToCancel = canCancelReservation(
+                reservation.reservation_date,
+                reservation.start_time
+              );
+
+              return (
+                <div
+                  key={reservation.id}
+                  className="rounded-2xl border border-zinc-800 bg-zinc-900 p-6"
+                >
+                  <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+                    <div>
+                      <span className="mb-3 inline-block rounded-full bg-green-950 px-3 py-1 text-xs font-semibold text-green-400">
+                        {reservation.shooting_lanes?.name ?? "Brak osi"}
+                      </span>
+
+                      <h2 className="text-xl font-semibold">
+                        {reservation.reservation_date} |{" "}
+                        {reservation.start_time.slice(0, 5)}–
+                        {reservation.end_time.slice(0, 5)}
+                      </h2>
+
+                      <p className="mt-2 text-sm text-zinc-400">
+                        Cena:{" "}
+                        <span className="font-semibold text-green-500">
+                          {Number(reservation.price).toFixed(0)} zł
+                        </span>
+                      </p>
+
+                      <p className="mt-1 text-sm text-zinc-400">
+                        Płatność:{" "}
+                        <span className="font-semibold text-green-500">
+                          {translatePaymentStatus(reservation.payment_status)}
+                        </span>
+                      </p>
+
+                      {reservation.reservation_status === "confirmed" &&
+                        !allowedToCancel && (
+                          <p className="mt-3 text-sm text-yellow-300">
+                            Samodzielne anulowanie nie jest już możliwe —
+                            zostało mniej niż 12 godzin do terminu.
+                          </p>
+                        )}
+                    </div>
+
+                    <div className="flex flex-col items-start gap-3 md:items-end">
+                      <span
+                        className={getStatusClass(
+                          reservation.reservation_status
+                        )}
+                      >
+                        {translateReservationStatus(
+                          reservation.reservation_status
+                        )}
+                      </span>
+
+                      {reservation.reservation_status === "confirmed" &&
+                        allowedToCancel && (
+                          <button
+                            type="button"
+                            onClick={() => cancelReservation(reservation)}
+                            className="rounded-xl border border-red-800 px-4 py-2 text-sm font-semibold text-red-400 transition hover:bg-red-950"
+                          >
+                            Anuluj rezerwację
+                          </button>
+                        )}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        <div className="mt-8 flex gap-4 text-sm text-zinc-400">
+          <a href="/booking" className="hover:text-white">
+            + Nowa rezerwacja
+          </a>
+
+          <a href="/" className="hover:text-white">
+            ← Strona główna
+          </a>
+        </div>
+      </section>
+    </main>
+  );
+}
