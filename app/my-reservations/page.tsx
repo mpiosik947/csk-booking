@@ -118,7 +118,7 @@ export default function MyReservationsPage() {
         return;
       }
 
-      setReservations((data ?? []) as Reservation[]);
+      setReservations((data as any) ?? []);
       setLoading(false);
     }
 
@@ -313,8 +313,8 @@ export default function MyReservationsPage() {
             + Nowa rezerwacja
           </a>
 
-          <a href="/" className="hover:text-white">
-            ← Strona główna
+          <a href="/dashboard" className="hover:text-white">
+            ← Panel klienta
           </a>
         </div>
       </section>
