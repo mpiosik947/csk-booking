@@ -27,6 +27,7 @@ export default function AdminPage() {
   const [reservations, setReservations] = useState<Reservation[]>([]);
   const [eventsCount, setEventsCount] = useState(0);
   const [registrationsCount, setRegistrationsCount] = useState(0);
+  const [laneBlocksCount, setLaneBlocksCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [isAdmin, setIsAdmin] = useState(false);
   const [message, setMessage] = useState("");
@@ -88,9 +89,15 @@ export default function AdminPage() {
         .from("event_registrations")
         .select("*", { count: "exact", head: true });
 
+      const { count: laneBlocksTotal } = await supabase
+        .from("lane_blocks")
+        .select("*", { count: "exact", head: true })
+        .eq("is_active", true);
+
       setReservations((reservationsData as any) ?? []);
       setEventsCount(eventsTotal ?? 0);
       setRegistrationsCount(registrationsTotal ?? 0);
+      setLaneBlocksCount(laneBlocksTotal ?? 0);
       setLoading(false);
     }
 
@@ -123,7 +130,8 @@ export default function AdminPage() {
             <h1 className="text-3xl font-bold">Panel administratora</h1>
 
             <p className="mt-2 text-zinc-400">
-              Zarządzanie rezerwacjami, płatnościami, eventami i szkoleniami.
+              Zarządzanie rezerwacjami, płatnościami, eventami, szkoleniami i
+              blokadami osi.
             </p>
           </div>
 
@@ -179,7 +187,7 @@ export default function AdminPage() {
               </div>
             </div>
 
-            <div className="mb-8 grid gap-5 md:grid-cols-2">
+            <div className="mb-8 grid gap-5 md:grid-cols-3">
               <a
                 href="/admin/events"
                 className="rounded-2xl border border-green-800 bg-green-950 p-6 transition hover:bg-green-900"
@@ -193,7 +201,7 @@ export default function AdminPage() {
                   zapisami uczestników.
                 </p>
 
-                <div className="grid gap-3 sm:grid-cols-2">
+                <div className="grid gap-3">
                   <div className="rounded-xl border border-green-800 bg-zinc-950 p-4">
                     <p className="text-sm text-zinc-400">Liczba szkoleń</p>
                     <p className="mt-1 text-3xl font-bold text-green-400">
@@ -210,17 +218,36 @@ export default function AdminPage() {
                 </div>
               </a>
 
-              <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-6">
-                <h2 className="mb-2 text-2xl font-bold">
-                  Rezerwacje osi
+              <a
+                href="/admin/lane-blocks"
+                className="rounded-2xl border border-red-800 bg-red-950 p-6 transition hover:bg-red-900"
+              >
+                <h2 className="mb-2 text-2xl font-bold text-red-300">
+                  Blokady osi
                 </h2>
+
+                <p className="mb-5 text-red-100">
+                  Zablokuj oś na zawody, serwis, szkolenie zamknięte albo
+                  przerwę techniczną.
+                </p>
+
+                <div className="rounded-xl border border-red-800 bg-zinc-950 p-4">
+                  <p className="text-sm text-zinc-400">Aktywne blokady</p>
+                  <p className="mt-1 text-3xl font-bold text-red-300">
+                    {laneBlocksCount}
+                  </p>
+                </div>
+              </a>
+
+              <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-6">
+                <h2 className="mb-2 text-2xl font-bold">Rezerwacje osi</h2>
 
                 <p className="mb-5 text-zinc-400">
                   Podgląd wszystkich rezerwacji osi, płatności oraz statusów
                   klientów.
                 </p>
 
-                <div className="grid gap-3 sm:grid-cols-2">
+                <div className="grid gap-3">
                   <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-4">
                     <p className="text-sm text-zinc-400">Aktywne</p>
                     <p className="mt-1 text-3xl font-bold">
