@@ -22,6 +22,14 @@ type LaneBlock = {
   end_time: string;
 };
 
+type ConfirmationData = {
+  date: string;
+  startTime: string;
+  endTime: string;
+  laneName: string;
+  price: number;
+};
+
 const durations = [
   { label: "30 minut", value: 30 },
   { label: "60 minut", value: 60 },
@@ -104,6 +112,9 @@ export default function BookingForm({ lanes }: BookingFormProps) {
 
   const [bookedHours, setBookedHours] = useState<string[]>([]);
   const [checkingAvailability, setCheckingAvailability] = useState(false);
+
+  const [confirmationData, setConfirmationData] =
+    useState<ConfirmationData | null>(null);
 
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
@@ -226,6 +237,7 @@ export default function BookingForm({ lanes }: BookingFormProps) {
     }
 
     const endTime = addMinutesToTime(selectedHour, durationMinutes);
+    const laneName = selectedLane?.name ?? "Wybrana oś";
 
     setLoading(true);
 
@@ -296,6 +308,14 @@ export default function BookingForm({ lanes }: BookingFormProps) {
       return;
     }
 
+    setConfirmationData({
+      date: reservationDate,
+      startTime: selectedHour,
+      endTime,
+      laneName,
+      price,
+    });
+
     setMessage("Rezerwacja została zapisana. Płatność na miejscu.");
 
     setReservationDate("");
@@ -346,192 +366,266 @@ export default function BookingForm({ lanes }: BookingFormProps) {
   }
 
   return (
-    <form className="grid gap-6 rounded-2xl border border-zinc-800 bg-zinc-900 p-6">
-      <div className="grid gap-4 md:grid-cols-3">
+    <>
+      {confirmationData && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 px-4">
+          <div className="w-full max-w-lg rounded-2xl border border-green-800 bg-zinc-950 p-6 text-white shadow-2xl">
+            <div className="mb-4 rounded-full border border-green-800 bg-green-950 px-4 py-2 text-center text-sm font-bold uppercase tracking-[0.25em] text-green-300">
+              Rezerwacja przyjęta
+            </div>
+
+            <h2 className="mb-3 text-3xl font-bold">
+              Udało się dokonać rezerwacji
+            </h2>
+
+            <p className="mb-6 text-zinc-400">
+              Poniżej znajduje się podsumowanie Twojej rezerwacji.
+            </p>
+
+            <div className="grid gap-3 rounded-2xl border border-zinc-800 bg-zinc-900 p-5 text-sm">
+              <div>
+                <p className="text-zinc-500">Data</p>
+                <p className="text-lg font-semibold text-white">
+                  {confirmationData.date}
+                </p>
+              </div>
+
+              <div>
+                <p className="text-zinc-500">Godzina</p>
+                <p className="text-lg font-semibold text-white">
+                  {confirmationData.startTime} - {confirmationData.endTime}
+                </p>
+              </div>
+
+              <div>
+                <p className="text-zinc-500">Oś</p>
+                <p className="text-lg font-semibold text-white">
+                  {confirmationData.laneName}
+                </p>
+              </div>
+
+              <div>
+                <p className="text-zinc-500">Cena</p>
+                <p className="text-lg font-semibold text-green-500">
+                  {confirmationData.price.toFixed(0)} zł
+                </p>
+              </div>
+
+              <div>
+                <p className="text-zinc-500">Płatność</p>
+                <p className="text-lg font-semibold text-green-500">
+                  Na miejscu
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-6 grid gap-3 sm:grid-cols-2">
+              <button
+                type="button"
+                onClick={() => setConfirmationData(null)}
+                className="rounded-xl bg-green-700 px-5 py-3 font-semibold transition hover:bg-green-600"
+              >
+                OK
+              </button>
+
+              <a
+                href="/my-reservations"
+                className="rounded-xl border border-zinc-700 px-5 py-3 text-center font-semibold text-zinc-300 transition hover:bg-zinc-900"
+              >
+                Moje rezerwacje
+              </a>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <form className="grid gap-6 rounded-2xl border border-zinc-800 bg-zinc-900 p-6">
+        <div className="grid gap-4 md:grid-cols-3">
+          <div>
+            <label className="mb-2 block text-sm text-zinc-300">
+              Imię i nazwisko
+            </label>
+
+            <input
+              type="text"
+              value={customerName}
+              disabled
+              className="w-full rounded-xl border border-zinc-700 bg-zinc-800 px-4 py-3 text-zinc-300"
+            />
+          </div>
+
+          <div>
+            <label className="mb-2 block text-sm text-zinc-300">E-mail</label>
+
+            <input
+              type="email"
+              value={customerEmail}
+              disabled
+              className="w-full rounded-xl border border-zinc-700 bg-zinc-800 px-4 py-3 text-zinc-300"
+            />
+          </div>
+
+          <div>
+            <label className="mb-2 block text-sm text-zinc-300">Telefon</label>
+
+            <input
+              type="tel"
+              value={customerPhone}
+              onChange={(event) => setCustomerPhone(event.target.value)}
+              placeholder="Wpisz numer telefonu"
+              className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-white outline-none focus:border-green-600"
+            />
+          </div>
+        </div>
+
         <div>
           <label className="mb-2 block text-sm text-zinc-300">
-            Imię i nazwisko
+            Data rezerwacji
           </label>
 
           <input
-            type="text"
-            value={customerName}
-            disabled
-            className="w-full rounded-xl border border-zinc-700 bg-zinc-800 px-4 py-3 text-zinc-300"
-          />
-        </div>
-
-        <div>
-          <label className="mb-2 block text-sm text-zinc-300">E-mail</label>
-
-          <input
-            type="email"
-            value={customerEmail}
-            disabled
-            className="w-full rounded-xl border border-zinc-700 bg-zinc-800 px-4 py-3 text-zinc-300"
-          />
-        </div>
-
-        <div>
-          <label className="mb-2 block text-sm text-zinc-300">Telefon</label>
-
-          <input
-            type="tel"
-            value={customerPhone}
-            onChange={(event) => setCustomerPhone(event.target.value)}
-            placeholder="Wpisz numer telefonu"
+            type="date"
+            value={reservationDate}
+            onChange={(event) => setReservationDate(event.target.value)}
             className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-white outline-none focus:border-green-600"
           />
         </div>
-      </div>
 
-      <div>
-        <label className="mb-2 block text-sm text-zinc-300">
-          Data rezerwacji
-        </label>
-
-        <input
-          type="date"
-          value={reservationDate}
-          onChange={(event) => setReservationDate(event.target.value)}
-          className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-white outline-none focus:border-green-600"
-        />
-      </div>
-
-      <div>
-        <label className="mb-2 block text-sm text-zinc-300">
-          Oś / stanowisko
-        </label>
-
-        <select
-          value={laneId}
-          onChange={(event) => setLaneId(event.target.value)}
-          className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-white outline-none focus:border-green-600"
-        >
-          <option value="">Wybierz oś</option>
-
-          {lanes.map((lane) => (
-            <option key={lane.id} value={lane.id}>
-              {lane.name} — {lane.price_per_hour} zł / h
-            </option>
-          ))}
-        </select>
-      </div>
-
-      <div>
-        <label className="mb-2 block text-sm text-zinc-300">
-          Czas rezerwacji
-        </label>
-
-        <select
-          value={durationMinutes}
-          onChange={(event) => setDurationMinutes(Number(event.target.value))}
-          className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-white outline-none focus:border-green-600"
-        >
-          {durations.map((duration) => (
-            <option key={duration.value} value={duration.value}>
-              {duration.label}
-            </option>
-          ))}
-        </select>
-      </div>
-
-      <div>
-        <div className="mb-3 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
-          <label className="block text-sm text-zinc-300">
-            Dostępne godziny
+        <div>
+          <label className="mb-2 block text-sm text-zinc-300">
+            Oś / stanowisko
           </label>
 
-          {reservationDate && laneId && (
-            <span className="text-xs text-zinc-500">
-              Zajęte lub zablokowane godziny są wyszarzone.
-            </span>
+          <select
+            value={laneId}
+            onChange={(event) => setLaneId(event.target.value)}
+            className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-white outline-none focus:border-green-600"
+          >
+            <option value="">Wybierz oś</option>
+
+            {lanes.map((lane) => (
+              <option key={lane.id} value={lane.id}>
+                {lane.name} — {lane.price_per_hour} zł / h
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div>
+          <label className="mb-2 block text-sm text-zinc-300">
+            Czas rezerwacji
+          </label>
+
+          <select
+            value={durationMinutes}
+            onChange={(event) => setDurationMinutes(Number(event.target.value))}
+            className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-white outline-none focus:border-green-600"
+          >
+            {durations.map((duration) => (
+              <option key={duration.value} value={duration.value}>
+                {duration.label}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div>
+          <div className="mb-3 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+            <label className="block text-sm text-zinc-300">
+              Dostępne godziny
+            </label>
+
+            {reservationDate && laneId && (
+              <span className="text-xs text-zinc-500">
+                Zajęte lub zablokowane godziny są wyszarzone.
+              </span>
+            )}
+          </div>
+
+          {!reservationDate || !laneId ? (
+            <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-4 text-sm text-zinc-400">
+              Najpierw wybierz datę oraz oś, aby zobaczyć dostępne godziny.
+            </div>
+          ) : checkingAvailability ? (
+            <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-4 text-sm text-zinc-400">
+              Sprawdzanie dostępnych godzin...
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+              {hours.map((hour) => {
+                const isBooked = bookedHours.includes(hour);
+                const isSelected = selectedHour === hour;
+
+                return (
+                  <button
+                    key={hour}
+                    type="button"
+                    disabled={isBooked}
+                    onClick={() => setSelectedHour(hour)}
+                    className={
+                      isBooked
+                        ? "cursor-not-allowed rounded-xl border border-red-900 bg-zinc-900 px-4 py-3 font-semibold text-zinc-600"
+                        : isSelected
+                          ? "rounded-xl border border-green-600 bg-green-700 px-4 py-3 font-semibold text-white"
+                          : "rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 font-semibold transition hover:border-green-600 hover:bg-green-700"
+                    }
+                  >
+                    <span>{hour}</span>
+                    <span className="mt-1 block text-xs">
+                      {isBooked ? "Niedostępne" : "Wolne"}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
           )}
         </div>
 
-        {!reservationDate || !laneId ? (
-          <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-4 text-sm text-zinc-400">
-            Najpierw wybierz datę oraz oś, aby zobaczyć dostępne godziny.
-          </div>
-        ) : checkingAvailability ? (
-          <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-4 text-sm text-zinc-400">
-            Sprawdzanie dostępnych godzin...
-          </div>
-        ) : (
-          <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-            {hours.map((hour) => {
-              const isBooked = bookedHours.includes(hour);
-              const isSelected = selectedHour === hour;
+        <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-4 text-sm text-zinc-300">
+          <p>
+            Status rezerwacji:{" "}
+            <span className="font-semibold text-green-500">
+              potwierdzona automatycznie
+            </span>
+          </p>
 
-              return (
-                <button
-                  key={hour}
-                  type="button"
-                  disabled={isBooked}
-                  onClick={() => setSelectedHour(hour)}
-                  className={
-                    isBooked
-                      ? "cursor-not-allowed rounded-xl border border-red-900 bg-zinc-900 px-4 py-3 font-semibold text-zinc-600"
-                      : isSelected
-                        ? "rounded-xl border border-green-600 bg-green-700 px-4 py-3 font-semibold text-white"
-                        : "rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 font-semibold transition hover:border-green-600 hover:bg-green-700"
-                  }
-                >
-                  <span>{hour}</span>
-                  <span className="mt-1 block text-xs">
-                    {isBooked ? "Niedostępne" : "Wolne"}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-        )}
-      </div>
+          <p>
+            Płatność:{" "}
+            <span className="font-semibold text-green-500">na miejscu</span>
+          </p>
 
-      <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-4 text-sm text-zinc-300">
-        <p>
-          Status rezerwacji:{" "}
-          <span className="font-semibold text-green-500">
-            potwierdzona automatycznie
+          <p>
+            Cena orientacyjna:{" "}
+            <span className="font-semibold text-green-500">
+              {price.toFixed(0)} zł
+            </span>
+          </p>
+        </div>
+
+        <label className="flex gap-3 text-sm text-zinc-300">
+          <input
+            type="checkbox"
+            checked={acceptedRules}
+            onChange={(event) => setAcceptedRules(event.target.checked)}
+            className="mt-1"
+          />
+
+          <span>
+            Potwierdzam zapoznanie się z regulaminem i zasadami bezpieczeństwa.
           </span>
-        </p>
+        </label>
 
-        <p>
-          Płatność:{" "}
-          <span className="font-semibold text-green-500">na miejscu</span>
-        </p>
+        {message && <div className={getMessageClass(message)}>{message}</div>}
 
-        <p>
-          Cena orientacyjna:{" "}
-          <span className="font-semibold text-green-500">
-            {price.toFixed(0)} zł
-          </span>
-        </p>
-      </div>
-
-      <label className="flex gap-3 text-sm text-zinc-300">
-        <input
-          type="checkbox"
-          checked={acceptedRules}
-          onChange={(event) => setAcceptedRules(event.target.checked)}
-          className="mt-1"
-        />
-
-        <span>
-          Potwierdzam zapoznanie się z regulaminem i zasadami bezpieczeństwa.
-        </span>
-      </label>
-
-      {message && <div className={getMessageClass(message)}>{message}</div>}
-
-      <button
-        type="button"
-        onClick={handleSubmit}
-        disabled={loading}
-        className="rounded-xl bg-green-700 px-4 py-3 font-semibold transition hover:bg-green-600 disabled:cursor-not-allowed disabled:opacity-60"
-      >
-        {loading ? "Zapisywanie..." : "Potwierdź rezerwację"}
-      </button>
-    </form>
+        <button
+          type="button"
+          onClick={handleSubmit}
+          disabled={loading}
+          className="rounded-xl bg-green-700 px-4 py-3 font-semibold transition hover:bg-green-600 disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          {loading ? "Zapisywanie..." : "Potwierdź rezerwację"}
+        </button>
+      </form>
+    </>
   );
 }
