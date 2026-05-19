@@ -58,11 +58,47 @@ function getStatusClass(status: string) {
   return "rounded-full bg-zinc-950 px-3 py-1 text-xs font-semibold text-zinc-300";
 }
 
+function formatDateHeader(dateString: string) {
+  const date = new Date(`${dateString}T12:00:00`);
+
+  const weekday = new Intl.DateTimeFormat("pl-PL", {
+    weekday: "long",
+  }).format(date);
+
+  const dayMonth = new Intl.DateTimeFormat("pl-PL", {
+    day: "2-digit",
+    month: "2-digit",
+  }).format(date);
+
+  return `${weekday.charAt(0).toUpperCase()}${weekday.slice(1)} ${dayMonth}`;
+}
+
+function groupReservationsByDate(reservations: Reservation[]) {
+  const groups: Record<string, Reservation[]> = {};
+
+  for (const reservation of reservations) {
+    if (!groups[reservation.reservation_date]) {
+      groups[reservation.reservation_date] = [];
+    }
+
+    groups[reservation.reservation_date].push(reservation);
+  }
+
+  return Object.entries(groups)
+    .sort(([dateA], [dateB]) => dateA.localeCompare(dateB))
+    .map(([date, items]) => ({
+      date,
+      items: items.sort((a, b) => a.start_time.localeCompare(b.start_time)),
+    }));
+}
+
 export default function AdminReservationsTable({
   reservations,
 }: AdminReservationsTableProps) {
   const [items, setItems] = useState(reservations);
   const [message, setMessage] = useState("");
+
+  const groupedReservations = groupReservationsByDate(items);
 
   async function updateReservationStatus(id: string, status: string) {
     setMessage("");
@@ -124,112 +160,137 @@ export default function AdminReservationsTable({
         </div>
       )}
 
-      <div className="overflow-x-auto">
-        <table className="w-full min-w-[1150px] border-collapse text-left text-sm">
-          <thead>
-            <tr className="border-b border-zinc-800 text-zinc-400">
-              <th className="py-3 pr-4">Data</th>
-              <th className="py-3 pr-4">Godzina</th>
-              <th className="py-3 pr-4">Oś</th>
-              <th className="py-3 pr-4">Klient</th>
-              <th className="py-3 pr-4">Telefon</th>
-              <th className="py-3 pr-4">E-mail</th>
-              <th className="py-3 pr-4">Cena</th>
-              <th className="py-3 pr-4">Status</th>
-              <th className="py-3 pr-4">Płatność</th>
-              <th className="py-3 pr-4">Akcje</th>
-            </tr>
-          </thead>
+      <div className="space-y-8">
+        {groupedReservations.map((group) => (
+          <div
+            key={group.date}
+            className="rounded-2xl border border-zinc-800 bg-zinc-950 p-5"
+          >
+            <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <h3 className="text-2xl font-bold text-white">
+                {formatDateHeader(group.date)}
+              </h3>
 
-          <tbody>
-            {items.map((reservation) => (
-              <tr key={reservation.id} className="border-b border-zinc-800">
-                <td className="py-4 pr-4">
-                  {reservation.reservation_date}
-                </td>
+              <span className="rounded-full bg-green-950 px-3 py-1 text-xs font-semibold text-green-400">
+                {group.items.length} rezerwacje
+              </span>
+            </div>
 
-                <td className="py-4 pr-4">
-                  {reservation.start_time.slice(0, 5)}–
-                  {reservation.end_time.slice(0, 5)}
-                </td>
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[1050px] border-collapse text-left text-sm">
+                <thead>
+                  <tr className="border-b border-zinc-800 text-zinc-400">
+                    <th className="py-3 pr-4">Godzina</th>
+                    <th className="py-3 pr-4">Oś</th>
+                    <th className="py-3 pr-4">Klient</th>
+                    <th className="py-3 pr-4">Telefon</th>
+                    <th className="py-3 pr-4">E-mail</th>
+                    <th className="py-3 pr-4">Cena</th>
+                    <th className="py-3 pr-4">Status</th>
+                    <th className="py-3 pr-4">Płatność</th>
+                    <th className="py-3 pr-4">Akcje</th>
+                  </tr>
+                </thead>
 
-                <td className="py-4 pr-4">
-                  <span className="rounded-full bg-green-950 px-3 py-1 text-xs font-semibold text-green-400">
-                    {reservation.shooting_lanes?.name ?? "Brak osi"}
-                  </span>
-                </td>
+                <tbody>
+                  {group.items.map((reservation) => (
+                    <tr key={reservation.id} className="border-b border-zinc-800">
+                      <td className="py-4 pr-4 font-semibold">
+                        {reservation.start_time.slice(0, 5)}–
+                        {reservation.end_time.slice(0, 5)}
+                      </td>
 
-                <td className="py-4 pr-4 font-semibold">
-                  {reservation.customer_name}
-                </td>
+                      <td className="py-4 pr-4">
+                        <span className="rounded-full bg-green-950 px-3 py-1 text-xs font-semibold text-green-400">
+                          {reservation.shooting_lanes?.name ?? "Brak osi"}
+                        </span>
+                      </td>
 
-                <td className="py-4 pr-4">
-                  {reservation.customer_phone}
-                </td>
+                      <td className="py-4 pr-4 font-semibold">
+                        {reservation.customer_name}
+                      </td>
 
-                <td className="py-4 pr-4">
-                  {reservation.customer_email}
-                </td>
+                      <td className="py-4 pr-4">
+                        {reservation.customer_phone}
+                      </td>
 
-                <td className="py-4 pr-4">
-                  {Number(reservation.price).toFixed(0)} zł
-                </td>
+                      <td className="py-4 pr-4">
+                        {reservation.customer_email}
+                      </td>
 
-                <td className="py-4 pr-4">
-                  <span className={getStatusClass(reservation.reservation_status)}>
-                    {translateReservationStatus(reservation.reservation_status)}
-                  </span>
-                </td>
+                      <td className="py-4 pr-4">
+                        {Number(reservation.price).toFixed(0)} zł
+                      </td>
 
-                <td className="py-4 pr-4">
-                  {translatePaymentStatus(reservation.payment_status)}
-                </td>
+                      <td className="py-4 pr-4">
+                        <span className={getStatusClass(reservation.reservation_status)}>
+                          {translateReservationStatus(
+                            reservation.reservation_status
+                          )}
+                        </span>
+                      </td>
 
-                <td className="py-4 pr-4">
-                  <div className="flex flex-wrap gap-2">
-                    <button
-                      type="button"
-                      onClick={() => markAsPaid(reservation.id)}
-                      className="rounded-lg border border-green-800 px-3 py-2 text-xs text-green-300 hover:bg-green-950"
-                    >
-                      Opłacona
-                    </button>
+                      <td className="py-4 pr-4">
+                        {translatePaymentStatus(reservation.payment_status)}
+                      </td>
 
-                    <button
-                      type="button"
-                      onClick={() =>
-                        updateReservationStatus(reservation.id, "completed")
-                      }
-                      className="rounded-lg border border-blue-800 px-3 py-2 text-xs text-blue-300 hover:bg-blue-950"
-                    >
-                      Zrealizowana
-                    </button>
+                      <td className="py-4 pr-4">
+                        <div className="flex flex-wrap gap-2">
+                          <button
+                            type="button"
+                            onClick={() => markAsPaid(reservation.id)}
+                            className="rounded-lg border border-green-800 px-3 py-2 text-xs text-green-300 hover:bg-green-950"
+                          >
+                            Opłacona
+                          </button>
 
-                    <button
-                      type="button"
-                      onClick={() =>
-                        updateReservationStatus(reservation.id, "no_show")
-                      }
-                      className="rounded-lg border border-yellow-800 px-3 py-2 text-xs text-yellow-300 hover:bg-yellow-950"
-                    >
-                      Nieobecny
-                    </button>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              updateReservationStatus(
+                                reservation.id,
+                                "completed"
+                              )
+                            }
+                            className="rounded-lg border border-blue-800 px-3 py-2 text-xs text-blue-300 hover:bg-blue-950"
+                          >
+                            Zrealizowana
+                          </button>
 
-                    <button
-                      type="button"
-                      onClick={() =>
-                        updateReservationStatus(reservation.id, "cancelled")
-                      }
-                      className="rounded-lg border border-red-800 px-3 py-2 text-xs text-red-300 hover:bg-red-950"
-                    >
-                      Anuluj
-                    </button>
-                  </div>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              updateReservationStatus(
+                                reservation.id,
+                                "no_show"
+                              )
+                            }
+                            className="rounded-lg border border-yellow-800 px-3 py-2 text-xs text-yellow-300 hover:bg-yellow-950"
+                          >
+                            Nieobecny
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() =>
+                              updateReservationStatus(
+                                reservation.id,
+                                "cancelled"
+                              )
+                            }
+                            className="rounded-lg border border-red-800 px-3 py-2 text-xs text-red-300 hover:bg-red-950"
+                          >
+                            Anuluj
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        ))}
       </div>
     </div>
   );
