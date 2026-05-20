@@ -3,6 +3,11 @@
 import { useEffect, useState } from "react";
 import { supabase } from "../../lib/supabase";
 
+type EventRegistration = {
+  id: string;
+  registration_status: string;
+};
+
 type Event = {
   id: string;
   title: string;
@@ -13,11 +18,12 @@ type Event = {
   location: string;
   price: number;
   max_participants: number;
-  event_registrations: { id: string }[];
+  event_registrations: EventRegistration[];
 };
 
 export default function EventsPage() {
   const [events, setEvents] = useState<Event[]>([]);
+  const [selectedEventId, setSelectedEventId] = useState("");
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState("");
 
@@ -34,6 +40,7 @@ export default function EventsPage() {
 
       if (user) {
         const metadata = user.user_metadata ?? {};
+
         setUserId(user.id);
         setCustomerName(metadata.full_name ?? metadata.name ?? "");
         setCustomerEmail(user.email ?? "");
@@ -60,7 +67,8 @@ export default function EventsPage() {
           price,
           max_participants,
           event_registrations (
-            id
+            id,
+            registration_status
           )
         `
         )
@@ -74,13 +82,64 @@ export default function EventsPage() {
         return;
       }
 
-      setEvents((data ?? []) as Event[]);
+      setEvents((data as any) ?? []);
     }
 
     loadData();
   }, []);
 
-  async function registerForEvent(eventItem: Event) {
+  function getParticipantsCount(eventItem: Event) {
+    return eventItem.event_registrations.filter(
+      (registration) =>
+        registration.registration_status !== "cancelled" &&
+        registration.registration_status !== "reserve"
+    ).length;
+  }
+
+  function getReserveCount(eventItem: Event) {
+    return eventItem.event_registrations.filter(
+      (registration) => registration.registration_status === "reserve"
+    ).length;
+  }
+
+  function getEventStatus(eventItem: Event) {
+    const participantsCount = getParticipantsCount(eventItem);
+    const freePlaces = eventItem.max_participants - participantsCount;
+
+    if (freePlaces <= 0) {
+      return {
+        label: "Pełne",
+        className:
+          "rounded-full bg-red-950 px-3 py-1 text-xs font-semibold text-red-300",
+      };
+    }
+
+    if (freePlaces <= 3) {
+      return {
+        label: "Ostatnie miejsca",
+        className:
+          "rounded-full bg-yellow-950 px-3 py-1 text-xs font-semibold text-yellow-300",
+      };
+    }
+
+    return {
+      label: "Wolne miejsca",
+      className:
+        "rounded-full bg-green-950 px-3 py-1 text-xs font-semibold text-green-400",
+    };
+  }
+
+  function formatDate(dateString: string) {
+    const date = new Date(`${dateString}T12:00:00`);
+
+    return new Intl.DateTimeFormat("pl-PL", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+    }).format(date);
+  }
+
+  async function registerForEvent(eventItem: Event, asReserve = false) {
     setMessage("");
 
     if (!userId) {
@@ -93,13 +152,6 @@ export default function EventsPage() {
       return;
     }
 
-    const currentParticipants = eventItem.event_registrations.length;
-
-    if (currentParticipants >= eventItem.max_participants) {
-      setMessage("Brak wolnych miejsc na to szkolenie.");
-      return;
-    }
-
     const { data: existingRegistration } = await supabase
       .from("event_registrations")
       .select("id")
@@ -109,9 +161,14 @@ export default function EventsPage() {
       .maybeSingle();
 
     if (existingRegistration) {
-      setMessage("Jesteś już zapisany na to szkolenie.");
+      setMessage("Jesteś już zapisany na to szkolenie lub listę rezerwową.");
       return;
     }
+
+    const participantsCount = getParticipantsCount(eventItem);
+    const isFull = participantsCount >= eventItem.max_participants;
+
+    const registrationStatus = asReserve || isFull ? "reserve" : "registered";
 
     const { error } = await supabase.from("event_registrations").insert({
       event_id: eventItem.id,
@@ -119,7 +176,7 @@ export default function EventsPage() {
       customer_name: customerName,
       customer_email: customerEmail,
       customer_phone: customerPhone,
-      registration_status: "registered",
+      registration_status: registrationStatus,
       payment_status: "pay_on_site",
     });
 
@@ -128,7 +185,11 @@ export default function EventsPage() {
       return;
     }
 
-    setMessage("Zostałeś zapisany na szkolenie.");
+    setMessage(
+      registrationStatus === "reserve"
+        ? "Zostałeś dodany do listy rezerwowej."
+        : "Zostałeś zapisany na szkolenie."
+    );
 
     setEvents((currentEvents) =>
       currentEvents.map((event) =>
@@ -137,7 +198,10 @@ export default function EventsPage() {
               ...event,
               event_registrations: [
                 ...event.event_registrations,
-                { id: crypto.randomUUID() },
+                {
+                  id: crypto.randomUUID(),
+                  registration_status: registrationStatus,
+                },
               ],
             }
           : event
@@ -153,9 +217,11 @@ export default function EventsPage() {
     return "mb-6 rounded-xl border border-red-800 bg-red-950 p-4 text-sm font-semibold text-red-300";
   }
 
+  const selectedEvent = events.find((event) => event.id === selectedEventId);
+
   return (
     <main className="min-h-screen bg-zinc-950 text-white">
-      <section className="mx-auto max-w-6xl px-6 py-12">
+      <section className="mx-auto max-w-7xl px-6 py-12">
         <div className="mb-10">
           <p className="mb-4 text-sm uppercase tracking-[0.35em] text-green-500">
             CSK Booking
@@ -164,8 +230,8 @@ export default function EventsPage() {
           <h1 className="text-4xl font-bold">Eventy i szkolenia</h1>
 
           <p className="mt-3 max-w-3xl text-zinc-400">
-            Lista aktualnych szkoleń, treningów i wydarzeń organizowanych na
-            strzelnicy.
+            Wybierz szkolenie z listy, sprawdź szczegóły i zapisz się na
+            wydarzenie albo listę rezerwową.
           </p>
         </div>
 
@@ -184,122 +250,209 @@ export default function EventsPage() {
         )}
 
         {!loading && events.length > 0 && (
-          <div className="grid gap-6">
-            {events.map((event) => {
-              const participantsCount = event.event_registrations.length;
-              const freePlaces = event.max_participants - participantsCount;
-              const isFull = freePlaces <= 0;
+          <div className="grid gap-6 lg:grid-cols-[1.3fr_1fr]">
+            <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-5">
+              <h2 className="mb-5 text-2xl font-bold">Lista szkoleń</h2>
 
-              return (
-                <div
-                  key={event.id}
-                  className="rounded-2xl border border-zinc-800 bg-zinc-900 p-6"
-                >
-                  <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
-                    <div className="max-w-3xl">
-                      <div
-                        className={
-                          isFull
-                            ? "mb-3 inline-block rounded-full bg-red-950 px-3 py-1 text-xs font-semibold text-red-400"
-                            : "mb-3 inline-block rounded-full bg-green-950 px-3 py-1 text-xs font-semibold text-green-400"
-                        }
-                      >
-                        {isFull ? "BRAK MIEJSC" : "ZAPISY OTWARTE"}
-                      </div>
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[850px] border-collapse text-left text-sm">
+                  <thead>
+                    <tr className="border-b border-zinc-800 text-zinc-400">
+                      <th className="py-3 pr-4">Temat</th>
+                      <th className="py-3 pr-4">Termin</th>
+                      <th className="py-3 pr-4">Godzina</th>
+                      <th className="py-3 pr-4">Koszt</th>
+                      <th className="py-3 pr-4">Miejsca</th>
+                      <th className="py-3 pr-4">Status</th>
+                    </tr>
+                  </thead>
 
-                      <h2 className="mb-3 text-3xl font-bold">
-                        {event.title}
-                      </h2>
+                  <tbody>
+                    {events.map((event) => {
+                      const participantsCount = getParticipantsCount(event);
+                      const reserveCount = getReserveCount(event);
+                      const status = getEventStatus(event);
+                      const isSelected = selectedEventId === event.id;
 
-                      <p className="mb-5 whitespace-pre-line text-zinc-300">
-                        {event.description}
-                      </p>
+                      return (
+                        <tr
+                          key={event.id}
+                          onClick={() => setSelectedEventId(event.id)}
+                          className={
+                            isSelected
+                              ? "cursor-pointer border-b border-green-800 bg-green-950/40"
+                              : "cursor-pointer border-b border-zinc-800 hover:bg-zinc-800"
+                          }
+                        >
+                          <td className="py-4 pr-4 font-semibold">
+                            {event.title}
+                            {reserveCount > 0 && (
+                              <span className="mt-1 block text-xs text-yellow-300">
+                                Lista rezerwowa: {reserveCount}
+                              </span>
+                            )}
+                          </td>
 
-                      <div className="grid gap-3 text-sm text-zinc-400 md:grid-cols-2">
-                        <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-4">
-                          <p className="mb-1 text-zinc-500">Data</p>
-                          <p className="font-semibold text-white">
-                            {event.event_date}
-                          </p>
-                        </div>
+                          <td className="py-4 pr-4">
+                            {formatDate(event.event_date)}
+                          </td>
 
-                        <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-4">
-                          <p className="mb-1 text-zinc-500">Godzina</p>
-                          <p className="font-semibold text-white">
-                            {event.start_time.slice(0, 5)} -{" "}
+                          <td className="py-4 pr-4">
+                            {event.start_time.slice(0, 5)}–
                             {event.end_time.slice(0, 5)}
-                          </p>
-                        </div>
+                          </td>
 
-                        <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-4">
-                          <p className="mb-1 text-zinc-500">Miejsce</p>
-                          <p className="font-semibold text-white">
-                            {event.location}
-                          </p>
-                        </div>
+                          <td className="py-4 pr-4">
+                            <span className="font-semibold text-green-500">
+                              {Number(event.price).toFixed(0)} zł
+                            </span>
+                          </td>
 
-                        <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-4">
-                          <p className="mb-1 text-zinc-500">Cena</p>
-                          <p className="font-semibold text-green-500">
-                            {Number(event.price).toFixed(0)} zł
-                          </p>
-                        </div>
-                      </div>
-                    </div>
+                          <td className="py-4 pr-4">
+                            {participantsCount} / {event.max_participants}
+                          </td>
 
-                    <div className="min-w-[260px] rounded-2xl border border-zinc-800 bg-zinc-950 p-5">
-                      <div className="mb-5 grid gap-3">
-                        <div>
-                          <p className="mb-1 text-sm text-zinc-500">
-                            Limit miejsc
-                          </p>
-                          <p className="text-3xl font-bold text-white">
-                            {event.max_participants}
-                          </p>
-                        </div>
+                          <td className="py-4 pr-4">
+                            <span className={status.className}>
+                              {status.label}
+                            </span>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
 
-                        <div>
-                          <p className="mb-1 text-sm text-zinc-500">
-                            Zapisane osoby
-                          </p>
-                          <p className="text-3xl font-bold text-green-500">
-                            {participantsCount}
-                          </p>
-                        </div>
+              <p className="mt-4 text-sm text-zinc-500">
+                Kliknij wybrane szkolenie, aby zobaczyć pełny opis i możliwość
+                zapisu.
+              </p>
+            </div>
 
-                        <div>
-                          <p className="mb-1 text-sm text-zinc-500">
-                            Wolne miejsca
-                          </p>
-                          <p
-                            className={
-                              isFull
-                                ? "text-3xl font-bold text-red-400"
-                                : "text-3xl font-bold text-green-500"
-                            }
-                          >
-                            {Math.max(freePlaces, 0)}
-                          </p>
-                        </div>
-                      </div>
+            <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-6">
+              {!selectedEvent && (
+                <div className="text-zinc-400">
+                  <h2 className="mb-3 text-2xl font-bold text-white">
+                    Szczegóły szkolenia
+                  </h2>
 
-                      <button
-                        type="button"
-                        disabled={isFull}
-                        onClick={() => registerForEvent(event)}
-                        className={
-                          isFull
-                            ? "w-full cursor-not-allowed rounded-xl border border-red-900 bg-zinc-900 px-4 py-3 font-semibold text-zinc-600"
-                            : "w-full rounded-xl bg-green-700 px-4 py-3 font-semibold transition hover:bg-green-600"
-                        }
-                      >
-                        {isFull ? "Brak miejsc" : "Zapisz się"}
-                      </button>
-                    </div>
-                  </div>
+                  <p>Wybierz szkolenie z tabeli po lewej stronie.</p>
                 </div>
-              );
-            })}
+              )}
+
+              {selectedEvent && (
+                <div>
+                  {(() => {
+                    const participantsCount =
+                      getParticipantsCount(selectedEvent);
+                    const reserveCount = getReserveCount(selectedEvent);
+                    const freePlaces =
+                      selectedEvent.max_participants - participantsCount;
+                    const isFull = freePlaces <= 0;
+                    const status = getEventStatus(selectedEvent);
+
+                    return (
+                      <>
+                        <span className={status.className}>
+                          {status.label}
+                        </span>
+
+                        <h2 className="mt-4 text-3xl font-bold">
+                          {selectedEvent.title}
+                        </h2>
+
+                        <div className="mt-5 grid gap-3 text-sm">
+                          <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-4">
+                            <p className="text-zinc-500">Termin</p>
+                            <p className="font-semibold text-white">
+                              {formatDate(selectedEvent.event_date)} |{" "}
+                              {selectedEvent.start_time.slice(0, 5)}–
+                              {selectedEvent.end_time.slice(0, 5)}
+                            </p>
+                          </div>
+
+                          <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-4">
+                            <p className="text-zinc-500">Miejsce</p>
+                            <p className="font-semibold text-white">
+                              {selectedEvent.location}
+                            </p>
+                          </div>
+
+                          <div className="grid gap-3 sm:grid-cols-2">
+                            <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-4">
+                              <p className="text-zinc-500">Koszt</p>
+                              <p className="font-semibold text-green-500">
+                                {Number(selectedEvent.price).toFixed(0)} zł
+                              </p>
+                            </div>
+
+                            <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-4">
+                              <p className="text-zinc-500">Miejsca</p>
+                              <p className="font-semibold text-white">
+                                {participantsCount} /{" "}
+                                {selectedEvent.max_participants}
+                              </p>
+                            </div>
+                          </div>
+
+                          <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-4">
+                            <p className="text-zinc-500">Wolne miejsca</p>
+                            <p
+                              className={
+                                isFull
+                                  ? "font-semibold text-red-400"
+                                  : "font-semibold text-green-500"
+                              }
+                            >
+                              {Math.max(freePlaces, 0)}
+                            </p>
+
+                            {reserveCount > 0 && (
+                              <p className="mt-2 text-yellow-300">
+                                Lista rezerwowa: {reserveCount}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+
+                        <div className="mt-6 rounded-2xl border border-zinc-800 bg-zinc-950 p-5">
+                          <h3 className="mb-3 text-xl font-bold">Opis</h3>
+
+                          <p className="whitespace-pre-line text-zinc-300">
+                            {selectedEvent.description}
+                          </p>
+                        </div>
+
+                        <div className="mt-6">
+                          {isFull ? (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                registerForEvent(selectedEvent, true)
+                              }
+                              className="w-full rounded-xl border border-yellow-700 bg-yellow-950 px-5 py-3 font-semibold text-yellow-300 transition hover:bg-yellow-900"
+                            >
+                              Dołącz do listy rezerwowej
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                registerForEvent(selectedEvent, false)
+                              }
+                              className="w-full rounded-xl bg-green-700 px-5 py-3 font-semibold text-white transition hover:bg-green-600"
+                            >
+                              Zapisz się
+                            </button>
+                          )}
+                        </div>
+                      </>
+                    );
+                  })()}
+                </div>
+              )}
+            </div>
           </div>
         )}
 
