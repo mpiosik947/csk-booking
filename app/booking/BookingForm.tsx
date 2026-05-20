@@ -15,6 +15,7 @@ type BookingFormProps = {
 
 type BookedReservation = {
   start_time: string;
+  end_time: string;
 };
 
 type LaneBlock = {
@@ -31,9 +32,10 @@ type ConfirmationData = {
 };
 
 const durations = [
-  { label: "30 minut", value: 30 },
-  { label: "60 minut", value: 60 },
-  { label: "120 minut", value: 120 },
+  { label: "1 godzina", value: 60 },
+  { label: "2 godziny", value: 120 },
+  { label: "3 godziny", value: 180 },
+  { label: "4 godziny", value: 240 },
 ];
 
 const hours = [
@@ -52,10 +54,10 @@ const hours = [
 ];
 
 function addMinutesToTime(time: string, minutes: number) {
-  const [hours, mins] = time.split(":").map(Number);
+  const [hour, mins] = time.split(":").map(Number);
 
   const date = new Date();
-  date.setHours(hours);
+  date.setHours(hour);
   date.setMinutes(mins + minutes);
   date.setSeconds(0);
 
@@ -63,27 +65,45 @@ function addMinutesToTime(time: string, minutes: number) {
 }
 
 function timeToMinutes(time: string) {
-  const [hours, minutes] = time.slice(0, 5).split(":").map(Number);
-  return hours * 60 + minutes;
+  const [hour, minutes] = time.slice(0, 5).split(":").map(Number);
+  return hour * 60 + minutes;
+}
+
+function rangesOverlap(
+  startA: string,
+  endA: string,
+  startB: string,
+  endB: string
+) {
+  return timeToMinutes(startA) < timeToMinutes(endB) &&
+    timeToMinutes(endA) > timeToMinutes(startB);
 }
 
 function getBlockedHoursFromRanges(blocks: LaneBlock[]) {
   const blockedHours: string[] = [];
 
   for (const block of blocks) {
-    const blockStart = timeToMinutes(block.start_time);
-    const blockEnd = timeToMinutes(block.end_time);
-
     for (const hour of hours) {
-      const hourMinutes = timeToMinutes(hour);
+      const hourEnd = addMinutesToTime(hour, 60);
 
-      if (hourMinutes >= blockStart && hourMinutes < blockEnd) {
+      if (rangesOverlap(hour, hourEnd, block.start_time, block.end_time)) {
         blockedHours.push(hour);
       }
     }
   }
 
   return blockedHours;
+}
+
+function getSelectedRange(startTime: string, durationMinutes: number) {
+  if (!startTime) return [];
+
+  const endTime = addMinutesToTime(startTime, durationMinutes);
+
+  return hours.filter((hour) => {
+    const hourEnd = addMinutesToTime(hour, 60);
+    return rangesOverlap(hour, hourEnd, startTime, endTime);
+  });
 }
 
 function getMessageClass(message: string) {
@@ -167,7 +187,7 @@ export default function BookingForm({ lanes }: BookingFormProps) {
 
       const { data, error } = await supabase
         .from("reservations")
-        .select("start_time")
+        .select("start_time, end_time")
         .eq("lane_id", laneId)
         .eq("reservation_date", reservationDate)
         .eq("reservation_status", "confirmed");
@@ -186,8 +206,8 @@ export default function BookingForm({ lanes }: BookingFormProps) {
         return;
       }
 
-      const reservedHours = ((data ?? []) as BookedReservation[]).map(
-        (reservation) => reservation.start_time.slice(0, 5)
+      const reservedHours = getBlockedHoursFromRanges(
+        (data ?? []) as BookedReservation[]
       );
 
       const blockedHours = getBlockedHoursFromRanges(
@@ -205,6 +225,21 @@ export default function BookingForm({ lanes }: BookingFormProps) {
   const price = selectedLane
     ? (Number(selectedLane.price_per_hour) / 60) * durationMinutes
     : 0;
+
+  const selectedRange = getSelectedRange(selectedHour, durationMinutes);
+
+  function canSelectStartHour(hour: string) {
+    const endTime = addMinutesToTime(hour, durationMinutes);
+    const lastPossibleEnd = addMinutesToTime(hours[hours.length - 1], 60);
+
+    if (timeToMinutes(endTime) > timeToMinutes(lastPossibleEnd)) {
+      return false;
+    }
+
+    const range = getSelectedRange(hour, durationMinutes);
+
+    return !range.some((rangeHour) => bookedHours.includes(rangeHour));
+  }
 
   async function handleSubmit() {
     setMessage("");
@@ -226,8 +261,8 @@ export default function BookingForm({ lanes }: BookingFormProps) {
       return;
     }
 
-    if (bookedHours.includes(selectedHour)) {
-      setMessage("Ten termin jest już zajęty lub zablokowany.");
+    if (!canSelectStartHour(selectedHour)) {
+      setMessage("Wybrany zakres rezerwacji koliduje z inną rezerwacją lub blokadą.");
       return;
     }
 
@@ -241,14 +276,12 @@ export default function BookingForm({ lanes }: BookingFormProps) {
 
     setLoading(true);
 
-    const { data: existingReservation, error: checkError } = await supabase
+    const { data: existingReservations, error: checkError } = await supabase
       .from("reservations")
-      .select("id")
+      .select("id, start_time, end_time")
       .eq("lane_id", laneId)
       .eq("reservation_date", reservationDate)
-      .eq("start_time", selectedHour)
-      .eq("reservation_status", "confirmed")
-      .maybeSingle();
+      .eq("reservation_status", "confirmed");
 
     const { data: existingBlocks, error: blockCheckError } = await supabase
       .from("lane_blocks")
@@ -263,25 +296,24 @@ export default function BookingForm({ lanes }: BookingFormProps) {
       return;
     }
 
-    const selectedHourMinutes = timeToMinutes(selectedHour);
-
-    const isBlockedByRange = ((existingBlocks ?? []) as LaneBlock[]).some(
-      (block) => {
-        const blockStart = timeToMinutes(block.start_time);
-        const blockEnd = timeToMinutes(block.end_time);
-
-        return selectedHourMinutes >= blockStart && selectedHourMinutes < blockEnd;
-      }
+    const hasReservationConflict = ((existingReservations ?? []) as BookedReservation[]).some(
+      (reservation) =>
+        rangesOverlap(
+          selectedHour,
+          endTime,
+          reservation.start_time,
+          reservation.end_time
+        )
     );
 
-    if (existingReservation || isBlockedByRange) {
+    const hasBlockConflict = ((existingBlocks ?? []) as LaneBlock[]).some(
+      (block) =>
+        rangesOverlap(selectedHour, endTime, block.start_time, block.end_time)
+    );
+
+    if (hasReservationConflict || hasBlockConflict) {
       setLoading(false);
-      setMessage("Ten termin jest już zajęty lub zablokowany.");
-      setBookedHours((currentHours) =>
-        currentHours.includes(selectedHour)
-          ? currentHours
-          : [...currentHours, selectedHour]
-      );
+      setMessage("Wybrany zakres jest już zajęty lub zablokowany.");
       setSelectedHour("");
       return;
     }
@@ -518,7 +550,10 @@ export default function BookingForm({ lanes }: BookingFormProps) {
 
           <select
             value={durationMinutes}
-            onChange={(event) => setDurationMinutes(Number(event.target.value))}
+            onChange={(event) => {
+              setDurationMinutes(Number(event.target.value));
+              setSelectedHour("");
+            }}
             className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-white outline-none focus:border-green-600"
           >
             {durations.map((duration) => (
@@ -532,12 +567,12 @@ export default function BookingForm({ lanes }: BookingFormProps) {
         <div>
           <div className="mb-3 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
             <label className="block text-sm text-zinc-300">
-              Dostępne godziny
+              Wybierz godzinę startu
             </label>
 
             {reservationDate && laneId && (
               <span className="text-xs text-zinc-500">
-                Zajęte lub zablokowane godziny są wyszarzone.
+                Żółte kafelki pokazują cały wybrany zakres rezerwacji.
               </span>
             )}
           </div>
@@ -555,24 +590,34 @@ export default function BookingForm({ lanes }: BookingFormProps) {
               {hours.map((hour) => {
                 const isBooked = bookedHours.includes(hour);
                 const isSelected = selectedHour === hour;
+                const isInSelectedRange = selectedRange.includes(hour);
+                const isStartAvailable = canSelectStartHour(hour);
 
                 return (
                   <button
                     key={hour}
                     type="button"
-                    disabled={isBooked}
+                    disabled={!isStartAvailable}
                     onClick={() => setSelectedHour(hour)}
                     className={
-                      isBooked
+                      !isStartAvailable
                         ? "cursor-not-allowed rounded-xl border border-red-900 bg-zinc-900 px-4 py-3 font-semibold text-zinc-600"
                         : isSelected
-                          ? "rounded-xl border border-green-600 bg-green-700 px-4 py-3 font-semibold text-white"
-                          : "rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 font-semibold transition hover:border-green-600 hover:bg-green-700"
+                          ? "rounded-xl border border-yellow-400 bg-yellow-600 px-4 py-3 font-semibold text-black"
+                          : isInSelectedRange
+                            ? "rounded-xl border border-yellow-500 bg-yellow-950 px-4 py-3 font-semibold text-yellow-300"
+                            : "rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 font-semibold transition hover:border-green-600 hover:bg-green-700"
                     }
                   >
                     <span>{hour}</span>
                     <span className="mt-1 block text-xs">
-                      {isBooked ? "Niedostępne" : "Wolne"}
+                      {!isStartAvailable
+                        ? isBooked
+                          ? "Niedostępne"
+                          : "Za długi zakres"
+                        : isInSelectedRange
+                          ? "Wybrany zakres"
+                          : "Wolne"}
                     </span>
                   </button>
                 );
