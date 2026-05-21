@@ -52,28 +52,29 @@ export default function AdminPage() {
 
       setIsAdmin(true);
 
-      const { data: reservationsData, error: reservationsError } = await supabase
-        .from("reservations")
-        .select(
+      const { data: reservationsData, error: reservationsError } =
+        await supabase
+          .from("reservations")
+          .select(
+            `
+            id,
+            customer_name,
+            customer_email,
+            customer_phone,
+            reservation_date,
+            start_time,
+            end_time,
+            duration_minutes,
+            price,
+            reservation_status,
+            payment_status,
+            shooting_lanes (
+              name
+            )
           `
-          id,
-          customer_name,
-          customer_email,
-          customer_phone,
-          reservation_date,
-          start_time,
-          end_time,
-          duration_minutes,
-          price,
-          reservation_status,
-          payment_status,
-          shooting_lanes (
-            name
           )
-        `
-        )
-        .order("reservation_date", { ascending: true })
-        .order("start_time", { ascending: true });
+          .order("reservation_date", { ascending: true })
+          .order("start_time", { ascending: true });
 
       if (reservationsError) {
         setMessage(`Błąd pobierania rezerwacji: ${reservationsError.message}`);
@@ -130,8 +131,8 @@ export default function AdminPage() {
             <h1 className="text-3xl font-bold">Panel administratora</h1>
 
             <p className="mt-2 text-zinc-400">
-              Zarządzanie rezerwacjami, płatnościami, eventami, szkoleniami i
-              blokadami osi.
+              Zarządzanie rezerwacjami, płatnościami, eventami, szkoleniami,
+              blokadami osi i raportami.
             </p>
           </div>
 
@@ -187,7 +188,7 @@ export default function AdminPage() {
               </div>
             </div>
 
-            <div className="mb-8 grid gap-5 md:grid-cols-3">
+            <div className="mb-8 grid gap-5 md:grid-cols-2 xl:grid-cols-4">
               <a
                 href="/admin/events"
                 className="rounded-2xl border border-green-800 bg-green-950 p-6 transition hover:bg-green-900"
@@ -235,6 +236,27 @@ export default function AdminPage() {
                   <p className="text-sm text-zinc-400">Aktywne blokady</p>
                   <p className="mt-1 text-3xl font-bold text-red-300">
                     {laneBlocksCount}
+                  </p>
+                </div>
+              </a>
+
+              <a
+                href="/admin/reports"
+                className="rounded-2xl border border-blue-800 bg-blue-950 p-6 transition hover:bg-blue-900"
+              >
+                <h2 className="mb-2 text-2xl font-bold text-blue-300">
+                  Raport dzienny
+                </h2>
+
+                <p className="mb-5 text-blue-100">
+                  Sprawdź rezerwacje, przychód oraz obłożenie osi w wybranym
+                  dniu.
+                </p>
+
+                <div className="rounded-xl border border-blue-800 bg-zinc-950 p-4">
+                  <p className="text-sm text-zinc-400">Analiza dnia</p>
+                  <p className="mt-1 text-3xl font-bold text-blue-300">
+                    Raport
                   </p>
                 </div>
               </a>
