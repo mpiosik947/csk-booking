@@ -75,8 +75,10 @@ function rangesOverlap(
   startB: string,
   endB: string
 ) {
-  return timeToMinutes(startA) < timeToMinutes(endB) &&
-    timeToMinutes(endA) > timeToMinutes(startB);
+  return (
+    timeToMinutes(startA) < timeToMinutes(endB) &&
+    timeToMinutes(endA) > timeToMinutes(startB)
+  );
 }
 
 function getBlockedHoursFromRanges(blocks: LaneBlock[]) {
@@ -228,17 +230,52 @@ export default function BookingForm({ lanes }: BookingFormProps) {
 
   const selectedRange = getSelectedRange(selectedHour, durationMinutes);
 
-  function canSelectStartHour(hour: string) {
+  function getUnavailableHoursInRange(hour: string) {
+    const range = getSelectedRange(hour, durationMinutes);
+    return range.filter((rangeHour) => bookedHours.includes(rangeHour));
+  }
+
+  function isRangeInsideOpeningHours(hour: string) {
     const endTime = addMinutesToTime(hour, durationMinutes);
     const lastPossibleEnd = addMinutesToTime(hours[hours.length - 1], 60);
 
-    if (timeToMinutes(endTime) > timeToMinutes(lastPossibleEnd)) {
+    return timeToMinutes(endTime) <= timeToMinutes(lastPossibleEnd);
+  }
+
+  function canSelectStartHour(hour: string) {
+    if (!isRangeInsideOpeningHours(hour)) {
       return false;
     }
 
-    const range = getSelectedRange(hour, durationMinutes);
+    const unavailableHours = getUnavailableHoursInRange(hour);
 
-    return !range.some((rangeHour) => bookedHours.includes(rangeHour));
+    return unavailableHours.length === 0;
+  }
+
+  function handleHourClick(hour: string) {
+    setMessage("");
+
+    if (!isRangeInsideOpeningHours(hour)) {
+      setSelectedHour("");
+      setMessage(
+        "Wybrany czas rezerwacji wychodzi poza dostępne godziny pracy. Wybierz wcześniejszą godzinę startu albo krótszy czas rezerwacji."
+      );
+      return;
+    }
+
+    const unavailableHours = getUnavailableHoursInRange(hour);
+
+    if (unavailableHours.length > 0) {
+      setSelectedHour("");
+      setMessage(
+        `Nie można zarezerwować tego zakresu. W wybranym czasie zajęte lub zablokowane są godziny: ${unavailableHours.join(
+          ", "
+        )}.`
+      );
+      return;
+    }
+
+    setSelectedHour(hour);
   }
 
   async function handleSubmit() {
@@ -262,7 +299,10 @@ export default function BookingForm({ lanes }: BookingFormProps) {
     }
 
     if (!canSelectStartHour(selectedHour)) {
-      setMessage("Wybrany zakres rezerwacji koliduje z inną rezerwacją lub blokadą.");
+      setMessage(
+        "Wybrany zakres rezerwacji koliduje z inną rezerwacją lub blokadą."
+      );
+      setSelectedHour("");
       return;
     }
 
@@ -296,14 +336,15 @@ export default function BookingForm({ lanes }: BookingFormProps) {
       return;
     }
 
-    const hasReservationConflict = ((existingReservations ?? []) as BookedReservation[]).some(
-      (reservation) =>
-        rangesOverlap(
-          selectedHour,
-          endTime,
-          reservation.start_time,
-          reservation.end_time
-        )
+    const hasReservationConflict = (
+      (existingReservations ?? []) as BookedReservation[]
+    ).some((reservation) =>
+      rangesOverlap(
+        selectedHour,
+        endTime,
+        reservation.start_time,
+        reservation.end_time
+      )
     );
 
     const hasBlockConflict = ((existingBlocks ?? []) as LaneBlock[]).some(
@@ -313,7 +354,9 @@ export default function BookingForm({ lanes }: BookingFormProps) {
 
     if (hasReservationConflict || hasBlockConflict) {
       setLoading(false);
-      setMessage("Wybrany zakres jest już zajęty lub zablokowany.");
+      setMessage(
+        "Nie można zarezerwować tego zakresu. Wybrany czas koliduje z inną rezerwacją lub blokadą osi."
+      );
       setSelectedHour("");
       return;
     }
@@ -553,6 +596,7 @@ export default function BookingForm({ lanes }: BookingFormProps) {
             onChange={(event) => {
               setDurationMinutes(Number(event.target.value));
               setSelectedHour("");
+              setMessage("");
             }}
             className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-white outline-none focus:border-green-600"
           >
@@ -591,21 +635,24 @@ export default function BookingForm({ lanes }: BookingFormProps) {
                 const isBooked = bookedHours.includes(hour);
                 const isSelected = selectedHour === hour;
                 const isInSelectedRange = selectedRange.includes(hour);
-                const isStartAvailable = canSelectStartHour(hour);
+                const isInsideOpeningHours = isRangeInsideOpeningHours(hour);
+                const unavailableHours = getUnavailableHoursInRange(hour);
+                const hasRangeConflict = unavailableHours.length > 0;
+                const isStartAvailable =
+                  isInsideOpeningHours && !hasRangeConflict;
 
                 return (
                   <button
                     key={hour}
                     type="button"
-                    disabled={!isStartAvailable}
-                    onClick={() => setSelectedHour(hour)}
+                    onClick={() => handleHourClick(hour)}
                     className={
-                      !isStartAvailable
-                        ? "cursor-not-allowed rounded-xl border border-red-900 bg-zinc-900 px-4 py-3 font-semibold text-zinc-600"
-                        : isSelected
-                          ? "rounded-xl border border-yellow-400 bg-yellow-600 px-4 py-3 font-semibold text-black"
-                          : isInSelectedRange
-                            ? "rounded-xl border border-yellow-500 bg-yellow-950 px-4 py-3 font-semibold text-yellow-300"
+                      isSelected
+                        ? "rounded-xl border border-yellow-400 bg-yellow-600 px-4 py-3 font-semibold text-black"
+                        : isInSelectedRange
+                          ? "rounded-xl border border-yellow-500 bg-yellow-950 px-4 py-3 font-semibold text-yellow-300"
+                          : !isStartAvailable
+                            ? "rounded-xl border border-red-900 bg-zinc-900 px-4 py-3 font-semibold text-zinc-600"
                             : "rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 font-semibold transition hover:border-green-600 hover:bg-green-700"
                     }
                   >
@@ -614,7 +661,7 @@ export default function BookingForm({ lanes }: BookingFormProps) {
                       {!isStartAvailable
                         ? isBooked
                           ? "Niedostępne"
-                          : "Za długi zakres"
+                          : "Kolizja zakresu"
                         : isInSelectedRange
                           ? "Wybrany zakres"
                           : "Wolne"}
