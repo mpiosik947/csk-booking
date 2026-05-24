@@ -53,11 +53,30 @@ function getStatusClass(status: string) {
   return "rounded-full bg-zinc-950 px-3 py-1 text-xs font-semibold text-zinc-300";
 }
 
+function canCancelEvent(eventDate: string, startTime: string) {
+  const eventDateTime = new Date(`${eventDate}T${startTime.slice(0, 5)}:00`);
+  const now = new Date();
+
+  const differenceInMilliseconds = eventDateTime.getTime() - now.getTime();
+  const differenceInHours = differenceInMilliseconds / (1000 * 60 * 60);
+
+  return differenceInHours >= 72;
+}
+
+function getMessageClass(message: string) {
+  if (message.includes("anulowany") || message.includes("anulowany")) {
+    return "mb-6 rounded-xl border border-green-800 bg-green-950 p-4 text-sm font-semibold text-green-300";
+  }
+
+  return "mb-6 rounded-xl border border-red-800 bg-red-950 p-4 text-sm font-semibold text-red-300";
+}
+
 export default function MyEventsPage() {
   const [items, setItems] = useState<EventRegistration[]>([]);
   const [loading, setLoading] = useState(true);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [message, setMessage] = useState("");
+  const [processingId, setProcessingId] = useState("");
 
   useEffect(() => {
     async function loadMyEvents() {
@@ -108,6 +127,56 @@ export default function MyEventsPage() {
     loadMyEvents();
   }, []);
 
+  async function cancelRegistration(item: EventRegistration) {
+    setMessage("");
+
+    if (!item.events) {
+      setMessage("Brak danych szkolenia.");
+      return;
+    }
+
+    if (!canCancelEvent(item.events.event_date, item.events.start_time)) {
+      setMessage(
+        "Anulacja online możliwa tylko do 72h przed szkoleniem. Skontaktuj się telefonicznie z organizatorem."
+      );
+      return;
+    }
+
+    const confirmed = window.confirm(
+      "Czy na pewno chcesz anulować udział w tym szkoleniu?"
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    setProcessingId(item.id);
+
+    const { error } = await supabase
+      .from("event_registrations")
+      .update({
+        registration_status: "cancelled",
+      })
+      .eq("id", item.id);
+
+    setProcessingId("");
+
+    if (error) {
+      setMessage(`Błąd anulacji: ${error.message}`);
+      return;
+    }
+
+    setItems((currentItems) =>
+      currentItems.map((currentItem) =>
+        currentItem.id === item.id
+          ? { ...currentItem, registration_status: "cancelled" }
+          : currentItem
+      )
+    );
+
+    setMessage("Udział w szkoleniu został anulowany.");
+  }
+
   return (
     <main className="min-h-screen bg-zinc-950 text-white">
       <section className="mx-auto max-w-5xl px-6 py-12">
@@ -118,7 +187,8 @@ export default function MyEventsPage() {
         <h1 className="mb-3 text-3xl font-bold">Moje szkolenia</h1>
 
         <p className="mb-8 text-zinc-400">
-          Tutaj widzisz szkolenia i eventy, na które jesteś zapisany.
+          Tutaj widzisz szkolenia i eventy, na które jesteś zapisany. Udział
+          możesz anulować samodzielnie najpóźniej 72 godziny przed terminem.
         </p>
 
         {loading && (
@@ -157,9 +227,7 @@ export default function MyEventsPage() {
         )}
 
         {!loading && isLoggedIn && message && (
-          <div className="mb-6 rounded-xl border border-red-800 bg-red-950 p-4 text-sm font-semibold text-red-300">
-            {message}
-          </div>
+          <div className={getMessageClass(message)}>{message}</div>
         )}
 
         {!loading && isLoggedIn && !message && items.length === 0 && (
@@ -170,60 +238,102 @@ export default function MyEventsPage() {
 
         {!loading && isLoggedIn && items.length > 0 && (
           <div className="space-y-4">
-            {items.map((item) => (
-              <div
-                key={item.id}
-                className="rounded-2xl border border-zinc-800 bg-zinc-900 p-6"
-              >
-                <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-                  <div>
-                    <span className={getStatusClass(item.registration_status)}>
-                      {translateStatus(item.registration_status)}
-                    </span>
+            {items.map((item) => {
+              const event = item.events;
+              const canCancel =
+                event &&
+                item.registration_status !== "cancelled" &&
+                canCancelEvent(event.event_date, event.start_time);
 
-                    <h2 className="mt-4 text-2xl font-bold">
-                      {item.events?.title ?? "Brak danych szkolenia"}
-                    </h2>
+              const isTooLateToCancel =
+                event &&
+                item.registration_status !== "cancelled" &&
+                !canCancelEvent(event.event_date, event.start_time);
 
-                    <p className="mt-2 text-zinc-400">
-                      {item.events?.description}
-                    </p>
+              return (
+                <div
+                  key={item.id}
+                  className="rounded-2xl border border-zinc-800 bg-zinc-900 p-6"
+                >
+                  <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+                    <div className="w-full">
+                      <span className={getStatusClass(item.registration_status)}>
+                        {translateStatus(item.registration_status)}
+                      </span>
 
-                    <div className="mt-5 grid gap-3 text-sm text-zinc-400 md:grid-cols-2">
-                      <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-4">
-                        <p className="mb-1 text-zinc-500">Data</p>
-                        <p className="font-semibold text-white">
-                          {item.events?.event_date}
-                        </p>
+                      <h2 className="mt-4 text-2xl font-bold">
+                        {event?.title ?? "Brak danych szkolenia"}
+                      </h2>
+
+                      <p className="mt-2 whitespace-pre-line text-zinc-400">
+                        {event?.description}
+                      </p>
+
+                      <div className="mt-5 grid gap-3 text-sm text-zinc-400 md:grid-cols-2">
+                        <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-4">
+                          <p className="mb-1 text-zinc-500">Data</p>
+                          <p className="font-semibold text-white">
+                            {event?.event_date}
+                          </p>
+                        </div>
+
+                        <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-4">
+                          <p className="mb-1 text-zinc-500">Godzina</p>
+                          <p className="font-semibold text-white">
+                            {event?.start_time?.slice(0, 5)} -{" "}
+                            {event?.end_time?.slice(0, 5)}
+                          </p>
+                        </div>
+
+                        <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-4">
+                          <p className="mb-1 text-zinc-500">Miejsce</p>
+                          <p className="font-semibold text-white">
+                            {event?.location}
+                          </p>
+                        </div>
+
+                        <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-4">
+                          <p className="mb-1 text-zinc-500">Cena / płatność</p>
+                          <p className="font-semibold text-green-500">
+                            {Number(event?.price ?? 0).toFixed(0)} zł —{" "}
+                            {translatePayment(item.payment_status)}
+                          </p>
+                        </div>
                       </div>
 
-                      <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-4">
-                        <p className="mb-1 text-zinc-500">Godzina</p>
-                        <p className="font-semibold text-white">
-                          {item.events?.start_time?.slice(0, 5)} -{" "}
-                          {item.events?.end_time?.slice(0, 5)}
-                        </p>
-                      </div>
+                      {canCancel && (
+                        <div className="mt-6">
+                          <button
+                            type="button"
+                            disabled={processingId === item.id}
+                            onClick={() => cancelRegistration(item)}
+                            className="rounded-xl border border-red-700 bg-red-950 px-5 py-3 text-sm font-semibold text-red-300 transition hover:bg-red-900 disabled:cursor-not-allowed disabled:opacity-60"
+                          >
+                            {processingId === item.id
+                              ? "Anulowanie..."
+                              : "Anuluj udział"}
+                          </button>
+                        </div>
+                      )}
 
-                      <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-4">
-                        <p className="mb-1 text-zinc-500">Miejsce</p>
-                        <p className="font-semibold text-white">
-                          {item.events?.location}
-                        </p>
-                      </div>
+                      {isTooLateToCancel && (
+                        <div className="mt-6 rounded-xl border border-yellow-700 bg-yellow-950 p-4 text-sm font-semibold text-yellow-300">
+                          Anulacja online niedostępna. Zostało mniej niż 72
+                          godziny do wydarzenia — skontaktuj się telefonicznie z
+                          organizatorem.
+                        </div>
+                      )}
 
-                      <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-4">
-                        <p className="mb-1 text-zinc-500">Cena / płatność</p>
-                        <p className="font-semibold text-green-500">
-                          {Number(item.events?.price ?? 0).toFixed(0)} zł —{" "}
-                          {translatePayment(item.payment_status)}
-                        </p>
-                      </div>
+                      {item.registration_status === "cancelled" && (
+                        <div className="mt-6 rounded-xl border border-red-800 bg-red-950 p-4 text-sm font-semibold text-red-300">
+                          Ten zapis został anulowany.
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
 

@@ -14,11 +14,16 @@ type BookingFormProps = {
 };
 
 type BookedReservation = {
+  id?: string;
+  lane_id?: string;
+  reservation_date?: string;
   start_time: string;
   end_time: string;
+  reservation_status?: string | null;
 };
 
 type LaneBlock = {
+  id?: string;
   start_time: string;
   end_time: string;
 };
@@ -53,8 +58,28 @@ const hours = [
   "19:00",
 ];
 
+function normalizeTime(time: string) {
+  return time.slice(0, 5);
+}
+
+function normalizeStatus(status?: string | null) {
+  return (status ?? "confirmed").toLowerCase();
+}
+
+function isActiveReservation(status?: string | null) {
+  const normalizedStatus = normalizeStatus(status);
+
+  return (
+    normalizedStatus !== "cancelled" &&
+    normalizedStatus !== "canceled" &&
+    normalizedStatus !== "anulowana" &&
+    normalizedStatus !== "cancelled_by_user" &&
+    normalizedStatus !== "cancelled_by_admin"
+  );
+}
+
 function addMinutesToTime(time: string, minutes: number) {
-  const [hour, mins] = time.split(":").map(Number);
+  const [hour, mins] = normalizeTime(time).split(":").map(Number);
 
   const date = new Date();
   date.setHours(hour);
@@ -65,7 +90,7 @@ function addMinutesToTime(time: string, minutes: number) {
 }
 
 function timeToMinutes(time: string) {
-  const [hour, minutes] = time.slice(0, 5).split(":").map(Number);
+  const [hour, minutes] = normalizeTime(time).split(":").map(Number);
   return hour * 60 + minutes;
 }
 
@@ -88,7 +113,14 @@ function getBlockedHoursFromRanges(blocks: LaneBlock[]) {
     for (const hour of hours) {
       const hourEnd = addMinutesToTime(hour, 60);
 
-      if (rangesOverlap(hour, hourEnd, block.start_time, block.end_time)) {
+      if (
+        rangesOverlap(
+          hour,
+          hourEnd,
+          normalizeTime(block.start_time),
+          normalizeTime(block.end_time)
+        )
+      ) {
         blockedHours.push(hour);
       }
     }
@@ -189,14 +221,15 @@ export default function BookingForm({ lanes }: BookingFormProps) {
 
       const { data, error } = await supabase
         .from("reservations")
-        .select("start_time, end_time")
+        .select(
+          "id, lane_id, reservation_date, start_time, end_time, reservation_status"
+        )
         .eq("lane_id", laneId)
-        .eq("reservation_date", reservationDate)
-        .eq("reservation_status", "confirmed");
+        .eq("reservation_date", reservationDate);
 
       const { data: blockedData, error: blockedError } = await supabase
         .from("lane_blocks")
-        .select("start_time, end_time")
+        .select("id, start_time, end_time")
         .eq("lane_id", laneId)
         .eq("block_date", reservationDate)
         .eq("is_active", true);
@@ -208,9 +241,11 @@ export default function BookingForm({ lanes }: BookingFormProps) {
         return;
       }
 
-      const reservedHours = getBlockedHoursFromRanges(
-        (data ?? []) as BookedReservation[]
+      const activeReservations = ((data ?? []) as BookedReservation[]).filter(
+        (reservation) => isActiveReservation(reservation.reservation_status)
       );
+
+      const reservedHours = getBlockedHoursFromRanges(activeReservations);
 
       const blockedHours = getBlockedHoursFromRanges(
         (blockedData ?? []) as LaneBlock[]
@@ -236,6 +271,8 @@ export default function BookingForm({ lanes }: BookingFormProps) {
   }
 
   function isRangeInsideOpeningHours(hour: string) {
+    if (!hour) return false;
+
     const endTime = addMinutesToTime(hour, durationMinutes);
     const lastPossibleEnd = addMinutesToTime(hours[hours.length - 1], 60);
 
@@ -243,6 +280,8 @@ export default function BookingForm({ lanes }: BookingFormProps) {
   }
 
   function canSelectStartHour(hour: string) {
+    if (!hour) return false;
+
     if (!isRangeInsideOpeningHours(hour)) {
       return false;
     }
@@ -251,6 +290,21 @@ export default function BookingForm({ lanes }: BookingFormProps) {
 
     return unavailableHours.length === 0;
   }
+
+  const hasSelectedRangeConflict =
+    selectedHour !== "" && !canSelectStartHour(selectedHour);
+
+  const canSubmit =
+    !loading &&
+    userId !== "" &&
+    customerName !== "" &&
+    customerEmail !== "" &&
+    customerPhone !== "" &&
+    reservationDate !== "" &&
+    laneId !== "" &&
+    selectedHour !== "" &&
+    acceptedRules &&
+    !hasSelectedRangeConflict;
 
   function handleHourClick(hour: string) {
     setMessage("");
@@ -268,7 +322,7 @@ export default function BookingForm({ lanes }: BookingFormProps) {
     if (unavailableHours.length > 0) {
       setSelectedHour("");
       setMessage(
-        `Nie można zarezerwować tego zakresu. W wybranym czasie zajęte lub zablokowane są godziny: ${unavailableHours.join(
+        `Nie można rozpocząć rezerwacji o tej godzinie. Wybrany czas rezerwacji zachodziłby na zajęte godziny: ${unavailableHours.join(
           ", "
         )}.`
       );
@@ -298,16 +352,32 @@ export default function BookingForm({ lanes }: BookingFormProps) {
       return;
     }
 
-    if (!canSelectStartHour(selectedHour)) {
+    if (!acceptedRules) {
+      setMessage("Musisz zaakceptować regulamin i zasady bezpieczeństwa.");
+      return;
+    }
+
+    if (!isRangeInsideOpeningHours(selectedHour)) {
       setMessage(
-        "Wybrany zakres rezerwacji koliduje z inną rezerwacją lub blokadą."
+        "Wybrany czas rezerwacji wychodzi poza dostępne godziny pracy."
       );
       setSelectedHour("");
       return;
     }
 
-    if (!acceptedRules) {
-      setMessage("Musisz zaakceptować regulamin i zasady bezpieczeństwa.");
+    const selectedRangeHours = getSelectedRange(selectedHour, durationMinutes);
+
+    const collisionHours = selectedRangeHours.filter((hour) =>
+      bookedHours.includes(hour)
+    );
+
+    if (collisionHours.length > 0) {
+      setMessage(
+        `Nie można utworzyć rezerwacji. Wybrany zakres zachodzi na zajęte godziny: ${collisionHours.join(
+          ", "
+        )}.`
+      );
+      setSelectedHour("");
       return;
     }
 
@@ -316,46 +386,70 @@ export default function BookingForm({ lanes }: BookingFormProps) {
 
     setLoading(true);
 
-    const { data: existingReservations, error: checkError } = await supabase
-      .from("reservations")
-      .select("id, start_time, end_time")
-      .eq("lane_id", laneId)
-      .eq("reservation_date", reservationDate)
-      .eq("reservation_status", "confirmed");
+    const { data: allReservationsForLane, error: reservationsError } =
+      await supabase
+        .from("reservations")
+        .select(
+          "id, lane_id, reservation_date, start_time, end_time, reservation_status"
+        )
+        .eq("lane_id", laneId)
+        .eq("reservation_date", reservationDate);
 
-    const { data: existingBlocks, error: blockCheckError } = await supabase
+    if (reservationsError) {
+      setLoading(false);
+      setMessage("Błąd sprawdzania rezerwacji.");
+      return;
+    }
+
+    const reservationConflict = (
+      (allReservationsForLane ?? []) as BookedReservation[]
+    ).filter((reservation) => {
+      return (
+        isActiveReservation(reservation.reservation_status) &&
+        rangesOverlap(
+          selectedHour,
+          endTime,
+          reservation.start_time,
+          reservation.end_time
+        )
+      );
+    });
+
+    if (reservationConflict.length > 0) {
+      setLoading(false);
+      setMessage(
+        `Nie można zarezerwować tego zakresu. Kolizja z istniejącą rezerwacją: ${normalizeTime(
+          reservationConflict[0].start_time
+        )} - ${normalizeTime(reservationConflict[0].end_time)}.`
+      );
+      setSelectedHour("");
+      return;
+    }
+
+    const { data: allBlocksForLane, error: blocksError } = await supabase
       .from("lane_blocks")
       .select("id, start_time, end_time")
       .eq("lane_id", laneId)
       .eq("block_date", reservationDate)
       .eq("is_active", true);
 
-    if (checkError || blockCheckError) {
+    if (blocksError) {
       setLoading(false);
-      setMessage("Błąd sprawdzania dostępności.");
+      setMessage("Błąd sprawdzania blokad osi.");
       return;
     }
 
-    const hasReservationConflict = (
-      (existingReservations ?? []) as BookedReservation[]
-    ).some((reservation) =>
-      rangesOverlap(
-        selectedHour,
-        endTime,
-        reservation.start_time,
-        reservation.end_time
-      )
-    );
-
-    const hasBlockConflict = ((existingBlocks ?? []) as LaneBlock[]).some(
+    const blockConflict = ((allBlocksForLane ?? []) as LaneBlock[]).filter(
       (block) =>
         rangesOverlap(selectedHour, endTime, block.start_time, block.end_time)
     );
 
-    if (hasReservationConflict || hasBlockConflict) {
+    if (blockConflict.length > 0) {
       setLoading(false);
       setMessage(
-        "Nie można zarezerwować tego zakresu. Wybrany czas koliduje z inną rezerwacją lub blokadą osi."
+        `Nie można zarezerwować tego zakresu. Kolizja z blokadą osi: ${normalizeTime(
+          blockConflict[0].start_time
+        )} - ${normalizeTime(blockConflict[0].end_time)}.`
       );
       setSelectedHour("");
       return;
@@ -561,7 +655,11 @@ export default function BookingForm({ lanes }: BookingFormProps) {
           <input
             type="date"
             value={reservationDate}
-            onChange={(event) => setReservationDate(event.target.value)}
+            onChange={(event) => {
+              setReservationDate(event.target.value);
+              setSelectedHour("");
+              setMessage("");
+            }}
             className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-white outline-none focus:border-green-600"
           />
         </div>
@@ -573,7 +671,11 @@ export default function BookingForm({ lanes }: BookingFormProps) {
 
           <select
             value={laneId}
-            onChange={(event) => setLaneId(event.target.value)}
+            onChange={(event) => {
+              setLaneId(event.target.value);
+              setSelectedHour("");
+              setMessage("");
+            }}
             className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-white outline-none focus:border-green-600"
           >
             <option value="">Wybierz oś</option>
@@ -616,10 +718,32 @@ export default function BookingForm({ lanes }: BookingFormProps) {
 
             {reservationDate && laneId && (
               <span className="text-xs text-zinc-500">
-                Żółte kafelki pokazują cały wybrany zakres rezerwacji.
+                Każdy kafelek oznacza pełny przedział jednej godziny, np.
+                12:00–13:00.
               </span>
             )}
           </div>
+
+          {reservationDate && laneId && (
+            <div className="mb-3 rounded-xl border border-zinc-800 bg-zinc-950 p-3 text-xs text-zinc-400">
+              <p>
+                <span className="font-semibold text-red-300">Zajęte</span> —
+                ta godzina jest już zarezerwowana.
+              </p>
+              <p>
+                <span className="font-semibold text-zinc-300">
+                  Start niedostępny
+                </span>{" "}
+                — wybrany czas rezerwacji zachodziłby na zajęty termin.
+              </p>
+              <p>
+                <span className="font-semibold text-yellow-300">
+                  Wybrany zakres
+                </span>{" "}
+                — godziny objęte Twoją aktualną rezerwacją.
+              </p>
+            </div>
+          )}
 
           {!reservationDate || !laneId ? (
             <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-4 text-sm text-zinc-400">
@@ -632,6 +756,7 @@ export default function BookingForm({ lanes }: BookingFormProps) {
           ) : (
             <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
               {hours.map((hour) => {
+                const hourEnd = addMinutesToTime(hour, 60);
                 const isBooked = bookedHours.includes(hour);
                 const isSelected = selectedHour === hour;
                 const isInSelectedRange = selectedRange.includes(hour);
@@ -646,24 +771,30 @@ export default function BookingForm({ lanes }: BookingFormProps) {
                     key={hour}
                     type="button"
                     onClick={() => handleHourClick(hour)}
+                    disabled={!isStartAvailable}
                     className={
-                      isSelected
-                        ? "rounded-xl border border-yellow-400 bg-yellow-600 px-4 py-3 font-semibold text-black"
-                        : isInSelectedRange
-                          ? "rounded-xl border border-yellow-500 bg-yellow-950 px-4 py-3 font-semibold text-yellow-300"
-                          : !isStartAvailable
-                            ? "rounded-xl border border-red-900 bg-zinc-900 px-4 py-3 font-semibold text-zinc-600"
-                            : "rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 font-semibold transition hover:border-green-600 hover:bg-green-700"
+                      isInSelectedRange
+                        ? isSelected
+                          ? "cursor-pointer rounded-xl border border-yellow-400 bg-yellow-600 px-4 py-3 font-semibold text-black"
+                          : "cursor-default rounded-xl border border-yellow-500 bg-yellow-950 px-4 py-3 font-semibold text-yellow-300"
+                        : !isStartAvailable
+                          ? isBooked
+                            ? "cursor-not-allowed rounded-xl border border-red-900 bg-red-950 px-4 py-3 font-semibold text-red-300 opacity-80"
+                            : "cursor-not-allowed rounded-xl border border-zinc-700 bg-zinc-900 px-4 py-3 font-semibold text-zinc-500 opacity-80"
+                          : "rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 font-semibold transition hover:border-green-600 hover:bg-green-700"
                     }
                   >
-                    <span>{hour}</span>
+                    <span className="block text-sm">
+                      {hour}–{hourEnd}
+                    </span>
+
                     <span className="mt-1 block text-xs">
-                      {!isStartAvailable
-                        ? isBooked
-                          ? "Niedostępne"
-                          : "Kolizja zakresu"
-                        : isInSelectedRange
-                          ? "Wybrany zakres"
+                      {isInSelectedRange
+                        ? "Wybrany zakres"
+                        : !isStartAvailable
+                          ? isBooked
+                            ? "Zajęte"
+                            : "Start niedostępny"
                           : "Wolne"}
                     </span>
                   </button>
@@ -712,7 +843,7 @@ export default function BookingForm({ lanes }: BookingFormProps) {
         <button
           type="button"
           onClick={handleSubmit}
-          disabled={loading}
+          disabled={!canSubmit}
           className="rounded-xl bg-green-700 px-4 py-3 font-semibold transition hover:bg-green-600 disabled:cursor-not-allowed disabled:opacity-60"
         >
           {loading ? "Zapisywanie..." : "Potwierdź rezerwację"}
