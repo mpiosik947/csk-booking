@@ -9,6 +9,7 @@ type EventRegistration = {
   payment_status: string;
   created_at: string;
   events: {
+    id: string;
     title: string;
     description: string;
     event_date: string;
@@ -17,6 +18,10 @@ type EventRegistration = {
     location: string;
     price: number;
   } | null;
+};
+
+type ReserveRegistration = {
+  id: string;
 };
 
 function translateStatus(status: string) {
@@ -64,7 +69,11 @@ function canCancelEvent(eventDate: string, startTime: string) {
 }
 
 function getMessageClass(message: string) {
-  if (message.includes("anulowany") || message.includes("anulowany")) {
+  if (
+    message.includes("anulowany") ||
+    message.includes("przeniesiona") ||
+    message.includes("przeniesiony")
+  ) {
     return "mb-6 rounded-xl border border-green-800 bg-green-950 p-4 text-sm font-semibold text-green-300";
   }
 
@@ -101,6 +110,7 @@ export default function MyEventsPage() {
           payment_status,
           created_at,
           events (
+            id,
             title,
             description,
             event_date,
@@ -126,6 +136,53 @@ export default function MyEventsPage() {
 
     loadMyEvents();
   }, []);
+
+  async function promoteFirstReservePerson(eventId: string) {
+    const { data: reserveList, error: reserveError } = await supabase
+      .from("event_registrations")
+      .select("id")
+      .eq("event_id", eventId)
+      .eq("registration_status", "reserve")
+      .order("created_at", { ascending: true })
+      .limit(1);
+
+    if (reserveError) {
+      return {
+        promoted: false,
+        error: reserveError.message,
+      };
+    }
+
+    const firstReserve = ((reserveList as any) ?? [])[0] as
+      | ReserveRegistration
+      | undefined;
+
+    if (!firstReserve) {
+      return {
+        promoted: false,
+        error: "",
+      };
+    }
+
+    const { error: updateError } = await supabase
+      .from("event_registrations")
+      .update({
+        registration_status: "registered",
+      })
+      .eq("id", firstReserve.id);
+
+    if (updateError) {
+      return {
+        promoted: false,
+        error: updateError.message,
+      };
+    }
+
+    return {
+      promoted: true,
+      error: "",
+    };
+  }
 
   async function cancelRegistration(item: EventRegistration) {
     setMessage("");
@@ -159,11 +216,26 @@ export default function MyEventsPage() {
       })
       .eq("id", item.id);
 
-    setProcessingId("");
-
     if (error) {
+      setProcessingId("");
       setMessage(`Błąd anulacji: ${error.message}`);
       return;
+    }
+
+    const reserveResult = await promoteFirstReservePerson(item.events.id);
+
+    setProcessingId("");
+
+    if (reserveResult.error) {
+      setMessage(
+        `Udział został anulowany, ale nie udało się automatycznie przenieść osoby z listy rezerwowej: ${reserveResult.error}`
+      );
+    } else if (reserveResult.promoted) {
+      setMessage(
+        "Udział w szkoleniu został anulowany. Pierwsza osoba z listy rezerwowej została automatycznie przeniesiona na listę uczestników."
+      );
+    } else {
+      setMessage("Udział w szkoleniu został anulowany.");
     }
 
     setItems((currentItems) =>
@@ -173,8 +245,6 @@ export default function MyEventsPage() {
           : currentItem
       )
     );
-
-    setMessage("Udział w szkoleniu został anulowany.");
   }
 
   return (
