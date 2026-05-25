@@ -15,6 +15,10 @@ type Reservation = {
   price: number;
   reservation_status: string;
   payment_status: string;
+  attendance_status?: string | null;
+  admin_note?: string | null;
+  checked_in_at?: string | null;
+  completed_at?: string | null;
   shooting_lanes: {
     name: string;
   } | null;
@@ -32,9 +36,20 @@ function translateReservationStatus(status: string) {
   return status;
 }
 
+function translateAttendanceStatus(status?: string | null) {
+  if (status === "present") return "Obecny";
+  if (status === "no_show") return "Nieobecny";
+  if (status === "completed") return "Zakończona";
+  return "Zaplanowana";
+}
+
 function translatePaymentStatus(status: string) {
   if (status === "pay_on_site") return "Płatność na miejscu";
   if (status === "paid_on_site") return "Opłacone na miejscu";
+  if (status === "paid") return "Opłacone";
+  if (status === "voucher") return "Voucher";
+  if (status === "free") return "Gratis";
+  if (status === "unpaid") return "Nieopłacone";
   return status;
 }
 
@@ -56,6 +71,22 @@ function getStatusClass(status: string) {
   }
 
   return "rounded-full bg-zinc-950 px-3 py-1 text-xs font-semibold text-zinc-300";
+}
+
+function getAttendanceClass(status?: string | null) {
+  if (status === "present") {
+    return "rounded-full bg-green-950 px-3 py-1 text-xs font-semibold text-green-300";
+  }
+
+  if (status === "completed") {
+    return "rounded-full bg-blue-950 px-3 py-1 text-xs font-semibold text-blue-300";
+  }
+
+  if (status === "no_show") {
+    return "rounded-full bg-red-950 px-3 py-1 text-xs font-semibold text-red-300";
+  }
+
+  return "rounded-full bg-zinc-900 px-3 py-1 text-xs font-semibold text-zinc-300";
 }
 
 function formatDateHeader(dateString: string) {
@@ -97,16 +128,20 @@ export default function AdminReservationsTable({
 }: AdminReservationsTableProps) {
   const [items, setItems] = useState(reservations);
   const [message, setMessage] = useState("");
+  const [savingId, setSavingId] = useState("");
 
   const groupedReservations = groupReservationsByDate(items);
 
   async function updateReservationStatus(id: string, status: string) {
     setMessage("");
+    setSavingId(id);
 
     const { error } = await supabase
       .from("reservations")
       .update({ reservation_status: status })
       .eq("id", id);
+
+    setSavingId("");
 
     if (error) {
       setMessage(`Błąd zmiany statusu: ${error.message}`);
@@ -122,13 +157,83 @@ export default function AdminReservationsTable({
     setMessage("Status rezerwacji został zaktualizowany.");
   }
 
+  async function updateAttendanceStatus(
+    id: string,
+    attendanceStatus: "planned" | "present" | "no_show" | "completed"
+  ) {
+    setMessage("");
+    setSavingId(id);
+
+    const now = new Date().toISOString();
+
+    const reservationStatus =
+      attendanceStatus === "no_show"
+        ? "no_show"
+        : attendanceStatus === "completed"
+          ? "completed"
+          : "confirmed";
+
+    const updatePayload = {
+      attendance_status: attendanceStatus,
+      reservation_status: reservationStatus,
+      checked_in_at: attendanceStatus === "present" ? now : null,
+      completed_at: attendanceStatus === "completed" ? now : null,
+    };
+
+    const { error } = await supabase
+      .from("reservations")
+      .update(updatePayload)
+      .eq("id", id);
+
+    setSavingId("");
+
+    if (error) {
+      setMessage(`Błąd zmiany obecności: ${error.message}`);
+      return;
+    }
+
+    setItems((currentItems) =>
+      currentItems.map((item) =>
+        item.id === id
+          ? {
+              ...item,
+              attendance_status: attendanceStatus,
+              reservation_status: reservationStatus,
+              checked_in_at: attendanceStatus === "present" ? now : null,
+              completed_at: attendanceStatus === "completed" ? now : null,
+            }
+          : item
+      )
+    );
+
+    if (attendanceStatus === "present") {
+      setMessage("Klient oznaczony jako obecny.");
+      return;
+    }
+
+    if (attendanceStatus === "no_show") {
+      setMessage("Klient oznaczony jako nieobecny.");
+      return;
+    }
+
+    if (attendanceStatus === "completed") {
+      setMessage("Rezerwacja oznaczona jako zakończona.");
+      return;
+    }
+
+    setMessage("Rezerwacja przywrócona jako zaplanowana.");
+  }
+
   async function markAsPaid(id: string) {
     setMessage("");
+    setSavingId(id);
 
     const { error } = await supabase
       .from("reservations")
       .update({ payment_status: "paid_on_site" })
       .eq("id", id);
+
+    setSavingId("");
 
     if (error) {
       setMessage(`Błąd zmiany płatności: ${error.message}`);
@@ -142,6 +247,33 @@ export default function AdminReservationsTable({
     );
 
     setMessage("Rezerwacja oznaczona jako opłacona.");
+  }
+
+  function updateLocalNote(id: string, note: string) {
+    setItems((currentItems) =>
+      currentItems.map((item) =>
+        item.id === id ? { ...item, admin_note: note } : item
+      )
+    );
+  }
+
+  async function saveAdminNote(id: string, note: string) {
+    setMessage("");
+    setSavingId(id);
+
+    const { error } = await supabase
+      .from("reservations")
+      .update({ admin_note: note })
+      .eq("id", id);
+
+    setSavingId("");
+
+    if (error) {
+      setMessage(`Błąd zapisu notatki: ${error.message}`);
+      return;
+    }
+
+    setMessage("Notatka została zapisana.");
   }
 
   if (items.length === 0) {
@@ -177,7 +309,7 @@ export default function AdminReservationsTable({
             </div>
 
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[1050px] border-collapse text-left text-sm">
+              <table className="w-full min-w-[1300px] border-collapse text-left text-sm">
                 <thead>
                   <tr className="border-b border-zinc-800 text-zinc-400">
                     <th className="py-3 pr-4">Godzina</th>
@@ -187,7 +319,9 @@ export default function AdminReservationsTable({
                     <th className="py-3 pr-4">E-mail</th>
                     <th className="py-3 pr-4">Cena</th>
                     <th className="py-3 pr-4">Status</th>
+                    <th className="py-3 pr-4">Obecność</th>
                     <th className="py-3 pr-4">Płatność</th>
+                    <th className="py-3 pr-4">Notatka</th>
                     <th className="py-3 pr-4">Akcje</th>
                   </tr>
                 </thead>
@@ -201,29 +335,33 @@ export default function AdminReservationsTable({
                       </td>
 
                       <td className="py-4 pr-4">
-                        <span className="rounded-full bg-green-950 px-3 py-1 text-xs font-semibold text-green-400">
-                          {reservation.shooting_lanes?.name ?? "Brak osi"}
-                        </span>
-                      </td>
-
-                      <td className="py-4 pr-4 font-semibold">
-                        {reservation.customer_name}
+                        {reservation.shooting_lanes?.name ?? "Brak osi"}
                       </td>
 
                       <td className="py-4 pr-4">
+                        <p className="font-semibold">
+                          {reservation.customer_name}
+                        </p>
+                      </td>
+
+                      <td className="py-4 pr-4 text-zinc-300">
                         {reservation.customer_phone}
                       </td>
 
-                      <td className="py-4 pr-4">
+                      <td className="py-4 pr-4 text-zinc-400">
                         {reservation.customer_email}
                       </td>
 
-                      <td className="py-4 pr-4">
-                        {Number(reservation.price).toFixed(0)} zł
+                      <td className="py-4 pr-4 font-semibold text-green-400">
+                        {reservation.price} zł
                       </td>
 
                       <td className="py-4 pr-4">
-                        <span className={getStatusClass(reservation.reservation_status)}>
+                        <span
+                          className={getStatusClass(
+                            reservation.reservation_status
+                          )}
+                        >
                           {translateReservationStatus(
                             reservation.reservation_status
                           )}
@@ -231,43 +369,96 @@ export default function AdminReservationsTable({
                       </td>
 
                       <td className="py-4 pr-4">
+                        <span
+                          className={getAttendanceClass(
+                            reservation.attendance_status
+                          )}
+                        >
+                          {translateAttendanceStatus(
+                            reservation.attendance_status
+                          )}
+                        </span>
+                      </td>
+
+                      <td className="py-4 pr-4 text-zinc-300">
                         {translatePaymentStatus(reservation.payment_status)}
                       </td>
 
                       <td className="py-4 pr-4">
-                        <div className="flex flex-wrap gap-2">
+                        <div className="grid min-w-[220px] gap-2">
+                          <textarea
+                            value={reservation.admin_note ?? ""}
+                            onChange={(event) =>
+                              updateLocalNote(
+                                reservation.id,
+                                event.target.value
+                              )
+                            }
+                            rows={2}
+                            placeholder="Notatka admina..."
+                            className="w-full rounded-xl border border-zinc-700 bg-zinc-900 px-3 py-2 text-xs text-white outline-none focus:border-green-600"
+                          />
+
                           <button
                             type="button"
-                            onClick={() => markAsPaid(reservation.id)}
-                            className="rounded-lg border border-green-800 px-3 py-2 text-xs text-green-300 hover:bg-green-950"
+                            onClick={() =>
+                              saveAdminNote(
+                                reservation.id,
+                                reservation.admin_note ?? ""
+                              )
+                            }
+                            disabled={savingId === reservation.id}
+                            className="rounded-lg border border-zinc-700 px-3 py-2 text-xs font-semibold text-zinc-300 transition hover:bg-zinc-900 disabled:cursor-not-allowed disabled:opacity-50"
                           >
-                            Opłacona
+                            Zapisz notatkę
+                          </button>
+                        </div>
+                      </td>
+
+                      <td className="py-4 pr-4">
+                        <div className="flex min-w-[360px] flex-wrap gap-2">
+                          <button
+                            type="button"
+                            onClick={() =>
+                              updateAttendanceStatus(reservation.id, "present")
+                            }
+                            disabled={savingId === reservation.id}
+                            className="rounded-lg bg-green-700 px-3 py-2 text-xs font-semibold transition hover:bg-green-600 disabled:cursor-not-allowed disabled:opacity-50"
+                          >
+                            Obecny
                           </button>
 
                           <button
                             type="button"
                             onClick={() =>
-                              updateReservationStatus(
-                                reservation.id,
-                                "completed"
-                              )
+                              updateAttendanceStatus(reservation.id, "no_show")
                             }
-                            className="rounded-lg border border-blue-800 px-3 py-2 text-xs text-blue-300 hover:bg-blue-950"
-                          >
-                            Zrealizowana
-                          </button>
-
-                          <button
-                            type="button"
-                            onClick={() =>
-                              updateReservationStatus(
-                                reservation.id,
-                                "no_show"
-                              )
-                            }
-                            className="rounded-lg border border-yellow-800 px-3 py-2 text-xs text-yellow-300 hover:bg-yellow-950"
+                            disabled={savingId === reservation.id}
+                            className="rounded-lg border border-yellow-700 px-3 py-2 text-xs font-semibold text-yellow-300 transition hover:bg-yellow-950 disabled:cursor-not-allowed disabled:opacity-50"
                           >
                             Nieobecny
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() =>
+                              updateAttendanceStatus(reservation.id, "completed")
+                            }
+                            disabled={savingId === reservation.id}
+                            className="rounded-lg border border-blue-700 px-3 py-2 text-xs font-semibold text-blue-300 transition hover:bg-blue-950 disabled:cursor-not-allowed disabled:opacity-50"
+                          >
+                            Zakończ
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() =>
+                              updateAttendanceStatus(reservation.id, "planned")
+                            }
+                            disabled={savingId === reservation.id}
+                            className="rounded-lg border border-zinc-700 px-3 py-2 text-xs font-semibold text-zinc-300 transition hover:bg-zinc-900 disabled:cursor-not-allowed disabled:opacity-50"
+                          >
+                            Zaplanowana
                           </button>
 
                           <button
@@ -278,9 +469,25 @@ export default function AdminReservationsTable({
                                 "cancelled"
                               )
                             }
-                            className="rounded-lg border border-red-800 px-3 py-2 text-xs text-red-300 hover:bg-red-950"
+                            disabled={
+                              savingId === reservation.id ||
+                              reservation.reservation_status === "cancelled"
+                            }
+                            className="rounded-lg border border-red-700 px-3 py-2 text-xs font-semibold text-red-300 transition hover:bg-red-950 disabled:cursor-not-allowed disabled:opacity-50"
                           >
                             Anuluj
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => markAsPaid(reservation.id)}
+                            disabled={
+                              savingId === reservation.id ||
+                              reservation.payment_status === "paid_on_site"
+                            }
+                            className="rounded-lg border border-green-700 px-3 py-2 text-xs font-semibold text-green-300 transition hover:bg-green-950 disabled:cursor-not-allowed disabled:opacity-50"
+                          >
+                            Opłacono
                           </button>
                         </div>
                       </td>

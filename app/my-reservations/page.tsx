@@ -11,6 +11,9 @@ type Reservation = {
   price: number;
   reservation_status: string;
   payment_status: string;
+  check_in_token: string | null;
+  attendance_status?: string | null;
+  checked_in_at?: string | null;
   shooting_lanes: {
     name: string;
   } | null;
@@ -30,6 +33,13 @@ function translatePaymentStatus(status: string) {
   return status;
 }
 
+function translateAttendanceStatus(status?: string | null) {
+  if (status === "present") return "Obecny";
+  if (status === "completed") return "Zakończona";
+  if (status === "no_show") return "Nieobecny";
+  return "Niepotwierdzony";
+}
+
 function getStatusClass(status: string) {
   if (status === "confirmed") {
     return "rounded-full bg-green-950 px-3 py-1 text-xs font-semibold text-green-400";
@@ -45,6 +55,22 @@ function getStatusClass(status: string) {
 
   if (status === "no_show") {
     return "rounded-full bg-yellow-950 px-3 py-1 text-xs font-semibold text-yellow-300";
+  }
+
+  return "rounded-full bg-zinc-950 px-3 py-1 text-xs font-semibold text-zinc-300";
+}
+
+function getAttendanceClass(status?: string | null) {
+  if (status === "present") {
+    return "rounded-full bg-green-950 px-3 py-1 text-xs font-semibold text-green-300";
+  }
+
+  if (status === "completed") {
+    return "rounded-full bg-blue-950 px-3 py-1 text-xs font-semibold text-blue-300";
+  }
+
+  if (status === "no_show") {
+    return "rounded-full bg-red-950 px-3 py-1 text-xs font-semibold text-red-300";
   }
 
   return "rounded-full bg-zinc-950 px-3 py-1 text-xs font-semibold text-zinc-300";
@@ -68,6 +94,14 @@ function canCancelReservation(reservationDate: string, startTime: string) {
   const differenceInHours = differenceInMilliseconds / (1000 * 60 * 60);
 
   return differenceInHours > 12;
+}
+
+function getCheckInUrl(token: string) {
+  if (typeof window === "undefined") {
+    return "";
+  }
+
+  return `${window.location.origin}/admin/check-in?token=${token}`;
 }
 
 export default function MyReservationsPage() {
@@ -103,6 +137,9 @@ export default function MyReservationsPage() {
           price,
           reservation_status,
           payment_status,
+          check_in_token,
+          attendance_status,
+          checked_in_at,
           shooting_lanes (
             name
           )
@@ -239,12 +276,25 @@ export default function MyReservationsPage() {
                 reservation.start_time
               );
 
+              const isActiveReservation =
+                reservation.reservation_status === "confirmed";
+
+              const checkInUrl = reservation.check_in_token
+                ? getCheckInUrl(reservation.check_in_token)
+                : "";
+
+              const qrUrl = checkInUrl
+                ? `https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(
+                    checkInUrl
+                  )}`
+                : "";
+
               return (
                 <div
                   key={reservation.id}
                   className="rounded-2xl border border-zinc-800 bg-zinc-900 p-6"
                 >
-                  <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+                  <div className="grid gap-6 md:grid-cols-[1fr_220px] md:items-start">
                     <div>
                       <span className="mb-3 inline-block rounded-full bg-green-950 px-3 py-1 text-xs font-semibold text-green-400">
                         {reservation.shooting_lanes?.name ?? "Brak osi"}
@@ -270,6 +320,28 @@ export default function MyReservationsPage() {
                         </span>
                       </p>
 
+                      <div className="mt-4 flex flex-wrap gap-2">
+                        <span
+                          className={getStatusClass(
+                            reservation.reservation_status
+                          )}
+                        >
+                          {translateReservationStatus(
+                            reservation.reservation_status
+                          )}
+                        </span>
+
+                        <span
+                          className={getAttendanceClass(
+                            reservation.attendance_status
+                          )}
+                        >
+                          {translateAttendanceStatus(
+                            reservation.attendance_status
+                          )}
+                        </span>
+                      </div>
+
                       {reservation.reservation_status === "confirmed" &&
                         !allowedToCancel && (
                           <p className="mt-3 text-sm text-yellow-300">
@@ -277,29 +349,66 @@ export default function MyReservationsPage() {
                             zostało mniej niż 12 godzin do terminu.
                           </p>
                         )}
+
+                      {reservation.checked_in_at && (
+                        <p className="mt-3 text-xs text-zinc-500">
+                          Check-in:{" "}
+                          {new Date(reservation.checked_in_at).toLocaleString(
+                            "pl-PL"
+                          )}
+                        </p>
+                      )}
+
+                      <div className="mt-5 flex flex-wrap gap-3">
+                        {reservation.reservation_status === "confirmed" &&
+                          allowedToCancel && (
+                            <button
+                              type="button"
+                              onClick={() => cancelReservation(reservation)}
+                              className="rounded-xl border border-red-800 px-4 py-2 text-sm font-semibold text-red-400 transition hover:bg-red-950"
+                            >
+                              Anuluj rezerwację
+                            </button>
+                          )}
+
+                        <a
+                          href="/booking"
+                          className="rounded-xl border border-zinc-700 px-4 py-2 text-sm font-semibold text-zinc-300 transition hover:bg-zinc-950"
+                        >
+                          Nowa rezerwacja
+                        </a>
+                      </div>
                     </div>
 
-                    <div className="flex flex-col items-start gap-3 md:items-end">
-                      <span
-                        className={getStatusClass(
-                          reservation.reservation_status
-                        )}
-                      >
-                        {translateReservationStatus(
-                          reservation.reservation_status
-                        )}
-                      </span>
+                    <div className="rounded-2xl border border-zinc-800 bg-zinc-950 p-4 text-center">
+                      {isActiveReservation && qrUrl ? (
+                        <>
+                          <p className="mb-3 text-xs font-semibold uppercase tracking-[0.2em] text-cyan-300">
+                            QR Check-in
+                          </p>
 
-                      {reservation.reservation_status === "confirmed" &&
-                        allowedToCancel && (
-                          <button
-                            type="button"
-                            onClick={() => cancelReservation(reservation)}
-                            className="rounded-xl border border-red-800 px-4 py-2 text-sm font-semibold text-red-400 transition hover:bg-red-950"
+                          <img
+                            src={qrUrl}
+                            alt="Kod QR check-in"
+                            className="mx-auto rounded-xl bg-white p-2"
+                          />
+
+                          <p className="mt-3 text-xs text-zinc-500">
+                            Pokaż ten kod pracownikowi strzelnicy przy wejściu.
+                          </p>
+
+                          <a
+                            href={checkInUrl}
+                            className="mt-3 inline-block text-xs text-cyan-300 hover:text-cyan-200"
                           >
-                            Anuluj rezerwację
-                          </button>
-                        )}
+                            Otwórz link check-in
+                          </a>
+                        </>
+                      ) : (
+                        <div className="text-sm text-zinc-500">
+                          QR dostępny tylko dla aktywnych rezerwacji.
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>

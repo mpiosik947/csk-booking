@@ -153,6 +153,8 @@ export default function BookingForm({ lanes }: BookingFormProps) {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
 
   const [userId, setUserId] = useState("");
+  const [verificationStatus, setVerificationStatus] =
+    useState("niezweryfikowane");
 
   const [customerName, setCustomerName] = useState("");
   const [customerEmail, setCustomerEmail] = useState("");
@@ -187,21 +189,41 @@ export default function BookingForm({ lanes }: BookingFormProps) {
 
       const metadata = user.user_metadata ?? {};
 
-      setIsLoggedIn(true);
-      setUserId(user.id);
-      setCustomerName(metadata.full_name ?? metadata.name ?? "");
-      setCustomerEmail(user.email ?? "");
-      setCustomerPhone(
-        metadata.phone ??
-          metadata.telefon ??
-          metadata.Phone ??
-          metadata.phone_number ??
-          metadata.phoneNumber ??
-          user.phone ??
-          ""
-      );
+setIsLoggedIn(true);
+setUserId(user.id);
 
-      setCheckingUser(false);
+setCustomerName(
+  metadata.full_name ??
+  metadata.name ??
+  ""
+);
+
+setCustomerEmail(
+  user.email ?? ""
+);
+
+setCustomerPhone(
+  metadata.phone ??
+  metadata.telefon ??
+  metadata.Phone ??
+  metadata.phone_number ??
+  metadata.phoneNumber ??
+  user.phone ??
+  ""
+);
+
+const { data: profileData } = await supabase
+  .from("profiles")
+  .select("verification_status")
+  .eq("user_id", user.id)
+  .single();
+
+setVerificationStatus(
+  profileData?.verification_status ??
+  "niezweryfikowane"
+);
+
+setCheckingUser(false);
     }
 
     loadUser();
@@ -294,8 +316,11 @@ export default function BookingForm({ lanes }: BookingFormProps) {
   const hasSelectedRangeConflict =
     selectedHour !== "" && !canSelectStartHour(selectedHour);
 
+  const isVerified = verificationStatus === "zweryfikowane";
+
   const canSubmit =
     !loading &&
+    isVerified &&
     userId !== "" &&
     customerName !== "" &&
     customerEmail !== "" &&
@@ -334,6 +359,13 @@ export default function BookingForm({ lanes }: BookingFormProps) {
 
   async function handleSubmit() {
     setMessage("");
+
+    if (!isVerified) {
+      setMessage(
+        "Twoje konto nie zostało jeszcze zweryfikowane. Rezerwacja osi będzie dostępna po pierwszej wizycie na strzelnicy i potwierdzeniu danych przez pracownika CSK."
+      );
+      return;
+    }
 
     if (!userId) {
       setMessage("Musisz być zalogowany, aby dokonać rezerwacji.");
@@ -609,6 +641,20 @@ export default function BookingForm({ lanes }: BookingFormProps) {
       )}
 
       <form className="grid gap-6 rounded-2xl border border-zinc-800 bg-zinc-900 p-6">
+        {!isVerified && (
+          <div className="rounded-xl border border-yellow-800 bg-yellow-950 p-4 text-sm text-yellow-100">
+            <p className="font-semibold text-yellow-300">
+              Konto oczekuje na weryfikację
+            </p>
+
+            <p className="mt-2 text-yellow-100/80">
+              Rezerwacja osi będzie dostępna po pierwszej wizycie na strzelnicy
+              i potwierdzeniu danych przez pracownika CSK. Do tego czasu możesz
+              uzupełnić profil oraz korzystać z ograniczonych funkcji konta.
+            </p>
+          </div>
+        )}
+
         <div className="grid gap-4 md:grid-cols-3">
           <div>
             <label className="mb-2 block text-sm text-zinc-300">
@@ -846,7 +892,11 @@ export default function BookingForm({ lanes }: BookingFormProps) {
           disabled={!canSubmit}
           className="rounded-xl bg-green-700 px-4 py-3 font-semibold transition hover:bg-green-600 disabled:cursor-not-allowed disabled:opacity-60"
         >
-          {loading ? "Zapisywanie..." : "Potwierdź rezerwację"}
+          {loading
+            ? "Zapisywanie..."
+            : !isVerified
+              ? "Konto wymaga weryfikacji"
+              : "Potwierdź rezerwację"}
         </button>
       </form>
     </>

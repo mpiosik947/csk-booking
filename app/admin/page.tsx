@@ -18,6 +18,10 @@ type Reservation = {
   price: number;
   reservation_status: string;
   payment_status: string;
+  attendance_status?: string | null;
+  admin_note?: string | null;
+  checked_in_at?: string | null;
+  completed_at?: string | null;
   shooting_lanes: {
     name: string;
   } | null;
@@ -68,6 +72,10 @@ export default function AdminPage() {
             price,
             reservation_status,
             payment_status,
+            attendance_status,
+            admin_note,
+            checked_in_at,
+            completed_at,
             shooting_lanes (
               name
             )
@@ -116,7 +124,9 @@ export default function AdminPage() {
   );
 
   const noShowReservations = reservations.filter(
-    (reservation) => reservation.reservation_status === "no_show"
+    (reservation) =>
+      reservation.reservation_status === "no_show" ||
+      reservation.attendance_status === "no_show"
   );
 
   return (
@@ -131,8 +141,9 @@ export default function AdminPage() {
             <h1 className="text-3xl font-bold">Panel administratora</h1>
 
             <p className="mt-2 text-zinc-400">
-              Zarządzanie rezerwacjami, płatnościami, eventami, szkoleniami,
-              blokadami osi i raportami.
+              Zarządzanie rezerwacjami, płatnościami, obecnością klientów,
+              eventami, szkoleniami, blokadami osi, kalendarzem, weryfikacją
+              kont i raportami.
             </p>
           </div>
 
@@ -188,7 +199,7 @@ export default function AdminPage() {
               </div>
             </div>
 
-            <div className="mb-8 grid gap-5 md:grid-cols-2 xl:grid-cols-4">
+            <div className="mb-8 grid gap-5 md:grid-cols-2 xl:grid-cols-7">
               <a
                 href="/admin/events"
                 className="rounded-2xl border border-green-800 bg-green-950 p-6 transition hover:bg-green-900"
@@ -241,6 +252,67 @@ export default function AdminPage() {
               </a>
 
               <a
+                href="/admin/calendar"
+                className="rounded-2xl border border-yellow-700 bg-yellow-950 p-6 transition hover:bg-yellow-900"
+              >
+                <h2 className="mb-2 text-2xl font-bold text-yellow-300">
+                  Kalendarz administratora
+                </h2>
+
+                <p className="mb-5 text-yellow-100">
+                  Podgląd rezerwacji i blokad osi w widoku dziennym oraz
+                  tygodniowym.
+                </p>
+
+                <div className="rounded-xl border border-yellow-700 bg-zinc-950 p-4">
+                  <p className="text-sm text-zinc-400">Widok</p>
+                  <p className="mt-1 text-3xl font-bold text-yellow-300">
+                    Kalendarz
+                  </p>
+                </div>
+              </a>
+
+              <a
+                href="/admin/users"
+                className="rounded-2xl border border-purple-800 bg-purple-950 p-6 transition hover:bg-purple-900"
+              >
+                <h2 className="mb-2 text-2xl font-bold text-purple-300">
+                  Weryfikacja kont
+                </h2>
+
+                <p className="mb-5 text-purple-100">
+                  Weryfikuj użytkowników, sprawdzaj dane strzeleckie,
+                  uprawnienia oraz zarządzaj statusem kont.
+                </p>
+
+                <div className="rounded-xl border border-purple-800 bg-zinc-950 p-4">
+                  <p className="text-sm text-zinc-400">Konta użytkowników</p>
+                  <p className="mt-1 text-3xl font-bold text-purple-300">
+                    Admin
+                  </p>
+                </div>
+              </a>
+
+              <a
+                href="/admin/check-in"
+                className="rounded-2xl border border-cyan-800 bg-cyan-950 p-6 transition hover:bg-cyan-900"
+              >
+                <h2 className="mb-2 text-2xl font-bold text-cyan-300">
+                  Check-in QR
+                </h2>
+
+                <p className="mb-5 text-cyan-100">
+                  Skanowanie kodów QR klientów i automatyczne oznaczanie
+                  obecności.
+                </p>
+
+                <div className="rounded-xl border border-cyan-800 bg-zinc-950 p-4">
+                  <p className="text-sm text-zinc-400">Wejście klienta</p>
+                  <p className="mt-1 text-3xl font-bold text-cyan-300">QR</p>
+                </div>
+              </a>
+
+              <a
                 href="/admin/reports"
                 className="rounded-2xl border border-blue-800 bg-blue-950 p-6 transition hover:bg-blue-900"
               >
@@ -265,8 +337,8 @@ export default function AdminPage() {
                 <h2 className="mb-2 text-2xl font-bold">Rezerwacje osi</h2>
 
                 <p className="mb-5 text-zinc-400">
-                  Podgląd wszystkich rezerwacji osi, płatności oraz statusów
-                  klientów.
+                  Podgląd wszystkich rezerwacji osi, płatności, obecności oraz
+                  statusów klientów.
                 </p>
 
                 <div className="grid gap-3">
