@@ -101,8 +101,8 @@ function getCheckInUrl(token: string) {
     return "";
   }
 
-  const siteUrl =
-  process.env.NEXT_PUBLIC_SITE_URL || window.location.origin;
+ const siteUrl =
+  "https://csk-booking-5nwh-git-main-mpiosik94-9167s-projects.vercel.app";
 
 return `${siteUrl}/admin/check-in?token=${token}`;
 }
