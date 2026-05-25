@@ -101,7 +101,10 @@ function getCheckInUrl(token: string) {
     return "";
   }
 
-  return `${window.location.origin}/admin/check-in?token=${token}`;
+  const siteUrl =
+  process.env.NEXT_PUBLIC_SITE_URL || window.location.origin;
+
+return `${siteUrl}/admin/check-in?token=${token}`;
 }
 
 export default function MyReservationsPage() {
