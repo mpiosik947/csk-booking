@@ -1,6 +1,8 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
+type UserRole = "admin" | "pracownik" | "instruktor" | "user";
+
 export async function middleware(request: NextRequest) {
   let response = NextResponse.next({
     request,
@@ -9,6 +11,7 @@ export async function middleware(request: NextRequest) {
   const path = request.nextUrl.pathname;
 
   const isAdminRoute = path.startsWith("/admin");
+  const isAdminUsersRoute = path.startsWith("/admin/users");
 
   if (!isAdminRoute) {
     return response;
@@ -41,14 +44,37 @@ export async function middleware(request: NextRequest) {
 
   const {
     data: { user },
-    error,
+    error: userError,
   } = await supabase.auth.getUser();
 
-  if (error || !user) {
+  if (userError || !user) {
     const loginUrl = new URL("/login", request.url);
     loginUrl.searchParams.set("redirectTo", path);
 
     return NextResponse.redirect(loginUrl);
+  }
+
+  const { data: profile, error: profileError } = await supabase
+    .from("profiles")
+    .select("role")
+    .eq("user_id", user.id)
+    .single();
+
+  if (profileError || !profile) {
+    return NextResponse.redirect(new URL("/dashboard", request.url));
+  }
+
+  const role = profile.role as UserRole;
+
+  const canAccessAdmin = role === "admin" || role === "pracownik";
+  const canAccessUsersPanel = role === "admin";
+
+  if (!canAccessAdmin) {
+    return NextResponse.redirect(new URL("/dashboard", request.url));
+  }
+
+  if (isAdminUsersRoute && !canAccessUsersPanel) {
+    return NextResponse.redirect(new URL("/admin", request.url));
   }
 
   return response;
