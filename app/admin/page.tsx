@@ -4,7 +4,7 @@ const adminTiles = [
   {
     title: "Rezerwacje",
     description: "Podgląd i obsługa rezerwacji klientów.",
-    href: "/admin",
+    href: "/admin/reservations",
   },
   {
     title: "Kalendarz",
