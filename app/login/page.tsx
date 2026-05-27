@@ -32,7 +32,10 @@ export default function LoginPage() {
       return;
     }
 
-   window.location.href = "/dashboard";
+    const params = new URLSearchParams(window.location.search);
+    const redirectTo = params.get("redirectTo") || "/dashboard";
+
+    window.location.href = redirectTo;
   }
 
   return (
