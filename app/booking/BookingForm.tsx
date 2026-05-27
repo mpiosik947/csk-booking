@@ -28,6 +28,15 @@ type LaneBlock = {
   end_time: string;
 };
 
+type Profile = {
+  user_id: string;
+  email: string | null;
+  full_name: string | null;
+  phone: string | null;
+  role: string | null;
+  verification_status: string | null;
+};
+
 type ConfirmationData = {
   date: string;
   startTime: string;
@@ -148,13 +157,36 @@ function getMessageClass(message: string) {
   return "rounded-xl border border-red-800 bg-red-950 p-4 text-sm font-semibold text-red-300";
 }
 
+function getVerificationBox(status: string) {
+  if (status === "verified") {
+    return null;
+  }
+
+  if (status === "rejected") {
+    return {
+      title: "Konto nie zostało zatwierdzone",
+      text: "Twoje konto zostało odrzucone lub wymaga dodatkowego kontaktu z obsługą CSK. Rezerwacja osi jest obecnie zablokowana.",
+      className:
+        "rounded-xl border border-red-800 bg-red-950 p-4 text-sm text-red-100",
+      titleClassName: "font-semibold text-red-300",
+    };
+  }
+
+  return {
+    title: "Konto oczekuje na weryfikację",
+    text: "Rezerwacja osi będzie dostępna po pierwszej wizycie na strzelnicy i potwierdzeniu danych przez pracownika CSK. Do tego czasu możesz uzupełnić profil oraz korzystać z ograniczonych funkcji konta.",
+    className:
+      "rounded-xl border border-yellow-800 bg-yellow-950 p-4 text-sm text-yellow-100",
+    titleClassName: "font-semibold text-yellow-300",
+  };
+}
+
 export default function BookingForm({ lanes }: BookingFormProps) {
   const [checkingUser, setCheckingUser] = useState(true);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
 
   const [userId, setUserId] = useState("");
-  const [verificationStatus, setVerificationStatus] =
-    useState("niezweryfikowane");
+  const [verificationStatus, setVerificationStatus] = useState("pending");
 
   const [customerName, setCustomerName] = useState("");
   const [customerEmail, setCustomerEmail] = useState("");
@@ -177,53 +209,56 @@ export default function BookingForm({ lanes }: BookingFormProps) {
 
   useEffect(() => {
     async function loadUser() {
+      setCheckingUser(true);
+      setMessage("");
+
       const {
         data: { user },
+        error: userError,
       } = await supabase.auth.getUser();
 
-      if (!user) {
+      if (userError || !user) {
         setIsLoggedIn(false);
         setCheckingUser(false);
         return;
       }
 
-      const metadata = user.user_metadata ?? {};
+      setIsLoggedIn(true);
+      setUserId(user.id);
+      setCustomerEmail(user.email ?? "");
 
-setIsLoggedIn(true);
-setUserId(user.id);
+      const { data: profile, error: profileError } = await supabase
+        .from("profiles")
+        .select("user_id,email,full_name,phone,role,verification_status")
+        .eq("user_id", user.id)
+        .single();
 
-setCustomerName(
-  metadata.full_name ??
-  metadata.name ??
-  ""
-);
+      if (profileError || !profile) {
+        setVerificationStatus("pending");
+        setCustomerName(
+          String(user.user_metadata?.full_name ?? user.email ?? "")
+        );
+        setCustomerPhone(String(user.user_metadata?.phone ?? ""));
+        setMessage(
+          "Nie udało się pobrać profilu użytkownika. Skontaktuj się z obsługą CSK."
+        );
+        setCheckingUser(false);
+        return;
+      }
 
-setCustomerEmail(
-  user.email ?? ""
-);
+      const typedProfile = profile as Profile;
 
-setCustomerPhone(
-  metadata.phone ??
-  metadata.telefon ??
-  metadata.Phone ??
-  metadata.phone_number ??
-  metadata.phoneNumber ??
-  user.phone ??
-  ""
-);
+      setVerificationStatus(typedProfile.verification_status ?? "pending");
+      setCustomerName(
+        typedProfile.full_name ||
+          String(user.user_metadata?.full_name ?? user.email ?? "")
+      );
+      setCustomerEmail(typedProfile.email || user.email || "");
+      setCustomerPhone(
+        typedProfile.phone || String(user.user_metadata?.phone ?? "")
+      );
 
-const { data: profileData } = await supabase
-  .from("profiles")
-  .select("verification_status")
-  .eq("user_id", user.id)
-  .single();
-
-setVerificationStatus(
-  profileData?.verification_status ??
-  "niezweryfikowane"
-);
-
-setCheckingUser(false);
+      setCheckingUser(false);
     }
 
     loadUser();
@@ -316,7 +351,7 @@ setCheckingUser(false);
   const hasSelectedRangeConflict =
     selectedHour !== "" && !canSelectStartHour(selectedHour);
 
-  const isVerified = verificationStatus === "zweryfikowane";
+  const isVerified = verificationStatus === "verified";
 
   const canSubmit =
     !loading &&
@@ -330,6 +365,8 @@ setCheckingUser(false);
     selectedHour !== "" &&
     acceptedRules &&
     !hasSelectedRangeConflict;
+
+  const verificationBox = getVerificationBox(verificationStatus);
 
   function handleHourClick(hour: string) {
     setMessage("");
@@ -361,6 +398,13 @@ setCheckingUser(false);
     setMessage("");
 
     if (!isVerified) {
+      if (verificationStatus === "rejected") {
+        setMessage(
+          "Twoje konto nie jest zatwierdzone. Skontaktuj się z obsługą CSK."
+        );
+        return;
+      }
+
       setMessage(
         "Twoje konto nie zostało jeszcze zweryfikowane. Rezerwacja osi będzie dostępna po pierwszej wizycie na strzelnicy i potwierdzeniu danych przez pracownika CSK."
       );
@@ -549,7 +593,7 @@ setCheckingUser(false);
 
         <div className="flex flex-col gap-3 sm:flex-row sm:justify-center">
           <a
-            href="/login"
+            href="/login?redirectTo=%2Fbooking"
             className="rounded-xl bg-green-700 px-5 py-3 font-semibold text-white transition hover:bg-green-600"
           >
             Zaloguj się
@@ -641,16 +685,14 @@ setCheckingUser(false);
       )}
 
       <form className="grid gap-6 rounded-2xl border border-zinc-800 bg-zinc-900 p-6">
-        {!isVerified && (
-          <div className="rounded-xl border border-yellow-800 bg-yellow-950 p-4 text-sm text-yellow-100">
-            <p className="font-semibold text-yellow-300">
-              Konto oczekuje na weryfikację
+        {verificationBox && (
+          <div className={verificationBox.className}>
+            <p className={verificationBox.titleClassName}>
+              {verificationBox.title}
             </p>
 
-            <p className="mt-2 text-yellow-100/80">
-              Rezerwacja osi będzie dostępna po pierwszej wizycie na strzelnicy
-              i potwierdzeniu danych przez pracownika CSK. Do tego czasu możesz
-              uzupełnić profil oraz korzystać z ograniczonych funkcji konta.
+            <p className="mt-2 opacity-80">
+              {verificationBox.text}
             </p>
           </div>
         )}
@@ -688,7 +730,8 @@ setCheckingUser(false);
               value={customerPhone}
               onChange={(event) => setCustomerPhone(event.target.value)}
               placeholder="Wpisz numer telefonu"
-              className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-white outline-none focus:border-green-600"
+              disabled={!isVerified}
+              className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-white outline-none focus:border-green-600 disabled:cursor-not-allowed disabled:bg-zinc-800 disabled:text-zinc-500"
             />
           </div>
         </div>
@@ -701,12 +744,13 @@ setCheckingUser(false);
           <input
             type="date"
             value={reservationDate}
+            disabled={!isVerified}
             onChange={(event) => {
               setReservationDate(event.target.value);
               setSelectedHour("");
               setMessage("");
             }}
-            className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-white outline-none focus:border-green-600"
+            className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-white outline-none focus:border-green-600 disabled:cursor-not-allowed disabled:bg-zinc-800 disabled:text-zinc-500"
           />
         </div>
 
@@ -717,12 +761,13 @@ setCheckingUser(false);
 
           <select
             value={laneId}
+            disabled={!isVerified}
             onChange={(event) => {
               setLaneId(event.target.value);
               setSelectedHour("");
               setMessage("");
             }}
-            className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-white outline-none focus:border-green-600"
+            className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-white outline-none focus:border-green-600 disabled:cursor-not-allowed disabled:bg-zinc-800 disabled:text-zinc-500"
           >
             <option value="">Wybierz oś</option>
 
@@ -741,12 +786,13 @@ setCheckingUser(false);
 
           <select
             value={durationMinutes}
+            disabled={!isVerified}
             onChange={(event) => {
               setDurationMinutes(Number(event.target.value));
               setSelectedHour("");
               setMessage("");
             }}
-            className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-white outline-none focus:border-green-600"
+            className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-white outline-none focus:border-green-600 disabled:cursor-not-allowed disabled:bg-zinc-800 disabled:text-zinc-500"
           >
             {durations.map((duration) => (
               <option key={duration.value} value={duration.value}>
@@ -770,28 +816,11 @@ setCheckingUser(false);
             )}
           </div>
 
-          {reservationDate && laneId && (
-            <div className="mb-3 rounded-xl border border-zinc-800 bg-zinc-950 p-3 text-xs text-zinc-400">
-              <p>
-                <span className="font-semibold text-red-300">Zajęte</span> —
-                ta godzina jest już zarezerwowana.
-              </p>
-              <p>
-                <span className="font-semibold text-zinc-300">
-                  Start niedostępny
-                </span>{" "}
-                — wybrany czas rezerwacji zachodziłby na zajęty termin.
-              </p>
-              <p>
-                <span className="font-semibold text-yellow-300">
-                  Wybrany zakres
-                </span>{" "}
-                — godziny objęte Twoją aktualną rezerwacją.
-              </p>
+          {!isVerified ? (
+            <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-4 text-sm text-zinc-400">
+              Godziny rezerwacji będą dostępne po weryfikacji konta.
             </div>
-          )}
-
-          {!reservationDate || !laneId ? (
+          ) : !reservationDate || !laneId ? (
             <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-4 text-sm text-zinc-400">
               Najpierw wybierz datę oraz oś, aby zobaczyć dostępne godziny.
             </div>
@@ -800,57 +829,97 @@ setCheckingUser(false);
               Sprawdzanie dostępnych godzin...
             </div>
           ) : (
-            <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-              {hours.map((hour) => {
-                const hourEnd = addMinutesToTime(hour, 60);
-                const isBooked = bookedHours.includes(hour);
-                const isSelected = selectedHour === hour;
-                const isInSelectedRange = selectedRange.includes(hour);
-                const isInsideOpeningHours = isRangeInsideOpeningHours(hour);
-                const unavailableHours = getUnavailableHoursInRange(hour);
-                const hasRangeConflict = unavailableHours.length > 0;
-                const isStartAvailable =
-                  isInsideOpeningHours && !hasRangeConflict;
+            <>
+              <div className="mb-3 rounded-xl border border-zinc-800 bg-zinc-950 p-3 text-xs text-zinc-400">
+                <p>
+                  <span className="font-semibold text-red-300">Zajęte</span> —
+                  ta godzina jest już zarezerwowana.
+                </p>
+                <p>
+                  <span className="font-semibold text-zinc-300">
+                    Start niedostępny
+                  </span>{" "}
+                  — wybrany czas rezerwacji zachodziłby na zajęty termin.
+                </p>
+                <p>
+                  <span className="font-semibold text-yellow-300">
+                    Wybrany zakres
+                  </span>{" "}
+                  — godziny objęte Twoją aktualną rezerwacją.
+                </p>
+              </div>
 
-                return (
-                  <button
-                    key={hour}
-                    type="button"
-                    onClick={() => handleHourClick(hour)}
-                    disabled={!isStartAvailable}
-                    className={
-                      isInSelectedRange
-                        ? isSelected
-                          ? "cursor-pointer rounded-xl border border-yellow-400 bg-yellow-600 px-4 py-3 font-semibold text-black"
-                          : "cursor-default rounded-xl border border-yellow-500 bg-yellow-950 px-4 py-3 font-semibold text-yellow-300"
-                        : !isStartAvailable
-                          ? isBooked
-                            ? "cursor-not-allowed rounded-xl border border-red-900 bg-red-950 px-4 py-3 font-semibold text-red-300 opacity-80"
-                            : "cursor-not-allowed rounded-xl border border-zinc-700 bg-zinc-900 px-4 py-3 font-semibold text-zinc-500 opacity-80"
-                          : "rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 font-semibold transition hover:border-green-600 hover:bg-green-700"
-                    }
-                  >
-                    <span className="block text-sm">
-                      {hour}–{hourEnd}
-                    </span>
+              <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+                {hours.map((hour) => {
+                  const hourEnd = addMinutesToTime(hour, 60);
+                  const isBooked = bookedHours.includes(hour);
+                  const isSelected = selectedHour === hour;
+                  const isInSelectedRange = selectedRange.includes(hour);
+                  const isInsideOpeningHours = isRangeInsideOpeningHours(hour);
+                  const unavailableHours = getUnavailableHoursInRange(hour);
+                  const hasRangeConflict = unavailableHours.length > 0;
+                  const isStartAvailable =
+                    isInsideOpeningHours && !hasRangeConflict;
 
-                    <span className="mt-1 block text-xs">
-                      {isInSelectedRange
-                        ? "Wybrany zakres"
-                        : !isStartAvailable
-                          ? isBooked
-                            ? "Zajęte"
-                            : "Start niedostępny"
-                          : "Wolne"}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
+                  return (
+                    <button
+                      key={hour}
+                      type="button"
+                      onClick={() => handleHourClick(hour)}
+                      disabled={!isStartAvailable}
+                      className={
+                        isInSelectedRange
+                          ? isSelected
+                            ? "cursor-pointer rounded-xl border border-yellow-400 bg-yellow-600 px-4 py-3 font-semibold text-black"
+                            : "cursor-default rounded-xl border border-yellow-500 bg-yellow-950 px-4 py-3 font-semibold text-yellow-300"
+                          : !isStartAvailable
+                            ? isBooked
+                              ? "cursor-not-allowed rounded-xl border border-red-900 bg-red-950 px-4 py-3 font-semibold text-red-300 opacity-80"
+                              : "cursor-not-allowed rounded-xl border border-zinc-700 bg-zinc-900 px-4 py-3 font-semibold text-zinc-500 opacity-80"
+                            : "rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 font-semibold transition hover:border-green-600 hover:bg-green-700"
+                      }
+                    >
+                      <span className="block text-sm">
+                        {hour}–{hourEnd}
+                      </span>
+
+                      <span className="mt-1 block text-xs">
+                        {isInSelectedRange
+                          ? "Wybrany zakres"
+                          : !isStartAvailable
+                            ? isBooked
+                              ? "Zajęte"
+                              : "Start niedostępny"
+                            : "Wolne"}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </>
           )}
         </div>
 
         <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-4 text-sm text-zinc-300">
+          <p>
+            Status konta:{" "}
+            <span
+              className={
+                isVerified
+                  ? "font-semibold text-green-500"
+                  : verificationStatus === "rejected"
+                    ? "font-semibold text-red-400"
+                    : "font-semibold text-yellow-400"
+              }
+            >
+              {isVerified
+                ? "zweryfikowane"
+                : verificationStatus === "rejected"
+                  ? "odrzucone"
+                  : "oczekuje na weryfikację"}
+            </span>
+          </p>
+
           <p>
             Status rezerwacji:{" "}
             <span className="font-semibold text-green-500">
@@ -875,8 +944,9 @@ setCheckingUser(false);
           <input
             type="checkbox"
             checked={acceptedRules}
+            disabled={!isVerified}
             onChange={(event) => setAcceptedRules(event.target.checked)}
-            className="mt-1"
+            className="mt-1 disabled:cursor-not-allowed"
           />
 
           <span>
