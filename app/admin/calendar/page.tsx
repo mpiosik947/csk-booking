@@ -49,6 +49,13 @@ type EventItem = {
   is_active: boolean | null;
 };
 
+type ClientStats = {
+  totalReservations: number;
+  totalCompleted: number;
+  totalNoShow: number;
+  totalSpent: number;
+};
+
 const hours = [
   "08:00",
   "09:00",
@@ -199,6 +206,13 @@ export default function AdminCalendarPage() {
     useState<Reservation | null>(null);
 
   const [reservationNote, setReservationNote] = useState("");
+  const [clientHistory, setClientHistory] = useState<Reservation[]>([]);
+  const [clientStats, setClientStats] = useState<ClientStats>({
+    totalReservations: 0,
+    totalCompleted: 0,
+    totalNoShow: 0,
+    totalSpent: 0,
+  });
 
   const [savingReservationId, setSavingReservationId] = useState<string | null>(
     null
@@ -214,14 +228,95 @@ export default function AdminCalendarPage() {
     loadCalendar();
   }, [selectedDate, mode]);
 
-  function openReservation(reservation: Reservation) {
-    setSelectedReservation(reservation);
-    setReservationNote(reservation.reservation_note || "");
-  }
-
   function getLaneNameById(laneId: string | null) {
     const lane = lanes.find((item) => item.id === laneId);
     return lane?.name ?? "Brak osi";
+  }
+
+  async function openReservation(reservation: Reservation) {
+    setSelectedReservation(reservation);
+    setReservationNote(reservation.reservation_note || "");
+
+    const customerEmail = reservation.customer_email;
+    const customerPhone = reservation.customer_phone;
+
+    if (!customerEmail && !customerPhone) {
+      setClientHistory([]);
+      setClientStats({
+        totalReservations: 0,
+        totalCompleted: 0,
+        totalNoShow: 0,
+        totalSpent: 0,
+      });
+      return;
+    }
+
+    let query = supabase
+      .from("reservations")
+      .select(
+        `
+        id,
+        lane_id,
+        customer_name,
+        customer_email,
+        customer_phone,
+        reservation_date,
+        start_time,
+        end_time,
+        reservation_status,
+        payment_status,
+        attendance_status,
+        checked_in_at,
+        created_at,
+        price,
+        reservation_note
+      `
+      )
+      .order("reservation_date", { ascending: false })
+      .order("start_time", { ascending: false })
+      .limit(5);
+
+    if (customerEmail) {
+      query = query.eq("customer_email", customerEmail);
+    } else if (customerPhone) {
+      query = query.eq("customer_phone", customerPhone);
+    }
+
+    const { data, error } = await query;
+
+    if (error || !data) {
+      setClientHistory([]);
+      setClientStats({
+        totalReservations: 0,
+        totalCompleted: 0,
+        totalNoShow: 0,
+        totalSpent: 0,
+      });
+      return;
+    }
+
+    const history = data as Reservation[];
+
+    const completed = history.filter(
+      (item) => item.reservation_status === "completed"
+    ).length;
+
+    const noShow = history.filter(
+      (item) => item.reservation_status === "no_show"
+    ).length;
+
+    const totalSpent = history.reduce(
+      (sum, item) => sum + Number(item.price ?? 0),
+      0
+    );
+
+    setClientHistory(history);
+    setClientStats({
+      totalReservations: history.length,
+      totalCompleted: completed,
+      totalNoShow: noShow,
+      totalSpent,
+    });
   }
 
   async function loadCalendar() {
@@ -953,6 +1048,78 @@ export default function AdminCalendarPage() {
                 >
                   Zapisz notatkę
                 </button>
+              </div>
+
+              <div className="mt-6 rounded-xl border border-zinc-800 bg-zinc-950 p-4">
+                <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                  <p className="text-xs uppercase tracking-[0.25em] text-zinc-500">
+                    Historia klienta
+                  </p>
+
+                  <div className="flex flex-wrap gap-2 text-xs font-semibold">
+                    <span className="rounded-full bg-zinc-800 px-3 py-1 text-zinc-300">
+                      Wizyty: {clientStats.totalReservations}
+                    </span>
+
+                    <span className="rounded-full bg-green-950 px-3 py-1 text-green-300">
+                      Completed: {clientStats.totalCompleted}
+                    </span>
+
+                    <span className="rounded-full bg-yellow-950 px-3 py-1 text-yellow-300">
+                      No-show: {clientStats.totalNoShow}
+                    </span>
+
+                    <span className="rounded-full bg-blue-950 px-3 py-1 text-blue-300">
+                      {clientStats.totalSpent.toFixed(0)} zł
+                    </span>
+                  </div>
+                </div>
+
+                {clientHistory.length === 0 ? (
+                  <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-4 text-sm text-zinc-500">
+                    Brak historii klienta.
+                  </div>
+                ) : (
+                  <div className="grid gap-3">
+                    {clientHistory.map((item) => (
+                      <div
+                        key={item.id}
+                        className="rounded-xl border border-zinc-800 bg-zinc-900 p-4"
+                      >
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <div>
+                            <p className="font-semibold text-white">
+                              {item.reservation_date}
+                            </p>
+
+                            <p className="text-sm text-zinc-400">
+                              {item.start_time.slice(0, 5)}–
+                              {item.end_time.slice(0, 5)}
+                            </p>
+                          </div>
+
+                          <div className="flex flex-wrap gap-2 text-xs font-semibold">
+                            <span className="rounded-full bg-zinc-800 px-3 py-1 text-zinc-300">
+                              {getReservationStatusLabel(
+                                item.reservation_status
+                              )}
+                            </span>
+
+                            <span className="rounded-full bg-green-950 px-3 py-1 text-green-300">
+                              {Number(item.price ?? 0).toFixed(0)} zł
+                            </span>
+                          </div>
+                        </div>
+
+                        {item.reservation_note && (
+                          <div className="mt-3 rounded-xl border border-yellow-800 bg-yellow-950 p-3 text-sm text-yellow-200">
+                            {item.reservation_note}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
 
               <div className="mt-6 grid gap-3 md:grid-cols-2">
