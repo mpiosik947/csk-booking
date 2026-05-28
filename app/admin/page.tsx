@@ -54,7 +54,7 @@ const adminTiles: AdminTile[] = [
     title: "Użytkownicy",
     description: "Weryfikacja kont, role i notatki administratora.",
     href: "/admin/users",
-    roles: ["admin"],
+    roles: ["admin", "pracownik"],
   },
 ];
 

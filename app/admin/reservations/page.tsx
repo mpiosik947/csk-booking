@@ -19,9 +19,14 @@ type Reservation = {
   reservation_status: string | null;
   payment_status: string | null;
   created_at: string | null;
-  shooting_lanes?: {
-    name: string | null;
-  }[] | null;
+  shooting_lanes?:
+    | {
+        name: string | null;
+      }
+    | {
+        name: string | null;
+      }[]
+    | null;
 };
 
 const statusOptions = [
@@ -38,7 +43,13 @@ function normalizeTime(time: string | null) {
 }
 
 function getLaneName(reservation: Reservation) {
-  return reservation.shooting_lanes?.[0]?.name || "Nieznana oś";
+  const lanes = reservation.shooting_lanes;
+
+  if (Array.isArray(lanes)) {
+    return lanes[0]?.name || "Nieznana oś";
+  }
+
+  return lanes?.name || "Nieznana oś";
 }
 
 function isCancelledStatus(status: string | null) {
@@ -122,7 +133,7 @@ function getPaymentStatusClass(status: string | null) {
 
 export default function AdminReservationsPage() {
   const [reservations, setReservations] = useState<Reservation[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [savingReservationId, setSavingReservationId] = useState<string | null>(
     null
   );
@@ -228,12 +239,7 @@ export default function AdminReservationsPage() {
 
     setReservations((currentReservations) =>
       currentReservations.map((item) =>
-        item.id === reservation.id
-          ? {
-              ...item,
-              ...changes,
-            }
-          : item
+        item.id === reservation.id ? { ...item, ...changes } : item
       )
     );
 
@@ -452,9 +458,7 @@ export default function AdminReservationsPage() {
                           </label>
 
                           <select
-                            value={
-                              reservation.reservation_status || "confirmed"
-                            }
+                            value={reservation.reservation_status || "confirmed"}
                             disabled={isSaving}
                             onChange={(event) =>
                               updateReservation(reservation, {
@@ -503,9 +507,9 @@ export default function AdminReservationsPage() {
 
                         <p className="mt-1 text-xs text-zinc-300">
                           {reservation.created_at
-                            ? new Date(
-                                reservation.created_at
-                              ).toLocaleString("pl-PL")
+                            ? new Date(reservation.created_at).toLocaleString(
+                                "pl-PL"
+                              )
                             : "brak danych"}
                         </p>
 

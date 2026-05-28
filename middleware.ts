@@ -69,8 +69,8 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(new URL("/dashboard", request.url));
   }
 
-  if (isAdminUsersRoute && role !== "admin") {
-    return NextResponse.redirect(new URL("/admin", request.url));
+  if (isAdminUsersRoute && role !== "admin" && role !== "pracownik") {
+  return NextResponse.redirect(new URL("/admin", request.url));
   }
 
   if (isAdminReportsRoute && role !== "admin") {

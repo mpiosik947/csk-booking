@@ -101,6 +101,7 @@ function getStatusBadgeClass(status: string | null) {
 
 export default function AdminUsersPage() {
   const [currentUserId, setCurrentUserId] = useState("");
+  const [currentUserRole, setCurrentUserRole] = useState<UserRole>("user");
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [loading, setLoading] = useState(true);
   const [savingUserId, setSavingUserId] = useState<string | null>(null);
@@ -109,12 +110,26 @@ export default function AdminUsersPage() {
   const [statusFilter, setStatusFilter] = useState("all");
   const [roleFilter, setRoleFilter] = useState("all");
 
+  const isAdmin = currentUserRole === "admin";
+
   async function loadCurrentUser() {
     const {
       data: { user },
     } = await supabase.auth.getUser();
 
     setCurrentUserId(user?.id ?? "");
+
+    if (!user) return;
+
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("role")
+      .eq("user_id", user.id)
+      .single();
+
+    if (profile?.role) {
+      setCurrentUserRole(profile.role as UserRole);
+    }
   }
 
   async function loadProfiles() {
@@ -221,6 +236,11 @@ export default function AdminUsersPage() {
   ) {
     const isOwnAccount = profile.user_id === currentUserId;
 
+    if (changes.role && !isAdmin) {
+      setMessage("Zablokowano zmianę: tylko administrator może zmieniać role.");
+      return;
+    }
+
     if (isOwnAccount && changes.role && changes.role !== "admin") {
       setMessage(
         "Zablokowano zmianę: nie możesz odebrać sam sobie roli administratora."
@@ -257,13 +277,15 @@ export default function AdminUsersPage() {
       return;
     }
 
+    const updatedAt = new Date().toISOString();
+
     setProfiles((currentProfiles) =>
       currentProfiles.map((item) =>
         item.user_id === profile.user_id
           ? {
               ...item,
               ...changes,
-              updated_at: new Date().toISOString(),
+              updated_at: updatedAt,
             }
           : item
       )
@@ -292,6 +314,13 @@ export default function AdminUsersPage() {
             <p className="mt-3 max-w-2xl text-zinc-400">
               Zarządzanie rolami, weryfikacją kont i notatkami administratora.
             </p>
+
+            {!isAdmin && (
+              <p className="mt-3 max-w-2xl text-sm text-yellow-400">
+                Tryb pracownika: możesz weryfikować konta i zapisywać notatki,
+                ale nie możesz zmieniać ról użytkowników.
+              </p>
+            )}
           </div>
 
           <Link
@@ -470,7 +499,7 @@ export default function AdminUsersPage() {
 
                         <select
                           value={profile.role || "user"}
-                          disabled={isSaving}
+                          disabled={isSaving || !isAdmin}
                           onChange={(event) =>
                             updateProfile(profile, {
                               role: event.target.value as UserRole,
@@ -489,9 +518,15 @@ export default function AdminUsersPage() {
                           ))}
                         </select>
 
-                        {isOwnAccount && (
+                        {isOwnAccount && isAdmin && (
                           <p className="mt-2 text-xs text-green-400">
                             Nie możesz odebrać sam sobie roli admina.
+                          </p>
+                        )}
+
+                        {!isAdmin && (
+                          <p className="mt-2 text-xs text-yellow-400">
+                            Tylko administrator może zmieniać role.
                           </p>
                         )}
                       </div>
@@ -567,7 +602,7 @@ export default function AdminUsersPage() {
 
                       <div>
                         <label className="mb-2 block text-xs uppercase tracking-[0.25em] text-zinc-500">
-                          Notatka admina
+                          Notatka admina / pracownika
                         </label>
 
                         <textarea
