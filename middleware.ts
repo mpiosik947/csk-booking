@@ -1,43 +1,107 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
-type UserRole = "admin" | "pracownik" | "instruktor" | "user";
+type UserRole =
+  | "admin"
+  | "pracownik"
+  | "instruktor"
+  | "user";
 
-export async function middleware(request: NextRequest) {
-  let response = NextResponse.next({ request });
+const routePermissions: Record<string, UserRole[]> = {
+  "/admin/users": ["admin"],
 
-  const path = request.nextUrl.pathname;
+  "/admin/reports": ["admin"],
 
-  const isAdminRoute = path.startsWith("/admin");
-  const isAdminUsersRoute = path.startsWith("/admin/users");
-  const isAdminReportsRoute = path.startsWith("/admin/reports");
+  "/admin/reservations": [
+    "admin",
+    "pracownik",
+  ],
+
+  "/admin/lane-blocks": [
+    "admin",
+    "pracownik",
+  ],
+
+  "/admin/calendar": [
+    "admin",
+    "pracownik",
+    "instruktor",
+  ],
+
+  "/admin/check-in": [
+    "admin",
+    "pracownik",
+    "instruktor",
+  ],
+
+  "/admin/events": [
+    "admin",
+    "pracownik",
+    "instruktor",
+  ],
+};
+
+export async function middleware(
+  request: NextRequest
+) {
+  let response = NextResponse.next({
+    request,
+  });
+
+  const path =
+    request.nextUrl.pathname;
+
+  const isAdminRoute =
+    path.startsWith("/admin");
 
   if (!isAdminRoute) {
     return response;
   }
 
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        getAll() {
-          return request.cookies.getAll();
-        },
-        setAll(cookiesToSet) {
-          cookiesToSet.forEach(({ name, value }) => {
-            request.cookies.set(name, value);
-          });
+  const supabase =
+    createServerClient(
+      process.env
+        .NEXT_PUBLIC_SUPABASE_URL!,
+      process.env
+        .NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        cookies: {
+          getAll() {
+            return request.cookies.getAll();
+          },
 
-          response = NextResponse.next({ request });
+          setAll(cookiesToSet) {
+            cookiesToSet.forEach(
+              ({ name, value }) => {
+                request.cookies.set(
+                  name,
+                  value
+                );
+              }
+            );
 
-          cookiesToSet.forEach(({ name, value, options }) => {
-            response.cookies.set(name, value, options);
-          });
+            response =
+              NextResponse.next({
+                request,
+              });
+
+            cookiesToSet.forEach(
+              ({
+                name,
+                value,
+                options,
+              }) => {
+                response.cookies.set(
+                  name,
+                  value,
+                  options
+                );
+              }
+            );
+          },
         },
-      },
-    }
-  );
+      }
+    );
 
   const {
     data: { user },
@@ -45,36 +109,77 @@ export async function middleware(request: NextRequest) {
   } = await supabase.auth.getUser();
 
   if (userError || !user) {
-    const loginUrl = new URL("/login", request.url);
-    loginUrl.searchParams.set("redirectTo", path);
-    return NextResponse.redirect(loginUrl);
+    const loginUrl = new URL(
+      "/login",
+      request.url
+    );
+
+    loginUrl.searchParams.set(
+      "redirectTo",
+      path
+    );
+
+    return NextResponse.redirect(
+      loginUrl
+    );
   }
 
-  const { data: profile, error: profileError } = await supabase
+  const {
+    data: profile,
+    error: profileError,
+  } = await supabase
     .from("profiles")
     .select("role")
     .eq("user_id", user.id)
-    .single();
+    .maybeSingle();
 
-  if (profileError || !profile) {
-    return NextResponse.redirect(new URL("/dashboard", request.url));
+  if (
+    profileError ||
+    !profile?.role
+  ) {
+    return NextResponse.redirect(
+      new URL(
+        "/dashboard",
+        request.url
+      )
+    );
   }
 
-  const role = profile.role as UserRole;
+  const role =
+    String(profile.role)
+      .trim()
+      .toLowerCase() as UserRole;
 
-  const canAccessAdmin =
-    role === "admin" || role === "pracownik" || role === "instruktor";
+  const adminAccess =
+    role === "admin" ||
+    role === "pracownik" ||
+    role === "instruktor";
 
-  if (!canAccessAdmin) {
-    return NextResponse.redirect(new URL("/dashboard", request.url));
+  if (!adminAccess) {
+    return NextResponse.redirect(
+      new URL(
+        "/dashboard",
+        request.url
+      )
+    );
   }
 
-  if (isAdminUsersRoute && role !== "admin" && role !== "pracownik") {
-  return NextResponse.redirect(new URL("/admin", request.url));
-  }
+  for (const route in routePermissions) {
+    if (path.startsWith(route)) {
+      const allowedRoles =
+        routePermissions[route];
 
-  if (isAdminReportsRoute && role !== "admin") {
-    return NextResponse.redirect(new URL("/admin", request.url));
+      if (
+        !allowedRoles.includes(role)
+      ) {
+        return NextResponse.redirect(
+          new URL(
+            "/admin",
+            request.url
+          )
+        );
+      }
+    }
   }
 
   return response;
