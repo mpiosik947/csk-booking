@@ -3,9 +3,8 @@
 import { useEffect, useState } from "react";
 import { supabase } from "../../../lib/supabase";
 
-const ADMIN_EMAIL = "m.piosik94@gmail.com";
-
 type CalendarMode = "day" | "week";
+type UserRole = "admin" | "pracownik" | "instruktor" | "user";
 
 type Lane = {
   id: string;
@@ -20,9 +19,11 @@ type Reservation = {
   start_time: string;
   end_time: string;
   reservation_status: string;
-  shooting_lanes: {
-    name: string;
-  } | null;
+  shooting_lanes:
+    | {
+        name: string;
+      }[]
+    | null;
 };
 
 const hours = [
@@ -86,6 +87,45 @@ function reservationCoversHour(reservation: Reservation, hour: string) {
   return reservationStart < hourEnd && reservationEnd > hourStart;
 }
 
+function getLaneName(reservation: Reservation) {
+  return reservation.shooting_lanes?.[0]?.name ?? "Brak osi";
+}
+
+function getRoleLabel(role: string | null) {
+  switch (role) {
+    case "admin":
+      return "Administrator";
+    case "pracownik":
+      return "Pracownik";
+    case "instruktor":
+      return "Instruktor";
+    default:
+      return "Brak roli";
+  }
+}
+
+function getRoleBadgeClass(role: string | null) {
+  switch (role) {
+    case "admin":
+      return "border-green-700 bg-green-950 text-green-300";
+    case "pracownik":
+      return "border-blue-700 bg-blue-950 text-blue-300";
+    case "instruktor":
+      return "border-purple-700 bg-purple-950 text-purple-300";
+    default:
+      return "border-zinc-700 bg-zinc-900 text-zinc-300";
+  }
+}
+
+function isCancelledStatus(status: string | null) {
+  return (
+    status === "cancelled" ||
+    status === "canceled" ||
+    status === "cancelled_by_user" ||
+    status === "cancelled_by_admin"
+  );
+}
+
 export default function AdminCalendarPage() {
   const today = new Date().toISOString().slice(0, 10);
 
@@ -94,10 +134,14 @@ export default function AdminCalendarPage() {
   const [lanes, setLanes] = useState<Lane[]>([]);
   const [reservations, setReservations] = useState<Reservation[]>([]);
   const [loading, setLoading] = useState(true);
-  const [isAdmin, setIsAdmin] = useState(false);
+  const [role, setRole] = useState<UserRole | null>(null);
   const [message, setMessage] = useState("");
 
-  const visibleDates = mode === "day" ? [selectedDate] : getWeekDates(selectedDate);
+  const visibleDates =
+    mode === "day" ? [selectedDate] : getWeekDates(selectedDate);
+
+  const hasAccess =
+    role === "admin" || role === "pracownik" || role === "instruktor";
 
   useEffect(() => {
     loadCalendar();
@@ -109,31 +153,55 @@ export default function AdminCalendarPage() {
 
     const {
       data: { user },
+      error: userError,
     } = await supabase.auth.getUser();
 
-    if (!user) {
-      setMessage("Musisz być zalogowany jako administrator.");
+    if (userError || !user) {
+      setMessage("Musisz być zalogowany.");
       setLoading(false);
       return;
     }
 
-    if (user.email !== ADMIN_EMAIL) {
-      setMessage("Brak dostępu do kalendarza administratora.");
+    const { data: profile, error: profileError } = await supabase
+      .from("profiles")
+      .select("role")
+      .eq("user_id", user.id)
+      .single();
+
+    if (profileError || !profile?.role) {
+      setMessage("Nie udało się pobrać roli użytkownika.");
       setLoading(false);
       return;
     }
 
-    setIsAdmin(true);
+    const currentRole = String(profile.role).trim().toLowerCase() as UserRole;
+    setRole(currentRole);
+
+    if (
+      currentRole !== "admin" &&
+      currentRole !== "pracownik" &&
+      currentRole !== "instruktor"
+    ) {
+      setMessage("Brak dostępu do kalendarza.");
+      setLoading(false);
+      return;
+    }
 
     const dates = mode === "day" ? [selectedDate] : getWeekDates(selectedDate);
 
-    const { data: lanesData } = await supabase
+    const { data: lanesData, error: lanesError } = await supabase
       .from("shooting_lanes")
       .select("id, name")
       .eq("is_active", true)
       .order("name");
 
-    const { data: reservationsData, error } = await supabase
+    if (lanesError) {
+      setMessage(`Błąd pobierania osi: ${lanesError.message}`);
+      setLoading(false);
+      return;
+    }
+
+    const { data: reservationsData, error: reservationsError } = await supabase
       .from("reservations")
       .select(
         `
@@ -151,18 +219,21 @@ export default function AdminCalendarPage() {
       )
       .gte("reservation_date", dates[0])
       .lte("reservation_date", dates[dates.length - 1])
-      .neq("reservation_status", "cancelled")
       .order("reservation_date", { ascending: true })
       .order("start_time", { ascending: true });
 
-    if (error) {
-      setMessage(`Błąd pobierania kalendarza: ${error.message}`);
+    if (reservationsError) {
+      setMessage(`Błąd pobierania kalendarza: ${reservationsError.message}`);
       setLoading(false);
       return;
     }
 
-    setLanes((lanesData as any) ?? []);
-    setReservations((reservationsData as any) ?? []);
+    const activeReservations = ((reservationsData ?? []) as unknown as Reservation[]).filter(
+      (reservation) => !isCancelledStatus(reservation.reservation_status)
+    );
+
+    setLanes((lanesData ?? []) as Lane[]);
+    setReservations(activeReservations);
     setLoading(false);
   }
 
@@ -170,7 +241,7 @@ export default function AdminCalendarPage() {
     return reservations.filter(
       (reservation) =>
         reservation.reservation_date === date &&
-        reservation.shooting_lanes?.name === laneName &&
+        getLaneName(reservation) === laneName &&
         reservationCoversHour(reservation, hour)
     );
   }
@@ -178,21 +249,46 @@ export default function AdminCalendarPage() {
   return (
     <main className="min-h-screen bg-zinc-950 text-white">
       <section className="mx-auto max-w-7xl px-4 py-10 sm:px-6">
-        <div className="mb-8">
-          <p className="mb-4 text-sm uppercase tracking-[0.35em] text-green-500">
-            ADMIN PANEL
-          </p>
+        <div className="mb-8 flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+          <div>
+            <p className="mb-4 text-sm uppercase tracking-[0.35em] text-green-500">
+              CSK Booking
+            </p>
 
-          <h1 className="text-4xl font-bold">Kalendarz administratora</h1>
+            <div className="flex flex-wrap items-center gap-3">
+              <h1 className="text-4xl font-bold">
+                Kalendarz
+              </h1>
 
-          <p className="mt-3 text-zinc-400">
-            Widok rezerwacji osi w układzie dnia albo tygodnia.
-          </p>
+              {!loading && role && (
+                <span
+                  className={`rounded-full border px-4 py-2 text-sm font-bold ${getRoleBadgeClass(
+                    role
+                  )}`}
+                >
+                  {getRoleLabel(role)}
+                </span>
+              )}
+            </div>
+
+            <p className="mt-3 text-zinc-400">
+              Widok rezerwacji osi w układzie dnia albo tygodnia.
+            </p>
+          </div>
+
+          <a
+            href="/admin"
+            className="rounded-xl border border-zinc-700 px-5 py-3 text-sm font-semibold text-zinc-300 transition hover:bg-zinc-900"
+          >
+            ← Panel admina
+          </a>
         </div>
 
         <div className="mb-8 grid gap-5 rounded-2xl border border-zinc-800 bg-zinc-900 p-6 md:grid-cols-2">
           <div>
-            <label className="mb-2 block text-sm text-zinc-300">Widok</label>
+            <label className="mb-2 block text-sm text-zinc-300">
+              Widok
+            </label>
 
             <select
               value={mode}
@@ -230,7 +326,7 @@ export default function AdminCalendarPage() {
           </div>
         )}
 
-        {!loading && isAdmin && (
+        {!loading && hasAccess && !message && (
           <>
             {mode === "day" && (
               <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-5">
@@ -282,7 +378,9 @@ export default function AdminCalendarPage() {
                                           {reservation.start_time.slice(0, 5)}–
                                           {reservation.end_time.slice(0, 5)}
                                         </p>
+
                                         <p>{reservation.customer_name}</p>
+
                                         <p className="text-green-400">
                                           {reservation.customer_phone}
                                         </p>
@@ -340,7 +438,7 @@ export default function AdminCalendarPage() {
                               </p>
 
                               <p className="mt-1 text-white">
-                                {reservation.shooting_lanes?.name ?? "Brak osi"}
+                                {getLaneName(reservation)}
                               </p>
 
                               <p className="mt-2 text-sm text-green-100">
@@ -359,15 +457,6 @@ export default function AdminCalendarPage() {
                 })}
               </div>
             )}
-
-            <div className="mt-8">
-              <a
-                href="/admin"
-                className="rounded-xl border border-zinc-700 px-5 py-3 text-sm font-semibold text-zinc-300 transition hover:bg-zinc-900"
-              >
-                ← Panel administratora
-              </a>
-            </div>
           </>
         )}
       </section>
