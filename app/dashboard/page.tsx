@@ -3,9 +3,13 @@
 import { useEffect, useState } from "react";
 import { supabase } from "../../lib/supabase";
 
+type Role = "admin" | "pracownik" | "instruktor" | "user";
+
 export default function DashboardPage() {
   const [email, setEmail] = useState("");
   const [fullName, setFullName] = useState("");
+  const [role, setRole] = useState<Role>("user");
+
   const [loading, setLoading] = useState(true);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
 
@@ -26,6 +30,17 @@ export default function DashboardPage() {
       setIsLoggedIn(true);
       setEmail(user.email ?? "");
       setFullName(metadata.full_name ?? metadata.name ?? "Użytkownik");
+
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("role")
+        .eq("user_id", user.id)
+        .single();
+
+      if (profile?.role) {
+        setRole(profile.role as Role);
+      }
+
       setLoading(false);
     }
 
@@ -84,6 +99,11 @@ export default function DashboardPage() {
     );
   }
 
+  const canAccessAdmin =
+    role === "admin" ||
+    role === "pracownik" ||
+    role === "instruktor";
+
   return (
     <main className="min-h-screen bg-zinc-950 text-white">
       <section className="mx-auto max-w-6xl px-6 py-12">
@@ -93,30 +113,55 @@ export default function DashboardPage() {
               CSK Booking
             </p>
 
-            <h1 className="text-3xl font-bold md:text-5xl">Panel klienta</h1>
+            <h1 className="text-3xl font-bold md:text-5xl">
+              Panel klienta
+            </h1>
 
             <p className="mt-3 text-zinc-400">
               Witaj,{" "}
-              <span className="font-semibold text-green-500">{fullName}</span>.
-              Zarządzaj swoimi rezerwacjami i szkoleniami.
+              <span className="font-semibold text-green-500">
+                {fullName}
+              </span>
+              . Zarządzaj swoimi rezerwacjami i szkoleniami.
             </p>
           </div>
 
           <div className="rounded-2xl border border-zinc-800 bg-zinc-900 px-5 py-4 text-sm text-zinc-300">
             Zalogowany jako:{" "}
-            <span className="font-semibold text-green-500">{email}</span>
+            <span className="font-semibold text-green-500">
+              {email}
+            </span>
           </div>
         </div>
 
         <div className="grid gap-5 md:grid-cols-2">
+
+          {canAccessAdmin && (
+            <a
+              href="/admin"
+              className="rounded-2xl border border-green-700 bg-green-950 p-6 transition hover:bg-green-900"
+            >
+              <h2 className="mb-2 text-2xl font-bold text-green-300">
+                Panel administracyjny
+              </h2>
+
+              <p className="text-green-100">
+                Zarządzanie rezerwacjami, eventami, check-in oraz obsługą systemu.
+              </p>
+            </a>
+          )}
+
           <a
             href="/booking"
             className="rounded-2xl bg-green-700 p-6 transition hover:bg-green-600"
           >
-            <h2 className="mb-2 text-2xl font-bold">Zarezerwuj oś</h2>
+            <h2 className="mb-2 text-2xl font-bold">
+              Zarezerwuj oś
+            </h2>
+
             <p className="text-green-100">
-              Wybierz datę, oś, godzinę oraz czas rezerwacji. Płatność na
-              miejscu.
+              Wybierz datę, oś, godzinę oraz czas rezerwacji.
+              Płatność na miejscu.
             </p>
           </a>
 
@@ -124,7 +169,10 @@ export default function DashboardPage() {
             href="/my-reservations"
             className="rounded-2xl border border-zinc-800 bg-zinc-900 p-6 transition hover:bg-zinc-800"
           >
-            <h2 className="mb-2 text-2xl font-bold">Moje rezerwacje</h2>
+            <h2 className="mb-2 text-2xl font-bold">
+              Moje rezerwacje
+            </h2>
+
             <p className="text-zinc-400">
               Sprawdź swoje terminy, statusy rezerwacji oraz płatności.
             </p>
@@ -137,6 +185,7 @@ export default function DashboardPage() {
             <h2 className="mb-2 text-2xl font-bold text-green-300">
               Eventy / Szkolenia
             </h2>
+
             <p className="text-green-100">
               Zobacz planowane szkolenia, wydarzenia i zapisz się na wybrany
               termin.
@@ -147,7 +196,10 @@ export default function DashboardPage() {
             href="/my-events"
             className="rounded-2xl border border-zinc-800 bg-zinc-900 p-6 transition hover:bg-zinc-800"
           >
-            <h2 className="mb-2 text-2xl font-bold">Moje szkolenia</h2>
+            <h2 className="mb-2 text-2xl font-bold">
+              Moje szkolenia
+            </h2>
+
             <p className="text-zinc-400">
               Sprawdź szkolenia, na które jesteś zapisany oraz status
               uczestnictwa.
@@ -158,7 +210,10 @@ export default function DashboardPage() {
             href="/terms"
             className="rounded-2xl border border-zinc-800 bg-zinc-900 p-6 transition hover:bg-zinc-800"
           >
-            <h2 className="mb-2 text-2xl font-bold">Regulamin i RODO</h2>
+            <h2 className="mb-2 text-2xl font-bold">
+              Regulamin i RODO
+            </h2>
+
             <p className="text-zinc-400">
               Regulamin strzelnicy, zasady bezpieczeństwa oraz polityka
               prywatności.
@@ -169,7 +224,10 @@ export default function DashboardPage() {
             href="/account"
             className="rounded-2xl border border-zinc-800 bg-zinc-900 p-6 transition hover:bg-zinc-800"
           >
-            <h2 className="mb-2 text-2xl font-bold">Moje konto</h2>
+            <h2 className="mb-2 text-2xl font-bold">
+              Moje konto
+            </h2>
+
             <p className="text-zinc-400">
               Edytuj swoje dane użytkownika, imię, nazwisko oraz numer telefonu.
             </p>
