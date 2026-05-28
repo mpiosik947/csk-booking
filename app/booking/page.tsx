@@ -1,12 +1,43 @@
+"use client";
+
+import { useEffect, useState } from "react";
 import { supabase } from "../../lib/supabase";
 import BookingForm from "./BookingForm";
 
-export default async function BookingPage() {
-  const { data: lanes, error } = await supabase
-    .from("shooting_lanes")
-    .select("id, name, price_per_hour")
-    .eq("is_active", true)
-    .order("name");
+type Lane = {
+  id: string;
+  name: string;
+  price_per_hour: number;
+};
+
+export default function BookingPage() {
+  const [lanes, setLanes] = useState<Lane[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [message, setMessage] = useState("");
+
+  useEffect(() => {
+    async function loadLanes() {
+      setLoading(true);
+      setMessage("");
+
+      const { data, error } = await supabase
+        .from("shooting_lanes")
+        .select("id, name, price_per_hour")
+        .eq("is_active", true)
+        .order("name");
+
+      setLoading(false);
+
+      if (error) {
+        setMessage(`Błąd pobierania osi: ${error.message}`);
+        return;
+      }
+
+      setLanes((data ?? []) as Lane[]);
+    }
+
+    loadLanes();
+  }, []);
 
   return (
     <main className="min-h-screen bg-zinc-950 text-white">
@@ -22,13 +53,25 @@ export default async function BookingPage() {
           odbywa się na miejscu.
         </p>
 
-        {error && (
-          <div className="mb-6 rounded-xl border border-red-800 bg-red-950 p-4 text-red-300">
-            Błąd połączenia z bazą: {error.message}
+        {loading && (
+          <div className="mb-6 rounded-xl border border-zinc-800 bg-zinc-900 p-4 text-zinc-400">
+            Ładowanie dostępnych osi...
           </div>
         )}
 
-        <BookingForm lanes={lanes ?? []} />
+        {message && (
+          <div className="mb-6 rounded-xl border border-red-800 bg-red-950 p-4 text-red-300">
+            {message}
+          </div>
+        )}
+
+        {!loading && lanes.length === 0 && !message && (
+          <div className="mb-6 rounded-xl border border-yellow-800 bg-yellow-950 p-4 text-yellow-200">
+            Brak aktywnych osi do rezerwacji.
+          </div>
+        )}
+
+        <BookingForm lanes={lanes} />
 
         <a
           href="/"
