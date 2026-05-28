@@ -4,14 +4,13 @@ import { NextResponse, type NextRequest } from "next/server";
 type UserRole = "admin" | "pracownik" | "instruktor" | "user";
 
 export async function middleware(request: NextRequest) {
-  let response = NextResponse.next({
-    request,
-  });
+  let response = NextResponse.next({ request });
 
   const path = request.nextUrl.pathname;
 
   const isAdminRoute = path.startsWith("/admin");
   const isAdminUsersRoute = path.startsWith("/admin/users");
+  const isAdminReportsRoute = path.startsWith("/admin/reports");
 
   if (!isAdminRoute) {
     return response;
@@ -30,9 +29,7 @@ export async function middleware(request: NextRequest) {
             request.cookies.set(name, value);
           });
 
-          response = NextResponse.next({
-            request,
-          });
+          response = NextResponse.next({ request });
 
           cookiesToSet.forEach(({ name, value, options }) => {
             response.cookies.set(name, value, options);
@@ -50,7 +47,6 @@ export async function middleware(request: NextRequest) {
   if (userError || !user) {
     const loginUrl = new URL("/login", request.url);
     loginUrl.searchParams.set("redirectTo", path);
-
     return NextResponse.redirect(loginUrl);
   }
 
@@ -66,14 +62,18 @@ export async function middleware(request: NextRequest) {
 
   const role = profile.role as UserRole;
 
-  const canAccessAdmin = role === "admin" || role === "pracownik";
-  const canAccessUsersPanel = role === "admin";
+  const canAccessAdmin =
+    role === "admin" || role === "pracownik" || role === "instruktor";
 
   if (!canAccessAdmin) {
     return NextResponse.redirect(new URL("/dashboard", request.url));
   }
 
-  if (isAdminUsersRoute && !canAccessUsersPanel) {
+  if (isAdminUsersRoute && role !== "admin") {
+    return NextResponse.redirect(new URL("/admin", request.url));
+  }
+
+  if (isAdminReportsRoute && role !== "admin") {
     return NextResponse.redirect(new URL("/admin", request.url));
   }
 

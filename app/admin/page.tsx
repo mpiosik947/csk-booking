@@ -92,42 +92,27 @@ export default function AdminPage() {
   const [message, setMessage] = useState("");
 
   useEffect(() => {
-    async function loadProfile() {
+    async function loadRole() {
       setLoading(true);
       setMessage("");
 
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-
-      if (!user) {
-        setMessage("Brak aktywnej sesji.");
-        setLoading(false);
-        return;
-      }
-
-      const { data, error } = await supabase
-        .from("profiles")
-        .select("role")
-        .eq("user_id", user.id)
-        .single();
+      const { data, error } = await supabase.rpc("get_my_role");
 
       setLoading(false);
 
       if (error) {
-        setMessage(`Błąd pobierania profilu: ${error.message}`);
+        setMessage(`Błąd pobierania roli: ${error.message}`);
         return;
       }
 
-      setRole((data?.role as Role) || "user");
+      setRole((data as Role) || "user");
     }
 
-    loadProfile();
+    loadRole();
   }, []);
 
   const visibleTiles = useMemo(() => {
     if (!role) return [];
-
     return adminTiles.filter((tile) => tile.roles.includes(role));
   }, [role]);
 
@@ -141,9 +126,7 @@ export default function AdminPage() {
             </p>
 
             <div className="mb-4 flex flex-wrap items-center gap-3">
-              <h1 className="text-4xl font-bold">
-                Panel administratora
-              </h1>
+              <h1 className="text-4xl font-bold">Panel administracyjny</h1>
 
               {!loading && role && (
                 <span
@@ -157,7 +140,7 @@ export default function AdminPage() {
             </div>
 
             <p className="max-w-2xl text-zinc-400">
-              Dynamiczny panel administracyjny zależny od roli użytkownika.
+              Widzisz tylko moduły dostępne dla Twojej roli.
             </p>
           </div>
 
@@ -195,9 +178,7 @@ export default function AdminPage() {
                   {tile.title.charAt(0)}
                 </div>
 
-                <h2 className="mb-2 text-xl font-bold">
-                  {tile.title}
-                </h2>
+                <h2 className="mb-2 text-xl font-bold">{tile.title}</h2>
 
                 <p className="text-sm leading-6 text-zinc-400">
                   {tile.description}
