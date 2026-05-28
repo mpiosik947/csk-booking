@@ -26,6 +26,7 @@ type Reservation = {
   checked_in_at: string | null;
   created_at: string | null;
   price: number | null;
+  reservation_note: string | null;
 };
 
 type LaneBlock = {
@@ -197,6 +198,8 @@ export default function AdminCalendarPage() {
   const [selectedReservation, setSelectedReservation] =
     useState<Reservation | null>(null);
 
+  const [reservationNote, setReservationNote] = useState("");
+
   const [savingReservationId, setSavingReservationId] = useState<string | null>(
     null
   );
@@ -210,6 +213,11 @@ export default function AdminCalendarPage() {
   useEffect(() => {
     loadCalendar();
   }, [selectedDate, mode]);
+
+  function openReservation(reservation: Reservation) {
+    setSelectedReservation(reservation);
+    setReservationNote(reservation.reservation_note || "");
+  }
 
   function getLaneNameById(laneId: string | null) {
     const lane = lanes.find((item) => item.id === laneId);
@@ -289,7 +297,8 @@ export default function AdminCalendarPage() {
         attendance_status,
         checked_in_at,
         created_at,
-        price
+        price,
+        reservation_note
       `
       )
       .gte("reservation_date", dateFrom)
@@ -428,6 +437,14 @@ export default function AdminCalendarPage() {
 
     await updateReservation(selectedReservation, {
       payment_status: "pay_on_site",
+    });
+  }
+
+  async function saveReservationNote() {
+    if (!selectedReservation) return;
+
+    await updateReservation(selectedReservation, {
+      reservation_note: reservationNote,
     });
   }
 
@@ -619,7 +636,7 @@ export default function AdminCalendarPage() {
                                           key={`${reservation.id}-${hour}`}
                                           type="button"
                                           onClick={() =>
-                                            setSelectedReservation(reservation)
+                                            openReservation(reservation)
                                           }
                                           className="rounded-xl border border-green-800 bg-green-950 p-3 text-left text-xs text-green-100 transition hover:border-green-500"
                                         >
@@ -633,6 +650,12 @@ export default function AdminCalendarPage() {
                                           <p className="text-green-400">
                                             {reservation.customer_phone}
                                           </p>
+
+                                          {reservation.reservation_note && (
+                                            <p className="mt-2 text-yellow-300">
+                                              Notatka
+                                            </p>
+                                          )}
                                         </button>
                                       ))}
                                     </div>
@@ -741,9 +764,7 @@ export default function AdminCalendarPage() {
                             <button
                               key={reservation.id}
                               type="button"
-                              onClick={() =>
-                                setSelectedReservation(reservation)
-                              }
+                              onClick={() => openReservation(reservation)}
                               className="rounded-xl border border-green-800 bg-green-950 p-4 text-left transition hover:border-green-500"
                             >
                               <p className="font-bold text-green-300">
@@ -762,6 +783,12 @@ export default function AdminCalendarPage() {
                               <p className="text-sm text-green-400">
                                 {reservation.customer_phone}
                               </p>
+
+                              {reservation.reservation_note && (
+                                <p className="mt-2 text-sm text-yellow-300">
+                                  Notatka
+                                </p>
+                              )}
                             </button>
                           ))}
 
@@ -814,7 +841,7 @@ export default function AdminCalendarPage() {
 
         {selectedReservation && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
-            <div className="w-full max-w-2xl rounded-2xl border border-zinc-800 bg-zinc-900 p-6">
+            <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl border border-zinc-800 bg-zinc-900 p-6">
               <div className="mb-6 flex items-start justify-between gap-4">
                 <div>
                   <p className="text-xs uppercase tracking-[0.25em] text-zinc-500">
@@ -903,6 +930,29 @@ export default function AdminCalendarPage() {
                     {Number(selectedReservation.price ?? 0).toFixed(0)} zł
                   </p>
                 </div>
+              </div>
+
+              <div className="mt-6 rounded-xl border border-zinc-800 bg-zinc-950 p-4">
+                <p className="mb-3 text-xs uppercase tracking-[0.25em] text-zinc-500">
+                  Notatka do rezerwacji
+                </p>
+
+                <textarea
+                  value={reservationNote}
+                  onChange={(event) => setReservationNote(event.target.value)}
+                  rows={4}
+                  placeholder="Np. klient pierwszy raz, broń własna, opóźnienie, uwagi organizacyjne..."
+                  className="w-full rounded-xl border border-zinc-700 bg-zinc-900 px-4 py-3 text-sm text-white outline-none focus:border-green-600"
+                />
+
+                <button
+                  type="button"
+                  onClick={saveReservationNote}
+                  disabled={savingReservationId === selectedReservation.id}
+                  className="mt-3 rounded-xl border border-green-700 px-4 py-2 text-sm font-bold text-green-300 transition hover:bg-green-950 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  Zapisz notatkę
+                </button>
               </div>
 
               <div className="mt-6 grid gap-3 md:grid-cols-2">
