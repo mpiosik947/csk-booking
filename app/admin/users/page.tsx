@@ -20,12 +20,7 @@ type Profile = {
   updated_at: string | null;
 };
 
-const roleOptions: UserRole[] = [
-  "admin",
-  "pracownik",
-  "instruktor",
-  "user",
-];
+const roleOptions: UserRole[] = ["admin", "pracownik", "instruktor", "user"];
 
 const verificationOptions: VerificationStatus[] = [
   "pending",
@@ -292,9 +287,7 @@ export default function AdminUsersPage() {
               CSK Booking
             </p>
 
-            <h1 className="text-4xl font-bold">
-              Użytkownicy
-            </h1>
+            <h1 className="text-4xl font-bold">Użytkownicy</h1>
 
             <p className="mt-3 max-w-2xl text-zinc-400">
               Zarządzanie rolami, weryfikacją kont i notatkami administratora.
@@ -407,9 +400,7 @@ export default function AdminUsersPage() {
           </div>
 
           {loading ? (
-            <div className="p-8 text-zinc-400">
-              Ładowanie użytkowników...
-            </div>
+            <div className="p-8 text-zinc-400">Ładowanie użytkowników...</div>
           ) : filteredProfiles.length === 0 ? (
             <div className="p-8 text-zinc-400">
               Brak użytkowników do wyświetlenia.
@@ -616,25 +607,19 @@ export default function AdminUsersPage() {
                       </div>
 
                       <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-4 text-sm">
-                        <p className="text-zinc-500">
-                          Aktualna rola
-                        </p>
+                        <p className="text-zinc-500">Aktualna rola</p>
 
                         <p className="mt-1 font-bold text-green-400">
                           {getRoleLabel(profile.role)}
                         </p>
 
-                        <p className="mt-4 text-zinc-500">
-                          Status
-                        </p>
+                        <p className="mt-4 text-zinc-500">Status</p>
 
                         <p className="mt-1 font-bold text-zinc-200">
                           {getStatusLabel(profile.verification_status)}
                         </p>
 
-                        <p className="mt-4 text-zinc-500">
-                          Utworzono
-                        </p>
+                        <p className="mt-4 text-zinc-500">Utworzono</p>
 
                         <p className="mt-1 text-xs text-zinc-300">
                           {profile.created_at
