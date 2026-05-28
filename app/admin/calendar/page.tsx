@@ -13,6 +13,7 @@ type Lane = {
 
 type Reservation = {
   id: string;
+  lane_id: string | null;
   customer_name: string | null;
   customer_phone: string | null;
   reservation_date: string;
@@ -107,8 +108,10 @@ function rangeCoversHour(startTime: string, endTime: string, hour: string) {
   return start < hourEnd && end > hourStart;
 }
 
-function getLaneName(reservation: Reservation) {
-  return reservation.shooting_lanes?.[0]?.name ?? "Brak osi";
+function getLaneName(reservation: Reservation, lanes: Lane[]) {
+  const lane = lanes.find((item) => item.id === reservation.lane_id);
+
+  return lane?.name ?? reservation.shooting_lanes?.[0]?.name ?? "Brak osi";
 }
 
 function getRoleLabel(role: string | null) {
@@ -230,6 +233,7 @@ export default function AdminCalendarPage() {
       .select(
         `
         id,
+        lane_id,
         customer_name,
         customer_phone,
         reservation_date,
@@ -293,11 +297,11 @@ export default function AdminCalendarPage() {
     setLoading(false);
   }
 
-  function getReservationsForSlot(date: string, laneName: string, hour: string) {
+  function getReservationsForSlot(date: string, laneId: string, hour: string) {
     return reservations.filter(
       (reservation) =>
         reservation.reservation_date === date &&
-        getLaneName(reservation) === laneName &&
+        reservation.lane_id === laneId &&
         rangeCoversHour(reservation.start_time, reservation.end_time, hour)
     );
   }
@@ -315,14 +319,6 @@ export default function AdminCalendarPage() {
     return events.filter((event) => event.event_date === date);
   }
 
-  function getEventsForHour(date: string, hour: string) {
-    return events.filter(
-      (event) =>
-        event.event_date === date &&
-        rangeCoversHour(event.start_time, event.end_time, hour)
-    );
-  }
-
   return (
     <main className="min-h-screen bg-zinc-950 text-white">
       <section className="mx-auto max-w-7xl px-4 py-10 sm:px-6">
@@ -333,9 +329,7 @@ export default function AdminCalendarPage() {
             </p>
 
             <div className="flex flex-wrap items-center gap-3">
-              <h1 className="text-4xl font-bold">
-                Kalendarz operacyjny
-              </h1>
+              <h1 className="text-4xl font-bold">Kalendarz operacyjny</h1>
 
               {!loading && role && (
                 <span
@@ -363,9 +357,7 @@ export default function AdminCalendarPage() {
 
         <div className="mb-6 grid gap-5 rounded-2xl border border-zinc-800 bg-zinc-900 p-6 md:grid-cols-2">
           <div>
-            <label className="mb-2 block text-sm text-zinc-300">
-              Widok
-            </label>
+            <label className="mb-2 block text-sm text-zinc-300">Widok</label>
 
             <select
               value={mode}
@@ -395,12 +387,15 @@ export default function AdminCalendarPage() {
           <span className="rounded-full border border-green-800 bg-green-950 px-3 py-1 text-green-300">
             Rezerwacja
           </span>
+
           <span className="rounded-full border border-red-800 bg-red-950 px-3 py-1 text-red-300">
             Blokada osi
           </span>
+
           <span className="rounded-full border border-purple-800 bg-purple-950 px-3 py-1 text-purple-300">
             Event / szkolenie
           </span>
+
           <span className="rounded-full border border-zinc-800 bg-zinc-950 px-3 py-1 text-zinc-500">
             Wolne
           </span>
@@ -438,6 +433,7 @@ export default function AdminCalendarPage() {
                       <thead>
                         <tr className="border-b border-zinc-800 text-zinc-400">
                           <th className="py-3 pr-4">Godzina</th>
+
                           {lanes.map((lane) => (
                             <th key={lane.id} className="py-3 pr-4">
                               {lane.name}
@@ -456,7 +452,7 @@ export default function AdminCalendarPage() {
                             {lanes.map((lane) => {
                               const slotReservations = getReservationsForSlot(
                                 selectedDate,
-                                lane.name,
+                                lane.id,
                                 hour
                               );
 
@@ -467,10 +463,7 @@ export default function AdminCalendarPage() {
                               );
 
                               return (
-                                <td
-                                  key={lane.id}
-                                  className="py-3 pr-4 align-top"
-                                >
+                                <td key={lane.id} className="py-3 pr-4 align-top">
                                   {slotReservations.length === 0 &&
                                   slotBlocks.length === 0 ? (
                                     <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-3 text-xs text-zinc-600">
@@ -487,10 +480,8 @@ export default function AdminCalendarPage() {
                                             {block.start_time.slice(0, 5)}–
                                             {block.end_time.slice(0, 5)}
                                           </p>
-                                          <p>
-                                            {block.reason ||
-                                              "Blokada osi"}
-                                          </p>
+
+                                          <p>{block.reason || "Blokada osi"}</p>
                                         </div>
                                       ))}
 
@@ -503,7 +494,9 @@ export default function AdminCalendarPage() {
                                             {reservation.start_time.slice(0, 5)}–
                                             {reservation.end_time.slice(0, 5)}
                                           </p>
+
                                           <p>{reservation.customer_name}</p>
+
                                           <p className="text-green-400">
                                             {reservation.customer_phone}
                                           </p>
@@ -622,7 +615,7 @@ export default function AdminCalendarPage() {
                               </p>
 
                               <p className="mt-1 text-white">
-                                {getLaneName(reservation)}
+                                {getLaneName(reservation, lanes)}
                               </p>
 
                               <p className="mt-2 text-sm text-green-100">
@@ -671,9 +664,7 @@ export default function AdminCalendarPage() {
                                 {event.end_time.slice(0, 5)}
                               </p>
 
-                              <p className="mt-1 text-white">
-                                {event.title}
-                              </p>
+                              <p className="mt-1 text-white">{event.title}</p>
 
                               <p className="mt-2 text-sm text-purple-200">
                                 {event.location || "Brak lokalizacji"}
