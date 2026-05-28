@@ -15,36 +15,17 @@ type Reservation = {
   id: string;
   lane_id: string | null;
   customer_name: string | null;
+  customer_email: string | null;
   customer_phone: string | null;
   reservation_date: string;
   start_time: string;
   end_time: string;
   reservation_status: string | null;
-  shooting_lanes:
-    | {
-        name: string | null;
-      }[]
-    | null;
-};
-
-type LaneBlock = {
-  id: string;
-  lane_id: string;
-  block_date: string;
-  start_time: string;
-  end_time: string;
-  reason: string | null;
-  is_active: boolean;
-};
-
-type EventItem = {
-  id: string;
-  title: string;
-  event_date: string;
-  start_time: string;
-  end_time: string;
-  location: string | null;
-  is_active: boolean | null;
+  payment_status: string | null;
+  attendance_status: string | null;
+  checked_in_at: string | null;
+  created_at: string | null;
+  price: number | null;
 };
 
 const hours = [
@@ -108,12 +89,6 @@ function rangeCoversHour(startTime: string, endTime: string, hour: string) {
   return start < hourEnd && end > hourStart;
 }
 
-function getLaneName(reservation: Reservation, lanes: Lane[]) {
-  const lane = lanes.find((item) => item.id === reservation.lane_id);
-
-  return lane?.name ?? reservation.shooting_lanes?.[0]?.name ?? "Brak osi";
-}
-
 function getRoleLabel(role: string | null) {
   switch (role) {
     case "admin":
@@ -140,13 +115,36 @@ function getRoleBadgeClass(role: string | null) {
   }
 }
 
-function isCancelledStatus(status: string | null) {
-  return (
-    status === "cancelled" ||
-    status === "canceled" ||
-    status === "cancelled_by_user" ||
-    status === "cancelled_by_admin"
-  );
+function getReservationStatusLabel(status: string | null) {
+  switch (status) {
+    case "confirmed":
+      return "Potwierdzona";
+    case "completed":
+      return "Zakończona";
+    case "no_show":
+      return "No-show";
+    case "cancelled_by_admin":
+      return "Anulowana";
+    default:
+      return status || "Brak statusu";
+  }
+}
+
+function getPaymentStatusLabel(status: string | null) {
+  switch (status) {
+    case "pay_on_site":
+      return "Płatność na miejscu";
+    case "paid":
+      return "Opłacona";
+    case "unpaid":
+      return "Nieopłacona";
+    case "free":
+      return "Darmowa";
+    case "voucher":
+      return "Voucher";
+    default:
+      return status || "Brak statusu";
+  }
 }
 
 export default function AdminCalendarPage() {
@@ -154,19 +152,28 @@ export default function AdminCalendarPage() {
 
   const [mode, setMode] = useState<CalendarMode>("day");
   const [selectedDate, setSelectedDate] = useState(today);
+
   const [lanes, setLanes] = useState<Lane[]>([]);
   const [reservations, setReservations] = useState<Reservation[]>([]);
-  const [laneBlocks, setLaneBlocks] = useState<LaneBlock[]>([]);
-  const [events, setEvents] = useState<EventItem[]>([]);
+
   const [loading, setLoading] = useState(true);
-  const [role, setRole] = useState<UserRole | null>(null);
   const [message, setMessage] = useState("");
+
+  const [role, setRole] = useState<UserRole | null>(null);
+
+  const [selectedReservation, setSelectedReservation] =
+    useState<Reservation | null>(null);
+
+  const [savingReservationId, setSavingReservationId] =
+    useState<string | null>(null);
 
   const visibleDates =
     mode === "day" ? [selectedDate] : getWeekDates(selectedDate);
 
   const hasAccess =
-    role === "admin" || role === "pracownik" || role === "instruktor";
+    role === "admin" ||
+    role === "pracownik" ||
+    role === "instruktor";
 
   useEffect(() => {
     loadCalendar();
@@ -178,28 +185,22 @@ export default function AdminCalendarPage() {
 
     const {
       data: { user },
-      error: userError,
     } = await supabase.auth.getUser();
 
-    if (userError || !user) {
+    if (!user) {
       setMessage("Musisz być zalogowany.");
       setLoading(false);
       return;
     }
 
-    const { data: profile, error: profileError } = await supabase
+    const { data: profile } = await supabase
       .from("profiles")
       .select("role")
       .eq("user_id", user.id)
       .single();
 
-    if (profileError || !profile?.role) {
-      setMessage("Nie udało się pobrać roli użytkownika.");
-      setLoading(false);
-      return;
-    }
+    const currentRole = String(profile?.role || "").toLowerCase() as UserRole;
 
-    const currentRole = String(profile.role).trim().toLowerCase() as UserRole;
     setRole(currentRole);
 
     if (
@@ -207,129 +208,171 @@ export default function AdminCalendarPage() {
       currentRole !== "pracownik" &&
       currentRole !== "instruktor"
     ) {
-      setMessage("Brak dostępu do kalendarza.");
+      setMessage("Brak dostępu.");
       setLoading(false);
       return;
     }
 
-    const dates = mode === "day" ? [selectedDate] : getWeekDates(selectedDate);
+    const dates =
+      mode === "day"
+        ? [selectedDate]
+        : getWeekDates(selectedDate);
+
     const dateFrom = dates[0];
     const dateTo = dates[dates.length - 1];
 
-    const { data: lanesData, error: lanesError } = await supabase
+    const { data: lanesData } = await supabase
       .from("shooting_lanes")
       .select("id, name")
       .eq("is_active", true)
       .order("name");
 
-    if (lanesError) {
-      setMessage(`Błąd pobierania osi: ${lanesError.message}`);
-      setLoading(false);
-      return;
-    }
-
-    const { data: reservationsData, error: reservationsError } = await supabase
+    const { data: reservationsData } = await supabase
       .from("reservations")
-      .select(
-        `
+      .select(`
         id,
         lane_id,
         customer_name,
+        customer_email,
         customer_phone,
         reservation_date,
         start_time,
         end_time,
         reservation_status,
-        shooting_lanes (
-          name
-        )
-      `
-      )
+        payment_status,
+        attendance_status,
+        checked_in_at,
+        created_at,
+        price
+      `)
       .gte("reservation_date", dateFrom)
       .lte("reservation_date", dateTo)
       .order("reservation_date", { ascending: true })
       .order("start_time", { ascending: true });
 
-    if (reservationsError) {
-      setMessage(`Błąd pobierania rezerwacji: ${reservationsError.message}`);
-      setLoading(false);
-      return;
-    }
-
-    const { data: blocksData, error: blocksError } = await supabase
-      .from("lane_blocks")
-      .select("id, lane_id, block_date, start_time, end_time, reason, is_active")
-      .gte("block_date", dateFrom)
-      .lte("block_date", dateTo)
-      .eq("is_active", true)
-      .order("block_date", { ascending: true })
-      .order("start_time", { ascending: true });
-
-    if (blocksError) {
-      setMessage(`Błąd pobierania blokad osi: ${blocksError.message}`);
-      setLoading(false);
-      return;
-    }
-
-    const { data: eventsData, error: eventsError } = await supabase
-      .from("events")
-      .select("id, title, event_date, start_time, end_time, location, is_active")
-      .gte("event_date", dateFrom)
-      .lte("event_date", dateTo)
-      .eq("is_active", true)
-      .order("event_date", { ascending: true })
-      .order("start_time", { ascending: true });
-
-    if (eventsError) {
-      setMessage(`Błąd pobierania eventów: ${eventsError.message}`);
-      setLoading(false);
-      return;
-    }
-
-    const activeReservations = (
-      (reservationsData ?? []) as unknown as Reservation[]
-    ).filter((reservation) => !isCancelledStatus(reservation.reservation_status));
-
     setLanes((lanesData ?? []) as Lane[]);
-    setReservations(activeReservations);
-    setLaneBlocks((blocksData ?? []) as LaneBlock[]);
-    setEvents((eventsData ?? []) as EventItem[]);
+    setReservations((reservationsData ?? []) as Reservation[]);
+
     setLoading(false);
   }
 
-  function getReservationsForSlot(date: string, laneId: string, hour: string) {
+  function getLaneName(reservation: Reservation) {
+    const lane = lanes.find(
+      (item) => item.id === reservation.lane_id
+    );
+
+    return lane?.name ?? "Brak osi";
+  }
+
+  function getReservationsForSlot(
+    date: string,
+    laneId: string,
+    hour: string
+  ) {
     return reservations.filter(
       (reservation) =>
         reservation.reservation_date === date &&
         reservation.lane_id === laneId &&
-        rangeCoversHour(reservation.start_time, reservation.end_time, hour)
+        rangeCoversHour(
+          reservation.start_time,
+          reservation.end_time,
+          hour
+        )
     );
   }
 
-  function getBlocksForSlot(date: string, laneId: string, hour: string) {
-    return laneBlocks.filter(
-      (block) =>
-        block.block_date === date &&
-        block.lane_id === laneId &&
-        rangeCoversHour(block.start_time, block.end_time, hour)
+  async function updateReservation(
+    reservation: Reservation,
+    changes: Partial<Reservation>
+  ) {
+    setSavingReservationId(reservation.id);
+
+    const { error } = await supabase
+      .from("reservations")
+      .update(changes)
+      .eq("id", reservation.id);
+
+    setSavingReservationId(null);
+
+    if (error) {
+      setMessage(error.message);
+      return;
+    }
+
+    setReservations((current) =>
+      current.map((item) =>
+        item.id === reservation.id
+          ? { ...item, ...changes }
+          : item
+      )
+    );
+
+    setSelectedReservation((current) =>
+      current
+        ? {
+            ...current,
+            ...changes,
+          }
+        : null
     );
   }
 
-  function getEventsForDate(date: string) {
-    return events.filter((event) => event.event_date === date);
+  async function markCompleted() {
+    if (!selectedReservation) return;
+
+    await updateReservation(selectedReservation, {
+      reservation_status: "completed",
+      attendance_status: "present",
+      checked_in_at: new Date().toISOString(),
+    });
+  }
+
+  async function markNoShow() {
+    if (!selectedReservation) return;
+
+    await updateReservation(selectedReservation, {
+      reservation_status: "no_show",
+      attendance_status: "no_show",
+    });
+  }
+
+  async function markPaid() {
+    if (!selectedReservation) return;
+
+    await updateReservation(selectedReservation, {
+      payment_status: "paid",
+    });
+  }
+
+  async function markPayOnSite() {
+    if (!selectedReservation) return;
+
+    await updateReservation(selectedReservation, {
+      payment_status: "pay_on_site",
+    });
+  }
+
+  async function cancelReservation() {
+    if (!selectedReservation) return;
+
+    await updateReservation(selectedReservation, {
+      reservation_status: "cancelled_by_admin",
+    });
   }
 
   return (
     <main className="min-h-screen bg-zinc-950 text-white">
       <section className="mx-auto max-w-7xl px-4 py-10 sm:px-6">
-        <div className="mb-8 flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+        <div className="mb-8 flex items-end justify-between gap-4">
           <div>
             <p className="mb-4 text-sm uppercase tracking-[0.35em] text-green-500">
               CSK Booking
             </p>
 
-            <div className="flex flex-wrap items-center gap-3">
-              <h1 className="text-4xl font-bold">Kalendarz operacyjny</h1>
+            <div className="flex items-center gap-3">
+              <h1 className="text-4xl font-bold">
+                Kalendarz operacyjny
+              </h1>
 
               {!loading && role && (
                 <span
@@ -341,15 +384,11 @@ export default function AdminCalendarPage() {
                 </span>
               )}
             </div>
-
-            <p className="mt-3 text-zinc-400">
-              Rezerwacje, blokady osi oraz eventy/szkolenia w jednym widoku.
-            </p>
           </div>
 
           <a
             href="/admin"
-            className="rounded-xl border border-zinc-700 px-5 py-3 text-sm font-semibold text-zinc-300 transition hover:bg-zinc-900"
+            className="rounded-xl border border-zinc-700 px-5 py-3 text-sm font-semibold text-zinc-300 hover:bg-zinc-900"
           >
             ← Panel admina
           </a>
@@ -357,12 +396,16 @@ export default function AdminCalendarPage() {
 
         <div className="mb-6 grid gap-5 rounded-2xl border border-zinc-800 bg-zinc-900 p-6 md:grid-cols-2">
           <div>
-            <label className="mb-2 block text-sm text-zinc-300">Widok</label>
+            <label className="mb-2 block text-sm text-zinc-300">
+              Widok
+            </label>
 
             <select
               value={mode}
-              onChange={(event) => setMode(event.target.value as CalendarMode)}
-              className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-white outline-none focus:border-green-600"
+              onChange={(event) =>
+                setMode(event.target.value as CalendarMode)
+              }
+              className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3"
             >
               <option value="day">Dzień</option>
               <option value="week">Tydzień</option>
@@ -371,314 +414,319 @@ export default function AdminCalendarPage() {
 
           <div>
             <label className="mb-2 block text-sm text-zinc-300">
-              Data odniesienia
+              Data
             </label>
 
             <input
               type="date"
               value={selectedDate}
-              onChange={(event) => setSelectedDate(event.target.value)}
-              className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-white outline-none focus:border-green-600"
+              onChange={(event) =>
+                setSelectedDate(event.target.value)
+              }
+              className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3"
             />
           </div>
         </div>
 
-        <div className="mb-8 flex flex-wrap gap-3 rounded-2xl border border-zinc-800 bg-zinc-900 p-4 text-xs font-semibold">
-          <span className="rounded-full border border-green-800 bg-green-950 px-3 py-1 text-green-300">
-            Rezerwacja
-          </span>
-
-          <span className="rounded-full border border-red-800 bg-red-950 px-3 py-1 text-red-300">
-            Blokada osi
-          </span>
-
-          <span className="rounded-full border border-purple-800 bg-purple-950 px-3 py-1 text-purple-300">
-            Event / szkolenie
-          </span>
-
-          <span className="rounded-full border border-zinc-800 bg-zinc-950 px-3 py-1 text-zinc-500">
-            Wolne
-          </span>
-        </div>
-
-        {loading && (
+        {loading ? (
           <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-6 text-zinc-400">
             Ładowanie kalendarza...
           </div>
-        )}
+        ) : (
+          <div className="grid gap-5">
+            {visibleDates.map((date) => (
+              <div
+                key={date}
+                className="rounded-2xl border border-zinc-800 bg-zinc-900 p-5"
+              >
+                <h2 className="mb-5 text-2xl font-bold">
+                  {formatShortDate(date)}
+                </h2>
 
-        {!loading && message && (
-          <div className="rounded-xl border border-red-800 bg-red-950 p-4 text-sm font-semibold text-red-300">
-            {message}
+                <div className="overflow-x-auto">
+                  <table className="w-full min-w-[900px] border-collapse text-left text-sm">
+                    <thead>
+                      <tr className="border-b border-zinc-800 text-zinc-400">
+                        <th className="py-3 pr-4">
+                          Godzina
+                        </th>
+
+                        {lanes.map((lane) => (
+                          <th
+                            key={lane.id}
+                            className="py-3 pr-4"
+                          >
+                            {lane.name}
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+
+                    <tbody>
+                      {hours.map((hour) => (
+                        <tr
+                          key={hour}
+                          className="border-b border-zinc-800"
+                        >
+                          <td className="py-4 pr-4 font-semibold text-zinc-300">
+                            {hour}
+                          </td>
+
+                          {lanes.map((lane) => {
+                            const slotReservations =
+                              getReservationsForSlot(
+                                date,
+                                lane.id,
+                                hour
+                              );
+
+                            return (
+                              <td
+                                key={lane.id}
+                                className="py-3 pr-4 align-top"
+                              >
+                                {slotReservations.length === 0 ? (
+                                  <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-3 text-xs text-zinc-600">
+                                    Wolne
+                                  </div>
+                                ) : (
+                                  <div className="grid gap-2">
+                                    {slotReservations.map(
+                                      (reservation) => (
+                                        <button
+                                          key={reservation.id}
+                                          type="button"
+                                          onClick={() =>
+                                            setSelectedReservation(
+                                              reservation
+                                            )
+                                          }
+                                          className="rounded-xl border border-green-800 bg-green-950 p-3 text-left text-xs text-green-100 transition hover:border-green-500"
+                                        >
+                                          <p className="font-bold text-green-300">
+                                            {reservation.start_time.slice(
+                                              0,
+                                              5
+                                            )}
+                                            –
+                                            {reservation.end_time.slice(
+                                              0,
+                                              5
+                                            )}
+                                          </p>
+
+                                          <p className="mt-1">
+                                            {
+                                              reservation.customer_name
+                                            }
+                                          </p>
+
+                                          <p className="text-green-400">
+                                            {
+                                              reservation.customer_phone
+                                            }
+                                          </p>
+                                        </button>
+                                      )
+                                    )}
+                                  </div>
+                                )}
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            ))}
           </div>
         )}
 
-        {!loading && hasAccess && !message && (
-          <>
-            {mode === "day" && (
-              <div className="grid gap-6">
-                <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-5">
-                  <div className="mb-5 flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-                    <h2 className="text-2xl font-bold">
-                      Osie — {formatShortDate(selectedDate)}
-                    </h2>
+        {selectedReservation && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
+            <div className="w-full max-w-2xl rounded-2xl border border-zinc-800 bg-zinc-900 p-6">
+              <div className="mb-6 flex items-start justify-between gap-4">
+                <div>
+                  <p className="text-xs uppercase tracking-[0.25em] text-zinc-500">
+                    Rezerwacja
+                  </p>
 
-                    <span className="text-sm text-zinc-400">
-                      Rezerwacje i blokady osi
-                    </span>
-                  </div>
+                  <h2 className="mt-2 text-3xl font-bold">
+                    {selectedReservation.customer_name}
+                  </h2>
 
-                  <div className="overflow-x-auto">
-                    <table className="w-full min-w-[900px] border-collapse text-left text-sm">
-                      <thead>
-                        <tr className="border-b border-zinc-800 text-zinc-400">
-                          <th className="py-3 pr-4">Godzina</th>
-
-                          {lanes.map((lane) => (
-                            <th key={lane.id} className="py-3 pr-4">
-                              {lane.name}
-                            </th>
-                          ))}
-                        </tr>
-                      </thead>
-
-                      <tbody>
-                        {hours.map((hour) => (
-                          <tr key={hour} className="border-b border-zinc-800">
-                            <td className="py-4 pr-4 font-semibold text-zinc-300">
-                              {hour}
-                            </td>
-
-                            {lanes.map((lane) => {
-                              const slotReservations = getReservationsForSlot(
-                                selectedDate,
-                                lane.id,
-                                hour
-                              );
-
-                              const slotBlocks = getBlocksForSlot(
-                                selectedDate,
-                                lane.id,
-                                hour
-                              );
-
-                              return (
-                                <td key={lane.id} className="py-3 pr-4 align-top">
-                                  {slotReservations.length === 0 &&
-                                  slotBlocks.length === 0 ? (
-                                    <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-3 text-xs text-zinc-600">
-                                      Wolne
-                                    </div>
-                                  ) : (
-                                    <div className="grid gap-2">
-                                      {slotBlocks.map((block) => (
-                                        <div
-                                          key={`${block.id}-${hour}`}
-                                          className="rounded-xl border border-red-800 bg-red-950 p-3 text-xs text-red-100"
-                                        >
-                                          <p className="font-bold text-red-300">
-                                            {block.start_time.slice(0, 5)}–
-                                            {block.end_time.slice(0, 5)}
-                                          </p>
-
-                                          <p>{block.reason || "Blokada osi"}</p>
-                                        </div>
-                                      ))}
-
-                                      {slotReservations.map((reservation) => (
-                                        <div
-                                          key={`${reservation.id}-${hour}`}
-                                          className="rounded-xl border border-green-800 bg-green-950 p-3 text-xs text-green-100"
-                                        >
-                                          <p className="font-bold text-green-300">
-                                            {reservation.start_time.slice(0, 5)}–
-                                            {reservation.end_time.slice(0, 5)}
-                                          </p>
-
-                                          <p>{reservation.customer_name}</p>
-
-                                          <p className="text-green-400">
-                                            {reservation.customer_phone}
-                                          </p>
-                                        </div>
-                                      ))}
-                                    </div>
-                                  )}
-                                </td>
-                              );
-                            })}
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
+                  <p className="mt-2 text-zinc-400">
+                    {getLaneName(selectedReservation)}
+                  </p>
                 </div>
 
-                <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-5">
-                  <div className="mb-5 flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-                    <h2 className="text-2xl font-bold">
-                      Eventy / szkolenia — {formatShortDate(selectedDate)}
-                    </h2>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setSelectedReservation(null)
+                  }
+                  className="rounded-xl border border-zinc-700 px-4 py-2 text-sm font-semibold text-zinc-300 hover:bg-zinc-800"
+                >
+                  Zamknij
+                </button>
+              </div>
 
-                    <span className="text-sm text-zinc-400">
-                      {getEventsForDate(selectedDate).length} wydarzenia
-                    </span>
-                  </div>
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-4">
+                  <p className="text-xs uppercase tracking-[0.25em] text-zinc-500">
+                    Kontakt
+                  </p>
 
-                  {getEventsForDate(selectedDate).length === 0 ? (
-                    <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-4 text-sm text-zinc-500">
-                      Brak eventów lub szkoleń w tym dniu.
-                    </div>
-                  ) : (
-                    <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-                      {getEventsForDate(selectedDate).map((event) => (
-                        <div
-                          key={event.id}
-                          className="rounded-xl border border-purple-800 bg-purple-950 p-4"
-                        >
-                          <p className="font-bold text-purple-300">
-                            {event.start_time.slice(0, 5)}–
-                            {event.end_time.slice(0, 5)}
-                          </p>
+                  <p className="mt-3 text-lg font-semibold">
+                    {selectedReservation.customer_phone ||
+                      "Brak telefonu"}
+                  </p>
 
-                          <p className="mt-1 font-semibold text-white">
-                            {event.title}
-                          </p>
+                  <p className="mt-2 text-zinc-400">
+                    {selectedReservation.customer_email ||
+                      "Brak e-maila"}
+                  </p>
+                </div>
 
-                          <p className="mt-2 text-sm text-purple-200">
-                            {event.location || "Brak lokalizacji"}
-                          </p>
-                        </div>
-                      ))}
-                    </div>
-                  )}
+                <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-4">
+                  <p className="text-xs uppercase tracking-[0.25em] text-zinc-500">
+                    Termin
+                  </p>
+
+                  <p className="mt-3 text-lg font-semibold">
+                    {
+                      selectedReservation.reservation_date
+                    }
+                  </p>
+
+                  <p className="mt-2 text-zinc-400">
+                    {selectedReservation.start_time.slice(
+                      0,
+                      5
+                    )}
+                    –
+                    {selectedReservation.end_time.slice(
+                      0,
+                      5
+                    )}
+                  </p>
+                </div>
+
+                <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-4">
+                  <p className="text-xs uppercase tracking-[0.25em] text-zinc-500">
+                    Status wizyty
+                  </p>
+
+                  <p className="mt-3 text-lg font-semibold">
+                    {getReservationStatusLabel(
+                      selectedReservation.reservation_status
+                    )}
+                  </p>
+
+                  <p className="mt-2 text-zinc-400">
+                    Check-in:
+                    {" "}
+                    {selectedReservation.checked_in_at
+                      ? new Date(
+                          selectedReservation.checked_in_at
+                        ).toLocaleString("pl-PL")
+                      : "brak"}
+                  </p>
+                </div>
+
+                <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-4">
+                  <p className="text-xs uppercase tracking-[0.25em] text-zinc-500">
+                    Płatność
+                  </p>
+
+                  <p className="mt-3 text-lg font-semibold">
+                    {getPaymentStatusLabel(
+                      selectedReservation.payment_status
+                    )}
+                  </p>
+
+                  <p className="mt-2 text-green-400">
+                    {Number(
+                      selectedReservation.price ?? 0
+                    ).toFixed(0)}
+                    {" "}
+                    zł
+                  </p>
                 </div>
               </div>
-            )}
 
-            {mode === "week" && (
-              <div className="grid gap-5">
-                {visibleDates.map((date) => {
-                  const dayReservations = reservations.filter(
-                    (reservation) => reservation.reservation_date === date
-                  );
+              <div className="mt-6 grid gap-3 md:grid-cols-2">
+                <button
+                  type="button"
+                  onClick={markCompleted}
+                  disabled={
+                    savingReservationId ===
+                    selectedReservation.id
+                  }
+                  className="rounded-xl border border-green-700 px-5 py-4 font-bold text-green-300 hover:bg-green-950"
+                >
+                  Zakończ wizytę
+                </button>
 
-                  const dayBlocks = laneBlocks.filter(
-                    (block) => block.block_date === date
-                  );
+                <button
+                  type="button"
+                  onClick={markNoShow}
+                  disabled={
+                    savingReservationId ===
+                    selectedReservation.id
+                  }
+                  className="rounded-xl border border-yellow-700 px-5 py-4 font-bold text-yellow-300 hover:bg-yellow-950"
+                >
+                  No-show
+                </button>
 
-                  const dayEvents = events.filter(
-                    (event) => event.event_date === date
-                  );
+                <button
+                  type="button"
+                  onClick={markPaid}
+                  disabled={
+                    savingReservationId ===
+                    selectedReservation.id
+                  }
+                  className="rounded-xl border border-blue-700 px-5 py-4 font-bold text-blue-300 hover:bg-blue-950"
+                >
+                  Oznacz jako opłacone
+                </button>
 
-                  return (
-                    <div
-                      key={date}
-                      className="rounded-2xl border border-zinc-800 bg-zinc-900 p-5"
-                    >
-                      <div className="mb-4 flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-                        <h2 className="text-2xl font-bold">
-                          {formatShortDate(date)}
-                        </h2>
+                <button
+                  type="button"
+                  onClick={markPayOnSite}
+                  disabled={
+                    savingReservationId ===
+                    selectedReservation.id
+                  }
+                  className="rounded-xl border border-purple-700 px-5 py-4 font-bold text-purple-300 hover:bg-purple-950"
+                >
+                  Płatność na miejscu
+                </button>
 
-                        <div className="flex flex-wrap gap-2 text-xs font-semibold">
-                          <span className="rounded-full bg-green-950 px-3 py-1 text-green-400">
-                            Rezerwacje: {dayReservations.length}
-                          </span>
-
-                          <span className="rounded-full bg-red-950 px-3 py-1 text-red-300">
-                            Blokady: {dayBlocks.length}
-                          </span>
-
-                          <span className="rounded-full bg-purple-950 px-3 py-1 text-purple-300">
-                            Eventy: {dayEvents.length}
-                          </span>
-                        </div>
-                      </div>
-
-                      {dayReservations.length === 0 &&
-                      dayBlocks.length === 0 &&
-                      dayEvents.length === 0 ? (
-                        <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-4 text-sm text-zinc-500">
-                          Brak rezerwacji, blokad i eventów.
-                        </div>
-                      ) : (
-                        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-                          {dayReservations.map((reservation) => (
-                            <div
-                              key={reservation.id}
-                              className="rounded-xl border border-green-800 bg-green-950 p-4"
-                            >
-                              <p className="font-bold text-green-300">
-                                {reservation.start_time.slice(0, 5)}–
-                                {reservation.end_time.slice(0, 5)}
-                              </p>
-
-                              <p className="mt-1 text-white">
-                                {getLaneName(reservation, lanes)}
-                              </p>
-
-                              <p className="mt-2 text-sm text-green-100">
-                                {reservation.customer_name}
-                              </p>
-
-                              <p className="text-sm text-green-400">
-                                {reservation.customer_phone}
-                              </p>
-                            </div>
-                          ))}
-
-                          {dayBlocks.map((block) => {
-                            const lane = lanes.find(
-                              (item) => item.id === block.lane_id
-                            );
-
-                            return (
-                              <div
-                                key={block.id}
-                                className="rounded-xl border border-red-800 bg-red-950 p-4"
-                              >
-                                <p className="font-bold text-red-300">
-                                  {block.start_time.slice(0, 5)}–
-                                  {block.end_time.slice(0, 5)}
-                                </p>
-
-                                <p className="mt-1 text-white">
-                                  {lane?.name || "Nieznana oś"}
-                                </p>
-
-                                <p className="mt-2 text-sm text-red-100">
-                                  {block.reason || "Blokada osi"}
-                                </p>
-                              </div>
-                            );
-                          })}
-
-                          {dayEvents.map((event) => (
-                            <div
-                              key={event.id}
-                              className="rounded-xl border border-purple-800 bg-purple-950 p-4"
-                            >
-                              <p className="font-bold text-purple-300">
-                                {event.start_time.slice(0, 5)}–
-                                {event.end_time.slice(0, 5)}
-                              </p>
-
-                              <p className="mt-1 text-white">{event.title}</p>
-
-                              <p className="mt-2 text-sm text-purple-200">
-                                {event.location || "Brak lokalizacji"}
-                              </p>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
+                <button
+                  type="button"
+                  onClick={cancelReservation}
+                  disabled={
+                    savingReservationId ===
+                    selectedReservation.id
+                  }
+                  className="md:col-span-2 rounded-xl border border-red-700 px-5 py-4 font-bold text-red-300 hover:bg-red-950"
+                >
+                  Anuluj rezerwację
+                </button>
               </div>
-            )}
-          </>
+
+              {savingReservationId ===
+                selectedReservation.id && (
+                <p className="mt-5 text-sm font-semibold text-yellow-400">
+                  Zapisywanie zmian...
+                </p>
+              )}
+            </div>
+          </div>
         )}
       </section>
     </main>
