@@ -5,7 +5,13 @@ import Link from "next/link";
 import { supabase } from "../../../lib/supabase";
 
 type UserRole = "admin" | "pracownik" | "instruktor" | "user";
-type VerificationStatus = "pending" | "verified" | "rejected";
+
+type VerificationStatus =
+  | "pending"
+  | "verified"
+  | "rejected"
+  | "niezweryfikowane"
+  | "unverified";
 
 type Profile = {
   id: string;
@@ -18,6 +24,22 @@ type Profile = {
   admin_note: string | null;
   created_at: string | null;
   updated_at: string | null;
+
+  postal_code: string | null;
+  city: string | null;
+  street: string | null;
+  house_number: string | null;
+  apartment_number: string | null;
+
+  weapon_permit_number: string | null;
+  weapon_permit_type: string | null;
+  weapon_permit_issuer: string | null;
+
+  has_range_officer: boolean | null;
+  range_officer_number: string | null;
+
+  has_instructor: boolean | null;
+  instructor_number: string | null;
 };
 
 const roleOptions: UserRole[] = ["admin", "pracownik", "instruktor", "user"];
@@ -31,6 +53,7 @@ const verificationOptions: VerificationStatus[] = [
 const statusFilters = [
   { label: "Wszyscy", value: "all" },
   { label: "Oczekujący", value: "pending" },
+  { label: "Niezweryfikowani", value: "unverified" },
   { label: "Zweryfikowani", value: "verified" },
   { label: "Odrzuceni", value: "rejected" },
 ];
@@ -42,6 +65,65 @@ const roleFilters = [
   { label: "Instruktor", value: "instruktor" },
   { label: "Użytkownik", value: "user" },
 ];
+
+function isUnverifiedStatus(status: string | null) {
+  return (
+    !status ||
+    status === "niezweryfikowane" ||
+    status === "unverified" ||
+    status === "brak statusu"
+  );
+}
+
+function valueOrMissing(value: string | null | undefined) {
+  return value && value.trim() ? value : "Brak danych";
+}
+
+function yesNo(value: boolean | null) {
+  return value ? "Tak" : "Nie";
+}
+
+function getMissingFields(profile: Profile) {
+  const missing: string[] = [];
+
+  if (!profile.full_name) missing.push("imię i nazwisko");
+  if (!profile.phone) missing.push("telefon");
+  if (!profile.postal_code) missing.push("kod pocztowy");
+  if (!profile.city) missing.push("miasto");
+  if (!profile.street) missing.push("ulica");
+  if (!profile.house_number) missing.push("numer domu");
+  if (!profile.weapon_permit_number) missing.push("numer pozwolenia");
+  if (!profile.weapon_permit_type) missing.push("typ pozwolenia");
+  if (!profile.weapon_permit_issuer) missing.push("organ wydający");
+
+  if (profile.has_range_officer && !profile.range_officer_number) {
+    missing.push("numer prowadzącego strzelanie");
+  }
+
+  if (profile.has_instructor && !profile.instructor_number) {
+    missing.push("numer instruktora");
+  }
+
+  return missing;
+}
+
+function getCompletionPercent(profile: Profile) {
+  const fields = [
+    profile.full_name,
+    profile.phone,
+    profile.postal_code,
+    profile.city,
+    profile.street,
+    profile.house_number,
+    profile.weapon_permit_number,
+    profile.weapon_permit_type,
+    profile.weapon_permit_issuer,
+  ];
+
+  const filled = fields.filter((field) => field && field.trim()).length;
+
+  return Math.round((filled / fields.length) * 100);
+}
 
 function getRoleLabel(role: string | null) {
   switch (role) {
@@ -66,6 +148,9 @@ function getStatusLabel(status: string | null) {
       return "Oczekuje";
     case "rejected":
       return "Odrzucony";
+    case "niezweryfikowane":
+    case "unverified":
+      return "Niezweryfikowany";
     default:
       return "Brak statusu";
   }
@@ -94,6 +179,9 @@ function getStatusBadgeClass(status: string | null) {
       return "border-yellow-700 bg-yellow-950 text-yellow-300";
     case "rejected":
       return "border-red-700 bg-red-950 text-red-300";
+    case "niezweryfikowane":
+    case "unverified":
+      return "border-orange-700 bg-orange-950 text-orange-300";
     default:
       return "border-zinc-700 bg-zinc-900 text-zinc-400";
   }
@@ -103,6 +191,7 @@ export default function AdminUsersPage() {
   const [currentUserId, setCurrentUserId] = useState("");
   const [currentUserRole, setCurrentUserRole] = useState<UserRole>("user");
   const [profiles, setProfiles] = useState<Profile[]>([]);
+  const [expandedUserId, setExpandedUserId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [savingUserId, setSavingUserId] = useState<string | null>(null);
   const [message, setMessage] = useState("");
@@ -141,7 +230,30 @@ export default function AdminUsersPage() {
     const { data, error } = await supabase
       .from("profiles")
       .select(
-        "id,user_id,email,full_name,phone,role,verification_status,admin_note,created_at,updated_at"
+        `
+        id,
+        user_id,
+        email,
+        full_name,
+        phone,
+        role,
+        verification_status,
+        admin_note,
+        created_at,
+        updated_at,
+        postal_code,
+        city,
+        street,
+        house_number,
+        apartment_number,
+        weapon_permit_number,
+        weapon_permit_type,
+        weapon_permit_issuer,
+        has_range_officer,
+        range_officer_number,
+        has_instructor,
+        instructor_number
+      `
       )
       .order("created_at", { ascending: false });
 
@@ -168,6 +280,8 @@ export default function AdminUsersPage() {
       const phone = profile.phone?.toLowerCase() ?? "";
       const role = profile.role?.toLowerCase() ?? "";
       const status = profile.verification_status?.toLowerCase() ?? "";
+      const permit = profile.weapon_permit_number?.toLowerCase() ?? "";
+      const issuer = profile.weapon_permit_issuer?.toLowerCase() ?? "";
 
       const matchesSearch =
         !phrase ||
@@ -175,10 +289,14 @@ export default function AdminUsersPage() {
         name.includes(phrase) ||
         phone.includes(phrase) ||
         role.includes(phrase) ||
-        status.includes(phrase);
+        status.includes(phrase) ||
+        permit.includes(phrase) ||
+        issuer.includes(phrase);
 
       const matchesStatus =
-        statusFilter === "all" || status === statusFilter;
+        statusFilter === "all" ||
+        status === statusFilter ||
+        (statusFilter === "unverified" && isUnverifiedStatus(status));
 
       const matchesRole = roleFilter === "all" || role === roleFilter;
 
@@ -191,6 +309,9 @@ export default function AdminUsersPage() {
       all: profiles.length,
       pending: profiles.filter(
         (profile) => profile.verification_status === "pending"
+      ).length,
+      unverified: profiles.filter((profile) =>
+        isUnverifiedStatus(profile.verification_status)
       ).length,
       verified: profiles.filter(
         (profile) => profile.verification_status === "verified"
@@ -211,6 +332,8 @@ export default function AdminUsersPage() {
     switch (value) {
       case "pending":
         return counters.pending;
+      case "unverified":
+        return counters.unverified;
       case "verified":
         return counters.verified;
       case "rejected":
@@ -312,7 +435,8 @@ export default function AdminUsersPage() {
             <h1 className="text-4xl font-bold">Użytkownicy</h1>
 
             <p className="mt-3 max-w-2xl text-zinc-400">
-              Zarządzanie rolami, weryfikacją kont i notatkami administratora.
+              Zarządzanie rolami, weryfikacją kont, pełnymi danymi użytkownika i
+              notatkami administratora.
             </p>
 
             {!isAdmin && (
@@ -341,7 +465,7 @@ export default function AdminUsersPage() {
               <input
                 value={search}
                 onChange={(event) => setSearch(event.target.value)}
-                placeholder="E-mail, imię, telefon, rola, status..."
+                placeholder="E-mail, imię, telefon, rola, status, pozwolenie, organ..."
                 className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-white outline-none transition focus:border-green-600"
               />
             </div>
@@ -439,6 +563,9 @@ export default function AdminUsersPage() {
               {filteredProfiles.map((profile) => {
                 const isSaving = savingUserId === profile.user_id;
                 const isOwnAccount = profile.user_id === currentUserId;
+                const isExpanded = expandedUserId === profile.user_id;
+                const missingFields = getMissingFields(profile);
+                const completion = getCompletionPercent(profile);
 
                 return (
                   <article
@@ -468,6 +595,16 @@ export default function AdminUsersPage() {
                             {getStatusLabel(profile.verification_status)}
                           </span>
 
+                          <span
+                            className={
+                              completion >= 80
+                                ? "rounded-full border border-green-700 bg-green-950 px-3 py-1 text-xs font-bold text-green-300"
+                                : "rounded-full border border-yellow-700 bg-yellow-950 px-3 py-1 text-xs font-bold text-yellow-300"
+                            }
+                          >
+                            Dane: {completion}%
+                          </span>
+
                           {isOwnAccount && (
                             <span className="rounded-full border border-green-700 bg-green-950 px-3 py-1 text-xs font-bold text-green-300">
                               Twoje konto
@@ -490,6 +627,16 @@ export default function AdminUsersPage() {
                         <p className="mt-1 text-sm text-zinc-500">
                           Tel.: {profile.phone || "brak"}
                         </p>
+
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setExpandedUserId(isExpanded ? null : profile.user_id)
+                          }
+                          className="mt-4 rounded-xl border border-zinc-700 px-4 py-2 text-sm font-semibold text-zinc-300 transition hover:border-green-600 hover:text-white"
+                        >
+                          {isExpanded ? "Ukryj pełne dane" : "Pokaż pełne dane"}
+                        </button>
                       </div>
 
                       <div>
@@ -671,6 +818,191 @@ export default function AdminUsersPage() {
                         )}
                       </div>
                     </div>
+
+                    {isExpanded && (
+                      <div className="mt-6 rounded-2xl border border-zinc-800 bg-zinc-900 p-5">
+                        <div className="mb-5 flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                          <div>
+                            <h3 className="text-xl font-bold">
+                              Pełne dane do weryfikacji
+                            </h3>
+
+                            <p className="mt-1 text-sm text-zinc-400">
+                              Kompletność danych:{" "}
+                              <span className="font-bold text-white">
+                                {completion}%
+                              </span>
+                            </p>
+                          </div>
+
+                          {missingFields.length === 0 ? (
+                            <span className="rounded-full border border-green-700 bg-green-950 px-4 py-2 text-sm font-bold text-green-300">
+                              Dane kompletne
+                            </span>
+                          ) : (
+                            <span className="rounded-full border border-yellow-700 bg-yellow-950 px-4 py-2 text-sm font-bold text-yellow-300">
+                              Braki: {missingFields.length}
+                            </span>
+                          )}
+                        </div>
+
+                        {missingFields.length > 0 && (
+                          <div className="mb-5 rounded-xl border border-yellow-800 bg-yellow-950 p-4 text-sm text-yellow-100">
+                            <p className="font-bold text-yellow-300">
+                              Brakujące dane:
+                            </p>
+
+                            <p className="mt-1">{missingFields.join(", ")}</p>
+                          </div>
+                        )}
+
+                        <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
+                          <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-4">
+                            <p className="mb-3 text-xs uppercase tracking-[0.25em] text-zinc-500">
+                              Dane podstawowe
+                            </p>
+
+                            <p className="text-sm text-zinc-500">Imię i nazwisko</p>
+                            <p className="mb-3 font-semibold">
+                              {valueOrMissing(profile.full_name)}
+                            </p>
+
+                            <p className="text-sm text-zinc-500">E-mail</p>
+                            <p className="mb-3 font-semibold">
+                              {valueOrMissing(profile.email)}
+                            </p>
+
+                            <p className="text-sm text-zinc-500">Telefon</p>
+                            <p className="font-semibold">
+                              {valueOrMissing(profile.phone)}
+                            </p>
+                          </div>
+
+                          <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-4">
+                            <p className="mb-3 text-xs uppercase tracking-[0.25em] text-zinc-500">
+                              Adres
+                            </p>
+
+                            <p className="text-sm text-zinc-500">Kod pocztowy</p>
+                            <p className="mb-3 font-semibold">
+                              {valueOrMissing(profile.postal_code)}
+                            </p>
+
+                            <p className="text-sm text-zinc-500">Miasto</p>
+                            <p className="mb-3 font-semibold">
+                              {valueOrMissing(profile.city)}
+                            </p>
+
+                            <p className="text-sm text-zinc-500">Ulica</p>
+                            <p className="mb-3 font-semibold">
+                              {valueOrMissing(profile.street)}
+                            </p>
+
+                            <p className="text-sm text-zinc-500">Dom / lokal</p>
+                            <p className="font-semibold">
+                              {valueOrMissing(profile.house_number)}
+                              {profile.apartment_number
+                                ? ` / ${profile.apartment_number}`
+                                : ""}
+                            </p>
+                          </div>
+
+                          <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-4">
+                            <p className="mb-3 text-xs uppercase tracking-[0.25em] text-zinc-500">
+                              Pozwolenie na broń
+                            </p>
+
+                            <p className="text-sm text-zinc-500">
+                              Numer pozwolenia
+                            </p>
+                            <p className="mb-3 font-semibold">
+                              {valueOrMissing(profile.weapon_permit_number)}
+                            </p>
+
+                            <p className="text-sm text-zinc-500">
+                              Typ pozwolenia
+                            </p>
+                            <p className="mb-3 font-semibold">
+                              {valueOrMissing(profile.weapon_permit_type)}
+                            </p>
+
+                            <p className="text-sm text-zinc-500">
+                              Organ wydający
+                            </p>
+                            <p className="font-semibold">
+                              {valueOrMissing(profile.weapon_permit_issuer)}
+                            </p>
+                          </div>
+
+                          <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-4">
+                            <p className="mb-3 text-xs uppercase tracking-[0.25em] text-zinc-500">
+                              Prowadzący strzelanie
+                            </p>
+
+                            <p className="text-sm text-zinc-500">
+                              Posiada uprawnienia
+                            </p>
+                            <p className="mb-3 font-semibold">
+                              {yesNo(profile.has_range_officer)}
+                            </p>
+
+                            <p className="text-sm text-zinc-500">
+                              Numer uprawnień
+                            </p>
+                            <p className="font-semibold">
+                              {valueOrMissing(profile.range_officer_number)}
+                            </p>
+                          </div>
+
+                          <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-4">
+                            <p className="mb-3 text-xs uppercase tracking-[0.25em] text-zinc-500">
+                              Instruktor
+                            </p>
+
+                            <p className="text-sm text-zinc-500">
+                              Posiada uprawnienia
+                            </p>
+                            <p className="mb-3 font-semibold">
+                              {yesNo(profile.has_instructor)}
+                            </p>
+
+                            <p className="text-sm text-zinc-500">
+                              Numer uprawnień
+                            </p>
+                            <p className="font-semibold">
+                              {valueOrMissing(profile.instructor_number)}
+                            </p>
+                          </div>
+
+                          <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-4">
+                            <p className="mb-3 text-xs uppercase tracking-[0.25em] text-zinc-500">
+                              System
+                            </p>
+
+                            <p className="text-sm text-zinc-500">Status konta</p>
+                            <p className="mb-3 font-semibold">
+                              {getStatusLabel(profile.verification_status)}
+                            </p>
+
+                            <p className="text-sm text-zinc-500">Rola</p>
+                            <p className="mb-3 font-semibold">
+                              {getRoleLabel(profile.role)}
+                            </p>
+
+                            <p className="text-sm text-zinc-500">
+                              Ostatnia aktualizacja
+                            </p>
+                            <p className="font-semibold">
+                              {profile.updated_at
+                                ? new Date(profile.updated_at).toLocaleString(
+                                    "pl-PL"
+                                  )
+                                : "Brak danych"}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    )}
                   </article>
                 );
               })}

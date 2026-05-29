@@ -20,6 +20,7 @@ export default function AccountPage() {
 
   const [weaponPermitNumber, setWeaponPermitNumber] = useState("");
   const [weaponPermitType, setWeaponPermitType] = useState("");
+  const [weaponPermitIssuer, setWeaponPermitIssuer] = useState("");
 
   const [hasRangeOfficer, setHasRangeOfficer] = useState(false);
   const [rangeOfficerNumber, setRangeOfficerNumber] = useState("");
@@ -70,6 +71,7 @@ export default function AccountPage() {
 
       setWeaponPermitNumber(metadata.weapon_permit_number ?? "");
       setWeaponPermitType(metadata.weapon_permit_type ?? "");
+      setWeaponPermitIssuer(metadata.weapon_permit_issuer ?? "");
 
       setHasRangeOfficer(metadata.has_range_officer ?? false);
       setRangeOfficerNumber(metadata.range_officer_number ?? "");
@@ -97,7 +99,17 @@ export default function AccountPage() {
 
     setSavingProfile(true);
 
-    const { error } = await supabase.auth.updateUser({
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (!user) {
+      setSavingProfile(false);
+      setMessage("Nie znaleziono zalogowanego użytkownika.");
+      return;
+    }
+
+    const { error: authError } = await supabase.auth.updateUser({
       data: {
         full_name: fullName,
         phone,
@@ -108,6 +120,7 @@ export default function AccountPage() {
         apartment_number: apartmentNumber,
         weapon_permit_number: weaponPermitNumber,
         weapon_permit_type: weaponPermitType,
+        weapon_permit_issuer: weaponPermitIssuer,
         has_range_officer: hasRangeOfficer,
         range_officer_number: hasRangeOfficer ? rangeOfficerNumber : "",
         has_instructor: hasInstructor,
@@ -116,10 +129,39 @@ export default function AccountPage() {
       },
     });
 
+    if (authError) {
+      setSavingProfile(false);
+      setMessage(`Błąd zapisu: ${authError.message}`);
+      return;
+    }
+
+    const { error: profileError } = await supabase
+      .from("profiles")
+      .update({
+        full_name: fullName,
+        phone,
+        postal_code: postalCode,
+        city,
+        street,
+        house_number: houseNumber,
+        apartment_number: apartmentNumber,
+        weapon_permit_number: weaponPermitNumber,
+        weapon_permit_type: weaponPermitType,
+        weapon_permit_issuer: weaponPermitIssuer,
+        has_range_officer: hasRangeOfficer,
+        range_officer_number: hasRangeOfficer ? rangeOfficerNumber : null,
+        has_instructor: hasInstructor,
+        instructor_number: hasInstructor ? instructorNumber : null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("user_id", user.id);
+
     setSavingProfile(false);
 
-    if (error) {
-      setMessage(`Błąd zapisu: ${error.message}`);
+    if (profileError) {
+      setMessage(
+        `Dane konta zapisane, ale nie udało się zaktualizować profilu: ${profileError.message}`
+      );
       return;
     }
 
@@ -168,9 +210,7 @@ export default function AccountPage() {
     }
 
     return "rounded-xl border border-red-800 bg-red-950 p-4 text-sm font-semibold text-red-300";
-  }
-
-  return (
+  }  return (
     <main className="min-h-screen bg-zinc-950 text-white">
       <section className="mx-auto max-w-4xl px-6 py-12">
         <p className="mb-4 text-sm uppercase tracking-[0.35em] text-green-500">
@@ -379,6 +419,22 @@ export default function AccountPage() {
                         <option value="inne">Inne</option>
                       </select>
                     </div>
+                  </div>
+
+                  <div className="mt-5">
+                    <label className="mb-2 block text-sm text-zinc-300">
+                      Organ wydający pozwolenie
+                    </label>
+
+                    <input
+                      type="text"
+                      value={weaponPermitIssuer}
+                      onChange={(event) =>
+                        setWeaponPermitIssuer(event.target.value)
+                      }
+                      placeholder="np. WPA Poznań / KWP Poznań"
+                      className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-white outline-none focus:border-green-600"
+                    />
                   </div>
 
                   <div className="mt-5 rounded-xl border border-zinc-800 bg-zinc-950 p-4">
