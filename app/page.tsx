@@ -3,10 +3,11 @@
 import { useEffect, useState } from "react";
 import { supabase } from "../lib/supabase";
 
-const ADMIN_EMAIL = "m.piosik94@gmail.com";
+type UserRole = "admin" | "pracownik" | "instruktor" | "user";
 
 export default function Home() {
   const [email, setEmail] = useState("");
+  const [role, setRole] = useState<UserRole | null>(null);
 
   useEffect(() => {
     async function loadUser() {
@@ -15,6 +16,22 @@ export default function Home() {
       } = await supabase.auth.getUser();
 
       setEmail(user?.email ?? "");
+
+      if (!user) {
+        setRole(null);
+        return;
+      }
+
+      const { data: roleData, error: roleError } = await supabase.rpc(
+        "get_my_role"
+      );
+
+      if (roleError) {
+        setRole(null);
+        return;
+      }
+
+      setRole((roleData as UserRole) ?? null);
     }
 
     loadUser();
@@ -23,10 +40,12 @@ export default function Home() {
   async function handleLogout() {
     await supabase.auth.signOut();
     setEmail("");
+    setRole(null);
     window.location.href = "/";
   }
 
-  const isAdmin = email === ADMIN_EMAIL;
+  const canSeeAdminPanel =
+    role === "admin" || role === "pracownik" || role === "instruktor";
 
   return (
     <main className="min-h-screen bg-zinc-950 text-white">
@@ -99,7 +118,7 @@ export default function Home() {
             Regulamin i RODO
           </a>
 
-          {isAdmin && (
+          {canSeeAdminPanel && (
             <a
               href="/admin"
               className="rounded-2xl border border-green-800 px-6 py-5 text-lg font-semibold text-green-400 transition hover:bg-green-950 md:col-span-2"

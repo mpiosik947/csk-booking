@@ -190,6 +190,7 @@ function getStatusBadgeClass(status: string | null) {
 export default function AdminUsersPage() {
   const [currentUserId, setCurrentUserId] = useState("");
   const [currentUserRole, setCurrentUserRole] = useState<UserRole>("user");
+  const [currentUserName, setCurrentUserName] = useState("");
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [expandedUserId, setExpandedUserId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -212,12 +213,13 @@ export default function AdminUsersPage() {
 
     const { data: profile } = await supabase
       .from("profiles")
-      .select("role")
+      .select("role,full_name,email")
       .eq("user_id", user.id)
       .single();
 
     if (profile?.role) {
       setCurrentUserRole(profile.role as UserRole);
+      setCurrentUserName(profile.full_name || profile.email || "Nieznany użytkownik");
     }
   }
 
@@ -351,6 +353,61 @@ export default function AdminUsersPage() {
     }
   }
 
+  function getAuditAction(
+    changes: Partial<
+      Pick<Profile, "role" | "verification_status" | "admin_note">
+    >
+  ) {
+    if (changes.role) return "PROFILE_ROLE_CHANGED";
+    if (changes.verification_status) return "PROFILE_VERIFICATION_CHANGED";
+
+    if (Object.prototype.hasOwnProperty.call(changes, "admin_note")) {
+      return "PROFILE_ADMIN_NOTE_UPDATED";
+    }
+
+    return "PROFILE_UPDATED";
+  }
+
+  async function createAuditLog(
+    profile: Profile,
+    changes: Partial<
+      Pick<Profile, "role" | "verification_status" | "admin_note">
+    >
+  ) {
+    if (!currentUserId) return null;
+
+    const hasAdminNoteChange = Object.prototype.hasOwnProperty.call(
+      changes,
+      "admin_note"
+    );
+
+    const { error } = await supabase.from("audit_logs").insert({
+      actor_user_id: currentUserId,
+      actor_name: currentUserName || "Nieznany użytkownik",
+      actor_role: currentUserRole,
+      action: getAuditAction(changes),
+      target_type: "profile",
+      target_id: profile.user_id,
+      target_name:
+        profile.full_name || profile.email || profile.phone || "Nieznany profil",
+      details: {
+        before: {
+          role: profile.role,
+          verification_status: profile.verification_status,
+          admin_note_exists: Boolean(profile.admin_note),
+        },
+        after: {
+          role: changes.role ?? profile.role,
+          verification_status:
+            changes.verification_status ?? profile.verification_status,
+          admin_note_changed: hasAdminNoteChange,
+        },
+      },
+    });
+
+    return error?.message ?? null;
+  }
+
   async function updateProfile(
     profile: Profile,
     changes: Partial<
@@ -414,7 +471,16 @@ export default function AdminUsersPage() {
       )
     );
 
-    setMessage("Zapisano zmiany.");
+    const auditError = await createAuditLog(profile, changes);
+
+    if (auditError) {
+      setMessage(
+        `Zapisano zmiany, ale nie udało się dodać wpisu audit log: ${auditError}`
+      );
+      return;
+    }
+
+    setMessage("Zapisano zmiany i dodano wpis audit log.");
   }
 
   function resetFilters() {

@@ -3,8 +3,6 @@
 import { useEffect, useState } from "react";
 import { supabase } from "../../../lib/supabase";
 
-const ADMIN_EMAIL = "m.piosik94@gmail.com";
-
 type ReportMode = "day" | "week" | "month" | "year";
 
 type Reservation = {
@@ -35,7 +33,6 @@ function formatDateInput(date: Date) {
 
 function getDateRange(mode: ReportMode, selectedDate: string) {
   const start = new Date(`${selectedDate}T12:00:00`);
-  const end = new Date(start);
 
   if (mode === "day") {
     return {
@@ -82,6 +79,8 @@ function getDateRange(mode: ReportMode, selectedDate: string) {
 function translateStatus(status: string) {
   if (status === "confirmed") return "Potwierdzona";
   if (status === "cancelled") return "Anulowana";
+  if (status === "cancelled_by_admin") return "Anulowana przez admina";
+  if (status === "cancelled_by_user") return "Anulowana przez użytkownika";
   if (status === "completed") return "Zrealizowana";
   if (status === "no_show") return "Nieobecny";
   return status;
@@ -90,7 +89,24 @@ function translateStatus(status: string) {
 function translatePayment(status: string) {
   if (status === "pay_on_site") return "Płatność na miejscu";
   if (status === "paid_on_site") return "Opłacone";
+  if (status === "paid") return "Opłacone";
+  if (status === "unpaid") return "Nieopłacone";
+  if (status === "voucher") return "Voucher";
+  if (status === "free") return "Darmowe";
   return status;
+}
+
+function isCancelled(status: string) {
+  return (
+    status === "cancelled" ||
+    status === "canceled" ||
+    status === "cancelled_by_admin" ||
+    status === "cancelled_by_user"
+  );
+}
+
+function isPaid(status: string) {
+  return status === "paid" || status === "paid_on_site";
 }
 
 export default function AdminReportsPage() {
@@ -101,7 +117,7 @@ export default function AdminReportsPage() {
   const [reservations, setReservations] = useState<Reservation[]>([]);
   const [lanesCount, setLanesCount] = useState(0);
   const [loading, setLoading] = useState(true);
-  const [isAdmin, setIsAdmin] = useState(false);
+  const [hasAccess, setHasAccess] = useState(false);
   const [message, setMessage] = useState("");
 
   const range = getDateRange(reportMode, selectedDate);
@@ -113,6 +129,7 @@ export default function AdminReportsPage() {
   async function loadReport() {
     setLoading(true);
     setMessage("");
+    setHasAccess(false);
 
     const {
       data: { user },
@@ -124,18 +141,34 @@ export default function AdminReportsPage() {
       return;
     }
 
-    if (user.email !== ADMIN_EMAIL) {
+    const { data: roleData, error: roleError } = await supabase.rpc(
+      "get_my_role"
+    );
+
+    if (roleError) {
+      setMessage(`Błąd sprawdzania roli: ${roleError.message}`);
+      setLoading(false);
+      return;
+    }
+
+    if (roleData !== "admin") {
       setMessage("Brak dostępu do raportów administratora.");
       setLoading(false);
       return;
     }
 
-    setIsAdmin(true);
+    setHasAccess(true);
 
-    const { data: lanesData } = await supabase
+    const { data: lanesData, error: lanesError } = await supabase
       .from("shooting_lanes")
       .select("id")
       .eq("is_active", true);
+
+    if (lanesError) {
+      setMessage(`Błąd pobierania osi: ${lanesError.message}`);
+      setLoading(false);
+      return;
+    }
 
     const { data, error } = await supabase
       .from("reservations")
@@ -168,22 +201,22 @@ export default function AdminReportsPage() {
     }
 
     setLanesCount((lanesData ?? []).length);
-    setReservations((data as any) ?? []);
+    setReservations((data as unknown as Reservation[]) ?? []);
     setLoading(false);
   }
 
   const activeReservations = reservations.filter(
     (reservation) =>
-      reservation.reservation_status !== "cancelled" &&
+      !isCancelled(reservation.reservation_status) &&
       reservation.reservation_status !== "no_show"
   );
 
-  const paidReservations = reservations.filter(
-    (reservation) => reservation.payment_status === "paid_on_site"
+  const paidReservations = activeReservations.filter((reservation) =>
+    isPaid(reservation.payment_status)
   );
 
-  const cancelledReservations = reservations.filter(
-    (reservation) => reservation.reservation_status === "cancelled"
+  const cancelledReservations = reservations.filter((reservation) =>
+    isCancelled(reservation.reservation_status)
   );
 
   const noShowReservations = reservations.filter(
@@ -200,6 +233,10 @@ export default function AdminReportsPage() {
     0
   );
 
+  const unpaidRevenue = activeReservations
+    .filter((reservation) => !isPaid(reservation.payment_status))
+    .reduce((sum, reservation) => sum + Number(reservation.price ?? 0), 0);
+
   const totalReservedMinutes = activeReservations.reduce(
     (sum, reservation) => sum + Number(reservation.duration_minutes ?? 0),
     0
@@ -211,7 +248,7 @@ export default function AdminReportsPage() {
       (1000 * 60 * 60 * 24) +
     1;
 
-  const openMinutesPerLanePerDay = 12 * 60;
+  const openMinutesPerLanePerDay = 16 * 60;
   const totalAvailableMinutes =
     lanesCount * openMinutesPerLanePerDay * daysInRange;
 
@@ -223,7 +260,8 @@ export default function AdminReportsPage() {
   const bestDay = Object.entries(
     activeReservations.reduce<Record<string, number>>((acc, reservation) => {
       acc[reservation.reservation_date] =
-        (acc[reservation.reservation_date] ?? 0) + Number(reservation.price ?? 0);
+        (acc[reservation.reservation_date] ?? 0) +
+        Number(reservation.price ?? 0);
       return acc;
     }, {})
   ).sort((a, b) => b[1] - a[1])[0];
@@ -259,7 +297,9 @@ export default function AdminReportsPage() {
 
             <select
               value={reportMode}
-              onChange={(event) => setReportMode(event.target.value as ReportMode)}
+              onChange={(event) =>
+                setReportMode(event.target.value as ReportMode)
+              }
               className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-white outline-none focus:border-green-600"
             >
               <option value="day">Dzień</option>
@@ -282,7 +322,7 @@ export default function AdminReportsPage() {
             />
           </div>
 
-          <div className="md:col-span-2 rounded-xl border border-zinc-800 bg-zinc-950 p-4 text-sm text-zinc-300">
+          <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-4 text-sm text-zinc-300 md:col-span-2">
             Zakres:{" "}
             <span className="font-semibold text-green-500">
               {range.startDate} – {range.endDate}
@@ -302,7 +342,7 @@ export default function AdminReportsPage() {
           </div>
         )}
 
-        {!loading && isAdmin && (
+        {!loading && hasAccess && (
           <>
             <div className="mb-8 grid gap-4 md:grid-cols-4">
               <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-5">
@@ -336,6 +376,13 @@ export default function AdminReportsPage() {
 
             <div className="mb-8 grid gap-4 md:grid-cols-4">
               <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-5">
+                <p className="text-sm text-zinc-400">Nieopłacone / na miejscu</p>
+                <p className="mt-2 text-3xl font-bold text-yellow-300">
+                  {unpaidRevenue.toFixed(0)} zł
+                </p>
+              </div>
+
+              <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-5">
                 <p className="text-sm text-zinc-400">Anulowane</p>
                 <p className="mt-2 text-3xl font-bold text-red-300">
                   {cancelledReservations.length}
@@ -350,16 +397,27 @@ export default function AdminReportsPage() {
               </div>
 
               <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-5">
+                <p className="text-sm text-zinc-400">Najczęściej używana oś</p>
+                <p className="mt-2 text-xl font-bold">
+                  {topLane ? `${topLane[0]} / ${topLane[1]} rez.` : "Brak"}
+                </p>
+              </div>
+            </div>
+
+            <div className="mb-8 grid gap-4 md:grid-cols-2">
+              <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-5">
                 <p className="text-sm text-zinc-400">Najlepszy dzień</p>
                 <p className="mt-2 text-xl font-bold">
-                  {bestDay ? `${bestDay[0]} / ${bestDay[1].toFixed(0)} zł` : "Brak"}
+                  {bestDay
+                    ? `${bestDay[0]} / ${bestDay[1].toFixed(0)} zł`
+                    : "Brak"}
                 </p>
               </div>
 
               <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-5">
-                <p className="text-sm text-zinc-400">Najczęściej używana oś</p>
+                <p className="text-sm text-zinc-400">Założenie obłożenia</p>
                 <p className="mt-2 text-xl font-bold">
-                  {topLane ? `${topLane[0]} / ${topLane[1]} rez.` : "Brak"}
+                  {lanesCount} osi × 16h dziennie × {daysInRange} dni
                 </p>
               </div>
             </div>
