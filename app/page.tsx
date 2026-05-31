@@ -138,7 +138,7 @@ export default function Home() {
           )}
         </div>
 
-        <div className="mt-12 grid w-full max-w-3xl gap-4 text-left md:grid-cols-3">
+        <div className="mt-12 grid w-full max-w-4xl gap-4 text-left md:grid-cols-4">
           <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-5">
             <h2 className="mb-2 font-semibold">Rezerwacje</h2>
             <p className="text-sm text-zinc-400">
@@ -150,6 +150,21 @@ export default function Home() {
             <h2 className="mb-2 font-semibold">Szkolenia</h2>
             <p className="text-sm text-zinc-400">
               Zapisy na eventy i szkolenia organizowane na obiekcie.
+            </p>
+          </div>
+
+          <div className="rounded-2xl border border-blue-800 bg-blue-950/40 p-5 opacity-70">
+            <div className="mb-2 flex items-center justify-between gap-3">
+              <h2 className="font-semibold">Strzelanie z instruktorem</h2>
+
+              <span className="rounded-full border border-blue-700 px-2 py-1 text-xs font-bold text-blue-300">
+                WKRÓTCE
+              </span>
+            </div>
+
+            <p className="text-sm text-zinc-400">
+              Dla osób nieposiadających pozwolenia na broń. Broń, amunicja i
+              instruktor zapewnione na miejscu.
             </p>
           </div>
 
