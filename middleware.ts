@@ -8,7 +8,7 @@ type UserRole =
   | "user";
 
 const routePermissions: Record<string, UserRole[]> = {
-  "/admin/users": ["admin"],
+  "/admin/users": ["admin", "pracownik"],
 
   "/admin/reports": ["admin"],
 

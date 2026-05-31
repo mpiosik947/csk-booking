@@ -775,11 +775,23 @@ export default function AdminUsersPage() {
                           <button
                             type="button"
                             disabled={isSaving}
-                            onClick={() =>
+                            onClick={() => {
+                              const missingFields = getMissingFields(profile);
+
+                              if (missingFields.length > 0) {
+                                const confirmed = window.confirm(
+                                  `Konto posiada braki:\n\n• ${missingFields.join(
+                                    "\n• "
+                                  )}\n\nCzy mimo to zweryfikować konto?`
+                                );
+
+                                if (!confirmed) return;
+                              }
+
                               updateProfile(profile, {
                                 verification_status: "verified",
-                              })
-                            }
+                              });
+                            }}
                             className="rounded-xl border border-green-700 px-3 py-2 text-xs font-bold text-green-300 transition hover:bg-green-950 disabled:cursor-not-allowed disabled:opacity-60"
                           >
                             Zweryfikuj

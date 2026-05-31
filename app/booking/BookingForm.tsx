@@ -83,7 +83,9 @@ function isActiveReservation(status?: string | null) {
     normalizedStatus !== "canceled" &&
     normalizedStatus !== "anulowana" &&
     normalizedStatus !== "cancelled_by_user" &&
-    normalizedStatus !== "cancelled_by_admin"
+    normalizedStatus !== "cancelled_by_admin" &&
+    normalizedStatus !== "completed" &&
+    normalizedStatus !== "no_show"
   );
 }
 
@@ -174,7 +176,7 @@ function getVerificationBox(status: string) {
 
   return {
     title: "Konto oczekuje na weryfikację",
-    text: "Rezerwacja osi będzie dostępna po pierwszej wizycie na strzelnicy i potwierdzeniu danych przez pracownika CSK. Do tego czasu możesz uzupełnić profil oraz korzystać z ograniczonych funkcji konta.",
+    text: "Możesz wykonać jedną rezerwację na pierwszą wizytę. Podczas wizyty pracownik recepcji sprawdzi Twoje dane i zweryfikuje konto. Do czasu weryfikacji nie możesz mieć więcej niż jednej aktywnej rezerwacji.",
     className:
       "rounded-xl border border-yellow-800 bg-yellow-950 p-4 text-sm text-yellow-100",
     titleClassName: "font-semibold text-yellow-300",
@@ -352,10 +354,12 @@ export default function BookingForm({ lanes }: BookingFormProps) {
     selectedHour !== "" && !canSelectStartHour(selectedHour);
 
   const isVerified = verificationStatus === "verified";
+  const isRejected = verificationStatus === "rejected";
+  const canUseBookingForm = !isRejected;
 
   const canSubmit =
     !loading &&
-    isVerified &&
+    canUseBookingForm &&
     userId !== "" &&
     customerName !== "" &&
     customerEmail !== "" &&
@@ -397,16 +401,9 @@ export default function BookingForm({ lanes }: BookingFormProps) {
   async function handleSubmit() {
     setMessage("");
 
-    if (!isVerified) {
-      if (verificationStatus === "rejected") {
-        setMessage(
-          "Twoje konto nie jest zatwierdzone. Skontaktuj się z obsługą CSK."
-        );
-        return;
-      }
-
+    if (isRejected) {
       setMessage(
-        "Twoje konto nie zostało jeszcze zweryfikowane. Rezerwacja osi będzie dostępna po pierwszej wizycie na strzelnicy i potwierdzeniu danych przez pracownika CSK."
+        "Twoje konto nie jest zatwierdzone. Skontaktuj się z obsługą CSK."
       );
       return;
     }
@@ -461,6 +458,31 @@ export default function BookingForm({ lanes }: BookingFormProps) {
     const laneName = selectedLane?.name ?? "Wybrana oś";
 
     setLoading(true);
+
+    if (!isVerified) {
+      const { data: activeReservations, error: activeReservationsError } =
+        await supabase
+          .from("reservations")
+          .select("id")
+          .eq("user_id", userId)
+          .in("reservation_status", ["confirmed"]);
+
+      if (activeReservationsError) {
+        setLoading(false);
+        setMessage(
+          `Błąd sprawdzania aktywnych rezerwacji: ${activeReservationsError.message}`
+        );
+        return;
+      }
+
+      if ((activeReservations ?? []).length >= 1) {
+        setLoading(false);
+        setMessage(
+          "Twoje konto oczekuje na weryfikację. Do czasu pierwszej wizyty i potwierdzenia danych przez pracownika możesz mieć tylko jedną aktywną rezerwację."
+        );
+        return;
+      }
+    }
 
     const { data: allReservationsForLane, error: reservationsError } =
       await supabase
@@ -691,9 +713,7 @@ export default function BookingForm({ lanes }: BookingFormProps) {
               {verificationBox.title}
             </p>
 
-            <p className="mt-2 opacity-80">
-              {verificationBox.text}
-            </p>
+            <p className="mt-2 opacity-80">{verificationBox.text}</p>
           </div>
         )}
 
@@ -730,7 +750,7 @@ export default function BookingForm({ lanes }: BookingFormProps) {
               value={customerPhone}
               onChange={(event) => setCustomerPhone(event.target.value)}
               placeholder="Wpisz numer telefonu"
-              disabled={!isVerified}
+              disabled={!canUseBookingForm}
               className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-white outline-none focus:border-green-600 disabled:cursor-not-allowed disabled:bg-zinc-800 disabled:text-zinc-500"
             />
           </div>
@@ -744,7 +764,7 @@ export default function BookingForm({ lanes }: BookingFormProps) {
           <input
             type="date"
             value={reservationDate}
-            disabled={!isVerified}
+            disabled={!canUseBookingForm}
             onChange={(event) => {
               setReservationDate(event.target.value);
               setSelectedHour("");
@@ -761,7 +781,7 @@ export default function BookingForm({ lanes }: BookingFormProps) {
 
           <select
             value={laneId}
-            disabled={!isVerified}
+            disabled={!canUseBookingForm}
             onChange={(event) => {
               setLaneId(event.target.value);
               setSelectedHour("");
@@ -786,7 +806,7 @@ export default function BookingForm({ lanes }: BookingFormProps) {
 
           <select
             value={durationMinutes}
-            disabled={!isVerified}
+            disabled={!canUseBookingForm}
             onChange={(event) => {
               setDurationMinutes(Number(event.target.value));
               setSelectedHour("");
@@ -816,9 +836,9 @@ export default function BookingForm({ lanes }: BookingFormProps) {
             )}
           </div>
 
-          {!isVerified ? (
+          {!canUseBookingForm ? (
             <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-4 text-sm text-zinc-400">
-              Godziny rezerwacji będą dostępne po weryfikacji konta.
+              Godziny rezerwacji są niedostępne dla kont odrzuconych.
             </div>
           ) : !reservationDate || !laneId ? (
             <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-4 text-sm text-zinc-400">
@@ -920,6 +940,13 @@ export default function BookingForm({ lanes }: BookingFormProps) {
             </span>
           </p>
 
+          {!isVerified && verificationStatus !== "rejected" && (
+            <p className="mt-2 text-yellow-200">
+              Możesz wykonać jedną rezerwację na pierwszą wizytę. Kolejne
+              rezerwacje będą dostępne po weryfikacji konta przez pracownika.
+            </p>
+          )}
+
           <p>
             Status rezerwacji:{" "}
             <span className="font-semibold text-green-500">
@@ -944,7 +971,7 @@ export default function BookingForm({ lanes }: BookingFormProps) {
           <input
             type="checkbox"
             checked={acceptedRules}
-            disabled={!isVerified}
+            disabled={!canUseBookingForm}
             onChange={(event) => setAcceptedRules(event.target.checked)}
             className="mt-1 disabled:cursor-not-allowed"
           />
@@ -964,8 +991,8 @@ export default function BookingForm({ lanes }: BookingFormProps) {
         >
           {loading
             ? "Zapisywanie..."
-            : !isVerified
-              ? "Konto wymaga weryfikacji"
+            : isRejected
+              ? "Konto odrzucone"
               : "Potwierdź rezerwację"}
         </button>
       </form>
