@@ -31,15 +31,22 @@ type Profile = {
   house_number: string | null;
   apartment_number: string | null;
 
-  weapon_permit_number: string | null;
-  weapon_permit_type: string | null;
-  weapon_permit_issuer: string | null;
+  permission_sport: boolean | null;
+  permission_collector: boolean | null;
+  permission_hunting: boolean | null;
+  permission_training: boolean | null;
+  permission_personal_protection: boolean | null;
+  permission_other: boolean | null;
 
-  has_range_officer: boolean | null;
-  range_officer_number: string | null;
+  qualification_instructor: boolean | null;
+  qualification_range_officer: boolean | null;
+  qualification_pzss_license: boolean | null;
+  qualification_hunter: boolean | null;
 
-  has_instructor: boolean | null;
-  instructor_number: string | null;
+  permissions_verified: boolean | null;
+  permissions_verified_at: string | null;
+  permissions_verified_by: string | null;
+  permissions_verification_note: string | null;
 };
 
 const roleOptions: UserRole[] = ["admin", "pracownik", "instruktor", "user"];
@@ -66,13 +73,29 @@ const roleFilters = [
   { label: "Użytkownik", value: "user" },
 ];
 
-function isUnverifiedStatus(status: string | null) {
+const VERIFIED_NOTE =
+  "Sprawdzono uprawnienia klienta podczas pierwszej wizyty. Dokumenty okazane do wglądu, bez kopiowania i zapisywania numerów. Klient zapoznany z regulaminem i zasadami bezpieczeństwa. Konto zweryfikowane.";
+
+const INCOMPLETE_NOTE =
+  "Nie zakończono pełnej weryfikacji uprawnień. Klient poinformowany o konieczności okazania wymaganych dokumentów przy kolejnej wizycie. Konto pozostaje niezweryfikowane.";
+
+function isFullyVerified(profile: Profile) {
   return (
-    !status ||
-    status === "niezweryfikowane" ||
-    status === "unverified" ||
-    status === "brak statusu"
+    profile.verification_status === "verified" &&
+    profile.permissions_verified === true
   );
+}
+
+function isNotFullyVerified(profile: Profile) {
+  return !isFullyVerified(profile);
+}
+
+function isPendingStatus(profile: Profile) {
+  return profile.verification_status === "pending";
+}
+
+function isRejectedStatus(profile: Profile) {
+  return profile.verification_status === "rejected";
 }
 
 function valueOrMissing(value: string | null | undefined) {
@@ -92,17 +115,6 @@ function getMissingFields(profile: Profile) {
   if (!profile.city) missing.push("miasto");
   if (!profile.street) missing.push("ulica");
   if (!profile.house_number) missing.push("numer domu");
-  if (!profile.weapon_permit_number) missing.push("numer pozwolenia");
-  if (!profile.weapon_permit_type) missing.push("typ pozwolenia");
-  if (!profile.weapon_permit_issuer) missing.push("organ wydający");
-
-  if (profile.has_range_officer && !profile.range_officer_number) {
-    missing.push("numer prowadzącego strzelanie");
-  }
-
-  if (profile.has_instructor && !profile.instructor_number) {
-    missing.push("numer instruktora");
-  }
 
   return missing;
 }
@@ -115,14 +127,36 @@ function getCompletionPercent(profile: Profile) {
     profile.city,
     profile.street,
     profile.house_number,
-    profile.weapon_permit_number,
-    profile.weapon_permit_type,
-    profile.weapon_permit_issuer,
   ];
 
   const filled = fields.filter((field) => field && field.trim()).length;
 
   return Math.round((filled / fields.length) * 100);
+}
+
+function getDeclaredPermissions(profile: Profile) {
+  const permissions: string[] = [];
+
+  if (profile.permission_sport) permissions.push("sportowe");
+  if (profile.permission_collector) permissions.push("kolekcjonerskie");
+  if (profile.permission_hunting) permissions.push("myśliwskie / łowieckie");
+  if (profile.permission_training) permissions.push("szkoleniowe / dopuszczenie");
+  if (profile.permission_personal_protection) permissions.push("ochrona osobista");
+  if (profile.permission_other) permissions.push("inne");
+
+  return permissions;
+}
+
+function getDeclaredQualifications(profile: Profile) {
+  const qualifications: string[] = [];
+
+  if (profile.qualification_instructor) qualifications.push("instruktor");
+  if (profile.qualification_range_officer)
+    qualifications.push("prowadzący strzelanie / range officer");
+  if (profile.qualification_pzss_license) qualifications.push("licencja PZSS");
+  if (profile.qualification_hunter) qualifications.push("myśliwy");
+
+  return qualifications;
 }
 
 function getRoleLabel(role: string | null) {
@@ -187,15 +221,58 @@ function getStatusBadgeClass(status: string | null) {
   }
 }
 
+function getPermissionsBadgeClass(verified: boolean | null) {
+  if (verified) {
+    return "border-green-700 bg-green-950 text-green-300";
+  }
+
+  return "border-yellow-700 bg-yellow-950 text-yellow-300";
+}
+
+function InfoLine({
+  label,
+  value,
+}: {
+  label: string;
+  value: string | number | null | undefined;
+}) {
+  return (
+    <>
+      <p className="text-sm text-zinc-500">{label}</p>
+      <p className="mb-3 font-semibold">{valueOrMissing(String(value ?? ""))}</p>
+    </>
+  );
+}
+
+function BooleanLine({ label, value }: { label: string; value: boolean | null }) {
+  return (
+    <div className="flex items-center justify-between gap-4 border-b border-zinc-800 py-2 last:border-b-0">
+      <span className="text-sm text-zinc-400">{label}</span>
+      <span
+        className={
+          value
+            ? "rounded-full border border-green-700 bg-green-950 px-3 py-1 text-xs font-bold text-green-300"
+            : "rounded-full border border-zinc-700 bg-zinc-900 px-3 py-1 text-xs font-bold text-zinc-400"
+        }
+      >
+        {yesNo(value)}
+      </span>
+    </div>
+  );
+}
+
 export default function AdminUsersPage() {
   const [currentUserId, setCurrentUserId] = useState("");
+  const [currentProfileId, setCurrentProfileId] = useState("");
   const [currentUserRole, setCurrentUserRole] = useState<UserRole>("user");
   const [currentUserName, setCurrentUserName] = useState("");
+
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [expandedUserId, setExpandedUserId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [savingUserId, setSavingUserId] = useState<string | null>(null);
   const [message, setMessage] = useState("");
+
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [roleFilter, setRoleFilter] = useState("all");
@@ -213,13 +290,19 @@ export default function AdminUsersPage() {
 
     const { data: profile } = await supabase
       .from("profiles")
-      .select("role,full_name,email")
+      .select("id, role, full_name, email")
       .eq("user_id", user.id)
       .single();
 
+    if (profile?.id) {
+      setCurrentProfileId(profile.id);
+    }
+
     if (profile?.role) {
       setCurrentUserRole(profile.role as UserRole);
-      setCurrentUserName(profile.full_name || profile.email || "Nieznany użytkownik");
+      setCurrentUserName(
+        profile.full_name || profile.email || "Nieznany użytkownik"
+      );
     }
   }
 
@@ -243,18 +326,29 @@ export default function AdminUsersPage() {
         admin_note,
         created_at,
         updated_at,
+
         postal_code,
         city,
         street,
         house_number,
         apartment_number,
-        weapon_permit_number,
-        weapon_permit_type,
-        weapon_permit_issuer,
-        has_range_officer,
-        range_officer_number,
-        has_instructor,
-        instructor_number
+
+        permission_sport,
+        permission_collector,
+        permission_hunting,
+        permission_training,
+        permission_personal_protection,
+        permission_other,
+
+        qualification_instructor,
+        qualification_range_officer,
+        qualification_pzss_license,
+        qualification_hunter,
+
+        permissions_verified,
+        permissions_verified_at,
+        permissions_verified_by,
+        permissions_verification_note
       `
       )
       .order("created_at", { ascending: false });
@@ -282,8 +376,10 @@ export default function AdminUsersPage() {
       const phone = profile.phone?.toLowerCase() ?? "";
       const role = profile.role?.toLowerCase() ?? "";
       const status = profile.verification_status?.toLowerCase() ?? "";
-      const permit = profile.weapon_permit_number?.toLowerCase() ?? "";
-      const issuer = profile.weapon_permit_issuer?.toLowerCase() ?? "";
+      const permissions = getDeclaredPermissions(profile).join(" ").toLowerCase();
+      const qualifications = getDeclaredQualifications(profile)
+        .join(" ")
+        .toLowerCase();
 
       const matchesSearch =
         !phrase ||
@@ -292,13 +388,15 @@ export default function AdminUsersPage() {
         phone.includes(phrase) ||
         role.includes(phrase) ||
         status.includes(phrase) ||
-        permit.includes(phrase) ||
-        issuer.includes(phrase);
+        permissions.includes(phrase) ||
+        qualifications.includes(phrase);
 
       const matchesStatus =
         statusFilter === "all" ||
-        status === statusFilter ||
-        (statusFilter === "unverified" && isUnverifiedStatus(status));
+        (statusFilter === "pending" && isPendingStatus(profile)) ||
+        (statusFilter === "unverified" && isNotFullyVerified(profile)) ||
+        (statusFilter === "verified" && isFullyVerified(profile)) ||
+        (statusFilter === "rejected" && isRejectedStatus(profile));
 
       const matchesRole = roleFilter === "all" || role === roleFilter;
 
@@ -309,18 +407,11 @@ export default function AdminUsersPage() {
   const counters = useMemo(() => {
     return {
       all: profiles.length,
-      pending: profiles.filter(
-        (profile) => profile.verification_status === "pending"
-      ).length,
-      unverified: profiles.filter((profile) =>
-        isUnverifiedStatus(profile.verification_status)
-      ).length,
-      verified: profiles.filter(
-        (profile) => profile.verification_status === "verified"
-      ).length,
-      rejected: profiles.filter(
-        (profile) => profile.verification_status === "rejected"
-      ).length,
+      pending: profiles.filter((profile) => isPendingStatus(profile)).length,
+      unverified: profiles.filter((profile) => isNotFullyVerified(profile))
+        .length,
+      verified: profiles.filter((profile) => isFullyVerified(profile)).length,
+      rejected: profiles.filter((profile) => isRejectedStatus(profile)).length,
       admin: profiles.filter((profile) => profile.role === "admin").length,
       pracownik: profiles.filter((profile) => profile.role === "pracownik")
         .length,
@@ -353,13 +444,19 @@ export default function AdminUsersPage() {
     }
   }
 
-  function getAuditAction(
-    changes: Partial<
-      Pick<Profile, "role" | "verification_status" | "admin_note">
-    >
-  ) {
+  function getAuditAction(changes: Partial<Profile>) {
     if (changes.role) return "PROFILE_ROLE_CHANGED";
     if (changes.verification_status) return "PROFILE_VERIFICATION_CHANGED";
+
+    if (
+      Object.prototype.hasOwnProperty.call(changes, "permissions_verified") ||
+      Object.prototype.hasOwnProperty.call(
+        changes,
+        "permissions_verification_note"
+      )
+    ) {
+      return "PROFILE_PERMISSIONS_VERIFICATION_UPDATED";
+    }
 
     if (Object.prototype.hasOwnProperty.call(changes, "admin_note")) {
       return "PROFILE_ADMIN_NOTE_UPDATED";
@@ -368,18 +465,8 @@ export default function AdminUsersPage() {
     return "PROFILE_UPDATED";
   }
 
-  async function createAuditLog(
-    profile: Profile,
-    changes: Partial<
-      Pick<Profile, "role" | "verification_status" | "admin_note">
-    >
-  ) {
+  async function createAuditLog(profile: Profile, changes: Partial<Profile>) {
     if (!currentUserId) return null;
-
-    const hasAdminNoteChange = Object.prototype.hasOwnProperty.call(
-      changes,
-      "admin_note"
-    );
 
     const { error } = await supabase.from("audit_logs").insert({
       actor_user_id: currentUserId,
@@ -394,13 +481,26 @@ export default function AdminUsersPage() {
         before: {
           role: profile.role,
           verification_status: profile.verification_status,
+          permissions_verified: profile.permissions_verified,
           admin_note_exists: Boolean(profile.admin_note),
+          permissions_verification_note_exists: Boolean(
+            profile.permissions_verification_note
+          ),
         },
         after: {
           role: changes.role ?? profile.role,
           verification_status:
             changes.verification_status ?? profile.verification_status,
-          admin_note_changed: hasAdminNoteChange,
+          permissions_verified:
+            changes.permissions_verified ?? profile.permissions_verified,
+          admin_note_changed: Object.prototype.hasOwnProperty.call(
+            changes,
+            "admin_note"
+          ),
+          permissions_note_changed: Object.prototype.hasOwnProperty.call(
+            changes,
+            "permissions_verification_note"
+          ),
         },
       },
     });
@@ -408,12 +508,7 @@ export default function AdminUsersPage() {
     return error?.message ?? null;
   }
 
-  async function updateProfile(
-    profile: Profile,
-    changes: Partial<
-      Pick<Profile, "role" | "verification_status" | "admin_note">
-    >
-  ) {
+  async function updateProfile(profile: Profile, changes: Partial<Profile>) {
     const isOwnAccount = profile.user_id === currentUserId;
 
     if (changes.role && !isAdmin) {
@@ -442,11 +537,13 @@ export default function AdminUsersPage() {
     setSavingUserId(profile.user_id);
     setMessage("");
 
+    const updatedAt = new Date().toISOString();
+
     const { error } = await supabase
       .from("profiles")
       .update({
         ...changes,
-        updated_at: new Date().toISOString(),
+        updated_at: updatedAt,
       })
       .eq("user_id", profile.user_id);
 
@@ -456,8 +553,6 @@ export default function AdminUsersPage() {
       setMessage(`Błąd zapisu: ${error.message}`);
       return;
     }
-
-    const updatedAt = new Date().toISOString();
 
     setProfiles((currentProfiles) =>
       currentProfiles.map((item) =>
@@ -483,6 +578,39 @@ export default function AdminUsersPage() {
     setMessage("Zapisano zmiany i dodano wpis audit log.");
   }
 
+  function verifyProfileAndPermissions(profile: Profile) {
+    const missingFields = getMissingFields(profile);
+
+    if (missingFields.length > 0) {
+      const confirmed = window.confirm(
+        `Konto posiada braki:\n\n• ${missingFields.join(
+          "\n• "
+        )}\n\nCzy mimo to oznaczyć konto jako zweryfikowane?`
+      );
+
+      if (!confirmed) return;
+    }
+
+    updateProfile(profile, {
+      verification_status: "verified",
+      permissions_verified: true,
+      permissions_verified_at: new Date().toISOString(),
+      permissions_verified_by: currentProfileId || null,
+      permissions_verification_note:
+        profile.permissions_verification_note || VERIFIED_NOTE,
+    });
+  }
+
+  function markVerificationIncomplete(profile: Profile) {
+    updateProfile(profile, {
+      verification_status: "pending",
+      permissions_verified: false,
+      permissions_verified_at: null,
+      permissions_verified_by: null,
+      permissions_verification_note: INCOMPLETE_NOTE,
+    });
+  }
+
   function resetFilters() {
     setSearch("");
     setStatusFilter("all");
@@ -501,8 +629,9 @@ export default function AdminUsersPage() {
             <h1 className="text-4xl font-bold">Użytkownicy</h1>
 
             <p className="mt-3 max-w-2xl text-zinc-400">
-              Zarządzanie rolami, weryfikacją kont, pełnymi danymi użytkownika i
-              notatkami administratora.
+              Zarządzanie rolami, weryfikacją kont, deklarowanymi uprawnieniami
+              i krótkimi notatkami pracownika — bez zapisywania numerów
+              dokumentów.
             </p>
 
             {!isAdmin && (
@@ -531,7 +660,7 @@ export default function AdminUsersPage() {
               <input
                 value={search}
                 onChange={(event) => setSearch(event.target.value)}
-                placeholder="E-mail, imię, telefon, rola, status, pozwolenie, organ..."
+                placeholder="E-mail, imię, telefon, rola, status, uprawnienia..."
                 className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-white outline-none transition focus:border-green-600"
               />
             </div>
@@ -575,6 +704,11 @@ export default function AdminUsersPage() {
                 </button>
               ))}
             </div>
+
+            <p className="mt-3 text-xs leading-5 text-zinc-500">
+              „Niezweryfikowani” pokazuje wszystkie konta, które nie mają
+              pełnej weryfikacji konta i uprawnień.
+            </p>
           </div>
 
           <div>
@@ -632,6 +766,9 @@ export default function AdminUsersPage() {
                 const isExpanded = expandedUserId === profile.user_id;
                 const missingFields = getMissingFields(profile);
                 const completion = getCompletionPercent(profile);
+                const declaredPermissions = getDeclaredPermissions(profile);
+                const declaredQualifications =
+                  getDeclaredQualifications(profile);
 
                 return (
                   <article
@@ -662,6 +799,17 @@ export default function AdminUsersPage() {
                           </span>
 
                           <span
+                            className={`rounded-full border px-3 py-1 text-xs font-bold ${getPermissionsBadgeClass(
+                              profile.permissions_verified
+                            )}`}
+                          >
+                            Uprawnienia:{" "}
+                            {profile.permissions_verified
+                              ? "sprawdzone"
+                              : "do sprawdzenia"}
+                          </span>
+
+                          <span
                             className={
                               completion >= 80
                                 ? "rounded-full border border-green-700 bg-green-950 px-3 py-1 text-xs font-bold text-green-300"
@@ -674,6 +822,16 @@ export default function AdminUsersPage() {
                           {isOwnAccount && (
                             <span className="rounded-full border border-green-700 bg-green-950 px-3 py-1 text-xs font-bold text-green-300">
                               Twoje konto
+                            </span>
+                          )}
+
+                          {isFullyVerified(profile) ? (
+                            <span className="rounded-full border border-green-700 bg-green-950 px-3 py-1 text-xs font-bold text-green-300">
+                              Pełna weryfikacja
+                            </span>
+                          ) : (
+                            <span className="rounded-full border border-orange-700 bg-orange-950 px-3 py-1 text-xs font-bold text-orange-300">
+                              Niepełna weryfikacja
                             </span>
                           )}
                         </div>
@@ -694,10 +852,23 @@ export default function AdminUsersPage() {
                           Tel.: {profile.phone || "brak"}
                         </p>
 
+                        <div className="mt-4 rounded-xl border border-zinc-800 bg-zinc-900 p-3 text-xs text-zinc-400">
+                          <p className="font-semibold text-zinc-300">
+                            Deklarowane uprawnienia:
+                          </p>
+                          <p className="mt-1">
+                            {declaredPermissions.length > 0
+                              ? declaredPermissions.join(", ")
+                              : "Brak zaznaczonych uprawnień"}
+                          </p>
+                        </div>
+
                         <button
                           type="button"
                           onClick={() =>
-                            setExpandedUserId(isExpanded ? null : profile.user_id)
+                            setExpandedUserId(
+                              isExpanded ? null : profile.user_id
+                            )
                           }
                           className="mt-4 rounded-xl border border-zinc-700 px-4 py-2 text-sm font-semibold text-zinc-300 transition hover:border-green-600 hover:text-white"
                         >
@@ -746,7 +917,7 @@ export default function AdminUsersPage() {
 
                       <div>
                         <label className="mb-2 block text-xs uppercase tracking-[0.25em] text-zinc-500">
-                          Weryfikacja
+                          Status konta
                         </label>
 
                         <select
@@ -775,39 +946,19 @@ export default function AdminUsersPage() {
                           <button
                             type="button"
                             disabled={isSaving}
-                            onClick={() => {
-                              const missingFields = getMissingFields(profile);
-
-                              if (missingFields.length > 0) {
-                                const confirmed = window.confirm(
-                                  `Konto posiada braki:\n\n• ${missingFields.join(
-                                    "\n• "
-                                  )}\n\nCzy mimo to zweryfikować konto?`
-                                );
-
-                                if (!confirmed) return;
-                              }
-
-                              updateProfile(profile, {
-                                verification_status: "verified",
-                              });
-                            }}
+                            onClick={() => verifyProfileAndPermissions(profile)}
                             className="rounded-xl border border-green-700 px-3 py-2 text-xs font-bold text-green-300 transition hover:bg-green-950 disabled:cursor-not-allowed disabled:opacity-60"
                           >
-                            Zweryfikuj
+                            Zweryfikuj konto i uprawnienia
                           </button>
 
                           <button
                             type="button"
                             disabled={isSaving || isOwnAccount}
-                            onClick={() =>
-                              updateProfile(profile, {
-                                verification_status: "pending",
-                              })
-                            }
+                            onClick={() => markVerificationIncomplete(profile)}
                             className="rounded-xl border border-yellow-700 px-3 py-2 text-xs font-bold text-yellow-300 transition hover:bg-yellow-950 disabled:cursor-not-allowed disabled:opacity-60"
                           >
-                            Cofnij do oczekujących
+                            Weryfikacja niepełna
                           </button>
 
                           <button
@@ -816,22 +967,23 @@ export default function AdminUsersPage() {
                             onClick={() =>
                               updateProfile(profile, {
                                 verification_status: "rejected",
+                                permissions_verified: false,
                               })
                             }
                             className="rounded-xl border border-red-700 px-3 py-2 text-xs font-bold text-red-300 transition hover:bg-red-950 disabled:cursor-not-allowed disabled:opacity-60"
                           >
-                            Odrzuć
+                            Odrzuć konto
                           </button>
                         </div>
                       </div>
 
                       <div>
                         <label className="mb-2 block text-xs uppercase tracking-[0.25em] text-zinc-500">
-                          Notatka admina / pracownika
+                          Notatka weryfikacyjna
                         </label>
 
                         <textarea
-                          value={profile.admin_note || ""}
+                          value={profile.permissions_verification_note || ""}
                           disabled={isSaving}
                           onChange={(event) => {
                             const value = event.target.value;
@@ -841,26 +993,71 @@ export default function AdminUsersPage() {
                                 item.user_id === profile.user_id
                                   ? {
                                       ...item,
-                                      admin_note: value,
+                                      permissions_verification_note: value,
                                     }
                                   : item
                               )
                             );
                           }}
-                          rows={3}
-                          placeholder="Np. dokumenty sprawdzone, kontakt telefoniczny, uwagi..."
+                          rows={4}
+                          placeholder="Krótka notatka. Nie wpisuj numerów dokumentów."
                           className="w-full rounded-xl border border-zinc-700 bg-zinc-900 px-4 py-3 text-sm text-white outline-none transition focus:border-green-600 disabled:opacity-60"
                         />
+
+                        <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                          <button
+                            type="button"
+                            disabled={isSaving}
+                            onClick={() =>
+                              setProfiles((currentProfiles) =>
+                                currentProfiles.map((item) =>
+                                  item.user_id === profile.user_id
+                                    ? {
+                                        ...item,
+                                        permissions_verification_note:
+                                          VERIFIED_NOTE,
+                                      }
+                                    : item
+                                )
+                              )
+                            }
+                            className="rounded-xl border border-green-700 px-3 py-2 text-xs font-bold text-green-300 transition hover:bg-green-950 disabled:cursor-not-allowed disabled:opacity-60"
+                          >
+                            Wstaw: zweryfikowano
+                          </button>
+
+                          <button
+                            type="button"
+                            disabled={isSaving}
+                            onClick={() =>
+                              setProfiles((currentProfiles) =>
+                                currentProfiles.map((item) =>
+                                  item.user_id === profile.user_id
+                                    ? {
+                                        ...item,
+                                        permissions_verification_note:
+                                          INCOMPLETE_NOTE,
+                                      }
+                                    : item
+                                )
+                              )
+                            }
+                            className="rounded-xl border border-yellow-700 px-3 py-2 text-xs font-bold text-yellow-300 transition hover:bg-yellow-950 disabled:cursor-not-allowed disabled:opacity-60"
+                          >
+                            Wstaw: braki
+                          </button>
+                        </div>
 
                         <button
                           type="button"
                           disabled={isSaving}
                           onClick={() =>
                             updateProfile(profile, {
-                              admin_note: profile.admin_note || "",
+                              permissions_verification_note:
+                                profile.permissions_verification_note || "",
                             })
                           }
-                          className="mt-3 rounded-xl border border-zinc-700 px-4 py-2 text-sm font-semibold text-zinc-300 transition hover:border-green-600 hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
+                          className="mt-3 w-full rounded-xl border border-zinc-700 px-4 py-2 text-sm font-semibold text-zinc-300 transition hover:border-green-600 hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
                         >
                           Zapisz notatkę
                         </button>
@@ -873,10 +1070,32 @@ export default function AdminUsersPage() {
                           {getRoleLabel(profile.role)}
                         </p>
 
-                        <p className="mt-4 text-zinc-500">Status</p>
+                        <p className="mt-4 text-zinc-500">Status konta</p>
 
                         <p className="mt-1 font-bold text-zinc-200">
                           {getStatusLabel(profile.verification_status)}
+                        </p>
+
+                        <p className="mt-4 text-zinc-500">Uprawnienia</p>
+
+                        <p className="mt-1 font-bold text-zinc-200">
+                          {profile.permissions_verified
+                            ? "Sprawdzone"
+                            : "Do sprawdzenia"}
+                        </p>
+
+                        <p className="mt-4 text-zinc-500">Weryfikacja</p>
+
+                        <p
+                          className={
+                            isFullyVerified(profile)
+                              ? "mt-1 font-bold text-green-300"
+                              : "mt-1 font-bold text-orange-300"
+                          }
+                        >
+                          {isFullyVerified(profile)
+                            ? "Pełna"
+                            : "Niepełna"}
                         </p>
 
                         <p className="mt-4 text-zinc-500">Utworzono</p>
@@ -902,11 +1121,11 @@ export default function AdminUsersPage() {
                         <div className="mb-5 flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
                           <div>
                             <h3 className="text-xl font-bold">
-                              Pełne dane do weryfikacji
+                              Dane do weryfikacji
                             </h3>
 
                             <p className="mt-1 text-sm text-zinc-400">
-                              Kompletność danych:{" "}
+                              Kompletność danych podstawowych:{" "}
                               <span className="font-bold text-white">
                                 {completion}%
                               </span>
@@ -915,7 +1134,7 @@ export default function AdminUsersPage() {
 
                           {missingFields.length === 0 ? (
                             <span className="rounded-full border border-green-700 bg-green-950 px-4 py-2 text-sm font-bold text-green-300">
-                              Dane kompletne
+                              Dane podstawowe kompletne
                             </span>
                           ) : (
                             <span className="rounded-full border border-yellow-700 bg-yellow-950 px-4 py-2 text-sm font-bold text-yellow-300">
@@ -934,26 +1153,33 @@ export default function AdminUsersPage() {
                           </div>
                         )}
 
+                        <div className="mb-5 rounded-xl border border-green-900 bg-green-950/40 p-4 text-sm text-green-200">
+                          <p className="font-semibold">
+                            Zasada minimalizacji danych
+                          </p>
+
+                          <p className="mt-1 text-green-300">
+                            Nie zapisujemy numerów pozwoleń, legitymacji,
+                            uprawnień instruktora ani prowadzącego strzelanie.
+                            Pracownik sprawdza dokumenty wyłącznie do wglądu i
+                            zapisuje tylko wynik weryfikacji.
+                          </p>
+                        </div>
+
                         <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
                           <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-4">
                             <p className="mb-3 text-xs uppercase tracking-[0.25em] text-zinc-500">
                               Dane podstawowe
                             </p>
 
-                            <p className="text-sm text-zinc-500">Imię i nazwisko</p>
-                            <p className="mb-3 font-semibold">
-                              {valueOrMissing(profile.full_name)}
-                            </p>
+                            <InfoLine
+                              label="Imię i nazwisko"
+                              value={profile.full_name}
+                            />
 
-                            <p className="text-sm text-zinc-500">E-mail</p>
-                            <p className="mb-3 font-semibold">
-                              {valueOrMissing(profile.email)}
-                            </p>
+                            <InfoLine label="E-mail" value={profile.email} />
 
-                            <p className="text-sm text-zinc-500">Telefon</p>
-                            <p className="font-semibold">
-                              {valueOrMissing(profile.phone)}
-                            </p>
+                            <InfoLine label="Telefon" value={profile.phone} />
                           </div>
 
                           <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-4">
@@ -961,20 +1187,14 @@ export default function AdminUsersPage() {
                               Adres
                             </p>
 
-                            <p className="text-sm text-zinc-500">Kod pocztowy</p>
-                            <p className="mb-3 font-semibold">
-                              {valueOrMissing(profile.postal_code)}
-                            </p>
+                            <InfoLine
+                              label="Kod pocztowy"
+                              value={profile.postal_code}
+                            />
 
-                            <p className="text-sm text-zinc-500">Miasto</p>
-                            <p className="mb-3 font-semibold">
-                              {valueOrMissing(profile.city)}
-                            </p>
+                            <InfoLine label="Miasto" value={profile.city} />
 
-                            <p className="text-sm text-zinc-500">Ulica</p>
-                            <p className="mb-3 font-semibold">
-                              {valueOrMissing(profile.street)}
-                            </p>
+                            <InfoLine label="Ulica" value={profile.street} />
 
                             <p className="text-sm text-zinc-500">Dom / lokal</p>
                             <p className="font-semibold">
@@ -987,68 +1207,99 @@ export default function AdminUsersPage() {
 
                           <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-4">
                             <p className="mb-3 text-xs uppercase tracking-[0.25em] text-zinc-500">
-                              Pozwolenie na broń
+                              Deklarowane pozwolenia / uprawnienia
                             </p>
 
-                            <p className="text-sm text-zinc-500">
-                              Numer pozwolenia
-                            </p>
-                            <p className="mb-3 font-semibold">
-                              {valueOrMissing(profile.weapon_permit_number)}
-                            </p>
+                            <BooleanLine
+                              label="Pozwolenie sportowe"
+                              value={profile.permission_sport}
+                            />
 
-                            <p className="text-sm text-zinc-500">
-                              Typ pozwolenia
-                            </p>
-                            <p className="mb-3 font-semibold">
-                              {valueOrMissing(profile.weapon_permit_type)}
-                            </p>
+                            <BooleanLine
+                              label="Pozwolenie kolekcjonerskie"
+                              value={profile.permission_collector}
+                            />
 
-                            <p className="text-sm text-zinc-500">
-                              Organ wydający
-                            </p>
-                            <p className="font-semibold">
-                              {valueOrMissing(profile.weapon_permit_issuer)}
-                            </p>
+                            <BooleanLine
+                              label="Pozwolenie myśliwskie / łowieckie"
+                              value={profile.permission_hunting}
+                            />
+
+                            <BooleanLine
+                              label="Szkoleniowe / dopuszczenie"
+                              value={profile.permission_training}
+                            />
+
+                            <BooleanLine
+                              label="Ochrona osobista"
+                              value={profile.permission_personal_protection}
+                            />
+
+                            <BooleanLine
+                              label="Inne"
+                              value={profile.permission_other}
+                            />
                           </div>
 
                           <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-4">
                             <p className="mb-3 text-xs uppercase tracking-[0.25em] text-zinc-500">
-                              Prowadzący strzelanie
+                              Dodatkowe kwalifikacje
                             </p>
 
-                            <p className="text-sm text-zinc-500">
-                              Posiada uprawnienia
-                            </p>
-                            <p className="mb-3 font-semibold">
-                              {yesNo(profile.has_range_officer)}
-                            </p>
+                            <BooleanLine
+                              label="Instruktor"
+                              value={profile.qualification_instructor}
+                            />
 
-                            <p className="text-sm text-zinc-500">
-                              Numer uprawnień
-                            </p>
-                            <p className="font-semibold">
-                              {valueOrMissing(profile.range_officer_number)}
-                            </p>
+                            <BooleanLine
+                              label="Prowadzący strzelanie / RO"
+                              value={profile.qualification_range_officer}
+                            />
+
+                            <BooleanLine
+                              label="Licencja PZSS"
+                              value={profile.qualification_pzss_license}
+                            />
+
+                            <BooleanLine
+                              label="Myśliwy"
+                              value={profile.qualification_hunter}
+                            />
                           </div>
 
                           <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-4">
                             <p className="mb-3 text-xs uppercase tracking-[0.25em] text-zinc-500">
-                              Instruktor
+                              Weryfikacja uprawnień
                             </p>
 
                             <p className="text-sm text-zinc-500">
-                              Posiada uprawnienia
+                              Status sprawdzenia
                             </p>
+
                             <p className="mb-3 font-semibold">
-                              {yesNo(profile.has_instructor)}
+                              {profile.permissions_verified
+                                ? "Sprawdzone przez obsługę"
+                                : "Do sprawdzenia podczas wizyty"}
                             </p>
 
                             <p className="text-sm text-zinc-500">
-                              Numer uprawnień
+                              Data sprawdzenia
                             </p>
-                            <p className="font-semibold">
-                              {valueOrMissing(profile.instructor_number)}
+
+                            <p className="mb-3 font-semibold">
+                              {profile.permissions_verified_at
+                                ? new Date(
+                                    profile.permissions_verified_at
+                                  ).toLocaleString("pl-PL")
+                                : "Brak danych"}
+                            </p>
+
+                            <p className="text-sm text-zinc-500">Notatka</p>
+
+                            <p className="whitespace-pre-line text-sm font-semibold leading-6">
+                              {valueOrMissing(
+                                profile.permissions_verification_note
+                              )}
                             </p>
                           </div>
 
@@ -1057,19 +1308,22 @@ export default function AdminUsersPage() {
                               System
                             </p>
 
-                            <p className="text-sm text-zinc-500">Status konta</p>
-                            <p className="mb-3 font-semibold">
-                              {getStatusLabel(profile.verification_status)}
-                            </p>
+                            <InfoLine
+                              label="Status konta"
+                              value={getStatusLabel(
+                                profile.verification_status
+                              )}
+                            />
 
-                            <p className="text-sm text-zinc-500">Rola</p>
-                            <p className="mb-3 font-semibold">
-                              {getRoleLabel(profile.role)}
-                            </p>
+                            <InfoLine
+                              label="Rola"
+                              value={getRoleLabel(profile.role)}
+                            />
 
                             <p className="text-sm text-zinc-500">
                               Ostatnia aktualizacja
                             </p>
+
                             <p className="font-semibold">
                               {profile.updated_at
                                 ? new Date(profile.updated_at).toLocaleString(
@@ -1078,6 +1332,47 @@ export default function AdminUsersPage() {
                                 : "Brak danych"}
                             </p>
                           </div>
+                        </div>
+
+                        <div className="mt-5 rounded-xl border border-zinc-800 bg-zinc-950 p-4">
+                          <p className="mb-2 text-xs uppercase tracking-[0.25em] text-zinc-500">
+                            Notatka admina / pracownika
+                          </p>
+
+                          <textarea
+                            value={profile.admin_note || ""}
+                            disabled={isSaving}
+                            onChange={(event) => {
+                              const value = event.target.value;
+
+                              setProfiles((currentProfiles) =>
+                                currentProfiles.map((item) =>
+                                  item.user_id === profile.user_id
+                                    ? {
+                                        ...item,
+                                        admin_note: value,
+                                      }
+                                    : item
+                                )
+                              );
+                            }}
+                            rows={3}
+                            placeholder="Uwagi organizacyjne, kontakt, informacje wewnętrzne. Bez numerów dokumentów."
+                            className="w-full rounded-xl border border-zinc-700 bg-zinc-900 px-4 py-3 text-sm text-white outline-none transition focus:border-green-600 disabled:opacity-60"
+                          />
+
+                          <button
+                            type="button"
+                            disabled={isSaving}
+                            onClick={() =>
+                              updateProfile(profile, {
+                                admin_note: profile.admin_note || "",
+                              })
+                            }
+                            className="mt-3 rounded-xl border border-zinc-700 px-4 py-2 text-sm font-semibold text-zinc-300 transition hover:border-green-600 hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
+                          >
+                            Zapisz notatkę admina
+                          </button>
                         </div>
                       </div>
                     )}

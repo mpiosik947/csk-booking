@@ -54,12 +54,25 @@ function getStatusClass(status: string) {
   return "rounded-full bg-zinc-950 px-3 py-1 text-xs font-semibold text-zinc-300";
 }
 
+function getPaidRegistrationsCount(registrations: Registration[]) {
+  return registrations.filter(
+    (registration) =>
+      registration.registration_status === "registered" ||
+      registration.registration_status === "approved"
+  ).length;
+}
+
+function FieldHelp({ children }: { children: React.ReactNode }) {
+  return <p className="mt-2 text-xs leading-relaxed text-zinc-500">{children}</p>;
+}
+
 export default function AdminEventsPage() {
   const [loading, setLoading] = useState(true);
   const [events, setEvents] = useState<Event[]>([]);
   const [selectedEventId, setSelectedEventId] = useState("");
   const [registrations, setRegistrations] = useState<Registration[]>([]);
   const [message, setMessage] = useState("");
+  const [userRole, setUserRole] = useState("");
 
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -80,9 +93,25 @@ export default function AdminEventsPage() {
   const [editPrice, setEditPrice] = useState("");
   const [editMaxParticipants, setEditMaxParticipants] = useState("");
 
+  const canManageEvents = userRole === "admin" || userRole === "pracownik";
+
   useEffect(() => {
     loadEvents();
+    loadRole();
   }, []);
+
+  async function loadRole() {
+    const { data, error } = await supabase.rpc("get_my_role");
+
+    if (error) {
+      setUserRole("");
+      return;
+    }
+
+    if (data) {
+      setUserRole(String(data));
+    }
+  }
 
   async function loadEvents() {
     const { data, error } = await supabase
@@ -120,15 +149,32 @@ export default function AdminEventsPage() {
   async function createEvent() {
     setMessage("");
 
+    if (!canManageEvents) {
+      setMessage("Brak dostępu. Instruktor nie może tworzyć szkoleń.");
+      return;
+    }
+
     if (
       !title ||
       !description ||
       !eventDate ||
       !startTime ||
       !endTime ||
-      !location
+      !location ||
+      !price ||
+      !maxParticipants
     ) {
       setMessage("Uzupełnij wszystkie pola.");
+      return;
+    }
+
+    if (Number(price) < 0) {
+      setMessage("Cena nie może być ujemna.");
+      return;
+    }
+
+    if (Number(maxParticipants) <= 0) {
+      setMessage("Liczba miejsc musi być większa od zera.");
       return;
     }
 
@@ -164,6 +210,11 @@ export default function AdminEventsPage() {
   }
 
   function startEditing(event: Event) {
+    if (!canManageEvents) {
+      setMessage("Brak dostępu. Instruktor nie może edytować szkoleń.");
+      return;
+    }
+
     setEditingEventId(event.id);
     setEditTitle(event.title);
     setEditDescription(event.description);
@@ -190,6 +241,11 @@ export default function AdminEventsPage() {
   async function saveEditedEvent(eventId: string) {
     setMessage("");
 
+    if (!canManageEvents) {
+      setMessage("Brak dostępu. Instruktor nie może edytować szkoleń.");
+      return;
+    }
+
     if (
       !editTitle ||
       !editDescription ||
@@ -201,6 +257,16 @@ export default function AdminEventsPage() {
       !editMaxParticipants
     ) {
       setMessage("Uzupełnij wszystkie pola edycji.");
+      return;
+    }
+
+    if (Number(editPrice) < 0) {
+      setMessage("Cena nie może być ujemna.");
+      return;
+    }
+
+    if (Number(editMaxParticipants) <= 0) {
+      setMessage("Liczba miejsc musi być większa od zera.");
       return;
     }
 
@@ -229,6 +295,13 @@ export default function AdminEventsPage() {
   }
 
   async function toggleEvent(eventId: string, currentStatus: boolean) {
+    if (!canManageEvents) {
+      setMessage(
+        "Brak dostępu. Instruktor nie może aktywować ani ukrywać szkoleń."
+      );
+      return;
+    }
+
     const { error } = await supabase
       .from("events")
       .update({ is_active: !currentStatus })
@@ -316,88 +389,194 @@ export default function AdminEventsPage() {
             Dodawanie, edycja, aktywacja, lista uczestników, zatwierdzanie
             zapisów i płatności.
           </p>
+
+          {userRole === "instruktor" && (
+            <div className="mt-5 rounded-xl border border-yellow-800 bg-yellow-950 p-4 text-sm font-semibold text-yellow-200">
+              Tryb instruktora: możesz przeglądać szkolenia i listy uczestników,
+              ale nie możesz tworzyć, edytować ani ukrywać szkoleń.
+            </div>
+          )}
         </div>
 
         {message && (
           <div className={`mb-6 ${getMessageClass(message)}`}>{message}</div>
         )}
 
-        <div className="mb-10 rounded-2xl border border-zinc-800 bg-zinc-900 p-6">
-          <h2 className="mb-6 text-2xl font-bold">Dodaj nowe szkolenie</h2>
+        {canManageEvents && (
+          <div className="mb-10 rounded-2xl border border-zinc-800 bg-zinc-900 p-6">
+            <div className="mb-6">
+              <h2 className="text-2xl font-bold">Dodaj nowe szkolenie</h2>
 
-          <div className="grid gap-5">
-            <input
-              type="text"
-              value={title}
-              onChange={(event) => setTitle(event.target.value)}
-              placeholder="Nazwa szkolenia"
-              className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-white outline-none focus:border-green-600"
-            />
-
-            <textarea
-              value={description}
-              onChange={(event) => setDescription(event.target.value)}
-              rows={5}
-              placeholder="Opis szkolenia..."
-              className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-white outline-none focus:border-green-600"
-            />
-
-            <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-5">
-              <input
-                type="date"
-                value={eventDate}
-                onChange={(event) => setEventDate(event.target.value)}
-                className="rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-white outline-none focus:border-green-600"
-              />
-
-              <input
-                type="time"
-                value={startTime}
-                onChange={(event) => setStartTime(event.target.value)}
-                className="rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-white outline-none focus:border-green-600"
-              />
-
-              <input
-                type="time"
-                value={endTime}
-                onChange={(event) => setEndTime(event.target.value)}
-                className="rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-white outline-none focus:border-green-600"
-              />
-
-              <input
-                type="number"
-                value={price}
-                onChange={(event) => setPrice(event.target.value)}
-                placeholder="Cena"
-                className="rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-white outline-none focus:border-green-600"
-              />
-
-              <input
-                type="number"
-                value={maxParticipants}
-                onChange={(event) => setMaxParticipants(event.target.value)}
-                placeholder="Limit miejsc"
-                className="rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-white outline-none focus:border-green-600"
-              />
+              <p className="mt-2 text-sm text-zinc-400">
+                Wypełnij dane szkolenia. Wolne miejsca nie są wpisywane ręcznie —
+                system liczy je automatycznie na podstawie liczby zapisanych
+                uczestników.
+              </p>
             </div>
 
-            <input
-              type="text"
-              value={location}
-              onChange={(event) => setLocation(event.target.value)}
-              placeholder="Miejsce / oś"
-              className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-white outline-none focus:border-green-600"
-            />
+            <div className="grid gap-5">
+              <div>
+                <label className="mb-2 block text-sm font-semibold text-zinc-200">
+                  Nazwa szkolenia
+                </label>
 
-            <button
-              type="button"
-              onClick={createEvent}
-              className="rounded-xl bg-green-700 px-4 py-3 font-semibold transition hover:bg-green-600"
-            >
-              Dodaj szkolenie
-            </button>
+                <input
+                  type="text"
+                  value={title}
+                  onChange={(event) => setTitle(event.target.value)}
+                  placeholder="Np. Szkolenie pistolet podstawowy"
+                  className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-white outline-none focus:border-green-600"
+                />
+
+                <FieldHelp>
+                  Wpisz krótką, czytelną nazwę szkolenia widoczną dla klienta.
+                </FieldHelp>
+              </div>
+
+              <div>
+                <label className="mb-2 block text-sm font-semibold text-zinc-200">
+                  Opis szkolenia
+                </label>
+
+                <textarea
+                  value={description}
+                  onChange={(event) => setDescription(event.target.value)}
+                  rows={5}
+                  placeholder="Np. Zakres szkolenia, wymagania, dla kogo jest szkolenie, co zawiera cena..."
+                  className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-white outline-none focus:border-green-600"
+                />
+
+                <FieldHelp>
+                  Opisz, czego dotyczy szkolenie i co uczestnik powinien wiedzieć
+                  przed zapisem.
+                </FieldHelp>
+              </div>
+
+              <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-5">
+                <div>
+                  <label className="mb-2 block text-sm font-semibold text-zinc-200">
+                    Data szkolenia
+                  </label>
+
+                  <input
+                    type="date"
+                    value={eventDate}
+                    onChange={(event) => setEventDate(event.target.value)}
+                    className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-white outline-none focus:border-green-600"
+                  />
+
+                  <FieldHelp>
+                    Wybierz dzień, w którym odbędzie się szkolenie.
+                  </FieldHelp>
+                </div>
+
+                <div>
+                  <label className="mb-2 block text-sm font-semibold text-zinc-200">
+                    Godzina rozpoczęcia
+                  </label>
+
+                  <input
+                    type="time"
+                    value={startTime}
+                    onChange={(event) => setStartTime(event.target.value)}
+                    className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-white outline-none focus:border-green-600"
+                  />
+
+                  <FieldHelp>Podaj godzinę startu, np. 10:00.</FieldHelp>
+                </div>
+
+                <div>
+                  <label className="mb-2 block text-sm font-semibold text-zinc-200">
+                    Godzina zakończenia
+                  </label>
+
+                  <input
+                    type="time"
+                    value={endTime}
+                    onChange={(event) => setEndTime(event.target.value)}
+                    className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-white outline-none focus:border-green-600"
+                  />
+
+                  <FieldHelp>Podaj godzinę zakończenia, np. 14:00.</FieldHelp>
+                </div>
+
+                <div>
+                  <label className="mb-2 block text-sm font-semibold text-zinc-200">
+                    Cena
+                  </label>
+
+                  <input
+                    type="number"
+                    min="0"
+                    value={price}
+                    onChange={(event) => setPrice(event.target.value)}
+                    placeholder="Np. 250"
+                    className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-white outline-none focus:border-green-600"
+                  />
+
+                  <FieldHelp>
+                    Wpisz cenę za jednego uczestnika. Dla darmowego szkolenia
+                    wpisz 0.
+                  </FieldHelp>
+                </div>
+
+                <div>
+                  <label className="mb-2 block text-sm font-semibold text-zinc-200">
+                    Liczba miejsc
+                  </label>
+
+                  <input
+                    type="number"
+                    min="1"
+                    value={maxParticipants}
+                    onChange={(event) => setMaxParticipants(event.target.value)}
+                    placeholder="Np. 10"
+                    className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-white outline-none focus:border-green-600"
+                  />
+
+                  <FieldHelp>
+                    Maksymalna liczba uczestników. Wolne miejsca system wyliczy
+                    sam.
+                  </FieldHelp>
+                </div>
+              </div>
+
+              <div>
+                <label className="mb-2 block text-sm font-semibold text-zinc-200">
+                  Miejsce / oś
+                </label>
+
+                <input
+                  type="text"
+                  value={location}
+                  onChange={(event) => setLocation(event.target.value)}
+                  placeholder="Np. Oś 25 m, sala szkoleniowa, oś 100 m"
+                  className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-white outline-none focus:border-green-600"
+                />
+
+                <FieldHelp>
+                  Wpisz miejsce prowadzenia szkolenia albo konkretną oś.
+                </FieldHelp>
+              </div>
+
+              <div className="rounded-xl border border-green-900 bg-green-950/40 p-4 text-sm text-green-200">
+                <p className="font-semibold">Informacja o wolnych miejscach</p>
+                <p className="mt-1 text-green-300">
+                  Tego pola nie uzupełniasz ręcznie. System liczy wolne miejsca:
+                  liczba miejsc minus zapisani uczestnicy.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={createEvent}
+                className="rounded-xl bg-green-700 px-4 py-3 font-semibold transition hover:bg-green-600"
+              >
+                Dodaj szkolenie
+              </button>
+            </div>
           </div>
-        </div>
+        )}
 
         {loading && (
           <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-6 text-zinc-400">
@@ -406,306 +585,429 @@ export default function AdminEventsPage() {
         )}
 
         <div className="grid gap-6">
-          {events.map((event) => (
-            <div
-              key={event.id}
-              className="rounded-2xl border border-zinc-800 bg-zinc-900 p-6"
-            >
-              {editingEventId === event.id ? (
-                <div className="grid gap-5">
-                  <h2 className="text-2xl font-bold text-green-400">
-                    Edycja szkolenia
-                  </h2>
+          {events.map((event) => {
+            const activeRegistrationsCount =
+              selectedEventId === event.id
+                ? getPaidRegistrationsCount(registrations)
+                : 0;
 
-                  <input
-                    type="text"
-                    value={editTitle}
-                    onChange={(e) => setEditTitle(e.target.value)}
-                    className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-white outline-none focus:border-green-600"
-                  />
+            const freePlaces =
+              selectedEventId === event.id
+                ? Math.max(event.max_participants - activeRegistrationsCount, 0)
+                : null;
 
-                  <textarea
-                    value={editDescription}
-                    onChange={(e) => setEditDescription(e.target.value)}
-                    rows={5}
-                    className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-white outline-none focus:border-green-600"
-                  />
+            return (
+              <div
+                key={event.id}
+                className="rounded-2xl border border-zinc-800 bg-zinc-900 p-6"
+              >
+                {editingEventId === event.id && canManageEvents ? (
+                  <div className="grid gap-5">
+                    <h2 className="text-2xl font-bold text-green-400">
+                      Edycja szkolenia
+                    </h2>
 
-                  <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-5">
-                    <input
-                      type="date"
-                      value={editEventDate}
-                      onChange={(e) => setEditEventDate(e.target.value)}
-                      className="rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-white outline-none focus:border-green-600"
-                    />
+                    <div>
+                      <label className="mb-2 block text-sm font-semibold text-zinc-200">
+                        Nazwa szkolenia
+                      </label>
 
-                    <input
-                      type="time"
-                      value={editStartTime}
-                      onChange={(e) => setEditStartTime(e.target.value)}
-                      className="rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-white outline-none focus:border-green-600"
-                    />
+                      <input
+                        type="text"
+                        value={editTitle}
+                        onChange={(e) => setEditTitle(e.target.value)}
+                        placeholder="Np. Szkolenie pistolet podstawowy"
+                        className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-white outline-none focus:border-green-600"
+                      />
 
-                    <input
-                      type="time"
-                      value={editEndTime}
-                      onChange={(e) => setEditEndTime(e.target.value)}
-                      className="rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-white outline-none focus:border-green-600"
-                    />
+                      <FieldHelp>
+                        Krótka nazwa szkolenia widoczna dla klienta.
+                      </FieldHelp>
+                    </div>
 
-                    <input
-                      type="number"
-                      value={editPrice}
-                      onChange={(e) => setEditPrice(e.target.value)}
-                      className="rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-white outline-none focus:border-green-600"
-                    />
+                    <div>
+                      <label className="mb-2 block text-sm font-semibold text-zinc-200">
+                        Opis szkolenia
+                      </label>
 
-                    <input
-                      type="number"
-                      value={editMaxParticipants}
-                      onChange={(e) => setEditMaxParticipants(e.target.value)}
-                      className="rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-white outline-none focus:border-green-600"
-                    />
-                  </div>
+                      <textarea
+                        value={editDescription}
+                        onChange={(e) => setEditDescription(e.target.value)}
+                        rows={5}
+                        placeholder="Opis szkolenia, wymagania, zakres, informacje organizacyjne..."
+                        className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-white outline-none focus:border-green-600"
+                      />
 
-                  <input
-                    type="text"
-                    value={editLocation}
-                    onChange={(e) => setEditLocation(e.target.value)}
-                    className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-white outline-none focus:border-green-600"
-                  />
+                      <FieldHelp>
+                        Opisz zakres szkolenia i najważniejsze informacje dla
+                        uczestnika.
+                      </FieldHelp>
+                    </div>
 
-                  <div className="flex flex-col gap-3 sm:flex-row">
-                    <button
-                      type="button"
-                      onClick={() => saveEditedEvent(event.id)}
-                      className="rounded-xl bg-green-700 px-5 py-3 text-sm font-semibold transition hover:bg-green-600"
-                    >
-                      Zapisz zmiany
-                    </button>
+                    <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-5">
+                      <div>
+                        <label className="mb-2 block text-sm font-semibold text-zinc-200">
+                          Data szkolenia
+                        </label>
 
-                    <button
-                      type="button"
-                      onClick={cancelEditing}
-                      className="rounded-xl border border-zinc-700 px-5 py-3 text-sm font-semibold text-zinc-300 transition hover:bg-zinc-800"
-                    >
-                      Anuluj edycję
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <>
-                  <div className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                    <div className="max-w-4xl">
-                      <span
-                        className={
-                          event.is_active
-                            ? "mb-3 inline-block rounded-full bg-green-950 px-3 py-1 text-xs font-semibold text-green-400"
-                            : "mb-3 inline-block rounded-full bg-red-950 px-3 py-1 text-xs font-semibold text-red-400"
-                        }
-                      >
-                        {event.is_active ? "AKTYWNE" : "UKRYTE"}
-                      </span>
+                        <input
+                          type="date"
+                          value={editEventDate}
+                          onChange={(e) => setEditEventDate(e.target.value)}
+                          className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-white outline-none focus:border-green-600"
+                        />
 
-                      <h2 className="mb-3 text-3xl font-bold">
-                        {event.title}
-                      </h2>
+                        <FieldHelp>Dzień, w którym odbędzie się szkolenie.</FieldHelp>
+                      </div>
 
-                      <p className="mb-5 whitespace-pre-line text-zinc-300">
-                        {event.description}
-                      </p>
+                      <div>
+                        <label className="mb-2 block text-sm font-semibold text-zinc-200">
+                          Godzina rozpoczęcia
+                        </label>
 
-                      <div className="grid gap-3 text-sm text-zinc-400 md:grid-cols-2 lg:grid-cols-4">
-                        <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-4">
-                          <p className="mb-1 text-zinc-500">Data</p>
-                          <p className="font-semibold text-white">
-                            {event.event_date}
-                          </p>
-                        </div>
+                        <input
+                          type="time"
+                          value={editStartTime}
+                          onChange={(e) => setEditStartTime(e.target.value)}
+                          className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-white outline-none focus:border-green-600"
+                        />
 
-                        <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-4">
-                          <p className="mb-1 text-zinc-500">Godzina</p>
-                          <p className="font-semibold text-white">
-                            {event.start_time.slice(0, 5)} -{" "}
-                            {event.end_time.slice(0, 5)}
-                          </p>
-                        </div>
+                        <FieldHelp>Godzina startu szkolenia.</FieldHelp>
+                      </div>
 
-                        <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-4">
-                          <p className="mb-1 text-zinc-500">Miejsce</p>
-                          <p className="font-semibold text-white">
-                            {event.location}
-                          </p>
-                        </div>
+                      <div>
+                        <label className="mb-2 block text-sm font-semibold text-zinc-200">
+                          Godzina zakończenia
+                        </label>
 
-                        <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-4">
-                          <p className="mb-1 text-zinc-500">Cena / limit</p>
-                          <p className="font-semibold text-green-500">
-                            {Number(event.price).toFixed(0)} zł /{" "}
-                            {event.max_participants} miejsc
-                          </p>
-                        </div>
+                        <input
+                          type="time"
+                          value={editEndTime}
+                          onChange={(e) => setEditEndTime(e.target.value)}
+                          className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-white outline-none focus:border-green-600"
+                        />
+
+                        <FieldHelp>Godzina zakończenia szkolenia.</FieldHelp>
+                      </div>
+
+                      <div>
+                        <label className="mb-2 block text-sm font-semibold text-zinc-200">
+                          Cena
+                        </label>
+
+                        <input
+                          type="number"
+                          min="0"
+                          value={editPrice}
+                          onChange={(e) => setEditPrice(e.target.value)}
+                          placeholder="Np. 250"
+                          className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-white outline-none focus:border-green-600"
+                        />
+
+                        <FieldHelp>Cena za jednego uczestnika.</FieldHelp>
+                      </div>
+
+                      <div>
+                        <label className="mb-2 block text-sm font-semibold text-zinc-200">
+                          Liczba miejsc
+                        </label>
+
+                        <input
+                          type="number"
+                          min="1"
+                          value={editMaxParticipants}
+                          onChange={(e) =>
+                            setEditMaxParticipants(e.target.value)
+                          }
+                          placeholder="Np. 10"
+                          className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-white outline-none focus:border-green-600"
+                        />
+
+                        <FieldHelp>
+                          Limit uczestników. Wolne miejsca liczy system.
+                        </FieldHelp>
                       </div>
                     </div>
 
-                    <div className="flex min-w-[220px] flex-col gap-3">
+                    <div>
+                      <label className="mb-2 block text-sm font-semibold text-zinc-200">
+                        Miejsce / oś
+                      </label>
+
+                      <input
+                        type="text"
+                        value={editLocation}
+                        onChange={(e) => setEditLocation(e.target.value)}
+                        placeholder="Np. Oś 25 m, sala szkoleniowa, oś 100 m"
+                        className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-white outline-none focus:border-green-600"
+                      />
+
+                      <FieldHelp>
+                        Miejsce prowadzenia szkolenia albo konkretna oś.
+                      </FieldHelp>
+                    </div>
+
+                    <div className="rounded-xl border border-green-900 bg-green-950/40 p-4 text-sm text-green-200">
+                      <p className="font-semibold">
+                        Wolnych miejsc nie edytujesz ręcznie
+                      </p>
+                      <p className="mt-1 text-green-300">
+                        System wylicza je automatycznie z liczby miejsc i liczby
+                        zapisanych uczestników.
+                      </p>
+                    </div>
+
+                    <div className="flex flex-col gap-3 sm:flex-row">
                       <button
                         type="button"
-                        onClick={() => startEditing(event)}
-                        className="rounded-xl border border-blue-800 px-4 py-3 text-sm font-semibold text-blue-300 transition hover:bg-blue-950"
+                        onClick={() => saveEditedEvent(event.id)}
+                        className="rounded-xl bg-green-700 px-5 py-3 text-sm font-semibold transition hover:bg-green-600"
                       >
-                        Edytuj szkolenie
+                        Zapisz zmiany
                       </button>
 
                       <button
                         type="button"
-                        onClick={() => loadRegistrations(event.id)}
-                        className="rounded-xl border border-zinc-700 px-4 py-3 text-sm font-semibold transition hover:bg-zinc-800"
+                        onClick={cancelEditing}
+                        className="rounded-xl border border-zinc-700 px-5 py-3 text-sm font-semibold text-zinc-300 transition hover:bg-zinc-800"
                       >
-                        Pokaż zapisanych
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => toggleEvent(event.id, event.is_active)}
-                        className={
-                          event.is_active
-                            ? "rounded-xl border border-red-800 px-4 py-3 text-sm font-semibold text-red-400 transition hover:bg-red-950"
-                            : "rounded-xl border border-green-800 px-4 py-3 text-sm font-semibold text-green-400 transition hover:bg-green-950"
-                        }
-                      >
-                        {event.is_active
-                          ? "Ukryj szkolenie"
-                          : "Aktywuj szkolenie"}
+                        Anuluj edycję
                       </button>
                     </div>
                   </div>
+                ) : (
+                  <>
+                    <div className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                      <div className="max-w-4xl">
+                        <span
+                          className={
+                            event.is_active
+                              ? "mb-3 inline-block rounded-full bg-green-950 px-3 py-1 text-xs font-semibold text-green-400"
+                              : "mb-3 inline-block rounded-full bg-red-950 px-3 py-1 text-xs font-semibold text-red-400"
+                          }
+                        >
+                          {event.is_active ? "AKTYWNE" : "UKRYTE"}
+                        </span>
 
-                  {selectedEventId === event.id && (
-                    <div className="mt-6 rounded-2xl border border-zinc-800 bg-zinc-950 p-5">
-                      <h3 className="mb-5 text-xl font-bold">
-                        Lista zapisanych osób
-                      </h3>
+                        <h2 className="mb-3 text-3xl font-bold">
+                          {event.title}
+                        </h2>
 
-                      {registrations.length === 0 ? (
-                        <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-4 text-zinc-400">
-                          Brak zapisanych osób.
+                        <p className="mb-5 whitespace-pre-line text-zinc-300">
+                          {event.description}
+                        </p>
+
+                        <div className="grid gap-3 text-sm text-zinc-400 md:grid-cols-2 lg:grid-cols-5">
+                          <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-4">
+                            <p className="mb-1 text-zinc-500">Data</p>
+                            <p className="font-semibold text-white">
+                              {event.event_date}
+                            </p>
+                          </div>
+
+                          <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-4">
+                            <p className="mb-1 text-zinc-500">Godzina</p>
+                            <p className="font-semibold text-white">
+                              {event.start_time.slice(0, 5)} -{" "}
+                              {event.end_time.slice(0, 5)}
+                            </p>
+                          </div>
+
+                          <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-4">
+                            <p className="mb-1 text-zinc-500">Miejsce</p>
+                            <p className="font-semibold text-white">
+                              {event.location}
+                            </p>
+                          </div>
+
+                          <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-4">
+                            <p className="mb-1 text-zinc-500">Cena</p>
+                            <p className="font-semibold text-green-500">
+                              {Number(event.price).toFixed(0)} zł
+                            </p>
+                          </div>
+
+                          <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-4">
+                            <p className="mb-1 text-zinc-500">Miejsca</p>
+                            <p className="font-semibold text-white">
+                              Limit: {event.max_participants}
+                            </p>
+                            {freePlaces !== null && (
+                              <p className="mt-1 text-xs font-semibold text-green-400">
+                                Wolne: {freePlaces}
+                              </p>
+                            )}
+                          </div>
                         </div>
-                      ) : (
-                        <div className="overflow-x-auto">
-                          <table className="min-w-full text-sm">
-                            <thead>
-                              <tr className="border-b border-zinc-800 text-left text-zinc-500">
-                                <th className="px-4 py-3">Imię i nazwisko</th>
-                                <th className="px-4 py-3">E-mail</th>
-                                <th className="px-4 py-3">Telefon</th>
-                                <th className="px-4 py-3">Status</th>
-                                <th className="px-4 py-3">Płatność</th>
-                                <th className="px-4 py-3">Akcje</th>
-                              </tr>
-                            </thead>
+                      </div>
 
-                            <tbody>
-                              {registrations.map((registration) => (
-                                <tr
-                                  key={registration.id}
-                                  className="border-b border-zinc-900"
-                                >
-                                  <td className="px-4 py-4 font-semibold">
-                                    {registration.customer_name}
-                                  </td>
+                      <div className="flex min-w-[220px] flex-col gap-3">
+                        {canManageEvents && (
+                          <button
+                            type="button"
+                            onClick={() => startEditing(event)}
+                            className="rounded-xl border border-blue-800 px-4 py-3 text-sm font-semibold text-blue-300 transition hover:bg-blue-950"
+                          >
+                            Edytuj szkolenie
+                          </button>
+                        )}
 
-                                  <td className="px-4 py-4 text-zinc-300">
-                                    {registration.customer_email}
-                                  </td>
+                        <button
+                          type="button"
+                          onClick={() => loadRegistrations(event.id)}
+                          className="rounded-xl border border-zinc-700 px-4 py-3 text-sm font-semibold transition hover:bg-zinc-800"
+                        >
+                          Pokaż zapisanych
+                        </button>
 
-                                  <td className="px-4 py-4 text-zinc-300">
-                                    {registration.customer_phone}
-                                  </td>
-
-                                  <td className="px-4 py-4">
-                                    <span
-                                      className={getStatusClass(
-                                        registration.registration_status
-                                      )}
-                                    >
-                                      {translateRegistrationStatus(
-                                        registration.registration_status
-                                      )}
-                                    </span>
-                                  </td>
-
-                                  <td className="px-4 py-4 text-zinc-300">
-                                    {registration.payment_status ===
-                                    "paid_on_site"
-                                      ? "Opłacone"
-                                      : "Płatność na miejscu"}
-                                  </td>
-
-                                  <td className="px-4 py-4">
-                                    <div className="flex flex-wrap gap-2">
-                                      <button
-                                        type="button"
-                                        onClick={() =>
-                                          updateRegistrationStatus(
-                                            registration.id,
-                                            "approved"
-                                          )
-                                        }
-                                        className="rounded-lg border border-green-800 px-3 py-2 text-xs text-green-300 hover:bg-green-950"
-                                      >
-                                        Zatwierdź
-                                      </button>
-
-                                      <button
-                                        type="button"
-                                        onClick={() =>
-                                          updateRegistrationStatus(
-                                            registration.id,
-                                            "reserve"
-                                          )
-                                        }
-                                        className="rounded-lg border border-yellow-800 px-3 py-2 text-xs text-yellow-300 hover:bg-yellow-950"
-                                      >
-                                        Rezerwowy
-                                      </button>
-
-                                      <button
-                                        type="button"
-                                        onClick={() =>
-                                          markRegistrationPaid(registration.id)
-                                        }
-                                        className="rounded-lg border border-blue-800 px-3 py-2 text-xs text-blue-300 hover:bg-blue-950"
-                                      >
-                                        Opłacone
-                                      </button>
-
-                                      <button
-                                        type="button"
-                                        onClick={() =>
-                                          updateRegistrationStatus(
-                                            registration.id,
-                                            "cancelled"
-                                          )
-                                        }
-                                        className="rounded-lg border border-red-800 px-3 py-2 text-xs text-red-300 hover:bg-red-950"
-                                      >
-                                        Anuluj
-                                      </button>
-                                    </div>
-                                  </td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        </div>
-                      )}
+                        {canManageEvents && (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              toggleEvent(event.id, event.is_active)
+                            }
+                            className={
+                              event.is_active
+                                ? "rounded-xl border border-red-800 px-4 py-3 text-sm font-semibold text-red-400 transition hover:bg-red-950"
+                                : "rounded-xl border border-green-800 px-4 py-3 text-sm font-semibold text-green-400 transition hover:bg-green-950"
+                            }
+                          >
+                            {event.is_active
+                              ? "Ukryj szkolenie"
+                              : "Aktywuj szkolenie"}
+                          </button>
+                        )}
+                      </div>
                     </div>
-                  )}
-                </>
-              )}
-            </div>
-          ))}
+
+                    {selectedEventId === event.id && (
+                      <div className="mt-6 rounded-2xl border border-zinc-800 bg-zinc-950 p-5">
+                        <h3 className="mb-5 text-xl font-bold">
+                          Lista zapisanych osób
+                        </h3>
+
+                        {registrations.length === 0 ? (
+                          <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-4 text-zinc-400">
+                            Brak zapisanych osób.
+                          </div>
+                        ) : (
+                          <div className="overflow-x-auto">
+                            <table className="min-w-full text-sm">
+                              <thead>
+                                <tr className="border-b border-zinc-800 text-left text-zinc-500">
+                                  <th className="px-4 py-3">Imię i nazwisko</th>
+                                  <th className="px-4 py-3">E-mail</th>
+                                  <th className="px-4 py-3">Telefon</th>
+                                  <th className="px-4 py-3">Status</th>
+                                  <th className="px-4 py-3">Płatność</th>
+                                  <th className="px-4 py-3">Akcje</th>
+                                </tr>
+                              </thead>
+
+                              <tbody>
+                                {registrations.map((registration) => (
+                                  <tr
+                                    key={registration.id}
+                                    className="border-b border-zinc-900"
+                                  >
+                                    <td className="px-4 py-4 font-semibold">
+                                      {registration.customer_name}
+                                    </td>
+
+                                    <td className="px-4 py-4 text-zinc-300">
+                                      {registration.customer_email}
+                                    </td>
+
+                                    <td className="px-4 py-4 text-zinc-300">
+                                      {registration.customer_phone}
+                                    </td>
+
+                                    <td className="px-4 py-4">
+                                      <span
+                                        className={getStatusClass(
+                                          registration.registration_status
+                                        )}
+                                      >
+                                        {translateRegistrationStatus(
+                                          registration.registration_status
+                                        )}
+                                      </span>
+                                    </td>
+
+                                    <td className="px-4 py-4 text-zinc-300">
+                                      {registration.payment_status ===
+                                      "paid_on_site"
+                                        ? "Opłacone"
+                                        : "Płatność na miejscu"}
+                                    </td>
+
+                                    <td className="px-4 py-4">
+                                      <div className="flex flex-wrap gap-2">
+                                        <button
+                                          type="button"
+                                          onClick={() =>
+                                            updateRegistrationStatus(
+                                              registration.id,
+                                              "approved"
+                                            )
+                                          }
+                                          className="rounded-lg border border-green-800 px-3 py-2 text-xs text-green-300 hover:bg-green-950"
+                                        >
+                                          Zatwierdź
+                                        </button>
+
+                                        <button
+                                          type="button"
+                                          onClick={() =>
+                                            updateRegistrationStatus(
+                                              registration.id,
+                                              "reserve"
+                                            )
+                                          }
+                                          className="rounded-lg border border-yellow-800 px-3 py-2 text-xs text-yellow-300 hover:bg-yellow-950"
+                                        >
+                                          Rezerwowy
+                                        </button>
+
+                                        <button
+                                          type="button"
+                                          onClick={() =>
+                                            markRegistrationPaid(
+                                              registration.id
+                                            )
+                                          }
+                                          className="rounded-lg border border-blue-800 px-3 py-2 text-xs text-blue-300 hover:bg-blue-950"
+                                        >
+                                          Opłacone
+                                        </button>
+
+                                        <button
+                                          type="button"
+                                          onClick={() =>
+                                            updateRegistrationStatus(
+                                              registration.id,
+                                              "cancelled"
+                                            )
+                                          }
+                                          className="rounded-lg border border-red-800 px-3 py-2 text-xs text-red-300 hover:bg-red-950"
+                                        >
+                                          Anuluj
+                                        </button>
+                                      </div>
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+            );
+          })}
         </div>
 
         <div className="mt-8 flex flex-col gap-3 sm:flex-row">

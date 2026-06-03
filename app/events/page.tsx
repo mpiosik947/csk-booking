@@ -21,11 +21,23 @@ type Event = {
   event_registrations: EventRegistration[];
 };
 
+type RegistrationSuccess = {
+  title: string;
+  date: string;
+  startTime: string;
+  endTime: string;
+  location: string;
+  price: number;
+  status: string;
+};
+
 export default function EventsPage() {
   const [events, setEvents] = useState<Event[]>([]);
   const [selectedEventId, setSelectedEventId] = useState("");
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState("");
+  const [registrationSuccess, setRegistrationSuccess] =
+    useState<RegistrationSuccess | null>(null);
 
   const [userId, setUserId] = useState("");
   const [customerName, setCustomerName] = useState("");
@@ -185,11 +197,18 @@ export default function EventsPage() {
       return;
     }
 
-    setMessage(
-      registrationStatus === "reserve"
-        ? "Zostałeś dodany do listy rezerwowej."
-        : "Zostałeś zapisany na szkolenie."
-    );
+    setRegistrationSuccess({
+      title: eventItem.title,
+      date: eventItem.event_date,
+      startTime: eventItem.start_time,
+      endTime: eventItem.end_time,
+      location: eventItem.location,
+      price: Number(eventItem.price),
+      status:
+        registrationStatus === "reserve"
+          ? "Lista rezerwowa"
+          : "Zapisany",
+    });
 
     setEvents((currentEvents) =>
       currentEvents.map((event) =>
@@ -330,6 +349,86 @@ export default function EventsPage() {
             wydarzenie albo listę rezerwową.
           </p>
         </div>
+
+        {registrationSuccess && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 px-4">
+            <div className="w-full max-w-xl rounded-2xl border border-green-800 bg-zinc-950 p-6 text-white shadow-2xl">
+              <div className="mb-4 rounded-full border border-green-800 bg-green-950 px-4 py-2 text-center text-sm font-bold uppercase tracking-[0.25em] text-green-300">
+                Zapis potwierdzony
+              </div>
+
+              <h2 className="mb-3 text-3xl font-bold">
+                Udało się zapisać na szkolenie
+              </h2>
+
+              <p className="mb-6 text-zinc-400">
+                Poniżej znajduje się podsumowanie zapisu.
+              </p>
+
+              <div className="grid gap-3 rounded-2xl border border-zinc-800 bg-zinc-900 p-5 text-sm">
+                <div>
+                  <p className="text-zinc-500">Szkolenie</p>
+                  <p className="text-lg font-semibold text-white">
+                    {registrationSuccess.title}
+                  </p>
+                </div>
+
+                <div>
+                  <p className="text-zinc-500">Data</p>
+                  <p className="text-lg font-semibold text-white">
+                    {formatDate(registrationSuccess.date)}
+                  </p>
+                </div>
+
+                <div>
+                  <p className="text-zinc-500">Godzina</p>
+                  <p className="text-lg font-semibold text-white">
+                    {registrationSuccess.startTime.slice(0, 5)} -{" "}
+                    {registrationSuccess.endTime.slice(0, 5)}
+                  </p>
+                </div>
+
+                <div>
+                  <p className="text-zinc-500">Miejsce</p>
+                  <p className="text-lg font-semibold text-white">
+                    {registrationSuccess.location}
+                  </p>
+                </div>
+
+                <div>
+                  <p className="text-zinc-500">Status</p>
+                  <p className="text-lg font-semibold text-green-500">
+                    {registrationSuccess.status}
+                  </p>
+                </div>
+
+                <div>
+                  <p className="text-zinc-500">Płatność</p>
+                  <p className="text-lg font-semibold text-green-500">
+                    Na miejscu
+                  </p>
+                </div>
+              </div>
+
+              <div className="mt-6 grid gap-3 sm:grid-cols-2">
+                <a
+                  href="/my-events"
+                  className="rounded-xl bg-green-700 px-5 py-3 text-center font-semibold transition hover:bg-green-600"
+                >
+                  Moje szkolenia
+                </a>
+
+                <button
+                  type="button"
+                  onClick={() => setRegistrationSuccess(null)}
+                  className="rounded-xl border border-zinc-700 px-5 py-3 font-semibold text-zinc-300 transition hover:bg-zinc-900"
+                >
+                  Zamknij
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {message && <div className={getMessageClass(message)}>{message}</div>}
 

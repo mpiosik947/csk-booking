@@ -3,6 +3,101 @@
 import { useEffect, useState } from "react";
 import { supabase } from "../../lib/supabase";
 
+type ProfileData = {
+  full_name: string | null;
+  phone: string | null;
+  postal_code: string | null;
+  city: string | null;
+  street: string | null;
+  house_number: string | null;
+  apartment_number: string | null;
+  verification_status: string | null;
+
+  permission_sport: boolean | null;
+  permission_collector: boolean | null;
+  permission_hunting: boolean | null;
+  permission_training: boolean | null;
+  permission_personal_protection: boolean | null;
+  permission_other: boolean | null;
+
+  qualification_instructor: boolean | null;
+  qualification_range_officer: boolean | null;
+  qualification_pzss_license: boolean | null;
+  qualification_hunter: boolean | null;
+
+  permissions_verified: boolean | null;
+  permissions_verified_at: string | null;
+  permissions_verification_note: string | null;
+};
+
+function getVerificationLabel(status: string) {
+  switch (status) {
+    case "verified":
+      return "Zweryfikowane";
+    case "pending":
+      return "Oczekuje na weryfikację";
+    case "rejected":
+      return "Wymaga poprawy";
+    case "niezweryfikowane":
+      return "Niezweryfikowane";
+    default:
+      return status || "Niezweryfikowane";
+  }
+}
+
+function getVerificationClass(status: string, permissionsVerified: boolean) {
+  if (status === "verified" && permissionsVerified) {
+    return "rounded-xl border border-green-800 bg-green-950 p-4 text-sm text-green-100";
+  }
+
+  if (status === "rejected") {
+    return "rounded-xl border border-red-800 bg-red-950 p-4 text-sm text-red-100";
+  }
+
+  return "rounded-xl border border-yellow-800 bg-yellow-950 p-4 text-sm text-yellow-100";
+}
+
+function getMessageClass(message: string) {
+  if (message.includes("zapisane") || message.includes("zmienione")) {
+    return "rounded-xl border border-green-800 bg-green-950 p-4 text-sm font-semibold text-green-300";
+  }
+
+  return "rounded-xl border border-red-800 bg-red-950 p-4 text-sm font-semibold text-red-300";
+}
+
+function CheckboxField({
+  checked,
+  onChange,
+  title,
+  description,
+}: {
+  checked: boolean;
+  onChange: (checked: boolean) => void;
+  title: string;
+  description?: string;
+}) {
+  return (
+    <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-zinc-800 bg-zinc-950 p-4 text-sm text-zinc-300 transition hover:border-green-800">
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={(event) => onChange(event.target.checked)}
+        className="mt-1"
+      />
+
+      <span>
+        <span className="block font-semibold text-zinc-100">{title}</span>
+
+        {description && (
+          <span className="mt-1 block text-xs leading-5 text-zinc-500">
+            {description}
+          </span>
+        )}
+      </span>
+    </label>
+  );
+}
+
 export default function AccountPage() {
   const [loading, setLoading] = useState(true);
   const [savingProfile, setSavingProfile] = useState(false);
@@ -18,18 +113,27 @@ export default function AccountPage() {
   const [houseNumber, setHouseNumber] = useState("");
   const [apartmentNumber, setApartmentNumber] = useState("");
 
-  const [weaponPermitNumber, setWeaponPermitNumber] = useState("");
-  const [weaponPermitType, setWeaponPermitType] = useState("");
-  const [weaponPermitIssuer, setWeaponPermitIssuer] = useState("");
+  const [permissionSport, setPermissionSport] = useState(false);
+  const [permissionCollector, setPermissionCollector] = useState(false);
+  const [permissionHunting, setPermissionHunting] = useState(false);
+  const [permissionTraining, setPermissionTraining] = useState(false);
+  const [permissionPersonalProtection, setPermissionPersonalProtection] =
+    useState(false);
+  const [permissionOther, setPermissionOther] = useState(false);
 
-  const [hasRangeOfficer, setHasRangeOfficer] = useState(false);
-  const [rangeOfficerNumber, setRangeOfficerNumber] = useState("");
-
-  const [hasInstructor, setHasInstructor] = useState(false);
-  const [instructorNumber, setInstructorNumber] = useState("");
+  const [qualificationInstructor, setQualificationInstructor] = useState(false);
+  const [qualificationRangeOfficer, setQualificationRangeOfficer] =
+    useState(false);
+  const [qualificationPzssLicense, setQualificationPzssLicense] =
+    useState(false);
+  const [qualificationHunter, setQualificationHunter] = useState(false);
 
   const [verificationStatus, setVerificationStatus] =
     useState("niezweryfikowane");
+  const [permissionsVerified, setPermissionsVerified] = useState(false);
+  const [permissionsVerifiedAt, setPermissionsVerifiedAt] = useState("");
+  const [permissionsVerificationNote, setPermissionsVerificationNote] =
+    useState("");
 
   const [newPassword, setNewPassword] = useState("");
   const [repeatPassword, setRepeatPassword] = useState("");
@@ -38,62 +142,163 @@ export default function AccountPage() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
 
   useEffect(() => {
-    async function loadUser() {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-
-      if (!user) {
-        setIsLoggedIn(false);
-        setLoading(false);
-        return;
-      }
-
-      setIsLoggedIn(true);
-
-      const metadata = user.user_metadata ?? {};
-
-      setEmail(user.email ?? "");
-      setFullName(metadata.full_name ?? metadata.name ?? "");
-      setPhone(
-        metadata.phone ??
-          metadata.telefon ??
-          metadata.phone_number ??
-          metadata.phoneNumber ??
-          ""
-      );
-
-      setPostalCode(metadata.postal_code ?? "");
-      setCity(metadata.city ?? "");
-      setStreet(metadata.street ?? "");
-      setHouseNumber(metadata.house_number ?? "");
-      setApartmentNumber(metadata.apartment_number ?? "");
-
-      setWeaponPermitNumber(metadata.weapon_permit_number ?? "");
-      setWeaponPermitType(metadata.weapon_permit_type ?? "");
-      setWeaponPermitIssuer(metadata.weapon_permit_issuer ?? "");
-
-      setHasRangeOfficer(metadata.has_range_officer ?? false);
-      setRangeOfficerNumber(metadata.range_officer_number ?? "");
-
-      setHasInstructor(metadata.has_instructor ?? false);
-      setInstructorNumber(metadata.instructor_number ?? "");
-
-      setVerificationStatus(
-        metadata.verification_status ?? "niezweryfikowane"
-      );
-
-      setLoading(false);
-    }
-
     loadUser();
   }, []);
+
+  async function loadUser() {
+    setLoading(true);
+    setMessage("");
+
+    const {
+      data: { user },
+      error: userError,
+    } = await supabase.auth.getUser();
+
+    if (userError) {
+      setMessage(`Błąd pobierania użytkownika: ${userError.message}`);
+      setIsLoggedIn(false);
+      setLoading(false);
+      return;
+    }
+
+    if (!user) {
+      setIsLoggedIn(false);
+      setLoading(false);
+      return;
+    }
+
+    setIsLoggedIn(true);
+    setEmail(user.email ?? "");
+
+    const metadata = user.user_metadata ?? {};
+
+    setFullName(metadata.full_name ?? metadata.name ?? "");
+    setPhone(
+      metadata.phone ??
+        metadata.telefon ??
+        metadata.phone_number ??
+        metadata.mobile ??
+        ""
+    );
+
+    const { data: profile, error: profileError } = await supabase
+      .from("profiles")
+      .select(
+        `
+        full_name,
+        phone,
+        postal_code,
+        city,
+        street,
+        house_number,
+        apartment_number,
+        verification_status,
+
+        permission_sport,
+        permission_collector,
+        permission_hunting,
+        permission_training,
+        permission_personal_protection,
+        permission_other,
+
+        qualification_instructor,
+        qualification_range_officer,
+        qualification_pzss_license,
+        qualification_hunter,
+
+        permissions_verified,
+        permissions_verified_at,
+        permissions_verification_note
+      `
+      )
+      .eq("user_id", user.id)
+      .maybeSingle();
+
+    if (profileError) {
+      setMessage(`Błąd pobierania profilu: ${profileError.message}`);
+      setLoading(false);
+      return;
+    }
+
+    if (profile) {
+      const profileData = profile as ProfileData;
+
+      setFullName(profileData.full_name ?? metadata.full_name ?? "");
+      setPhone(profileData.phone ?? metadata.phone ?? "");
+
+      setPostalCode(profileData.postal_code ?? "");
+      setCity(profileData.city ?? "");
+      setStreet(profileData.street ?? "");
+      setHouseNumber(profileData.house_number ?? "");
+      setApartmentNumber(profileData.apartment_number ?? "");
+
+      setVerificationStatus(
+        profileData.verification_status ?? "niezweryfikowane"
+      );
+
+      setPermissionSport(Boolean(profileData.permission_sport));
+      setPermissionCollector(Boolean(profileData.permission_collector));
+      setPermissionHunting(Boolean(profileData.permission_hunting));
+      setPermissionTraining(Boolean(profileData.permission_training));
+      setPermissionPersonalProtection(
+        Boolean(profileData.permission_personal_protection)
+      );
+      setPermissionOther(Boolean(profileData.permission_other));
+
+      setQualificationInstructor(Boolean(profileData.qualification_instructor));
+      setQualificationRangeOfficer(
+        Boolean(profileData.qualification_range_officer)
+      );
+      setQualificationPzssLicense(
+        Boolean(profileData.qualification_pzss_license)
+      );
+      setQualificationHunter(Boolean(profileData.qualification_hunter));
+
+      setPermissionsVerified(Boolean(profileData.permissions_verified));
+      setPermissionsVerifiedAt(profileData.permissions_verified_at ?? "");
+      setPermissionsVerificationNote(
+        profileData.permissions_verification_note ?? ""
+      );
+    }
+
+    setLoading(false);
+  }
+
+  function validateProfile() {
+    if (!fullName.trim()) {
+      return "Uzupełnij imię i nazwisko.";
+    }
+
+    if (!phone.trim()) {
+      return "Uzupełnij numer telefonu.";
+    }
+
+    if (!postalCode.trim()) {
+      return "Uzupełnij kod pocztowy.";
+    }
+
+    if (!city.trim()) {
+      return "Uzupełnij miasto.";
+    }
+
+    if (!street.trim()) {
+      return "Uzupełnij ulicę.";
+    }
+
+    if (!houseNumber.trim()) {
+      return "Uzupełnij numer domu.";
+    }
+
+    return "";
+  }
 
   async function saveProfile() {
     setMessage("");
 
-    if (!fullName || !phone || !postalCode || !city || !street || !houseNumber) {
-      setMessage("Uzupełnij wymagane pola.");
+    const validationError = validateProfile();
+
+    if (validationError) {
+      setMessage(validationError);
       return;
     }
 
@@ -101,57 +306,63 @@ export default function AccountPage() {
 
     const {
       data: { user },
+      error: userError,
     } = await supabase.auth.getUser();
 
-    if (!user) {
+    if (userError || !user) {
       setSavingProfile(false);
-      setMessage("Nie znaleziono zalogowanego użytkownika.");
+      setMessage("Nie udało się pobrać zalogowanego użytkownika.");
       return;
     }
 
     const { error: authError } = await supabase.auth.updateUser({
       data: {
-        full_name: fullName,
-        phone,
-        postal_code: postalCode,
-        city,
-        street,
-        house_number: houseNumber,
-        apartment_number: apartmentNumber,
-        weapon_permit_number: weaponPermitNumber,
-        weapon_permit_type: weaponPermitType,
-        weapon_permit_issuer: weaponPermitIssuer,
-        has_range_officer: hasRangeOfficer,
-        range_officer_number: hasRangeOfficer ? rangeOfficerNumber : "",
-        has_instructor: hasInstructor,
-        instructor_number: hasInstructor ? instructorNumber : "",
-        verification_status: verificationStatus,
+        full_name: fullName.trim(),
+        phone: phone.trim(),
+
+        permission_sport: permissionSport,
+        permission_collector: permissionCollector,
+        permission_hunting: permissionHunting,
+        permission_training: permissionTraining,
+        permission_personal_protection: permissionPersonalProtection,
+        permission_other: permissionOther,
+
+        qualification_instructor: qualificationInstructor,
+        qualification_range_officer: qualificationRangeOfficer,
+        qualification_pzss_license: qualificationPzssLicense,
+        qualification_hunter: qualificationHunter,
       },
     });
 
     if (authError) {
       setSavingProfile(false);
-      setMessage(`Błąd zapisu: ${authError.message}`);
+      setMessage(`Błąd zapisu danych konta: ${authError.message}`);
       return;
     }
 
     const { error: profileError } = await supabase
       .from("profiles")
       .update({
-        full_name: fullName,
-        phone,
-        postal_code: postalCode,
-        city,
-        street,
-        house_number: houseNumber,
-        apartment_number: apartmentNumber,
-        weapon_permit_number: weaponPermitNumber,
-        weapon_permit_type: weaponPermitType,
-        weapon_permit_issuer: weaponPermitIssuer,
-        has_range_officer: hasRangeOfficer,
-        range_officer_number: hasRangeOfficer ? rangeOfficerNumber : null,
-        has_instructor: hasInstructor,
-        instructor_number: hasInstructor ? instructorNumber : null,
+        full_name: fullName.trim(),
+        phone: phone.trim(),
+        postal_code: postalCode.trim(),
+        city: city.trim(),
+        street: street.trim(),
+        house_number: houseNumber.trim(),
+        apartment_number: apartmentNumber.trim() || null,
+
+        permission_sport: permissionSport,
+        permission_collector: permissionCollector,
+        permission_hunting: permissionHunting,
+        permission_training: permissionTraining,
+        permission_personal_protection: permissionPersonalProtection,
+        permission_other: permissionOther,
+
+        qualification_instructor: qualificationInstructor,
+        qualification_range_officer: qualificationRangeOfficer,
+        qualification_pzss_license: qualificationPzssLicense,
+        qualification_hunter: qualificationHunter,
+
         updated_at: new Date().toISOString(),
       })
       .eq("user_id", user.id);
@@ -204,13 +415,7 @@ export default function AccountPage() {
     setMessage("Hasło zostało zmienione.");
   }
 
-  function getMessageClass(message: string) {
-    if (message.includes("zapisane") || message.includes("zmienione")) {
-      return "rounded-xl border border-green-800 bg-green-950 p-4 text-sm font-semibold text-green-300";
-    }
-
-    return "rounded-xl border border-red-800 bg-red-950 p-4 text-sm font-semibold text-red-300";
-  }  return (
+  return (
     <main className="min-h-screen bg-zinc-950 text-white">
       <section className="mx-auto max-w-4xl px-6 py-12">
         <p className="mb-4 text-sm uppercase tracking-[0.35em] text-green-500">
@@ -220,8 +425,8 @@ export default function AccountPage() {
         <h1 className="mb-3 text-4xl font-bold">Moje konto</h1>
 
         <p className="mb-8 text-zinc-400">
-          Zarządzaj swoimi danymi użytkownika, adresem, uprawnieniami i
-          bezpieczeństwem konta.
+          Zarządzaj swoimi danymi użytkownika, adresem, deklarowanymi
+          uprawnieniami i bezpieczeństwem konta.
         </p>
 
         {loading && (
@@ -305,212 +510,148 @@ export default function AccountPage() {
 
                 <div className="mt-2 border-t border-zinc-800 pt-5">
                   <h2 className="mb-4 text-xl font-semibold">
-                    Bezpieczeństwo konta
+                    Status weryfikacji
                   </h2>
 
-                  <p className="mb-5 text-sm text-zinc-400">
-                    Zmień hasło do swojego konta. Nowe hasło musi mieć minimum
-                    8 znaków.
-                  </p>
-
-                  <div className="grid gap-5 md:grid-cols-2">
-                    <div>
-                      <label className="mb-2 block text-sm text-zinc-300">
-                        Nowe hasło
-                      </label>
-
-                      <input
-                        type="password"
-                        value={newPassword}
-                        onChange={(event) =>
-                          setNewPassword(event.target.value)
-                        }
-                        placeholder="Minimum 8 znaków"
-                        className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-white outline-none focus:border-yellow-600"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="mb-2 block text-sm text-zinc-300">
-                        Powtórz hasło
-                      </label>
-
-                      <input
-                        type="password"
-                        value={repeatPassword}
-                        onChange={(event) =>
-                          setRepeatPassword(event.target.value)
-                        }
-                        placeholder="Powtórz nowe hasło"
-                        className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-white outline-none focus:border-yellow-600"
-                      />
-                    </div>
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={changePassword}
-                    disabled={savingPassword}
-                    className="mt-5 rounded-xl border border-yellow-700 bg-yellow-950 px-5 py-3 font-semibold text-yellow-300 transition hover:bg-yellow-900 disabled:cursor-not-allowed disabled:opacity-60"
+                  <div
+                    className={getVerificationClass(
+                      verificationStatus,
+                      permissionsVerified
+                    )}
                   >
-                    {savingPassword ? "Zmiana hasła..." : "Zmień hasło"}
-                  </button>
+                    <p className="font-semibold">
+                      Konto: {getVerificationLabel(verificationStatus)}
+                    </p>
+
+                    <p className="mt-1">
+                      Uprawnienia:{" "}
+                      {permissionsVerified
+                        ? "sprawdzone przez obsługę"
+                        : "do sprawdzenia podczas wizyty"}
+                    </p>
+
+                    {permissionsVerifiedAt && (
+                      <p className="mt-1 text-xs opacity-80">
+                        Data weryfikacji:{" "}
+                        {new Date(permissionsVerifiedAt).toLocaleString(
+                          "pl-PL"
+                        )}
+                      </p>
+                    )}
+
+                    {permissionsVerificationNote && (
+                      <p className="mt-3 rounded-lg border border-zinc-700 bg-zinc-950/60 p-3 text-xs leading-5">
+                        {permissionsVerificationNote}
+                      </p>
+                    )}
+
+                    <p className="mt-3 text-xs opacity-80">
+                      Pełna możliwość korzystania z systemu może wymagać
+                      sprawdzenia uprawnień przez pracownika CSK podczas wizyty
+                      na strzelnicy.
+                    </p>
+                  </div>
                 </div>
 
                 <div className="mt-2 border-t border-zinc-800 pt-5">
                   <h2 className="mb-4 text-xl font-semibold">
-                    Uprawnienia i dane strzeleckie
+                    Deklarowane uprawnienia
                   </h2>
 
-                  <p className="mb-5 text-sm text-zinc-400">
-                    Dane te pomagają obsłudze szybciej zweryfikować konto
-                    podczas pierwszej wizyty na strzelnicy.
+                  <p className="mb-5 text-sm leading-6 text-zinc-400">
+                    Zaznacz, jakie uprawnienia posiadasz. Nie wpisuj numerów
+                    dokumentów. Dokumenty okazujesz wyłącznie do wglądu
+                    pracownikowi podczas wizyty.
                   </p>
 
-                  <div className="mb-5 rounded-xl border border-yellow-800 bg-yellow-950 p-4 text-sm text-yellow-100">
-                    <p className="font-semibold text-yellow-300">
-                      Status konta: {verificationStatus}
+                  <div className="mb-5 rounded-xl border border-green-900 bg-green-950/40 p-4 text-sm text-green-200">
+                    <p className="font-semibold">
+                      Minimalizacja danych osobowych
                     </p>
 
-                    <p className="mt-1 text-yellow-100/80">
-                      Pełna możliwość rezerwacji osi będzie dostępna po
-                      weryfikacji danych przez pracownika CSK podczas wizyty na
-                      strzelnicy.
+                    <p className="mt-1 text-green-300">
+                      System zapisuje tylko deklarowany typ uprawnień i fakt
+                      późniejszej weryfikacji. Numery dokumentów nie są tutaj
+                      wymagane.
                     </p>
                   </div>
 
-                  <div className="grid gap-5 md:grid-cols-2">
-                    <div>
-                      <label className="mb-2 block text-sm text-zinc-300">
-                        Numer pozwolenia na broń
-                      </label>
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <CheckboxField
+                      checked={permissionSport}
+                      onChange={setPermissionSport}
+                      title="Pozwolenie sportowe"
+                      description="Zaznacz, jeżeli posiadasz uprawnienia/pozwolenie do celów sportowych."
+                    />
 
-                      <input
-                        type="text"
-                        value={weaponPermitNumber}
-                        onChange={(event) =>
-                          setWeaponPermitNumber(event.target.value)
-                        }
-                        placeholder="Opcjonalnie"
-                        className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-white outline-none focus:border-green-600"
-                      />
-                    </div>
+                    <CheckboxField
+                      checked={permissionCollector}
+                      onChange={setPermissionCollector}
+                      title="Pozwolenie kolekcjonerskie"
+                      description="Zaznacz, jeżeli posiadasz uprawnienia/pozwolenie do celów kolekcjonerskich."
+                    />
 
-                    <div>
-                      <label className="mb-2 block text-sm text-zinc-300">
-                        Typ pozwolenia
-                      </label>
+                    <CheckboxField
+                      checked={permissionHunting}
+                      onChange={setPermissionHunting}
+                      title="Pozwolenie myśliwskie / łowieckie"
+                      description="Zaznacz, jeżeli posiadasz uprawnienia związane z łowiectwem."
+                    />
 
-                      <select
-                        value={weaponPermitType}
-                        onChange={(event) =>
-                          setWeaponPermitType(event.target.value)
-                        }
-                        className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-white outline-none focus:border-green-600"
-                      >
-                        <option value="">Brak / nie dotyczy</option>
-                        <option value="sportowe">Sportowe</option>
-                        <option value="kolekcjonerskie">Kolekcjonerskie</option>
-                        <option value="lowieckie">Łowieckie</option>
-                        <option value="szkoleniowe">Szkoleniowe</option>
-                        <option value="ochrona_osobista">
-                          Ochrona osobista
-                        </option>
-                        <option value="inne">Inne</option>
-                      </select>
-                    </div>
-                  </div>
+                    <CheckboxField
+                      checked={permissionTraining}
+                      onChange={setPermissionTraining}
+                      title="Uprawnienia szkoleniowe / dopuszczenie"
+                      description="Zaznacz, jeżeli posiadasz inne uprawnienia związane ze szkoleniem lub użytkowaniem broni."
+                    />
 
-                  <div className="mt-5">
-                    <label className="mb-2 block text-sm text-zinc-300">
-                      Organ wydający pozwolenie
-                    </label>
+                    <CheckboxField
+                      checked={permissionPersonalProtection}
+                      onChange={setPermissionPersonalProtection}
+                      title="Ochrona osobista"
+                      description="Zaznacz, jeżeli posiadasz uprawnienia w zakresie ochrony osobistej."
+                    />
 
-                    <input
-                      type="text"
-                      value={weaponPermitIssuer}
-                      onChange={(event) =>
-                        setWeaponPermitIssuer(event.target.value)
-                      }
-                      placeholder="np. WPA Poznań / KWP Poznań"
-                      className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-white outline-none focus:border-green-600"
+                    <CheckboxField
+                      checked={permissionOther}
+                      onChange={setPermissionOther}
+                      title="Inne uprawnienia"
+                      description="Zaznacz, jeżeli posiadasz inne uprawnienia niewymienione powyżej."
                     />
                   </div>
 
-                  <div className="mt-5 rounded-xl border border-zinc-800 bg-zinc-950 p-4">
-                    <label className="flex items-start gap-3 text-sm text-zinc-300">
-                      <input
-                        type="checkbox"
-                        checked={hasRangeOfficer}
-                        onChange={(event) => {
-                          setHasRangeOfficer(event.target.checked);
+                  <h3 className="mt-8 mb-4 text-lg font-semibold">
+                    Dodatkowe kwalifikacje
+                  </h3>
 
-                          if (!event.target.checked) {
-                            setRangeOfficerNumber("");
-                          }
-                        }}
-                        className="mt-1"
-                      />
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <CheckboxField
+                      checked={qualificationInstructor}
+                      onChange={setQualificationInstructor}
+                      title="Instruktor strzelectwa"
+                      description="Zaznacz, jeżeli posiadasz kwalifikacje instruktorskie."
+                    />
 
-                      <span>
-                        Posiadam uprawnienia prowadzącego strzelanie
-                      </span>
-                    </label>
+                    <CheckboxField
+                      checked={qualificationRangeOfficer}
+                      onChange={setQualificationRangeOfficer}
+                      title="Prowadzący strzelanie / Range Officer"
+                      description="Zaznacz, jeżeli posiadasz uprawnienia prowadzącego strzelanie."
+                    />
 
-                    {hasRangeOfficer && (
-                      <div className="mt-4">
-                        <label className="mb-2 block text-sm text-zinc-300">
-                          Numer uprawnień prowadzącego strzelanie
-                        </label>
+                    <CheckboxField
+                      checked={qualificationPzssLicense}
+                      onChange={setQualificationPzssLicense}
+                      title="Licencja PZSS"
+                      description="Zaznacz, jeżeli posiadasz aktualną licencję PZSS."
+                    />
 
-                        <input
-                          type="text"
-                          value={rangeOfficerNumber}
-                          onChange={(event) =>
-                            setRangeOfficerNumber(event.target.value)
-                          }
-                          placeholder="Wpisz numer uprawnień"
-                          className="w-full rounded-xl border border-zinc-700 bg-zinc-900 px-4 py-3 text-white outline-none focus:border-green-600"
-                        />
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="mt-5 rounded-xl border border-zinc-800 bg-zinc-950 p-4">
-                    <label className="flex items-start gap-3 text-sm text-zinc-300">
-                      <input
-                        type="checkbox"
-                        checked={hasInstructor}
-                        onChange={(event) => {
-                          setHasInstructor(event.target.checked);
-
-                          if (!event.target.checked) {
-                            setInstructorNumber("");
-                          }
-                        }}
-                        className="mt-1"
-                      />
-
-                      <span>Posiadam uprawnienia instruktora strzelectwa</span>
-                    </label>
-
-                    {hasInstructor && (
-                      <div className="mt-4">
-                        <label className="mb-2 block text-sm text-zinc-300">
-                          Numer uprawnień instruktora
-                        </label>
-
-                        <input
-                          type="text"
-                          value={instructorNumber}
-                          onChange={(event) =>
-                            setInstructorNumber(event.target.value)
-                          }
-                          placeholder="Wpisz numer uprawnień"
-                          className="w-full rounded-xl border border-zinc-700 bg-zinc-900 px-4 py-3 text-white outline-none focus:border-green-600"
-                        />
-                      </div>
-                    )}
+                    <CheckboxField
+                      checked={qualificationHunter}
+                      onChange={setQualificationHunter}
+                      title="Myśliwy"
+                      description="Zaznacz, jeżeli jesteś myśliwym i posiadasz odpowiednie uprawnienia."
+                    />
                   </div>
                 </div>
 
@@ -592,6 +733,60 @@ export default function AccountPage() {
                       />
                     </div>
                   </div>
+                </div>
+
+                <div className="mt-2 border-t border-zinc-800 pt-5">
+                  <h2 className="mb-4 text-xl font-semibold">
+                    Bezpieczeństwo konta
+                  </h2>
+
+                  <p className="mb-5 text-sm text-zinc-400">
+                    Zmień hasło do swojego konta. Nowe hasło musi mieć minimum
+                    8 znaków.
+                  </p>
+
+                  <div className="grid gap-5 md:grid-cols-2">
+                    <div>
+                      <label className="mb-2 block text-sm text-zinc-300">
+                        Nowe hasło
+                      </label>
+
+                      <input
+                        type="password"
+                        value={newPassword}
+                        onChange={(event) =>
+                          setNewPassword(event.target.value)
+                        }
+                        placeholder="Minimum 8 znaków"
+                        className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-white outline-none focus:border-yellow-600"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="mb-2 block text-sm text-zinc-300">
+                        Powtórz hasło
+                      </label>
+
+                      <input
+                        type="password"
+                        value={repeatPassword}
+                        onChange={(event) =>
+                          setRepeatPassword(event.target.value)
+                        }
+                        placeholder="Powtórz nowe hasło"
+                        className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-white outline-none focus:border-yellow-600"
+                      />
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={changePassword}
+                    disabled={savingPassword}
+                    className="mt-5 rounded-xl border border-yellow-700 bg-yellow-950 px-5 py-3 font-semibold text-yellow-300 transition hover:bg-yellow-900 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {savingPassword ? "Zmiana hasła..." : "Zmień hasło"}
+                  </button>
                 </div>
 
                 {message && (

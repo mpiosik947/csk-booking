@@ -49,7 +49,7 @@ const adminTiles: AdminTile[] = [
     title: "Kalendarz",
     description: "Widok dnia i tygodnia dla osi oraz wydarzeń.",
     href: "/admin/calendar",
-    roles: ["admin", "pracownik"],
+    roles: ["admin", "pracownik", "instruktor"],
   },
   {
     title: "Blokady osi",
@@ -79,7 +79,7 @@ const adminTiles: AdminTile[] = [
     title: "Użytkownicy",
     description: "Weryfikacja kont, role i notatki administratora.",
     href: "/admin/users",
-    roles: ["admin", "pracownik"],
+    roles: ["admin"],
   },
 ];
 
@@ -163,6 +163,11 @@ function getRoleBadgeClass(role: string | null) {
   }
 }
 
+function hasAccess(role: Role | null, allowedRoles: Role[]) {
+  if (!role) return false;
+  return allowedRoles.includes(role);
+}
+
 function StatCard({
   title,
   value,
@@ -202,6 +207,51 @@ function StatCard({
   }
 
   return content;
+}
+
+function AdminModuleTile({
+  tile,
+  allowed,
+}: {
+  tile: AdminTile;
+  allowed: boolean;
+}) {
+  if (!allowed) {
+    return (
+      <div className="rounded-2xl border border-red-900 bg-red-950/40 p-6 opacity-90">
+        <div className="mb-5 flex h-12 w-12 items-center justify-center rounded-xl bg-red-900/70 text-xl font-bold text-red-300">
+          !
+        </div>
+
+        <div className="mb-3 inline-flex rounded-full border border-red-800 bg-red-950 px-3 py-1 text-xs font-bold uppercase tracking-[0.2em] text-red-300">
+          Brak dostępu
+        </div>
+
+        <h2 className="mb-2 text-xl font-bold text-red-100">{tile.title}</h2>
+
+        <p className="text-sm leading-6 text-red-200/80">{tile.description}</p>
+      </div>
+    );
+  }
+
+  return (
+    <Link
+      href={tile.href}
+      className="group rounded-2xl border border-zinc-800 bg-zinc-900 p-6 transition hover:border-green-700 hover:bg-zinc-900/80"
+    >
+      <div className="mb-5 flex h-12 w-12 items-center justify-center rounded-xl bg-green-900/40 text-xl font-bold text-green-400 transition group-hover:bg-green-800/60">
+        {tile.title.charAt(0)}
+      </div>
+
+      <div className="mb-3 inline-flex rounded-full border border-green-800 bg-green-950 px-3 py-1 text-xs font-bold uppercase tracking-[0.2em] text-green-300">
+        Dostęp
+      </div>
+
+      <h2 className="mb-2 text-xl font-bold">{tile.title}</h2>
+
+      <p className="text-sm leading-6 text-zinc-400">{tile.description}</p>
+    </Link>
+  );
 }
 
 export default function AdminPage() {
@@ -330,9 +380,9 @@ export default function AdminPage() {
     setLoading(false);
   }
 
-  const visibleTiles = useMemo(() => {
-    if (!role) return [];
-    return adminTiles.filter((tile) => tile.roles.includes(role));
+  const availableTilesCount = useMemo(() => {
+    if (!role) return 0;
+    return adminTiles.filter((tile) => hasAccess(role, tile.roles)).length;
   }, [role]);
 
   const activeTodayReservations = todayReservations.filter(
@@ -474,8 +524,8 @@ export default function AdminPage() {
           <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-8 text-zinc-400">
             Ładowanie dashboardu...
           </div>
-        ) : visibleTiles.length === 0 ? (
-          <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-8 text-zinc-400">
+        ) : availableTilesCount === 0 ? (
+          <div className="rounded-2xl border border-red-900 bg-red-950/40 p-8 text-red-200">
             Brak dostępnych modułów dla tej roli.
           </div>
         ) : (
@@ -588,7 +638,9 @@ export default function AdminPage() {
                 <StatCard
                   title="Najpopularniejsza oś"
                   value={topLane ? topLane[0] : "Brak"}
-                  description={topLane ? `${topLane[1]} rez. w miesiącu` : "Brak danych"}
+                  description={
+                    topLane ? `${topLane[1]} rez. w miesiącu` : "Brak danych"
+                  }
                   href="/admin/reports"
                   tone="blue"
                 />
@@ -704,25 +756,31 @@ export default function AdminPage() {
             </div>
 
             <div>
-              <h2 className="mb-4 text-2xl font-bold">Moduły systemu</h2>
+              <div className="mb-4 flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
+                <div>
+                  <h2 className="text-2xl font-bold">Moduły systemu</h2>
+                  <p className="mt-2 text-sm text-zinc-500">
+                    Zielone kafelki są dostępne dla Twojej roli. Czerwone
+                    oznaczają brak dostępu.
+                  </p>
+                </div>
+
+                <p className="text-sm text-zinc-500">
+                  Dostępne moduły:{" "}
+                  <span className="font-bold text-white">
+                    {availableTilesCount}
+                  </span>
+                  /{adminTiles.length}
+                </p>
+              </div>
 
               <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
-                {visibleTiles.map((tile) => (
-                  <Link
+                {adminTiles.map((tile) => (
+                  <AdminModuleTile
                     key={tile.href + tile.title}
-                    href={tile.href}
-                    className="group rounded-2xl border border-zinc-800 bg-zinc-900 p-6 transition hover:border-green-700 hover:bg-zinc-900/80"
-                  >
-                    <div className="mb-5 flex h-12 w-12 items-center justify-center rounded-xl bg-green-900/40 text-xl font-bold text-green-400 transition group-hover:bg-green-800/60">
-                      {tile.title.charAt(0)}
-                    </div>
-
-                    <h2 className="mb-2 text-xl font-bold">{tile.title}</h2>
-
-                    <p className="text-sm leading-6 text-zinc-400">
-                      {tile.description}
-                    </p>
-                  </Link>
+                    tile={tile}
+                    allowed={hasAccess(role, tile.roles)}
+                  />
                 ))}
               </div>
             </div>

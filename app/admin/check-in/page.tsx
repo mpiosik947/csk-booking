@@ -37,19 +37,36 @@ type Profile = {
   admin_note: string | null;
   created_at: string | null;
   updated_at: string | null;
+
   postal_code: string | null;
   city: string | null;
   street: string | null;
   house_number: string | null;
   apartment_number: string | null;
-  weapon_permit_number: string | null;
-  weapon_permit_type: string | null;
-  weapon_permit_issuer: string | null;
-  has_range_officer: boolean | null;
-  range_officer_number: string | null;
-  has_instructor: boolean | null;
-  instructor_number: string | null;
+
+  permission_sport: boolean | null;
+  permission_collector: boolean | null;
+  permission_hunting: boolean | null;
+  permission_training: boolean | null;
+  permission_personal_protection: boolean | null;
+  permission_other: boolean | null;
+
+  qualification_instructor: boolean | null;
+  qualification_range_officer: boolean | null;
+  qualification_pzss_license: boolean | null;
+  qualification_hunter: boolean | null;
+
+  permissions_verified: boolean | null;
+  permissions_verified_at: string | null;
+  permissions_verified_by: string | null;
+  permissions_verification_note: string | null;
 };
+
+const VERIFIED_NOTE =
+  "Sprawdzono uprawnienia klienta podczas pierwszej wizyty. Dokumenty okazane do wglądu, bez kopiowania i zapisywania numerów. Klient zapoznany z regulaminem i zasadami bezpieczeństwa. Konto zweryfikowane.";
+
+const INCOMPLETE_NOTE =
+  "Nie zakończono pełnej weryfikacji uprawnień. Klient poinformowany o konieczności okazania wymaganych dokumentów przy kolejnej wizycie. Konto pozostaje niezweryfikowane.";
 
 function todayISODate() {
   return new Date().toISOString().slice(0, 10);
@@ -119,11 +136,15 @@ function isVerifiedProfile(profile: Profile | null | undefined) {
   return profile?.verification_status === "verified";
 }
 
+function arePermissionsVerified(profile: Profile | null | undefined) {
+  return Boolean(profile?.permissions_verified);
+}
+
 function valueOrMissing(value: string | null | undefined) {
   return value && value.trim() ? value : "Brak danych";
 }
 
-function yesNo(value: boolean | null) {
+function yesNo(value: boolean | null | undefined) {
   return value ? "Tak" : "Nie";
 }
 
@@ -140,17 +161,6 @@ function getMissingFields(profile: Profile | null | undefined) {
   if (!profile.city) missing.push("miasto");
   if (!profile.street) missing.push("ulica");
   if (!profile.house_number) missing.push("numer domu");
-  if (!profile.weapon_permit_number) missing.push("numer pozwolenia");
-  if (!profile.weapon_permit_type) missing.push("typ pozwolenia");
-  if (!profile.weapon_permit_issuer) missing.push("organ wydający");
-
-  if (profile.has_range_officer && !profile.range_officer_number) {
-    missing.push("numer prowadzącego strzelanie");
-  }
-
-  if (profile.has_instructor && !profile.instructor_number) {
-    missing.push("numer instruktora");
-  }
 
   return missing;
 }
@@ -165,14 +175,40 @@ function getCompletionPercent(profile: Profile | null | undefined) {
     profile.city,
     profile.street,
     profile.house_number,
-    profile.weapon_permit_number,
-    profile.weapon_permit_type,
-    profile.weapon_permit_issuer,
   ];
 
   const filled = fields.filter((field) => field && field.trim()).length;
 
   return Math.round((filled / fields.length) * 100);
+}
+
+function getDeclaredPermissions(profile: Profile | null | undefined) {
+  if (!profile) return [];
+
+  const permissions: string[] = [];
+
+  if (profile.permission_sport) permissions.push("sportowe");
+  if (profile.permission_collector) permissions.push("kolekcjonerskie");
+  if (profile.permission_hunting) permissions.push("myśliwskie / łowieckie");
+  if (profile.permission_training) permissions.push("szkoleniowe / dopuszczenie");
+  if (profile.permission_personal_protection) permissions.push("ochrona osobista");
+  if (profile.permission_other) permissions.push("inne");
+
+  return permissions;
+}
+
+function getDeclaredQualifications(profile: Profile | null | undefined) {
+  if (!profile) return [];
+
+  const qualifications: string[] = [];
+
+  if (profile.qualification_instructor) qualifications.push("instruktor");
+  if (profile.qualification_range_officer)
+    qualifications.push("prowadzący strzelanie / range officer");
+  if (profile.qualification_pzss_license) qualifications.push("licencja PZSS");
+  if (profile.qualification_hunter) qualifications.push("myśliwy");
+
+  return qualifications;
 }
 
 function getStatusClass(status: string | null) {
@@ -215,7 +251,42 @@ function getVerificationClass(profile: Profile | null | undefined) {
     return "border-green-700 bg-green-950 text-green-300";
   }
 
+  if (profile?.verification_status === "rejected") {
+    return "border-red-700 bg-red-950 text-red-300";
+  }
+
   return "border-orange-700 bg-orange-950 text-orange-300";
+}
+
+function getPermissionsClass(profile: Profile | null | undefined) {
+  if (arePermissionsVerified(profile)) {
+    return "border-green-700 bg-green-950 text-green-300";
+  }
+
+  return "border-yellow-700 bg-yellow-950 text-yellow-300";
+}
+
+function BooleanLine({
+  label,
+  value,
+}: {
+  label: string;
+  value: boolean | null | undefined;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-4 border-b border-zinc-800 py-2 last:border-b-0">
+      <span className="text-sm text-zinc-400">{label}</span>
+      <span
+        className={
+          value
+            ? "rounded-full border border-green-700 bg-green-950 px-3 py-1 text-xs font-bold text-green-300"
+            : "rounded-full border border-zinc-700 bg-zinc-900 px-3 py-1 text-xs font-bold text-zinc-400"
+        }
+      >
+        {yesNo(value)}
+      </span>
+    </div>
+  );
 }
 
 function CheckInContent() {
@@ -230,6 +301,7 @@ function CheckInContent() {
   >({});
 
   const [currentUserId, setCurrentUserId] = useState("");
+  const [currentProfileId, setCurrentProfileId] = useState("");
   const [currentUserName, setCurrentUserName] = useState("");
   const [currentUserRole, setCurrentUserRole] = useState<UserRole | "">("");
 
@@ -251,9 +323,13 @@ function CheckInContent() {
 
     const { data: profile } = await supabase
       .from("profiles")
-      .select("role,full_name,email")
+      .select("id,role,full_name,email")
       .eq("user_id", user.id)
       .maybeSingle();
+
+    if (profile?.id) {
+      setCurrentProfileId(profile.id);
+    }
 
     if (profile?.role) {
       setCurrentUserRole(String(profile.role) as UserRole);
@@ -291,18 +367,29 @@ function CheckInContent() {
         admin_note,
         created_at,
         updated_at,
+
         postal_code,
         city,
         street,
         house_number,
         apartment_number,
-        weapon_permit_number,
-        weapon_permit_type,
-        weapon_permit_issuer,
-        has_range_officer,
-        range_officer_number,
-        has_instructor,
-        instructor_number
+
+        permission_sport,
+        permission_collector,
+        permission_hunting,
+        permission_training,
+        permission_personal_protection,
+        permission_other,
+
+        qualification_instructor,
+        qualification_range_officer,
+        qualification_pzss_license,
+        qualification_hunter,
+
+        permissions_verified,
+        permissions_verified_at,
+        permissions_verified_by,
+        permissions_verification_note
       `
       )
       .in("user_id", userIds);
@@ -475,8 +562,10 @@ function CheckInContent() {
       const status = reservation.reservation_status?.toLowerCase() ?? "";
       const payment = reservation.payment_status?.toLowerCase() ?? "";
       const verification = profile?.verification_status?.toLowerCase() ?? "";
-      const permit = profile?.weapon_permit_number?.toLowerCase() ?? "";
-      const issuer = profile?.weapon_permit_issuer?.toLowerCase() ?? "";
+      const permissions = getDeclaredPermissions(profile).join(" ").toLowerCase();
+      const qualifications = getDeclaredQualifications(profile)
+        .join(" ")
+        .toLowerCase();
 
       return (
         name.includes(phrase) ||
@@ -486,8 +575,8 @@ function CheckInContent() {
         status.includes(phrase) ||
         payment.includes(phrase) ||
         verification.includes(phrase) ||
-        permit.includes(phrase) ||
-        issuer.includes(phrase)
+        permissions.includes(phrase) ||
+        qualifications.includes(phrase)
       );
     });
   }, [reservations, search, profilesByUserId]);
@@ -596,7 +685,7 @@ function CheckInContent() {
       const confirmed = window.confirm(
         `Konto posiada braki:\n\n• ${missingFields.join(
           "\n• "
-        )}\n\nCzy mimo to zweryfikować konto i rozpocząć wizytę?`
+        )}\n\nCzy mimo to zweryfikować konto, uprawnienia i rozpocząć wizytę?`
       );
 
       if (!confirmed) return;
@@ -611,6 +700,11 @@ function CheckInContent() {
       .from("profiles")
       .update({
         verification_status: "verified",
+        permissions_verified: true,
+        permissions_verified_at: now,
+        permissions_verified_by: currentProfileId || null,
+        permissions_verification_note:
+          profile.permissions_verification_note || VERIFIED_NOTE,
         updated_at: now,
       })
       .eq("user_id", reservation.user_id);
@@ -641,6 +735,11 @@ function CheckInContent() {
     const updatedProfile: Profile = {
       ...profile,
       verification_status: "verified",
+      permissions_verified: true,
+      permissions_verified_at: now,
+      permissions_verified_by: currentProfileId || null,
+      permissions_verification_note:
+        profile.permissions_verification_note || VERIFIED_NOTE,
       updated_at: now,
     };
 
@@ -667,17 +766,22 @@ function CheckInContent() {
     }
 
     const auditError = await createAuditLog({
-      action: "FIRST_VISIT_PROFILE_VERIFIED_AND_CHECKED_IN",
+      action: "FIRST_VISIT_PROFILE_PERMISSIONS_VERIFIED_AND_CHECKED_IN",
       reservation,
       profile,
       details: {
         profile_before: {
           verification_status: profile.verification_status,
+          permissions_verified: profile.permissions_verified,
           completion_percent: getCompletionPercent(profile),
           missing_fields: missingFields,
+          declared_permissions: getDeclaredPermissions(profile),
+          declared_qualifications: getDeclaredQualifications(profile),
         },
         profile_after: {
           verification_status: "verified",
+          permissions_verified: true,
+          permissions_verification_note_used: true,
         },
         reservation_before: {
           reservation_status: reservation.reservation_status,
@@ -696,12 +800,91 @@ function CheckInContent() {
 
     if (auditError) {
       setMessage(
-        `Konto zweryfikowane i wizyta rozpoczęta, ale nie udało się dodać wpisu audit log: ${auditError}`
+        `Konto i uprawnienia zweryfikowane, wizyta rozpoczęta, ale nie udało się dodać wpisu audit log: ${auditError}`
       );
       return;
     }
 
-    setMessage("Konto zweryfikowane i wizyta rozpoczęta.");
+    setMessage("Konto i uprawnienia zweryfikowane. Wizyta rozpoczęta.");
+  }
+
+  async function markVerificationIncomplete(reservation: Reservation) {
+    if (!reservation.user_id) {
+      setMessage("Ta rezerwacja nie jest powiązana z kontem użytkownika.");
+      return;
+    }
+
+    const profile = profilesByUserId[reservation.user_id];
+
+    if (!profile) {
+      setMessage("Nie znaleziono profilu użytkownika do aktualizacji.");
+      return;
+    }
+
+    setSavingId(reservation.id);
+    setMessage("");
+
+    const now = new Date().toISOString();
+
+    const { error } = await supabase
+      .from("profiles")
+      .update({
+        verification_status: "pending",
+        permissions_verified: false,
+        permissions_verified_at: null,
+        permissions_verified_by: null,
+        permissions_verification_note: INCOMPLETE_NOTE,
+        updated_at: now,
+      })
+      .eq("user_id", reservation.user_id);
+
+    setSavingId(null);
+
+    if (error) {
+      setMessage(`Błąd zapisu weryfikacji: ${error.message}`);
+      return;
+    }
+
+    const updatedProfile: Profile = {
+      ...profile,
+      verification_status: "pending",
+      permissions_verified: false,
+      permissions_verified_at: null,
+      permissions_verified_by: null,
+      permissions_verification_note: INCOMPLETE_NOTE,
+      updated_at: now,
+    };
+
+    setProfilesByUserId((current) => ({
+      ...current,
+      [reservation.user_id as string]: updatedProfile,
+    }));
+
+    const auditError = await createAuditLog({
+      action: "FIRST_VISIT_PERMISSIONS_VERIFICATION_INCOMPLETE",
+      reservation,
+      profile,
+      details: {
+        profile_before: {
+          verification_status: profile.verification_status,
+          permissions_verified: profile.permissions_verified,
+        },
+        profile_after: {
+          verification_status: "pending",
+          permissions_verified: false,
+          note: INCOMPLETE_NOTE,
+        },
+      },
+    });
+
+    if (auditError) {
+      setMessage(
+        `Zapisano weryfikację niepełną, ale nie udało się dodać wpisu audit log: ${auditError}`
+      );
+      return;
+    }
+
+    setMessage("Zapisano: weryfikacja niepełna.");
   }
 
   async function markNoShow(reservation: Reservation) {
@@ -740,7 +923,7 @@ function CheckInContent() {
 
           <p className="mt-3 max-w-2xl text-zinc-400">
             Obsługa dzisiejszych rezerwacji, obecności, no-show, płatności i
-            zakończonych wizyt.
+            weryfikacji klienta podczas pierwszej wizyty.
           </p>
         </div>
 
@@ -775,7 +958,7 @@ function CheckInContent() {
             <input
               value={search}
               onChange={(event) => setSearch(event.target.value)}
-              placeholder="Imię, e-mail, telefon, oś, status, pozwolenie..."
+              placeholder="Imię, e-mail, telefon, oś, status, uprawnienia..."
               className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-white outline-none focus:border-green-600"
             />
           </div>
@@ -812,11 +995,18 @@ function CheckInContent() {
             const profile = reservation.user_id
               ? profilesByUserId[reservation.user_id]
               : null;
+
             const isProfileVerified = isVerifiedProfile(profile);
+            const permissionsVerified = arePermissionsVerified(profile);
+
             const shouldVerifyAtReception =
-              Boolean(reservation.user_id) && !isProfileVerified;
+              Boolean(reservation.user_id) &&
+              (!isProfileVerified || !permissionsVerified);
+
             const missingFields = getMissingFields(profile);
             const completion = getCompletionPercent(profile);
+            const declaredPermissions = getDeclaredPermissions(profile);
+            const declaredQualifications = getDeclaredQualifications(profile);
 
             return (
               <article
@@ -849,7 +1039,19 @@ function CheckInContent() {
                           profile
                         )}`}
                       >
-                        Konto: {getVerificationStatusLabel(profile?.verification_status ?? null)}
+                        Konto:{" "}
+                        {getVerificationStatusLabel(
+                          profile?.verification_status ?? null
+                        )}
+                      </span>
+
+                      <span
+                        className={`rounded-full border px-3 py-1 text-xs font-bold ${getPermissionsClass(
+                          profile
+                        )}`}
+                      >
+                        Uprawnienia:{" "}
+                        {permissionsVerified ? "sprawdzone" : "do sprawdzenia"}
                       </span>
                     </div>
 
@@ -858,16 +1060,33 @@ function CheckInContent() {
                     </p>
 
                     <h2 className="mt-2 text-xl font-bold">
-                      {reservation.customer_name || profile?.full_name || "Brak danych"}
+                      {reservation.customer_name ||
+                        profile?.full_name ||
+                        "Brak danych"}
                     </h2>
 
                     <p className="mt-1 text-sm text-zinc-400">
-                      {reservation.customer_email || profile?.email || "Brak e-maila"}
+                      {reservation.customer_email ||
+                        profile?.email ||
+                        "Brak e-maila"}
                     </p>
 
                     <p className="mt-1 text-sm text-zinc-500">
-                      Tel.: {reservation.customer_phone || profile?.phone || "brak"}
+                      Tel.:{" "}
+                      {reservation.customer_phone || profile?.phone || "brak"}
                     </p>
+
+                    <div className="mt-4 rounded-xl border border-zinc-800 bg-zinc-950 p-3 text-xs text-zinc-400">
+                      <p className="font-semibold text-zinc-300">
+                        Deklarowane uprawnienia:
+                      </p>
+
+                      <p className="mt-1">
+                        {declaredPermissions.length > 0
+                          ? declaredPermissions.join(", ")
+                          : "Brak zaznaczonych uprawnień"}
+                      </p>
+                    </div>
                   </div>
 
                   <div>
@@ -970,14 +1189,29 @@ function CheckInContent() {
 
                   <div className="grid gap-2">
                     {shouldVerifyAtReception ? (
-                      <button
-                        type="button"
-                        disabled={isSaving}
-                        onClick={() => verifyAccountAndStartVisit(reservation)}
-                        className="rounded-xl border border-orange-700 px-4 py-3 text-sm font-bold text-orange-300 transition hover:bg-orange-950 disabled:cursor-not-allowed disabled:opacity-60"
-                      >
-                        Zweryfikuj konto i rozpocznij wizytę
-                      </button>
+                      <>
+                        <button
+                          type="button"
+                          disabled={isSaving}
+                          onClick={() =>
+                            verifyAccountAndStartVisit(reservation)
+                          }
+                          className="rounded-xl border border-orange-700 px-4 py-3 text-sm font-bold text-orange-300 transition hover:bg-orange-950 disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          Zweryfikuj konto i uprawnienia
+                        </button>
+
+                        <button
+                          type="button"
+                          disabled={isSaving}
+                          onClick={() =>
+                            markVerificationIncomplete(reservation)
+                          }
+                          className="rounded-xl border border-yellow-700 px-4 py-3 text-sm font-bold text-yellow-300 transition hover:bg-yellow-950 disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          Weryfikacja niepełna
+                        </button>
+                      </>
                     ) : (
                       <button
                         type="button"
@@ -1020,12 +1254,12 @@ function CheckInContent() {
                     <div className="mb-4 flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
                       <div>
                         <h3 className="text-xl font-bold text-orange-200">
-                          Pierwsza wizyta / konto do weryfikacji
+                          Pierwsza wizyta / uprawnienia do sprawdzenia
                         </h3>
 
                         <p className="mt-1 text-sm text-orange-100/80">
-                          Przed wpuszczeniem klienta na oś zweryfikuj dane na
-                          recepcji.
+                          Sprawdź dokumenty tylko do wglądu. Nie zapisuj numerów
+                          dokumentów, pozwoleń ani legitymacji.
                         </p>
                       </div>
 
@@ -1045,9 +1279,22 @@ function CheckInContent() {
                         <p className="font-bold text-yellow-300">
                           Brakujące dane:
                         </p>
+
                         <p className="mt-1">{missingFields.join(", ")}</p>
                       </div>
                     )}
+
+                    <div className="mb-5 rounded-xl border border-green-900 bg-green-950/40 p-4 text-sm text-green-200">
+                      <p className="font-semibold">
+                        Zasada minimalizacji danych
+                      </p>
+
+                      <p className="mt-1 text-green-300">
+                        Weryfikujesz uprawnienia na miejscu, ale w systemie
+                        zapisujesz tylko wynik weryfikacji i krótką notatkę. Bez
+                        numerów dokumentów.
+                      </p>
+                    </div>
 
                     <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
                       <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-4">
@@ -1057,17 +1304,25 @@ function CheckInContent() {
 
                         <p className="text-sm text-zinc-500">Imię i nazwisko</p>
                         <p className="mb-3 font-semibold">
-                          {valueOrMissing(profile?.full_name ?? reservation.customer_name ?? null)}
+                          {valueOrMissing(
+                            profile?.full_name ??
+                              reservation.customer_name ??
+                              null
+                          )}
                         </p>
 
                         <p className="text-sm text-zinc-500">E-mail</p>
                         <p className="mb-3 font-semibold">
-                          {valueOrMissing(profile?.email || reservation.customer_email)}
+                          {valueOrMissing(
+                            profile?.email || reservation.customer_email
+                          )}
                         </p>
 
                         <p className="text-sm text-zinc-500">Telefon</p>
                         <p className="font-semibold">
-                          {valueOrMissing(profile?.phone || reservation.customer_phone)}
+                          {valueOrMissing(
+                            profile?.phone || reservation.customer_phone
+                          )}
                         </p>
                       </div>
 
@@ -1102,74 +1357,125 @@ function CheckInContent() {
 
                       <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-4">
                         <p className="mb-3 text-xs uppercase tracking-[0.25em] text-zinc-500">
-                          Pozwolenie na broń
+                          Deklarowane pozwolenia / uprawnienia
                         </p>
 
-                        <p className="text-sm text-zinc-500">Numer</p>
-                        <p className="mb-3 font-semibold">
-                          {valueOrMissing(profile?.weapon_permit_number)}
-                        </p>
+                        <BooleanLine
+                          label="Pozwolenie sportowe"
+                          value={profile?.permission_sport}
+                        />
 
-                        <p className="text-sm text-zinc-500">Typ</p>
-                        <p className="mb-3 font-semibold">
-                          {valueOrMissing(profile?.weapon_permit_type)}
-                        </p>
+                        <BooleanLine
+                          label="Pozwolenie kolekcjonerskie"
+                          value={profile?.permission_collector}
+                        />
 
-                        <p className="text-sm text-zinc-500">Organ wydający</p>
-                        <p className="font-semibold">
-                          {valueOrMissing(profile?.weapon_permit_issuer)}
-                        </p>
+                        <BooleanLine
+                          label="Pozwolenie myśliwskie / łowieckie"
+                          value={profile?.permission_hunting}
+                        />
+
+                        <BooleanLine
+                          label="Szkoleniowe / dopuszczenie"
+                          value={profile?.permission_training}
+                        />
+
+                        <BooleanLine
+                          label="Ochrona osobista"
+                          value={profile?.permission_personal_protection}
+                        />
+
+                        <BooleanLine
+                          label="Inne"
+                          value={profile?.permission_other}
+                        />
                       </div>
 
                       <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-4">
                         <p className="mb-3 text-xs uppercase tracking-[0.25em] text-zinc-500">
-                          Prowadzący strzelanie
+                          Dodatkowe kwalifikacje
                         </p>
 
-                        <p className="text-sm text-zinc-500">
-                          Posiada uprawnienia
-                        </p>
-                        <p className="mb-3 font-semibold">
-                          {yesNo(profile?.has_range_officer ?? null)}
-                        </p>
+                        <BooleanLine
+                          label="Instruktor"
+                          value={profile?.qualification_instructor}
+                        />
 
-                        <p className="text-sm text-zinc-500">Numer uprawnień</p>
-                        <p className="font-semibold">
-                          {valueOrMissing(profile?.range_officer_number)}
-                        </p>
+                        <BooleanLine
+                          label="Prowadzący strzelanie / RO"
+                          value={profile?.qualification_range_officer}
+                        />
+
+                        <BooleanLine
+                          label="Licencja PZSS"
+                          value={profile?.qualification_pzss_license}
+                        />
+
+                        <BooleanLine
+                          label="Myśliwy"
+                          value={profile?.qualification_hunter}
+                        />
                       </div>
 
                       <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-4">
                         <p className="mb-3 text-xs uppercase tracking-[0.25em] text-zinc-500">
-                          Instruktor
-                        </p>
-
-                        <p className="text-sm text-zinc-500">
-                          Posiada uprawnienia
-                        </p>
-                        <p className="mb-3 font-semibold">
-                          {yesNo(profile?.has_instructor ?? null)}
-                        </p>
-
-                        <p className="text-sm text-zinc-500">Numer uprawnień</p>
-                        <p className="font-semibold">
-                          {valueOrMissing(profile?.instructor_number)}
-                        </p>
-                      </div>
-
-                      <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-4">
-                        <p className="mb-3 text-xs uppercase tracking-[0.25em] text-zinc-500">
-                          System
+                          Weryfikacja uprawnień
                         </p>
 
                         <p className="text-sm text-zinc-500">Status konta</p>
                         <p className="mb-3 font-semibold">
-                          {getVerificationStatusLabel(profile?.verification_status ?? null)}
+                          {getVerificationStatusLabel(
+                            profile?.verification_status ?? null
+                          )}
                         </p>
 
-                        <p className="text-sm text-zinc-500">Rola</p>
-                        <p className="font-semibold">
-                          {valueOrMissing(profile?.role ?? null)}
+                        <p className="text-sm text-zinc-500">
+                          Status uprawnień
+                        </p>
+                        <p className="mb-3 font-semibold">
+                          {permissionsVerified
+                            ? "Sprawdzone przez obsługę"
+                            : "Do sprawdzenia podczas wizyty"}
+                        </p>
+
+                        <p className="text-sm text-zinc-500">
+                          Data sprawdzenia
+                        </p>
+                        <p className="mb-3 font-semibold">
+                          {profile?.permissions_verified_at
+                            ? new Date(
+                                profile.permissions_verified_at
+                              ).toLocaleString("pl-PL")
+                            : "Brak danych"}
+                        </p>
+
+                        <p className="text-sm text-zinc-500">Notatka</p>
+                        <p className="whitespace-pre-line text-sm font-semibold leading-6">
+                          {valueOrMissing(
+                            profile?.permissions_verification_note
+                          )}
+                        </p>
+                      </div>
+
+                      <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-4">
+                        <p className="mb-3 text-xs uppercase tracking-[0.25em] text-zinc-500">
+                          Notatki systemowe
+                        </p>
+
+                        <p className="text-sm text-zinc-500">
+                          Gotowa notatka po weryfikacji
+                        </p>
+
+                        <p className="mb-4 rounded-lg border border-green-900 bg-green-950/40 p-3 text-xs leading-5 text-green-200">
+                          {VERIFIED_NOTE}
+                        </p>
+
+                        <p className="text-sm text-zinc-500">
+                          Gotowa notatka przy brakach
+                        </p>
+
+                        <p className="rounded-lg border border-yellow-900 bg-yellow-950/40 p-3 text-xs leading-5 text-yellow-200">
+                          {INCOMPLETE_NOTE}
                         </p>
                       </div>
                     </div>

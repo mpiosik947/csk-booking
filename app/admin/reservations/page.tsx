@@ -1,8 +1,10 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { supabase } from "../../../lib/supabase";
+
+type ReservationSort = "newest" | "oldest" | "lane" | "status" | "payment";
 
 type Reservation = {
   id: string;
@@ -29,6 +31,16 @@ type Reservation = {
     | null;
 };
 
+const DEFAULT_SORT: ReservationSort = "newest";
+
+const sortOptions: { label: string; value: ReservationSort }[] = [
+  { label: "Najnowsze", value: "newest" },
+  { label: "Najstarsze", value: "oldest" },
+  { label: "Oś", value: "lane" },
+  { label: "Status", value: "status" },
+  { label: "Płatność", value: "payment" },
+];
+
 const statusOptions = [
   { label: "Wszystkie", value: "all" },
   { label: "Potwierdzone", value: "confirmed" },
@@ -50,15 +62,6 @@ function getLaneName(reservation: Reservation) {
   }
 
   return lanes?.name || "Nieznana oś";
-}
-
-function isCancelledStatus(status: string | null) {
-  return (
-    status === "cancelled" ||
-    status === "canceled" ||
-    status === "cancelled_by_user" ||
-    status === "cancelled_by_admin"
-  );
 }
 
 function getReservationStatusLabel(status: string | null) {
@@ -131,6 +134,51 @@ function getPaymentStatusClass(status: string | null) {
   }
 }
 
+function isReservationSort(value: string | null): value is ReservationSort {
+  return (
+    value === "newest" ||
+    value === "oldest" ||
+    value === "lane" ||
+    value === "status" ||
+    value === "payment"
+  );
+}
+
+function sanitizeSearchPhrase(value: string) {
+  return value
+    .trim()
+    .replace(/[,%]/g, " ")
+    .replace(/\s+/g, " ")
+    .slice(0, 80);
+}
+
+function buildUrlParams(params: {
+  search: string;
+  statusFilter: string;
+  dateFilter: string;
+  sort: ReservationSort;
+}) {
+  const urlParams = new URLSearchParams();
+
+  if (params.search.trim()) {
+    urlParams.set("search", params.search.trim());
+  }
+
+  if (params.statusFilter !== "all") {
+    urlParams.set("status", params.statusFilter);
+  }
+
+  if (params.dateFilter) {
+    urlParams.set("date", params.dateFilter);
+  }
+
+  if (params.sort !== DEFAULT_SORT) {
+    urlParams.set("sort", params.sort);
+  }
+
+  return urlParams.toString();
+}
+
 export default function AdminReservationsPage() {
   const [reservations, setReservations] = useState<Reservation[]>([]);
   const [loading, setLoading] = useState(false);
@@ -138,18 +186,63 @@ export default function AdminReservationsPage() {
     null
   );
   const [message, setMessage] = useState("");
+
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [dateFilter, setDateFilter] = useState("");
+  const [sort, setSort] = useState<ReservationSort>(DEFAULT_SORT);
+  const [urlParamsLoaded, setUrlParamsLoaded] = useState(false);
 
-  async function loadReservations() {
+  const activeSortLabel = useMemo(() => {
+    return (
+      sortOptions.find((option) => option.value === sort)?.label || "Najnowsze"
+    );
+  }, [sort]);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+
+    const searchParam = params.get("search") || "";
+    const statusParam = params.get("status") || "all";
+    const dateParam = params.get("date") || "";
+    const sortParam = params.get("sort");
+
+    setSearch(searchParam);
+    setStatusFilter(statusParam);
+    setDateFilter(dateParam);
+
+    if (isReservationSort(sortParam)) {
+      setSort(sortParam);
+    } else {
+      setSort(DEFAULT_SORT);
+    }
+
+    setUrlParamsLoaded(true);
+  }, []);
+
+  const loadReservations = useCallback(async () => {
     setLoading(true);
     setMessage("");
 
-    const { data, error } = await supabase
-      .from("reservations")
-      .select(
-        `
+    const phrase = sanitizeSearchPhrase(search);
+
+    let matchingLaneIds: string[] = [];
+
+    if (phrase) {
+      const { data: laneData, error: laneError } = await supabase
+        .from("shooting_lanes")
+        .select("id")
+        .ilike("name", `%${phrase}%`);
+
+      if (!laneError && laneData) {
+        matchingLaneIds = laneData
+          .map((lane) => String(lane.id))
+          .filter(Boolean);
+      }
+    }
+
+    let query = supabase.from("reservations").select(
+      `
         id,
         user_id,
         lane_id,
@@ -168,9 +261,89 @@ export default function AdminReservationsPage() {
           name
         )
       `
-      )
-      .order("reservation_date", { ascending: false })
-      .order("start_time", { ascending: false });
+    );
+
+    if (phrase) {
+      const searchParts = [
+        `customer_name.ilike.%${phrase}%`,
+        `customer_email.ilike.%${phrase}%`,
+        `customer_phone.ilike.%${phrase}%`,
+        `reservation_status.ilike.%${phrase}%`,
+        `payment_status.ilike.%${phrase}%`,
+      ];
+
+      if (matchingLaneIds.length > 0) {
+        searchParts.push(`lane_id.in.(${matchingLaneIds.join(",")})`);
+      }
+
+      query = query.or(searchParts.join(","));
+    }
+
+    if (statusFilter !== "all") {
+      if (statusFilter === "cancelled") {
+        query = query.in("reservation_status", [
+          "cancelled",
+          "canceled",
+          "cancelled_by_user",
+          "cancelled_by_admin",
+        ]);
+      } else {
+        query = query.eq("reservation_status", statusFilter);
+      }
+    }
+
+    if (dateFilter) {
+      query = query.eq("reservation_date", dateFilter);
+    }
+
+    switch (sort) {
+      case "newest":
+        query = query
+          .order("created_at", { ascending: false })
+          .order("reservation_date", { ascending: false })
+          .order("start_time", { ascending: false });
+        break;
+
+      case "oldest":
+        query = query
+          .order("created_at", { ascending: true })
+          .order("reservation_date", { ascending: true })
+          .order("start_time", { ascending: true });
+        break;
+
+      case "lane":
+        query = query
+          .order("name", {
+            ascending: true,
+            referencedTable: "shooting_lanes",
+          } as any)
+          .order("reservation_date", { ascending: false })
+          .order("start_time", { ascending: false });
+        break;
+
+      case "status":
+        query = query
+          .order("reservation_status", { ascending: true })
+          .order("reservation_date", { ascending: false })
+          .order("start_time", { ascending: false });
+        break;
+
+      case "payment":
+        query = query
+          .order("payment_status", { ascending: true })
+          .order("reservation_date", { ascending: false })
+          .order("start_time", { ascending: false });
+        break;
+
+      default:
+        query = query
+          .order("created_at", { ascending: false })
+          .order("reservation_date", { ascending: false })
+          .order("start_time", { ascending: false });
+        break;
+    }
+
+    const { data, error } = await query;
 
     setLoading(false);
 
@@ -180,43 +353,36 @@ export default function AdminReservationsPage() {
     }
 
     setReservations((data ?? []) as unknown as Reservation[]);
-  }
+  }, [search, statusFilter, dateFilter, sort]);
 
   useEffect(() => {
-    loadReservations();
-  }, []);
+    if (!urlParamsLoaded) return;
 
-  const filteredReservations = useMemo(() => {
-    const phrase = search.trim().toLowerCase();
-
-    return reservations.filter((reservation) => {
-      const name = reservation.customer_name?.toLowerCase() ?? "";
-      const email = reservation.customer_email?.toLowerCase() ?? "";
-      const phone = reservation.customer_phone?.toLowerCase() ?? "";
-      const lane = getLaneName(reservation).toLowerCase();
-      const status = reservation.reservation_status?.toLowerCase() ?? "";
-      const payment = reservation.payment_status?.toLowerCase() ?? "";
-
-      const matchesSearch =
-        !phrase ||
-        name.includes(phrase) ||
-        email.includes(phrase) ||
-        phone.includes(phrase) ||
-        lane.includes(phrase) ||
-        status.includes(phrase) ||
-        payment.includes(phrase);
-
-      const matchesStatus =
-        statusFilter === "all" ||
-        status === statusFilter ||
-        (statusFilter === "cancelled" && isCancelledStatus(status));
-
-      const matchesDate =
-        !dateFilter || reservation.reservation_date === dateFilter;
-
-      return matchesSearch && matchesStatus && matchesDate;
+    const params = buildUrlParams({
+      search,
+      statusFilter,
+      dateFilter,
+      sort,
     });
-  }, [reservations, search, statusFilter, dateFilter]);
+
+    const nextUrl = params
+      ? `${window.location.pathname}?${params}`
+      : window.location.pathname;
+
+    window.history.replaceState(null, "", nextUrl);
+  }, [search, statusFilter, dateFilter, sort, urlParamsLoaded]);
+
+  useEffect(() => {
+    if (!urlParamsLoaded) return;
+
+    const timeout = window.setTimeout(() => {
+      loadReservations();
+    }, 250);
+
+    return () => {
+      window.clearTimeout(timeout);
+    };
+  }, [loadReservations, urlParamsLoaded]);
 
   async function updateReservation(
     reservation: Reservation,
@@ -250,6 +416,7 @@ export default function AdminReservationsPage() {
     setSearch("");
     setStatusFilter("all");
     setDateFilter("");
+    setSort(DEFAULT_SORT);
   }
 
   return (
@@ -277,7 +444,7 @@ export default function AdminReservationsPage() {
         </div>
 
         <div className="mb-6 grid gap-4 rounded-2xl border border-zinc-800 bg-zinc-900 p-5">
-          <div className="grid gap-4 md:grid-cols-[1fr_auto_auto_auto] md:items-end">
+          <div className="grid gap-4 md:grid-cols-[1fr_auto_auto_auto_auto] md:items-end">
             <div>
               <label className="mb-2 block text-sm font-semibold text-zinc-300">
                 Szukaj rezerwacji
@@ -304,10 +471,30 @@ export default function AdminReservationsPage() {
               />
             </div>
 
+            <div>
+              <label className="mb-2 block text-sm font-semibold text-zinc-300">
+                Sortowanie
+              </label>
+
+              <select
+                value={sort}
+                onChange={(event) =>
+                  setSort(event.target.value as ReservationSort)
+                }
+                className="rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-white outline-none transition focus:border-green-600"
+              >
+                {sortOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+
             <button
               type="button"
               onClick={loadReservations}
-              disabled={loading}
+              disabled={loading || !urlParamsLoaded}
               className="rounded-xl bg-green-700 px-5 py-3 font-semibold transition hover:bg-green-600 disabled:cursor-not-allowed disabled:opacity-60"
             >
               {loading ? "Odświeżanie..." : "Odśwież"}
@@ -344,6 +531,11 @@ export default function AdminReservationsPage() {
               ))}
             </div>
           </div>
+
+          <div className="rounded-xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-sm text-zinc-400">
+            Aktywne sortowanie:{" "}
+            <span className="font-bold text-white">{activeSortLabel}</span>
+          </div>
         </div>
 
         {message && (
@@ -357,21 +549,20 @@ export default function AdminReservationsPage() {
             <p className="text-sm text-zinc-400">
               Liczba rezerwacji w widoku:{" "}
               <span className="font-bold text-white">
-                {filteredReservations.length}
-              </span>{" "}
-              / {reservations.length}
+                {reservations.length}
+              </span>
             </p>
           </div>
 
-          {loading ? (
+          {!urlParamsLoaded || loading ? (
             <div className="p-8 text-zinc-400">Ładowanie rezerwacji...</div>
-          ) : filteredReservations.length === 0 ? (
+          ) : reservations.length === 0 ? (
             <div className="p-8 text-zinc-400">
               Brak rezerwacji do wyświetlenia.
             </div>
           ) : (
             <div className="grid gap-4 p-4">
-              {filteredReservations.map((reservation) => {
+              {reservations.map((reservation) => {
                 const isSaving = savingReservationId === reservation.id;
 
                 return (
@@ -458,7 +649,9 @@ export default function AdminReservationsPage() {
                           </label>
 
                           <select
-                            value={reservation.reservation_status || "confirmed"}
+                            value={
+                              reservation.reservation_status || "confirmed"
+                            }
                             disabled={isSaving}
                             onChange={(event) =>
                               updateReservation(reservation, {
@@ -482,7 +675,9 @@ export default function AdminReservationsPage() {
                           </label>
 
                           <select
-                            value={reservation.payment_status || "pay_on_site"}
+                            value={
+                              reservation.payment_status || "pay_on_site"
+                            }
                             disabled={isSaving}
                             onChange={(event) =>
                               updateReservation(reservation, {
