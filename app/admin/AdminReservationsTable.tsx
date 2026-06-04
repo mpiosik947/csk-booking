@@ -8,6 +8,7 @@ import {
   markPaid,
   markPresent,
   markScheduled,
+  updateReservationNote,
 } from "../../lib/reservation-actions";
 import { supabase } from "../../lib/supabase";
 
@@ -321,24 +322,24 @@ const completedAt = new Date().toISOString();
     );
   }
 
-  async function saveAdminNote(id: string, note: string) {
-    setMessage("");
-    setSavingId(id);
+ async function saveAdminNote(id: string, note: string) {
+  setMessage("");
+  setSavingId(id);
 
-    const { error } = await supabase
-      .from("reservations")
-      .update({ admin_note: note })
-      .eq("id", id);
+  const result = await updateReservationNote(supabase, {
+    reservationId: id,
+    note,
+  });
 
-    setSavingId("");
+  setSavingId("");
 
-    if (error) {
-      setMessage(`Błąd zapisu notatki: ${error.message}`);
-      return;
-    }
-
-    setMessage("Notatka została zapisana.");
+  if (result.error) {
+    setMessage(`Błąd zapisu notatki: ${result.error}`);
+    return;
   }
+
+  setMessage("Notatka została zapisana.");
+}
 
   if (items.length === 0) {
     return (
