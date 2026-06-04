@@ -10,6 +10,16 @@ import {
   markScheduled,
   updateReservationNote,
 } from "../../lib/reservation-actions";
+import {
+  getPaymentStatusBadgeClass,
+  getPaymentStatusLabel,
+  PAYMENT_STATUS,
+} from "../../lib/payment-status";
+import {
+  getReservationStatusBadgeClass,
+  getReservationStatusLabel,
+  RESERVATION_STATUS,
+} from "../../lib/reservation-status";
 import { supabase } from "../../lib/supabase";
 
 type Reservation = {
@@ -37,49 +47,11 @@ type AdminReservationsTableProps = {
   reservations: Reservation[];
 };
 
-function translateReservationStatus(status: string) {
-  if (status === "confirmed") return "Potwierdzona";
-  if (status === "cancelled") return "Anulowana";
-  if (status === "completed") return "Zrealizowana";
-  if (status === "no_show") return "Nieobecny";
-  return status;
-}
-
 function translateAttendanceStatus(status?: string | null) {
   if (status === "present") return "Obecny";
   if (status === "no_show") return "Nieobecny";
   if (status === "completed") return "Zakończona";
   return "Zaplanowana";
-}
-
-function translatePaymentStatus(status: string) {
-  if (status === "pay_on_site") return "Płatność na miejscu";
-  if (status === "paid_on_site") return "Opłacone na miejscu";
-  if (status === "paid") return "Opłacone";
-  if (status === "voucher") return "Voucher";
-  if (status === "free") return "Gratis";
-  if (status === "unpaid") return "Nieopłacone";
-  return status;
-}
-
-function getStatusClass(status: string) {
-  if (status === "confirmed") {
-    return "rounded-full bg-green-950 px-3 py-1 text-xs font-semibold text-green-400";
-  }
-
-  if (status === "completed") {
-    return "rounded-full bg-blue-950 px-3 py-1 text-xs font-semibold text-blue-300";
-  }
-
-  if (status === "cancelled") {
-    return "rounded-full bg-red-950 px-3 py-1 text-xs font-semibold text-red-300";
-  }
-
-  if (status === "no_show") {
-    return "rounded-full bg-yellow-950 px-3 py-1 text-xs font-semibold text-yellow-300";
-  }
-
-  return "rounded-full bg-zinc-950 px-3 py-1 text-xs font-semibold text-zinc-300";
 }
 
 function getAttendanceClass(status?: string | null) {
@@ -132,6 +104,10 @@ function groupReservationsByDate(reservations: Reservation[]) {
     }));
 }
 
+function getBadgeClass(baseClass: string) {
+  return `rounded-full border px-3 py-1 text-xs font-semibold ${baseClass}`;
+}
+
 export default function AdminReservationsTable({
   reservations,
 }: AdminReservationsTableProps) {
@@ -159,7 +135,7 @@ export default function AdminReservationsTable({
         item.id === id
           ? {
               ...item,
-              reservation_status: "cancelled",
+              reservation_status: RESERVATION_STATUS.CANCELLED,
             }
           : item
       )
@@ -170,7 +146,7 @@ export default function AdminReservationsTable({
 
   async function updateAttendanceStatus(
     id: string,
-    attendanceStatus: "planned" | "present" | "no_show" | "completed"
+    attendanceStatus: "planned" | "present" | "no_show" | "completed",
   ) {
     setMessage("");
     setSavingId(id);
@@ -185,8 +161,7 @@ export default function AdminReservationsTable({
         return;
       }
 
-      const checkedInAt =
-        result.data?.checked_in_at ?? new Date().toISOString();
+      const checkedInAt = result.data?.checked_in_at ?? new Date().toISOString();
 
       setItems((currentItems) =>
         currentItems.map((item) =>
@@ -194,12 +169,12 @@ export default function AdminReservationsTable({
             ? {
                 ...item,
                 attendance_status: "present",
-                reservation_status: "confirmed",
+                reservation_status: RESERVATION_STATUS.CONFIRMED,
                 checked_in_at: checkedInAt,
                 completed_at: null,
               }
-            : item
-        )
+            : item,
+        ),
       );
 
       setMessage("Klient oznaczony jako obecny.");
@@ -222,12 +197,12 @@ export default function AdminReservationsTable({
             ? {
                 ...item,
                 attendance_status: "planned",
-                reservation_status: "confirmed",
+                reservation_status: RESERVATION_STATUS.CONFIRMED,
                 checked_in_at: null,
                 completed_at: null,
               }
-            : item
-        )
+            : item,
+        ),
       );
 
       setMessage("Rezerwacja przywrócona jako zaplanowana.");
@@ -250,10 +225,10 @@ export default function AdminReservationsTable({
             ? {
                 ...item,
                 attendance_status: "no_show",
-                reservation_status: "no_show",
+                reservation_status: RESERVATION_STATUS.NO_SHOW,
               }
-            : item
-        )
+            : item,
+        ),
       );
 
       setMessage("Klient oznaczony jako nieobecny.");
@@ -270,9 +245,8 @@ export default function AdminReservationsTable({
         return;
       }
 
-      const checkedInAt =
-  result.data?.checked_in_at ?? new Date().toISOString();
-const completedAt = new Date().toISOString();
+      const checkedInAt = result.data?.checked_in_at ?? new Date().toISOString();
+      const completedAt = new Date().toISOString();
 
       setItems((currentItems) =>
         currentItems.map((item) =>
@@ -280,12 +254,12 @@ const completedAt = new Date().toISOString();
             ? {
                 ...item,
                 attendance_status: "completed",
-                reservation_status: "completed",
+                reservation_status: RESERVATION_STATUS.COMPLETED,
                 checked_in_at: item.checked_in_at ?? checkedInAt,
                 completed_at: completedAt,
               }
-            : item
-        )
+            : item,
+        ),
       );
 
       setMessage("Rezerwacja oznaczona jako zakończona.");
@@ -307,8 +281,10 @@ const completedAt = new Date().toISOString();
 
     setItems((currentItems) =>
       currentItems.map((item) =>
-        item.id === id ? { ...item, payment_status: "paid" } : item
-      )
+        item.id === id
+          ? { ...item, payment_status: PAYMENT_STATUS.PAID }
+          : item,
+      ),
     );
 
     setMessage("Rezerwacja oznaczona jako opłacona.");
@@ -317,29 +293,29 @@ const completedAt = new Date().toISOString();
   function updateLocalNote(id: string, note: string) {
     setItems((currentItems) =>
       currentItems.map((item) =>
-        item.id === id ? { ...item, admin_note: note } : item
-      )
+        item.id === id ? { ...item, admin_note: note } : item,
+      ),
     );
   }
 
- async function saveAdminNote(id: string, note: string) {
-  setMessage("");
-  setSavingId(id);
+  async function saveAdminNote(id: string, note: string) {
+    setMessage("");
+    setSavingId(id);
 
-  const result = await updateReservationNote(supabase, {
-    reservationId: id,
-    note,
-  });
+    const result = await updateReservationNote(supabase, {
+      reservationId: id,
+      note,
+    });
 
-  setSavingId("");
+    setSavingId("");
 
-  if (result.error) {
-    setMessage(`Błąd zapisu notatki: ${result.error}`);
-    return;
+    if (result.error) {
+      setMessage(`Błąd zapisu notatki: ${result.error}`);
+      return;
+    }
+
+    setMessage("Notatka została zapisana.");
   }
-
-  setMessage("Notatka została zapisana.");
-}
 
   if (items.length === 0) {
     return (
@@ -423,12 +399,14 @@ const completedAt = new Date().toISOString();
 
                       <td className="py-4 pr-4">
                         <span
-                          className={getStatusClass(
-                            reservation.reservation_status
+                          className={getBadgeClass(
+                            getReservationStatusBadgeClass(
+                              reservation.reservation_status,
+                            ),
                           )}
                         >
-                          {translateReservationStatus(
-                            reservation.reservation_status
+                          {getReservationStatusLabel(
+                            reservation.reservation_status,
                           )}
                         </span>
                       </td>
@@ -436,17 +414,25 @@ const completedAt = new Date().toISOString();
                       <td className="py-4 pr-4">
                         <span
                           className={getAttendanceClass(
-                            reservation.attendance_status
+                            reservation.attendance_status,
                           )}
                         >
                           {translateAttendanceStatus(
-                            reservation.attendance_status
+                            reservation.attendance_status,
                           )}
                         </span>
                       </td>
 
-                      <td className="py-4 pr-4 text-zinc-300">
-                        {translatePaymentStatus(reservation.payment_status)}
+                      <td className="py-4 pr-4">
+                        <span
+                          className={getBadgeClass(
+                            getPaymentStatusBadgeClass(
+                              reservation.payment_status,
+                            ),
+                          )}
+                        >
+                          {getPaymentStatusLabel(reservation.payment_status)}
+                        </span>
                       </td>
 
                       <td className="py-4 pr-4">
@@ -456,7 +442,7 @@ const completedAt = new Date().toISOString();
                             onChange={(event) =>
                               updateLocalNote(
                                 reservation.id,
-                                event.target.value
+                                event.target.value,
                               )
                             }
                             rows={2}
@@ -469,7 +455,7 @@ const completedAt = new Date().toISOString();
                             onClick={() =>
                               saveAdminNote(
                                 reservation.id,
-                                reservation.admin_note ?? ""
+                                reservation.admin_note ?? "",
                               )
                             }
                             disabled={savingId === reservation.id}
@@ -507,7 +493,10 @@ const completedAt = new Date().toISOString();
                           <button
                             type="button"
                             onClick={() =>
-                              updateAttendanceStatus(reservation.id, "completed")
+                              updateAttendanceStatus(
+                                reservation.id,
+                                "completed",
+                              )
                             }
                             disabled={savingId === reservation.id}
                             className="rounded-lg border border-blue-700 px-3 py-2 text-xs font-semibold text-blue-300 transition hover:bg-blue-950 disabled:cursor-not-allowed disabled:opacity-50"
@@ -533,7 +522,8 @@ const completedAt = new Date().toISOString();
                             }
                             disabled={
                               savingId === reservation.id ||
-                              reservation.reservation_status === "cancelled"
+                              reservation.reservation_status ===
+                                RESERVATION_STATUS.CANCELLED
                             }
                             className="rounded-lg border border-red-700 px-3 py-2 text-xs font-semibold text-red-300 transition hover:bg-red-950 disabled:cursor-not-allowed disabled:opacity-50"
                           >
@@ -545,8 +535,10 @@ const completedAt = new Date().toISOString();
                             onClick={() => markAsPaid(reservation.id)}
                             disabled={
                               savingId === reservation.id ||
-                              reservation.payment_status === "paid" ||
-                              reservation.payment_status === "paid_on_site"
+                              reservation.payment_status ===
+                                PAYMENT_STATUS.PAID ||
+                              reservation.payment_status ===
+                                PAYMENT_STATUS.PAID_ON_SITE
                             }
                             className="rounded-lg border border-green-700 px-3 py-2 text-xs font-semibold text-green-300 transition hover:bg-green-950 disabled:cursor-not-allowed disabled:opacity-50"
                           >
