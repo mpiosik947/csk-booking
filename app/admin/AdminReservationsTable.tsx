@@ -6,6 +6,8 @@ import {
   completeReservation,
   markNoShow,
   markPaid,
+  markPresent,
+  markScheduled,
 } from "../../lib/reservation-actions";
 import { supabase } from "../../lib/supabase";
 
@@ -138,54 +140,31 @@ export default function AdminReservationsTable({
 
   const groupedReservations = groupReservationsByDate(items);
 
-  async function updateReservationStatus(id: string, status: string) {
+  async function handleCancelReservation(id: string) {
     setMessage("");
     setSavingId(id);
 
-    if (status === "cancelled") {
-      const result = await cancelReservation(supabase, { reservationId: id });
-
-      setSavingId("");
-
-      if (result.error) {
-        setMessage(`Błąd anulowania rezerwacji: ${result.error}`);
-        return;
-      }
-
-      setItems((currentItems) =>
-        currentItems.map((item) =>
-          item.id === id
-            ? {
-                ...item,
-                reservation_status: "cancelled",
-              }
-            : item
-        )
-      );
-
-      setMessage("Rezerwacja została anulowana.");
-      return;
-    }
-
-    const { error } = await supabase
-      .from("reservations")
-      .update({ reservation_status: status })
-      .eq("id", id);
+    const result = await cancelReservation(supabase, { reservationId: id });
 
     setSavingId("");
 
-    if (error) {
-      setMessage(`Błąd zmiany statusu: ${error.message}`);
+    if (result.error) {
+      setMessage(`Błąd anulowania rezerwacji: ${result.error}`);
       return;
     }
 
     setItems((currentItems) =>
       currentItems.map((item) =>
-        item.id === id ? { ...item, reservation_status: status } : item
+        item.id === id
+          ? {
+              ...item,
+              reservation_status: "cancelled",
+            }
+          : item
       )
     );
 
-    setMessage("Status rezerwacji został zaktualizowany.");
+    setMessage("Rezerwacja została anulowana.");
   }
 
   async function updateAttendanceStatus(
@@ -194,6 +173,65 @@ export default function AdminReservationsTable({
   ) {
     setMessage("");
     setSavingId(id);
+
+    if (attendanceStatus === "present") {
+      const result = await markPresent(supabase, { reservationId: id });
+
+      setSavingId("");
+
+      if (result.error) {
+        setMessage(`Błąd zmiany obecności: ${result.error}`);
+        return;
+      }
+
+      const checkedInAt =
+        result.data?.checked_in_at ?? new Date().toISOString();
+
+      setItems((currentItems) =>
+        currentItems.map((item) =>
+          item.id === id
+            ? {
+                ...item,
+                attendance_status: "present",
+                reservation_status: "confirmed",
+                checked_in_at: checkedInAt,
+                completed_at: null,
+              }
+            : item
+        )
+      );
+
+      setMessage("Klient oznaczony jako obecny.");
+      return;
+    }
+
+    if (attendanceStatus === "planned") {
+      const result = await markScheduled(supabase, { reservationId: id });
+
+      setSavingId("");
+
+      if (result.error) {
+        setMessage(`Błąd zmiany obecności: ${result.error}`);
+        return;
+      }
+
+      setItems((currentItems) =>
+        currentItems.map((item) =>
+          item.id === id
+            ? {
+                ...item,
+                attendance_status: "planned",
+                reservation_status: "confirmed",
+                checked_in_at: null,
+                completed_at: null,
+              }
+            : item
+        )
+      );
+
+      setMessage("Rezerwacja przywrócona jako zaplanowana.");
+      return;
+    }
 
     if (attendanceStatus === "no_show") {
       const result = await markNoShow(supabase, { reservationId: id });
@@ -222,7 +260,6 @@ export default function AdminReservationsTable({
     }
 
     if (attendanceStatus === "completed") {
-      const now = new Date().toISOString();
       const result = await completeReservation(supabase, { reservationId: id });
 
       setSavingId("");
@@ -232,6 +269,10 @@ export default function AdminReservationsTable({
         return;
       }
 
+      const checkedInAt =
+  result.data?.checked_in_at ?? new Date().toISOString();
+const completedAt = new Date().toISOString();
+
       setItems((currentItems) =>
         currentItems.map((item) =>
           item.id === id
@@ -239,58 +280,15 @@ export default function AdminReservationsTable({
                 ...item,
                 attendance_status: "completed",
                 reservation_status: "completed",
-                checked_in_at: item.checked_in_at ?? now,
-                completed_at: now,
+                checked_in_at: item.checked_in_at ?? checkedInAt,
+                completed_at: completedAt,
               }
             : item
         )
       );
 
       setMessage("Rezerwacja oznaczona jako zakończona.");
-      return;
     }
-
-    const now = new Date().toISOString();
-
-    const updatePayload = {
-      attendance_status: attendanceStatus,
-      reservation_status: "confirmed",
-      checked_in_at: attendanceStatus === "present" ? now : null,
-      completed_at: null,
-    };
-
-    const { error } = await supabase
-      .from("reservations")
-      .update(updatePayload)
-      .eq("id", id);
-
-    setSavingId("");
-
-    if (error) {
-      setMessage(`Błąd zmiany obecności: ${error.message}`);
-      return;
-    }
-
-    setItems((currentItems) =>
-      currentItems.map((item) =>
-        item.id === id
-          ? {
-              ...item,
-              attendance_status: attendanceStatus,
-              reservation_status: "confirmed",
-              checked_in_at: attendanceStatus === "present" ? now : null,
-              completed_at: null,
-            }
-          : item
-      )
-    );
-
-    if (attendanceStatus === "present") {
-      setMessage("Klient oznaczony jako obecny.");
-      return;
-    }
-
-    setMessage("Rezerwacja przywrócona jako zaplanowana.");
   }
 
   async function markAsPaid(id: string) {
@@ -530,10 +528,7 @@ export default function AdminReservationsTable({
                           <button
                             type="button"
                             onClick={() =>
-                              updateReservationStatus(
-                                reservation.id,
-                                "cancelled"
-                              )
+                              handleCancelReservation(reservation.id)
                             }
                             disabled={
                               savingId === reservation.id ||
@@ -549,7 +544,8 @@ export default function AdminReservationsTable({
                             onClick={() => markAsPaid(reservation.id)}
                             disabled={
                               savingId === reservation.id ||
-                              (reservation.payment_status === "paid" || reservation.payment_status === "paid_on_site")
+                              reservation.payment_status === "paid" ||
+                              reservation.payment_status === "paid_on_site"
                             }
                             className="rounded-lg border border-green-700 px-3 py-2 text-xs font-semibold text-green-300 transition hover:bg-green-950 disabled:cursor-not-allowed disabled:opacity-50"
                           >

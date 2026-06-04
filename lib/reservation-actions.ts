@@ -105,3 +105,50 @@ export async function markPaid(
     payment_status: "paid",
   });
 }
+export async function markPresent(
+  supabase: any,
+  { reservationId }: { reservationId: string }
+) {
+  const now = new Date().toISOString();
+
+  const { data, error } = await supabase
+    .from("reservations")
+    .update({
+      attendance_status: "present",
+      reservation_status: "confirmed",
+      checked_in_at: now,
+      completed_at: null,
+    })
+    .eq("id", reservationId)
+    .select()
+    .single();
+
+  if (error) {
+    return { data: null, error: error.message };
+  }
+
+  return { data, error: null };
+}
+
+export async function markScheduled(
+  supabase: any,
+  { reservationId }: { reservationId: string }
+) {
+  const { data, error } = await supabase
+    .from("reservations")
+    .update({
+      attendance_status: "planned",
+      reservation_status: "confirmed",
+      checked_in_at: null,
+      completed_at: null,
+    })
+    .eq("id", reservationId)
+    .select()
+    .single();
+
+  if (error) {
+    return { data: null, error: error.message };
+  }
+
+  return { data, error: null };
+}
