@@ -3,6 +3,21 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { supabase } from "../../../lib/supabase";
+import {
+  getReservationStatusLabel,
+  getReservationStatusBadgeClass,
+} from "../../../lib/reservation-status";
+
+import {
+  getPaymentStatusLabel,
+  getPaymentStatusBadgeClass,
+} from "../../../lib/payment-status";
+import {
+  cancelReservation,
+  completeReservation,
+  markNoShow,
+  markPaid,
+} from "../../../lib/reservation-actions";
 
 type ReservationSort = "newest" | "oldest" | "lane" | "status" | "payment";
 
@@ -62,76 +77,6 @@ function getLaneName(reservation: Reservation) {
   }
 
   return lanes?.name || "Nieznana oś";
-}
-
-function getReservationStatusLabel(status: string | null) {
-  switch (status) {
-    case "confirmed":
-      return "Potwierdzona";
-    case "completed":
-      return "Zakończona";
-    case "no_show":
-      return "No-show";
-    case "cancelled":
-    case "canceled":
-    case "cancelled_by_user":
-    case "cancelled_by_admin":
-      return "Anulowana";
-    default:
-      return status || "Brak statusu";
-  }
-}
-
-function getReservationStatusClass(status: string | null) {
-  switch (status) {
-    case "confirmed":
-      return "border-green-700 bg-green-950 text-green-300";
-    case "completed":
-      return "border-blue-700 bg-blue-950 text-blue-300";
-    case "no_show":
-      return "border-yellow-700 bg-yellow-950 text-yellow-300";
-    case "cancelled":
-    case "canceled":
-    case "cancelled_by_user":
-    case "cancelled_by_admin":
-      return "border-red-700 bg-red-950 text-red-300";
-    default:
-      return "border-zinc-700 bg-zinc-900 text-zinc-300";
-  }
-}
-
-function getPaymentStatusLabel(status: string | null) {
-  switch (status) {
-    case "pay_on_site":
-      return "Płatność na miejscu";
-    case "paid":
-      return "Opłacona";
-    case "unpaid":
-      return "Nieopłacona";
-    case "free":
-      return "Darmowa";
-    case "voucher":
-      return "Voucher";
-    default:
-      return status || "Brak statusu";
-  }
-}
-
-function getPaymentStatusClass(status: string | null) {
-  switch (status) {
-    case "paid":
-      return "border-green-700 bg-green-950 text-green-300";
-    case "pay_on_site":
-      return "border-yellow-700 bg-yellow-950 text-yellow-300";
-    case "unpaid":
-      return "border-red-700 bg-red-950 text-red-300";
-    case "free":
-      return "border-blue-700 bg-blue-950 text-blue-300";
-    case "voucher":
-      return "border-purple-700 bg-purple-950 text-purple-300";
-    default:
-      return "border-zinc-700 bg-zinc-900 text-zinc-300";
-  }
 }
 
 function isReservationSort(value: string | null): value is ReservationSort {
@@ -391,21 +336,68 @@ export default function AdminReservationsPage() {
     setSavingReservationId(reservation.id);
     setMessage("");
 
-    const { error } = await supabase
-      .from("reservations")
-      .update(changes)
-      .eq("id", reservation.id);
+    let result:
+      | {
+          data: {
+            reservation_status: string | null;
+            payment_status: string | null;
+          } | null;
+          error: string | null;
+        }
+      | null = null;
+
+    if (changes.reservation_status === "completed") {
+      result = await completeReservation(supabase, {
+        reservationId: reservation.id,
+      });
+    } else if (changes.reservation_status === "no_show") {
+      result = await markNoShow(supabase, {
+        reservationId: reservation.id,
+      });
+    } else if (changes.reservation_status === "cancelled_by_admin") {
+      result = await cancelReservation(supabase, {
+        reservationId: reservation.id,
+      });
+    } else if (changes.payment_status === "paid") {
+      result = await markPaid(supabase, {
+        reservationId: reservation.id,
+      });
+    }
+
+    if (!result) {
+      const { data, error } = await supabase
+        .from("reservations")
+        .update(changes)
+        .eq("id", reservation.id)
+        .select("reservation_status, payment_status")
+        .single();
+
+      result = {
+        data,
+        error: error ? error.message : null,
+      };
+    }
 
     setSavingReservationId(null);
 
-    if (error) {
-      setMessage(`Błąd zapisu rezerwacji: ${error.message}`);
+    if (result.error) {
+      setMessage(`Błąd zapisu rezerwacji: ${result.error}`);
       return;
     }
 
+    const nextChanges = {
+      ...changes,
+      ...(result.data?.reservation_status !== undefined
+        ? { reservation_status: result.data.reservation_status }
+        : {}),
+      ...(result.data?.payment_status !== undefined
+        ? { payment_status: result.data.payment_status }
+        : {}),
+    };
+
     setReservations((currentReservations) =>
       currentReservations.map((item) =>
-        item.id === reservation.id ? { ...item, ...changes } : item
+        item.id === reservation.id ? { ...item, ...nextChanges } : item
       )
     );
 
@@ -574,7 +566,7 @@ export default function AdminReservationsPage() {
                       <div>
                         <div className="mb-3 flex flex-wrap gap-2">
                           <span
-                            className={`rounded-full border px-3 py-1 text-xs font-bold ${getReservationStatusClass(
+                            className={`rounded-full border px-3 py-1 text-xs font-bold ${getReservationStatusBadgeClass(
                               reservation.reservation_status
                             )}`}
                           >
@@ -584,7 +576,7 @@ export default function AdminReservationsPage() {
                           </span>
 
                           <span
-                            className={`rounded-full border px-3 py-1 text-xs font-bold ${getPaymentStatusClass(
+                            className={`rounded-full border px-3 py-1 text-xs font-bold ${getPaymentStatusBadgeClass(
                               reservation.payment_status
                             )}`}
                           >
