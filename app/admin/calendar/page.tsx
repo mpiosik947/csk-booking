@@ -1,6 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import {
+  cancelReservation as cancelReservationAction,
+  completeReservation as completeReservationAction,
+  markNoShow as markNoShowAction,
+  markPaid as markPaidAction,
+} from "../../../lib/reservation-actions";
 import { supabase } from "../../../lib/supabase";
 
 type CalendarMode = "day" | "week";
@@ -470,6 +476,21 @@ export default function AdminCalendarPage() {
     return events.filter((event) => event.event_date === date);
   }
 
+  function applyReservationChanges(
+    reservationId: string,
+    changes: Partial<Reservation>
+  ) {
+    setReservations((current) =>
+      current.map((item) =>
+        item.id === reservationId ? { ...item, ...changes } : item
+      )
+    );
+
+    setSelectedReservation((current) =>
+      current && current.id === reservationId ? { ...current, ...changes } : current
+    );
+  }
+
   async function updateReservation(
     reservation: Reservation,
     changes: Partial<Reservation>
@@ -486,45 +507,67 @@ export default function AdminCalendarPage() {
 
     if (error) {
       setMessage(`Błąd zapisu: ${error.message}`);
-      return;
+      return false;
     }
 
-    setReservations((current) =>
-      current.map((item) =>
-        item.id === reservation.id ? { ...item, ...changes } : item
-      )
-    );
+    applyReservationChanges(reservation.id, changes);
 
-    setSelectedReservation((current) =>
-      current ? { ...current, ...changes } : null
-    );
+    return true;
+  }
+
+  async function runReservationAction(
+    reservation: Reservation,
+    action: (reservationId: string) => Promise<{
+      data: Partial<Reservation> | null;
+      error: string | null;
+    }>
+  ) {
+    setSavingReservationId(reservation.id);
+    setMessage("");
+
+    const result = await action(reservation.id);
+
+    setSavingReservationId(null);
+
+    if (result.error) {
+      setMessage(`Błąd zapisu: ${result.error}`);
+      return false;
+    }
+
+    if (result.data) {
+      applyReservationChanges(reservation.id, {
+        reservation_status: result.data.reservation_status ?? null,
+        attendance_status: result.data.attendance_status ?? null,
+        payment_status: result.data.payment_status ?? null,
+        checked_in_at: result.data.checked_in_at ?? null,
+      });
+    }
+
+    return true;
   }
 
   async function markCompleted() {
     if (!selectedReservation) return;
 
-    await updateReservation(selectedReservation, {
-      reservation_status: "completed",
-      attendance_status: "present",
-      checked_in_at: new Date().toISOString(),
-    });
+    await runReservationAction(selectedReservation, (reservationId) =>
+      completeReservationAction(supabase, { reservationId })
+    );
   }
 
   async function markNoShow() {
     if (!selectedReservation) return;
 
-    await updateReservation(selectedReservation, {
-      reservation_status: "no_show",
-      attendance_status: "no_show",
-    });
+    await runReservationAction(selectedReservation, (reservationId) =>
+      markNoShowAction(supabase, { reservationId })
+    );
   }
 
   async function markPaid() {
     if (!selectedReservation) return;
 
-    await updateReservation(selectedReservation, {
-      payment_status: "paid",
-    });
+    await runReservationAction(selectedReservation, (reservationId) =>
+      markPaidAction(supabase, { reservationId })
+    );
   }
 
   async function markPayOnSite() {
@@ -546,9 +589,11 @@ export default function AdminCalendarPage() {
   async function cancelReservation() {
     if (!selectedReservation) return;
 
-    await updateReservation(selectedReservation, {
-      reservation_status: "cancelled_by_admin",
-    });
+    const wasSaved = await runReservationAction(selectedReservation, (reservationId) =>
+      cancelReservationAction(supabase, { reservationId })
+    );
+
+    if (!wasSaved) return;
 
     setReservations((current) =>
       current.filter((item) => item.id !== selectedReservation.id)
