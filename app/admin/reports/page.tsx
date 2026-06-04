@@ -1,6 +1,18 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import {
+  getPaymentStatusBadgeClass,
+  getPaymentStatusLabel,
+  isPaidPaymentStatus,
+  PAYMENT_STATUS,
+} from "../../../lib/payment-status";
+import {
+  getReservationStatusBadgeClass,
+  getReservationStatusLabel,
+  isCancelledReservationStatus,
+  RESERVATION_STATUS,
+} from "../../../lib/reservation-status";
 import { supabase } from "../../../lib/supabase";
 
 type ReportMode = "day" | "week" | "month" | "year";
@@ -76,37 +88,8 @@ function getDateRange(mode: ReportMode, selectedDate: string) {
   };
 }
 
-function translateStatus(status: string) {
-  if (status === "confirmed") return "Potwierdzona";
-  if (status === "cancelled") return "Anulowana";
-  if (status === "cancelled_by_admin") return "Anulowana przez admina";
-  if (status === "cancelled_by_user") return "Anulowana przez użytkownika";
-  if (status === "completed") return "Zrealizowana";
-  if (status === "no_show") return "Nieobecny";
-  return status;
-}
-
-function translatePayment(status: string) {
-  if (status === "pay_on_site") return "Płatność na miejscu";
-  if (status === "paid_on_site") return "Opłacone";
-  if (status === "paid") return "Opłacone";
-  if (status === "unpaid") return "Nieopłacone";
-  if (status === "voucher") return "Voucher";
-  if (status === "free") return "Darmowe";
-  return status;
-}
-
-function isCancelled(status: string) {
-  return (
-    status === "cancelled" ||
-    status === "canceled" ||
-    status === "cancelled_by_admin" ||
-    status === "cancelled_by_user"
-  );
-}
-
-function isPaid(status: string) {
-  return status === "paid" || status === "paid_on_site";
+function getBadgeClass(baseClass: string) {
+  return `rounded-full border px-3 py-1 text-xs font-semibold ${baseClass}`;
 }
 
 export default function AdminReportsPage() {
@@ -142,7 +125,7 @@ export default function AdminReportsPage() {
     }
 
     const { data: roleData, error: roleError } = await supabase.rpc(
-      "get_my_role"
+      "get_my_role",
     );
 
     if (roleError) {
@@ -187,7 +170,7 @@ export default function AdminReportsPage() {
         shooting_lanes (
           name
         )
-      `
+      `,
       )
       .gte("reservation_date", range.startDate)
       .lte("reservation_date", range.endDate)
@@ -207,39 +190,39 @@ export default function AdminReportsPage() {
 
   const activeReservations = reservations.filter(
     (reservation) =>
-      !isCancelled(reservation.reservation_status) &&
-      reservation.reservation_status !== "no_show"
+      !isCancelledReservationStatus(reservation.reservation_status) &&
+      reservation.reservation_status !== RESERVATION_STATUS.NO_SHOW,
   );
 
   const paidReservations = activeReservations.filter((reservation) =>
-    isPaid(reservation.payment_status)
+    isPaidPaymentStatus(reservation.payment_status),
   );
 
   const cancelledReservations = reservations.filter((reservation) =>
-    isCancelled(reservation.reservation_status)
+    isCancelledReservationStatus(reservation.reservation_status),
   );
 
   const noShowReservations = reservations.filter(
-    (reservation) => reservation.reservation_status === "no_show"
+    (reservation) => reservation.reservation_status === RESERVATION_STATUS.NO_SHOW,
   );
 
   const totalRevenue = activeReservations.reduce(
     (sum, reservation) => sum + Number(reservation.price ?? 0),
-    0
+    0,
   );
 
   const paidRevenue = paidReservations.reduce(
     (sum, reservation) => sum + Number(reservation.price ?? 0),
-    0
+    0,
   );
 
   const unpaidRevenue = activeReservations
-    .filter((reservation) => !isPaid(reservation.payment_status))
+    .filter((reservation) => !isPaidPaymentStatus(reservation.payment_status))
     .reduce((sum, reservation) => sum + Number(reservation.price ?? 0), 0);
 
   const totalReservedMinutes = activeReservations.reduce(
     (sum, reservation) => sum + Number(reservation.duration_minutes ?? 0),
-    0
+    0,
   );
 
   const daysInRange =
@@ -263,7 +246,7 @@ export default function AdminReportsPage() {
         (acc[reservation.reservation_date] ?? 0) +
         Number(reservation.price ?? 0);
       return acc;
-    }, {})
+    }, {}),
   ).sort((a, b) => b[1] - a[1])[0];
 
   const topLane = Object.entries(
@@ -271,7 +254,7 @@ export default function AdminReportsPage() {
       const laneName = reservation.shooting_lanes?.name ?? "Brak osi";
       acc[laneName] = (acc[laneName] ?? 0) + 1;
       return acc;
-    }, {})
+    }, {}),
   ).sort((a, b) => b[1] - a[1])[0];
 
   return (
@@ -477,11 +460,31 @@ export default function AdminReportsPage() {
                           </td>
 
                           <td className="py-4 pr-4">
-                            {translateStatus(reservation.reservation_status)}
+                            <span
+                              className={getBadgeClass(
+                                getReservationStatusBadgeClass(
+                                  reservation.reservation_status,
+                                ),
+                              )}
+                            >
+                              {getReservationStatusLabel(
+                                reservation.reservation_status,
+                              )}
+                            </span>
                           </td>
 
                           <td className="py-4 pr-4">
-                            {translatePayment(reservation.payment_status)}
+                            <span
+                              className={getBadgeClass(
+                                getPaymentStatusBadgeClass(
+                                  reservation.payment_status,
+                                ),
+                              )}
+                            >
+                              {getPaymentStatusLabel(
+                                reservation.payment_status,
+                              )}
+                            </span>
                           </td>
                         </tr>
                       ))}
