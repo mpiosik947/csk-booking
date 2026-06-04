@@ -1,135 +1,90 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import { supabase } from "../../../lib/supabase";
 import {
   cancelReservation as cancelReservationAction,
   completeReservation as completeReservationAction,
   markNoShow as markNoShowAction,
   markPaid as markPaidAction,
 } from "../../../lib/reservation-actions";
-import { supabase } from "../../../lib/supabase";
 
-type CalendarMode = "day" | "week";
 type UserRole = "admin" | "pracownik" | "instruktor" | "user";
-
-type Lane = {
-  id: string;
-  name: string;
-};
 
 type Reservation = {
   id: string;
-  lane_id: string | null;
+  check_in_token: string | null;
+  user_id: string | null;
   customer_name: string | null;
   customer_email: string | null;
   customer_phone: string | null;
-  reservation_date: string;
-  start_time: string;
-  end_time: string;
+  reservation_date: string | null;
+  start_time: string | null;
+  end_time: string | null;
   reservation_status: string | null;
-  payment_status: string | null;
   attendance_status: string | null;
+  payment_status: string | null;
   checked_in_at: string | null;
-  created_at: string | null;
   price: number | null;
-  reservation_note: string | null;
+  shooting_lanes?: {
+    name: string | null;
+  }[] | null;
 };
 
-type LaneBlock = {
+type Profile = {
   id: string;
-  lane_id: string;
-  block_date: string;
-  start_time: string;
-  end_time: string;
-  reason: string | null;
-  is_active: boolean;
+  user_id: string;
+  email: string | null;
+  full_name: string | null;
+  phone: string | null;
+  role: UserRole | string | null;
+  verification_status: string | null;
+  admin_note: string | null;
+  created_at: string | null;
+  updated_at: string | null;
+
+  postal_code: string | null;
+  city: string | null;
+  street: string | null;
+  house_number: string | null;
+  apartment_number: string | null;
+
+  permission_sport: boolean | null;
+  permission_collector: boolean | null;
+  permission_hunting: boolean | null;
+  permission_training: boolean | null;
+  permission_personal_protection: boolean | null;
+  permission_other: boolean | null;
+
+  qualification_instructor: boolean | null;
+  qualification_range_officer: boolean | null;
+  qualification_pzss_license: boolean | null;
+  qualification_hunter: boolean | null;
+
+  permissions_verified: boolean | null;
+  permissions_verified_at: string | null;
+  permissions_verified_by: string | null;
+  permissions_verification_note: string | null;
 };
 
-type EventItem = {
-  id: string;
-  title: string;
-  event_date: string;
-  start_time: string;
-  end_time: string;
-  location: string | null;
-  is_active: boolean | null;
-};
+const VERIFIED_NOTE =
+  "Sprawdzono uprawnienia klienta podczas pierwszej wizyty. Dokumenty okazane do wglądu, bez kopiowania i zapisywania numerów. Klient zapoznany z regulaminem i zasadami bezpieczeństwa. Konto zweryfikowane.";
 
-type ClientStats = {
-  totalReservations: number;
-  totalCompleted: number;
-  totalNoShow: number;
-  totalSpent: number;
-};
+const INCOMPLETE_NOTE =
+  "Nie zakończono pełnej weryfikacji uprawnień. Klient poinformowany o konieczności okazania wymaganych dokumentów przy kolejnej wizycie. Konto pozostaje niezweryfikowane.";
 
-const hours = [
-  "08:00",
-  "09:00",
-  "10:00",
-  "11:00",
-  "12:00",
-  "13:00",
-  "14:00",
-  "15:00",
-  "16:00",
-  "17:00",
-  "18:00",
-  "19:00",
-];
-
-function addDays(date: Date, days: number) {
-  const copy = new Date(date);
-  copy.setDate(copy.getDate() + days);
-  return copy;
+function todayISODate() {
+  return new Date().toISOString().slice(0, 10);
 }
 
-function formatDateInput(date: Date) {
-  return date.toISOString().slice(0, 10);
+function normalizeTime(time: string | null) {
+  if (!time) return "";
+  return time.slice(0, 5);
 }
 
-function getWeekDates(selectedDate: string) {
-  const base = new Date(`${selectedDate}T12:00:00`);
-  const day = base.getDay();
-  const diffToMonday = day === 0 ? -6 : 1 - day;
-  const monday = addDays(base, diffToMonday);
-
-  return Array.from({ length: 7 }, (_, index) =>
-    formatDateInput(addDays(monday, index))
-  );
-}
-
-function formatShortDate(dateString: string) {
-  const date = new Date(`${dateString}T12:00:00`);
-
-  return new Intl.DateTimeFormat("pl-PL", {
-    weekday: "short",
-    day: "2-digit",
-    month: "2-digit",
-  }).format(date);
-}
-
-function timeToMinutes(time: string) {
-  const [hour, minutes] = time.slice(0, 5).split(":").map(Number);
-  return hour * 60 + minutes;
-}
-
-function rangeCoversHour(startTime: string, endTime: string, hour: string) {
-  const hourStart = timeToMinutes(hour);
-  const hourEnd = hourStart + 60;
-
-  const start = timeToMinutes(startTime);
-  const end = timeToMinutes(endTime);
-
-  return start < hourEnd && end > hourStart;
-}
-
-function isCancelledStatus(status: string | null) {
-  return (
-    status === "cancelled" ||
-    status === "canceled" ||
-    status === "cancelled_by_user" ||
-    status === "cancelled_by_admin"
-  );
+function getLaneName(reservation: Reservation) {
+  return reservation.shooting_lanes?.[0]?.name || "Nieznana oś";
 }
 
 function getReservationStatusLabel(status: string | null) {
@@ -167,102 +122,342 @@ function getPaymentStatusLabel(status: string | null) {
   }
 }
 
-function getRoleLabel(role: string | null) {
-  switch (role) {
-    case "admin":
-      return "Administrator";
-    case "pracownik":
-      return "Pracownik";
-    case "instruktor":
-      return "Instruktor";
+function getVerificationStatusLabel(status: string | null) {
+  switch (status) {
+    case "verified":
+      return "Zweryfikowane";
+    case "pending":
+      return "Oczekuje";
+    case "rejected":
+      return "Odrzucone";
+    case "niezweryfikowane":
+    case "unverified":
+      return "Niezweryfikowane";
     default:
-      return "Brak roli";
+      return "Brak statusu";
   }
 }
 
-function getRoleBadgeClass(role: string | null) {
-  switch (role) {
-    case "admin":
-      return "border-green-700 bg-green-950 text-green-300";
-    case "pracownik":
+function isVerifiedProfile(profile: Profile | null | undefined) {
+  return profile?.verification_status === "verified";
+}
+
+function arePermissionsVerified(profile: Profile | null | undefined) {
+  return Boolean(profile?.permissions_verified);
+}
+
+function valueOrMissing(value: string | null | undefined) {
+  return value && value.trim() ? value : "Brak danych";
+}
+
+function yesNo(value: boolean | null | undefined) {
+  return value ? "Tak" : "Nie";
+}
+
+function getMissingFields(profile: Profile | null | undefined) {
+  const missing: string[] = [];
+
+  if (!profile) {
+    return ["brak profilu użytkownika"];
+  }
+
+  if (!profile.full_name) missing.push("imię i nazwisko");
+  if (!profile.phone) missing.push("telefon");
+  if (!profile.postal_code) missing.push("kod pocztowy");
+  if (!profile.city) missing.push("miasto");
+  if (!profile.street) missing.push("ulica");
+  if (!profile.house_number) missing.push("numer domu");
+
+  return missing;
+}
+
+function getCompletionPercent(profile: Profile | null | undefined) {
+  if (!profile) return 0;
+
+  const fields = [
+    profile.full_name,
+    profile.phone,
+    profile.postal_code,
+    profile.city,
+    profile.street,
+    profile.house_number,
+  ];
+
+  const filled = fields.filter((field) => field && field.trim()).length;
+
+  return Math.round((filled / fields.length) * 100);
+}
+
+function getDeclaredPermissions(profile: Profile | null | undefined) {
+  if (!profile) return [];
+
+  const permissions: string[] = [];
+
+  if (profile.permission_sport) permissions.push("sportowe");
+  if (profile.permission_collector) permissions.push("kolekcjonerskie");
+  if (profile.permission_hunting) permissions.push("myśliwskie / łowieckie");
+  if (profile.permission_training) permissions.push("szkoleniowe / dopuszczenie");
+  if (profile.permission_personal_protection) permissions.push("ochrona osobista");
+  if (profile.permission_other) permissions.push("inne");
+
+  return permissions;
+}
+
+function getDeclaredQualifications(profile: Profile | null | undefined) {
+  if (!profile) return [];
+
+  const qualifications: string[] = [];
+
+  if (profile.qualification_instructor) qualifications.push("instruktor");
+  if (profile.qualification_range_officer)
+    qualifications.push("prowadzący strzelanie / range officer");
+  if (profile.qualification_pzss_license) qualifications.push("licencja PZSS");
+  if (profile.qualification_hunter) qualifications.push("myśliwy");
+
+  return qualifications;
+}
+
+function getStatusClass(status: string | null) {
+  switch (status) {
+    case "completed":
       return "border-blue-700 bg-blue-950 text-blue-300";
-    case "instruktor":
+    case "confirmed":
+      return "border-green-700 bg-green-950 text-green-300";
+    case "no_show":
+      return "border-yellow-700 bg-yellow-950 text-yellow-300";
+    case "cancelled_by_admin":
+    case "cancelled_by_user":
+    case "cancelled":
+    case "canceled":
+      return "border-red-700 bg-red-950 text-red-300";
+    default:
+      return "border-zinc-700 bg-zinc-900 text-zinc-300";
+  }
+}
+
+function getPaymentClass(status: string | null) {
+  switch (status) {
+    case "paid":
+      return "border-green-700 bg-green-950 text-green-300";
+    case "pay_on_site":
+      return "border-yellow-700 bg-yellow-950 text-yellow-300";
+    case "unpaid":
+      return "border-red-700 bg-red-950 text-red-300";
+    case "free":
+      return "border-blue-700 bg-blue-950 text-blue-300";
+    case "voucher":
       return "border-purple-700 bg-purple-950 text-purple-300";
     default:
       return "border-zinc-700 bg-zinc-900 text-zinc-300";
   }
 }
 
-export default function AdminCalendarPage() {
-  const today = new Date().toISOString().slice(0, 10);
-
-  const [mode, setMode] = useState<CalendarMode>("day");
-  const [selectedDate, setSelectedDate] = useState(today);
-
-  const [lanes, setLanes] = useState<Lane[]>([]);
-  const [reservations, setReservations] = useState<Reservation[]>([]);
-  const [laneBlocks, setLaneBlocks] = useState<LaneBlock[]>([]);
-  const [events, setEvents] = useState<EventItem[]>([]);
-
-  const [loading, setLoading] = useState(true);
-  const [message, setMessage] = useState("");
-  const [role, setRole] = useState<UserRole | null>(null);
-
-  const [selectedReservation, setSelectedReservation] =
-    useState<Reservation | null>(null);
-
-  const [reservationNote, setReservationNote] = useState("");
-  const [clientHistory, setClientHistory] = useState<Reservation[]>([]);
-  const [clientStats, setClientStats] = useState<ClientStats>({
-    totalReservations: 0,
-    totalCompleted: 0,
-    totalNoShow: 0,
-    totalSpent: 0,
-  });
-
-  const [savingReservationId, setSavingReservationId] = useState<string | null>(
-    null
-  );
-
-  const visibleDates =
-    mode === "day" ? [selectedDate] : getWeekDates(selectedDate);
-
-  const hasAccess =
-    role === "admin" || role === "pracownik" || role === "instruktor";
-
-  useEffect(() => {
-    loadCalendar();
-  }, [selectedDate, mode]);
-
-  function getLaneNameById(laneId: string | null) {
-    const lane = lanes.find((item) => item.id === laneId);
-    return lane?.name ?? "Brak osi";
+function getVerificationClass(profile: Profile | null | undefined) {
+  if (isVerifiedProfile(profile)) {
+    return "border-green-700 bg-green-950 text-green-300";
   }
 
-  async function openReservation(reservation: Reservation) {
-    setSelectedReservation(reservation);
-    setReservationNote(reservation.reservation_note || "");
+  if (profile?.verification_status === "rejected") {
+    return "border-red-700 bg-red-950 text-red-300";
+  }
 
-    const customerEmail = reservation.customer_email;
-    const customerPhone = reservation.customer_phone;
+  return "border-orange-700 bg-orange-950 text-orange-300";
+}
 
-    if (!customerEmail && !customerPhone) {
-      setClientHistory([]);
-      setClientStats({
-        totalReservations: 0,
-        totalCompleted: 0,
-        totalNoShow: 0,
-        totalSpent: 0,
-      });
+function getPermissionsClass(profile: Profile | null | undefined) {
+  if (arePermissionsVerified(profile)) {
+    return "border-green-700 bg-green-950 text-green-300";
+  }
+
+  return "border-yellow-700 bg-yellow-950 text-yellow-300";
+}
+
+function BooleanLine({
+  label,
+  value,
+}: {
+  label: string;
+  value: boolean | null | undefined;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-4 border-b border-zinc-800 py-2 last:border-b-0">
+      <span className="text-sm text-zinc-400">{label}</span>
+      <span
+        className={
+          value
+            ? "rounded-full border border-green-700 bg-green-950 px-3 py-1 text-xs font-bold text-green-300"
+            : "rounded-full border border-zinc-700 bg-zinc-900 px-3 py-1 text-xs font-bold text-zinc-400"
+        }
+      >
+        {yesNo(value)}
+      </span>
+    </div>
+  );
+}
+
+function CheckInContent() {
+  const params = useSearchParams();
+  const token = params.get("token");
+
+  const [reservations, setReservations] = useState<Reservation[]>([]);
+  const [selectedReservation, setSelectedReservation] =
+    useState<Reservation | null>(null);
+  const [profilesByUserId, setProfilesByUserId] = useState<
+    Record<string, Profile>
+  >({});
+
+  const [currentUserId, setCurrentUserId] = useState("");
+  const [currentProfileId, setCurrentProfileId] = useState("");
+  const [currentUserName, setCurrentUserName] = useState("");
+  const [currentUserRole, setCurrentUserRole] = useState<UserRole | "">("");
+
+  const [dateFilter, setDateFilter] = useState(todayISODate());
+  const [search, setSearch] = useState("");
+
+  const [message, setMessage] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [savingId, setSavingId] = useState<string | null>(null);
+
+  async function loadCurrentUser() {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    setCurrentUserId(user?.id ?? "");
+
+    if (!user) return;
+
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("id,role,full_name,email")
+      .eq("user_id", user.id)
+      .maybeSingle();
+
+    if (profile?.id) {
+      setCurrentProfileId(profile.id);
+    }
+
+    if (profile?.role) {
+      setCurrentUserRole(String(profile.role) as UserRole);
+      setCurrentUserName(
+        profile.full_name || profile.email || "Nieznany użytkownik"
+      );
+    }
+  }
+
+  async function loadProfilesForReservations(items: Reservation[]) {
+    const userIds = Array.from(
+      new Set(
+        items
+          .map((reservation) => reservation.user_id)
+          .filter((id): id is string => Boolean(id))
+      )
+    );
+
+    if (userIds.length === 0) {
+      setProfilesByUserId({});
       return;
     }
+
+    const { data, error } = await supabase
+      .from("profiles")
+      .select(
+        `
+        id,
+        user_id,
+        email,
+        full_name,
+        phone,
+        role,
+        verification_status,
+        admin_note,
+        created_at,
+        updated_at,
+
+        postal_code,
+        city,
+        street,
+        house_number,
+        apartment_number,
+
+        permission_sport,
+        permission_collector,
+        permission_hunting,
+        permission_training,
+        permission_personal_protection,
+        permission_other,
+
+        qualification_instructor,
+        qualification_range_officer,
+        qualification_pzss_license,
+        qualification_hunter,
+
+        permissions_verified,
+        permissions_verified_at,
+        permissions_verified_by,
+        permissions_verification_note
+      `
+      )
+      .in("user_id", userIds);
+
+    if (error) {
+      setMessage(`Błąd pobierania profili: ${error.message}`);
+      return;
+    }
+
+    const map: Record<string, Profile> = {};
+
+    for (const profile of (data ?? []) as Profile[]) {
+      map[profile.user_id] = profile;
+    }
+
+    setProfilesByUserId(map);
+  }
+
+  async function createAuditLog({
+    action,
+    reservation,
+    profile,
+    details,
+  }: {
+    action: string;
+    reservation?: Reservation;
+    profile?: Profile | null;
+    details?: Record<string, unknown>;
+  }) {
+    if (!currentUserId) return null;
+
+    const { error } = await supabase.from("audit_logs").insert({
+      actor_user_id: currentUserId,
+      actor_name: currentUserName || "Nieznany użytkownik",
+      actor_role: currentUserRole || "unknown",
+      action,
+      target_type: reservation ? "reservation" : "profile",
+      target_id: reservation?.id || profile?.user_id || null,
+      target_name:
+        reservation?.customer_name ||
+        profile?.full_name ||
+        profile?.email ||
+        "Nieznany cel",
+      details: details ?? {},
+    });
+
+    return error?.message ?? null;
+  }
+
+  async function loadReservations() {
+    setLoading(true);
+    setMessage("");
+
+    await loadCurrentUser();
 
     let query = supabase
       .from("reservations")
       .select(
         `
         id,
-        lane_id,
+        check_in_token,
+        user_id,
         customer_name,
         customer_email,
         customer_phone,
@@ -270,123 +465,49 @@ export default function AdminCalendarPage() {
         start_time,
         end_time,
         reservation_status,
-        payment_status,
         attendance_status,
+        payment_status,
         checked_in_at,
-        created_at,
         price,
-        reservation_note
+        shooting_lanes (
+          name
+        )
       `
       )
-      .order("reservation_date", { ascending: false })
-      .order("start_time", { ascending: false })
-      .limit(5);
+      .order("start_time", { ascending: true });
 
-    if (customerEmail) {
-      query = query.eq("customer_email", customerEmail);
-    } else if (customerPhone) {
-      query = query.eq("customer_phone", customerPhone);
+    if (dateFilter) {
+      query = query.eq("reservation_date", dateFilter);
     }
 
     const { data, error } = await query;
 
-    if (error || !data) {
-      setClientHistory([]);
-      setClientStats({
-        totalReservations: 0,
-        totalCompleted: 0,
-        totalNoShow: 0,
-        totalSpent: 0,
-      });
+    setLoading(false);
+
+    if (error) {
+      setMessage(`Błąd pobierania rezerwacji: ${error.message}`);
       return;
     }
 
-    const history = data as Reservation[];
+    const loadedReservations = (data ?? []) as unknown as Reservation[];
 
-    const completed = history.filter(
-      (item) => item.reservation_status === "completed"
-    ).length;
-
-    const noShow = history.filter(
-      (item) => item.reservation_status === "no_show"
-    ).length;
-
-    const totalSpent = history.reduce(
-      (sum, item) => sum + Number(item.price ?? 0),
-      0
-    );
-
-    setClientHistory(history);
-    setClientStats({
-      totalReservations: history.length,
-      totalCompleted: completed,
-      totalNoShow: noShow,
-      totalSpent,
-    });
+    setReservations(loadedReservations);
+    await loadProfilesForReservations(loadedReservations);
   }
 
-  async function loadCalendar() {
+  async function loadReservationByToken(checkInToken: string) {
     setLoading(true);
     setMessage("");
 
-    const {
-      data: { user },
-      error: userError,
-    } = await supabase.auth.getUser();
+    await loadCurrentUser();
 
-    if (userError || !user) {
-      setMessage("Musisz być zalogowany.");
-      setLoading(false);
-      return;
-    }
-
-    const { data: profile, error: profileError } = await supabase
-      .from("profiles")
-      .select("role")
-      .eq("user_id", user.id)
-      .single();
-
-    if (profileError || !profile?.role) {
-      setMessage("Nie udało się pobrać roli użytkownika.");
-      setLoading(false);
-      return;
-    }
-
-    const currentRole = String(profile.role).trim().toLowerCase() as UserRole;
-    setRole(currentRole);
-
-    if (
-      currentRole !== "admin" &&
-      currentRole !== "pracownik" &&
-      currentRole !== "instruktor"
-    ) {
-      setMessage("Brak dostępu.");
-      setLoading(false);
-      return;
-    }
-
-    const dates = mode === "day" ? [selectedDate] : getWeekDates(selectedDate);
-    const dateFrom = dates[0];
-    const dateTo = dates[dates.length - 1];
-
-    const { data: lanesData, error: lanesError } = await supabase
-      .from("shooting_lanes")
-      .select("id, name")
-      .eq("is_active", true)
-      .order("name");
-
-    if (lanesError) {
-      setMessage(`Błąd pobierania osi: ${lanesError.message}`);
-      setLoading(false);
-      return;
-    }
-
-    const { data: reservationsData, error: reservationsError } = await supabase
+    const { data, error } = await supabase
       .from("reservations")
       .select(
         `
         id,
-        lane_id,
+        check_in_token,
+        user_id,
         customer_name,
         customer_email,
         customer_phone,
@@ -394,108 +515,92 @@ export default function AdminCalendarPage() {
         start_time,
         end_time,
         reservation_status,
-        payment_status,
         attendance_status,
+        payment_status,
         checked_in_at,
-        created_at,
         price,
-        reservation_note
+        shooting_lanes (
+          name
+        )
       `
       )
-      .gte("reservation_date", dateFrom)
-      .lte("reservation_date", dateTo)
-      .order("reservation_date", { ascending: true })
-      .order("start_time", { ascending: true });
+      .eq("check_in_token", checkInToken)
+      .single();
 
-    if (reservationsError) {
-      setMessage(`Błąd pobierania rezerwacji: ${reservationsError.message}`);
-      setLoading(false);
-      return;
-    }
-
-    const { data: blocksData, error: blocksError } = await supabase
-      .from("lane_blocks")
-      .select("id, lane_id, block_date, start_time, end_time, reason, is_active")
-      .gte("block_date", dateFrom)
-      .lte("block_date", dateTo)
-      .eq("is_active", true)
-      .order("block_date", { ascending: true })
-      .order("start_time", { ascending: true });
-
-    if (blocksError) {
-      setMessage(`Błąd pobierania blokad osi: ${blocksError.message}`);
-      setLoading(false);
-      return;
-    }
-
-    const { data: eventsData, error: eventsError } = await supabase
-      .from("events")
-      .select("id, title, event_date, start_time, end_time, location, is_active")
-      .gte("event_date", dateFrom)
-      .lte("event_date", dateTo)
-      .eq("is_active", true)
-      .order("event_date", { ascending: true })
-      .order("start_time", { ascending: true });
-
-    if (eventsError) {
-      setMessage(`Błąd pobierania eventów: ${eventsError.message}`);
-      setLoading(false);
-      return;
-    }
-
-    const activeReservations = ((reservationsData ?? []) as Reservation[]).filter(
-      (reservation) => !isCancelledStatus(reservation.reservation_status)
-    );
-
-    setLanes((lanesData ?? []) as Lane[]);
-    setReservations(activeReservations);
-    setLaneBlocks((blocksData ?? []) as LaneBlock[]);
-    setEvents((eventsData ?? []) as EventItem[]);
     setLoading(false);
+
+    if (error) {
+      setMessage("Nie znaleziono rezerwacji dla tego kodu QR.");
+      return;
+    }
+
+    const reservation = data as unknown as Reservation;
+
+    setSelectedReservation(reservation);
+    await loadProfilesForReservations([reservation]);
   }
 
-  function getReservationsForSlot(date: string, laneId: string, hour: string) {
-    return reservations.filter(
-      (reservation) =>
-        reservation.reservation_date === date &&
-        reservation.lane_id === laneId &&
-        rangeCoversHour(reservation.start_time, reservation.end_time, hour)
-    );
-  }
+  useEffect(() => {
+    if (token) {
+      loadReservationByToken(token);
+      return;
+    }
 
-  function getBlocksForSlot(date: string, laneId: string, hour: string) {
-    return laneBlocks.filter(
-      (block) =>
-        block.block_date === date &&
-        block.lane_id === laneId &&
-        rangeCoversHour(block.start_time, block.end_time, hour)
-    );
-  }
+    loadReservations();
+  }, [token, dateFilter]);
 
-  function getEventsForDate(date: string) {
-    return events.filter((event) => event.event_date === date);
-  }
+  const filteredReservations = useMemo(() => {
+    const phrase = search.trim().toLowerCase();
 
-  function applyReservationChanges(
-    reservationId: string,
-    changes: Partial<Reservation>
-  ) {
-    setReservations((current) =>
-      current.map((item) =>
-        item.id === reservationId ? { ...item, ...changes } : item
-      )
-    );
+    if (!phrase) {
+      return reservations;
+    }
 
-    setSelectedReservation((current) =>
-      current && current.id === reservationId ? { ...current, ...changes } : current
-    );
-  }
+    return reservations.filter((reservation) => {
+      const profile = reservation.user_id
+        ? profilesByUserId[reservation.user_id]
+        : null;
+
+      const name = reservation.customer_name?.toLowerCase() ?? "";
+      const email = reservation.customer_email?.toLowerCase() ?? "";
+      const phone = reservation.customer_phone?.toLowerCase() ?? "";
+      const lane = getLaneName(reservation).toLowerCase();
+      const status = reservation.reservation_status?.toLowerCase() ?? "";
+      const payment = reservation.payment_status?.toLowerCase() ?? "";
+      const verification = profile?.verification_status?.toLowerCase() ?? "";
+      const permissions = getDeclaredPermissions(profile).join(" ").toLowerCase();
+      const qualifications = getDeclaredQualifications(profile)
+        .join(" ")
+        .toLowerCase();
+
+      return (
+        name.includes(phrase) ||
+        email.includes(phrase) ||
+        phone.includes(phrase) ||
+        lane.includes(phrase) ||
+        status.includes(phrase) ||
+        payment.includes(phrase) ||
+        verification.includes(phrase) ||
+        permissions.includes(phrase) ||
+        qualifications.includes(phrase)
+      );
+    });
+  }, [reservations, search, profilesByUserId]);
 
   async function updateReservation(
     reservation: Reservation,
-    changes: Partial<Reservation>
+    changes: Partial<
+      Pick<
+        Reservation,
+        | "reservation_status"
+        | "attendance_status"
+        | "payment_status"
+        | "checked_in_at"
+      >
+    >,
+    auditAction = "RESERVATION_UPDATED"
   ) {
-    setSavingReservationId(reservation.id);
+    setSavingId(reservation.id);
     setMessage("");
 
     const { error } = await supabase
@@ -503,726 +608,1118 @@ export default function AdminCalendarPage() {
       .update(changes)
       .eq("id", reservation.id);
 
-    setSavingReservationId(null);
-
     if (error) {
+      setSavingId(null);
       setMessage(`Błąd zapisu: ${error.message}`);
-      return false;
+      return;
     }
 
-    applyReservationChanges(reservation.id, changes);
+    setReservations((current) =>
+      current.map((item) =>
+        item.id === reservation.id ? { ...item, ...changes } : item
+      )
+    );
 
-    return true;
-  }
-
-  async function runReservationAction(
-    reservation: Reservation,
-    action: (reservationId: string) => Promise<{
-      data: Partial<Reservation> | null;
-      error: string | null;
-    }>
-  ) {
-    setSavingReservationId(reservation.id);
-    setMessage("");
-
-    const result = await action(reservation.id);
-
-    setSavingReservationId(null);
-
-    if (result.error) {
-      setMessage(`Błąd zapisu: ${result.error}`);
-      return false;
-    }
-
-    if (result.data) {
-      applyReservationChanges(reservation.id, {
-        reservation_status: result.data.reservation_status ?? null,
-        attendance_status: result.data.attendance_status ?? null,
-        payment_status: result.data.payment_status ?? null,
-        checked_in_at: result.data.checked_in_at ?? null,
+    if (selectedReservation?.id === reservation.id) {
+      setSelectedReservation({
+        ...selectedReservation,
+        ...changes,
       });
     }
 
-    return true;
-  }
+    const profile = reservation.user_id
+      ? profilesByUserId[reservation.user_id]
+      : null;
 
-  async function markCompleted() {
-    if (!selectedReservation) return;
-
-    await runReservationAction(selectedReservation, (reservationId) =>
-      completeReservationAction(supabase, { reservationId })
-    );
-  }
-
-  async function markNoShow() {
-    if (!selectedReservation) return;
-
-    await runReservationAction(selectedReservation, (reservationId) =>
-      markNoShowAction(supabase, { reservationId })
-    );
-  }
-
-  async function markPaid() {
-    if (!selectedReservation) return;
-
-    await runReservationAction(selectedReservation, (reservationId) =>
-      markPaidAction(supabase, { reservationId })
-    );
-  }
-
-  async function markPayOnSite() {
-    if (!selectedReservation) return;
-
-    await updateReservation(selectedReservation, {
-      payment_status: "pay_on_site",
+    const auditError = await createAuditLog({
+      action: auditAction,
+      reservation,
+      profile,
+      details: {
+        before: {
+          reservation_status: reservation.reservation_status,
+          attendance_status: reservation.attendance_status,
+          payment_status: reservation.payment_status,
+          checked_in_at: reservation.checked_in_at,
+        },
+        after: changes,
+      },
     });
+
+    setSavingId(null);
+
+    if (auditError) {
+      setMessage(
+        `Zapisano zmianę, ale nie udało się dodać wpisu audit log: ${auditError}`
+      );
+      return;
+    }
+
+    setMessage("Zapisano zmianę.");
   }
 
-  async function saveReservationNote() {
-    if (!selectedReservation) return;
+  async function markCompleted(reservation: Reservation) {
+    setSavingId(reservation.id);
+    setMessage("");
 
-    await updateReservation(selectedReservation, {
-      reservation_note: reservationNote,
+    const result = await completeReservationAction(supabase, {
+      reservationId: reservation.id,
     });
-  }
 
-  async function cancelReservation() {
-    if (!selectedReservation) return;
+    if (result.error) {
+      setSavingId(null);
+      setMessage(`Błąd zapisu: ${result.error}`);
+      return;
+    }
 
-    const wasSaved = await runReservationAction(selectedReservation, (reservationId) =>
-      cancelReservationAction(supabase, { reservationId })
-    );
-
-    if (!wasSaved) return;
+    const updatedReservation: Reservation = {
+      ...reservation,
+      attendance_status: result.data?.attendance_status ?? "present",
+      reservation_status: result.data?.reservation_status ?? "completed",
+      checked_in_at: result.data?.checked_in_at ?? new Date().toISOString(),
+    };
 
     setReservations((current) =>
-      current.filter((item) => item.id !== selectedReservation.id)
+      current.map((item) =>
+        item.id === reservation.id ? updatedReservation : item
+      )
     );
 
-    setSelectedReservation(null);
+    if (selectedReservation?.id === reservation.id) {
+      setSelectedReservation(updatedReservation);
+    }
+
+    const profile = reservation.user_id
+      ? profilesByUserId[reservation.user_id]
+      : null;
+
+    const auditError = await createAuditLog({
+      action: "CHECK_IN_COMPLETED",
+      reservation,
+      profile,
+      details: {
+        before: {
+          reservation_status: reservation.reservation_status,
+          attendance_status: reservation.attendance_status,
+          checked_in_at: reservation.checked_in_at,
+        },
+        after: {
+          reservation_status: updatedReservation.reservation_status,
+          attendance_status: updatedReservation.attendance_status,
+          checked_in_at: updatedReservation.checked_in_at,
+        },
+      },
+    });
+
+    setSavingId(null);
+
+    if (auditError) {
+      setMessage(
+        `Wizyta zakończona, ale nie udało się dodać wpisu audit log: ${auditError}`
+      );
+      return;
+    }
+
+    setMessage("Wizyta zakończona.");
   }
 
+  async function verifyAccountAndStartVisit(reservation: Reservation) {
+    if (!reservation.user_id) {
+      setMessage("Ta rezerwacja nie jest powiązana z kontem użytkownika.");
+      return;
+    }
+
+    const profile = profilesByUserId[reservation.user_id];
+
+    if (!profile) {
+      setMessage("Nie znaleziono profilu użytkownika do weryfikacji.");
+      return;
+    }
+
+    const missingFields = getMissingFields(profile);
+
+    if (missingFields.length > 0) {
+      const confirmed = window.confirm(
+        `Konto posiada braki:\n\n• ${missingFields.join(
+          "\n• "
+        )}\n\nCzy mimo to zweryfikować konto, uprawnienia i rozpocząć wizytę?`
+      );
+
+      if (!confirmed) return;
+    }
+
+    setSavingId(reservation.id);
+    setMessage("");
+
+    const now = new Date().toISOString();
+
+    const { error: profileError } = await supabase
+      .from("profiles")
+      .update({
+        verification_status: "verified",
+        permissions_verified: true,
+        permissions_verified_at: now,
+        permissions_verified_by: currentProfileId || null,
+        permissions_verification_note:
+          profile.permissions_verification_note || VERIFIED_NOTE,
+        updated_at: now,
+      })
+      .eq("user_id", reservation.user_id);
+
+    if (profileError) {
+      setSavingId(null);
+      setMessage(`Błąd weryfikacji konta: ${profileError.message}`);
+      return;
+    }
+
+    const reservationResult = await completeReservationAction(supabase, {
+      reservationId: reservation.id,
+    });
+
+    if (reservationResult.error) {
+      setSavingId(null);
+      setMessage(
+        `Konto zweryfikowane, ale błąd check-in: ${reservationResult.error}`
+      );
+      return;
+    }
+
+    const updatedProfile: Profile = {
+      ...profile,
+      verification_status: "verified",
+      permissions_verified: true,
+      permissions_verified_at: now,
+      permissions_verified_by: currentProfileId || null,
+      permissions_verification_note:
+        profile.permissions_verification_note || VERIFIED_NOTE,
+      updated_at: now,
+    };
+
+    const updatedReservation: Reservation = {
+      ...reservation,
+      attendance_status: reservationResult.data?.attendance_status ?? "present",
+      reservation_status:
+        reservationResult.data?.reservation_status ?? "completed",
+      checked_in_at: reservationResult.data?.checked_in_at ?? now,
+    };
+
+    setProfilesByUserId((current) => ({
+      ...current,
+      [reservation.user_id as string]: updatedProfile,
+    }));
+
+    setReservations((current) =>
+      current.map((item) =>
+        item.id === reservation.id ? updatedReservation : item
+      )
+    );
+
+    if (selectedReservation?.id === reservation.id) {
+      setSelectedReservation(updatedReservation);
+    }
+
+    const auditError = await createAuditLog({
+      action: "FIRST_VISIT_PROFILE_PERMISSIONS_VERIFIED_AND_CHECKED_IN",
+      reservation,
+      profile,
+      details: {
+        profile_before: {
+          verification_status: profile.verification_status,
+          permissions_verified: profile.permissions_verified,
+          completion_percent: getCompletionPercent(profile),
+          missing_fields: missingFields,
+          declared_permissions: getDeclaredPermissions(profile),
+          declared_qualifications: getDeclaredQualifications(profile),
+        },
+        profile_after: {
+          verification_status: "verified",
+          permissions_verified: true,
+          permissions_verification_note_used: true,
+        },
+        reservation_before: {
+          reservation_status: reservation.reservation_status,
+          attendance_status: reservation.attendance_status,
+          checked_in_at: reservation.checked_in_at,
+        },
+        reservation_after: {
+          reservation_status: "completed",
+          attendance_status: "present",
+          checked_in_at: now,
+        },
+      },
+    });
+
+    setSavingId(null);
+
+    if (auditError) {
+      setMessage(
+        `Konto i uprawnienia zweryfikowane, wizyta rozpoczęta, ale nie udało się dodać wpisu audit log: ${auditError}`
+      );
+      return;
+    }
+
+    setMessage("Konto i uprawnienia zweryfikowane. Wizyta rozpoczęta.");
+  }
+
+  async function markVerificationIncomplete(reservation: Reservation) {
+    if (!reservation.user_id) {
+      setMessage("Ta rezerwacja nie jest powiązana z kontem użytkownika.");
+      return;
+    }
+
+    const profile = profilesByUserId[reservation.user_id];
+
+    if (!profile) {
+      setMessage("Nie znaleziono profilu użytkownika do aktualizacji.");
+      return;
+    }
+
+    setSavingId(reservation.id);
+    setMessage("");
+
+    const now = new Date().toISOString();
+
+    const { error } = await supabase
+      .from("profiles")
+      .update({
+        verification_status: "pending",
+        permissions_verified: false,
+        permissions_verified_at: null,
+        permissions_verified_by: null,
+        permissions_verification_note: INCOMPLETE_NOTE,
+        updated_at: now,
+      })
+      .eq("user_id", reservation.user_id);
+
+    setSavingId(null);
+
+    if (error) {
+      setMessage(`Błąd zapisu weryfikacji: ${error.message}`);
+      return;
+    }
+
+    const updatedProfile: Profile = {
+      ...profile,
+      verification_status: "pending",
+      permissions_verified: false,
+      permissions_verified_at: null,
+      permissions_verified_by: null,
+      permissions_verification_note: INCOMPLETE_NOTE,
+      updated_at: now,
+    };
+
+    setProfilesByUserId((current) => ({
+      ...current,
+      [reservation.user_id as string]: updatedProfile,
+    }));
+
+    const auditError = await createAuditLog({
+      action: "FIRST_VISIT_PERMISSIONS_VERIFICATION_INCOMPLETE",
+      reservation,
+      profile,
+      details: {
+        profile_before: {
+          verification_status: profile.verification_status,
+          permissions_verified: profile.permissions_verified,
+        },
+        profile_after: {
+          verification_status: "pending",
+          permissions_verified: false,
+          note: INCOMPLETE_NOTE,
+        },
+      },
+    });
+
+    if (auditError) {
+      setMessage(
+        `Zapisano weryfikację niepełną, ale nie udało się dodać wpisu audit log: ${auditError}`
+      );
+      return;
+    }
+
+    setMessage("Zapisano: weryfikacja niepełna.");
+  }
+
+  async function markNoShow(reservation: Reservation) {
+    setSavingId(reservation.id);
+    setMessage("");
+
+    const result = await markNoShowAction(supabase, {
+      reservationId: reservation.id,
+    });
+
+    if (result.error) {
+      setSavingId(null);
+      setMessage(`Błąd zapisu: ${result.error}`);
+      return;
+    }
+
+    const updatedReservation: Reservation = {
+      ...reservation,
+      attendance_status: result.data?.attendance_status ?? "no_show",
+      reservation_status: result.data?.reservation_status ?? "no_show",
+    };
+
+    setReservations((current) =>
+      current.map((item) =>
+        item.id === reservation.id ? updatedReservation : item
+      )
+    );
+
+    if (selectedReservation?.id === reservation.id) {
+      setSelectedReservation(updatedReservation);
+    }
+
+    const profile = reservation.user_id
+      ? profilesByUserId[reservation.user_id]
+      : null;
+
+    const auditError = await createAuditLog({
+      action: "RESERVATION_NO_SHOW",
+      reservation,
+      profile,
+      details: {
+        before: {
+          reservation_status: reservation.reservation_status,
+          attendance_status: reservation.attendance_status,
+        },
+        after: {
+          reservation_status: updatedReservation.reservation_status,
+          attendance_status: updatedReservation.attendance_status,
+        },
+      },
+    });
+
+    setSavingId(null);
+
+    if (auditError) {
+      setMessage(
+        `Oznaczono no-show, ale nie udało się dodać wpisu audit log: ${auditError}`
+      );
+      return;
+    }
+
+    setMessage("Oznaczono no-show.");
+  }
+
+  async function cancelByAdmin(reservation: Reservation) {
+    setSavingId(reservation.id);
+    setMessage("");
+
+    const result = await cancelReservationAction(supabase, {
+      reservationId: reservation.id,
+    });
+
+    if (result.error) {
+      setSavingId(null);
+      setMessage(`Błąd zapisu: ${result.error}`);
+      return;
+    }
+
+    const updatedReservation: Reservation = {
+      ...reservation,
+      reservation_status:
+        result.data?.reservation_status ?? "cancelled_by_admin",
+    };
+
+    setReservations((current) =>
+      current.map((item) =>
+        item.id === reservation.id ? updatedReservation : item
+      )
+    );
+
+    if (selectedReservation?.id === reservation.id) {
+      setSelectedReservation(updatedReservation);
+    }
+
+    const profile = reservation.user_id
+      ? profilesByUserId[reservation.user_id]
+      : null;
+
+    const auditError = await createAuditLog({
+      action: "RESERVATION_CANCELLED_BY_ADMIN",
+      reservation,
+      profile,
+      details: {
+        before: {
+          reservation_status: reservation.reservation_status,
+        },
+        after: {
+          reservation_status: updatedReservation.reservation_status,
+        },
+      },
+    });
+
+    setSavingId(null);
+
+    if (auditError) {
+      setMessage(
+        `Anulowano rezerwację, ale nie udało się dodać wpisu audit log: ${auditError}`
+      );
+      return;
+    }
+
+    setMessage("Rezerwacja anulowana.");
+  }
+
+  async function markPaymentAsPaid(reservation: Reservation) {
+    setSavingId(reservation.id);
+    setMessage("");
+
+    const result = await markPaidAction(supabase, {
+      reservationId: reservation.id,
+    });
+
+    if (result.error) {
+      setSavingId(null);
+      setMessage(`Błąd zapisu: ${result.error}`);
+      return;
+    }
+
+    const updatedReservation: Reservation = {
+      ...reservation,
+      payment_status: result.data?.payment_status ?? "paid",
+    };
+
+    setReservations((current) =>
+      current.map((item) =>
+        item.id === reservation.id ? updatedReservation : item
+      )
+    );
+
+    if (selectedReservation?.id === reservation.id) {
+      setSelectedReservation(updatedReservation);
+    }
+
+    const profile = reservation.user_id
+      ? profilesByUserId[reservation.user_id]
+      : null;
+
+    const auditError = await createAuditLog({
+      action: "RESERVATION_PAYMENT_PAID",
+      reservation,
+      profile,
+      details: {
+        before: {
+          payment_status: reservation.payment_status,
+        },
+        after: {
+          payment_status: updatedReservation.payment_status,
+        },
+      },
+    });
+
+    setSavingId(null);
+
+    if (auditError) {
+      setMessage(
+        `Oznaczono płatność, ale nie udało się dodać wpisu audit log: ${auditError}`
+      );
+      return;
+    }
+
+    setMessage("Płatność oznaczona jako opłacona.");
+  }
+
+  const mainList =
+    token && selectedReservation ? [selectedReservation] : filteredReservations;
+
   return (
-    <main className="min-h-screen bg-zinc-950 text-white">
-      <section className="mx-auto max-w-7xl px-4 py-10 sm:px-6">
-        <div className="mb-8 flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
-          <div>
-            <p className="mb-4 text-sm uppercase tracking-[0.35em] text-green-500">
-              CSK Booking
-            </p>
+    <div className="mx-auto max-w-7xl">
+      <div className="mb-8 flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+        <div>
+          <p className="mb-4 text-sm uppercase tracking-[0.35em] text-green-500">
+            CSK Booking
+          </p>
 
-            <div className="flex flex-wrap items-center gap-3">
-              <h1 className="text-4xl font-bold">Kalendarz operacyjny</h1>
+          <h1 className="text-4xl font-bold">Check-in i obsługa wizyt</h1>
 
-              {!loading && role && (
-                <span
-                  className={`rounded-full border px-4 py-2 text-sm font-bold ${getRoleBadgeClass(
-                    role
-                  )}`}
-                >
-                  {getRoleLabel(role)}
-                </span>
-              )}
-            </div>
-
-            <p className="mt-3 text-zinc-400">
-              Rezerwacje, blokady osi oraz eventy/szkolenia w jednym widoku.
-            </p>
-          </div>
-
-          <a
-            href="/admin"
-            className="rounded-xl border border-zinc-700 px-5 py-3 text-sm font-semibold text-zinc-300 transition hover:bg-zinc-900"
-          >
-            ← Panel admina
-          </a>
+          <p className="mt-3 max-w-2xl text-zinc-400">
+            Obsługa dzisiejszych rezerwacji, obecności, no-show, płatności i
+            weryfikacji klienta podczas pierwszej wizyty.
+          </p>
         </div>
 
-        <div className="mb-6 grid gap-5 rounded-2xl border border-zinc-800 bg-zinc-900 p-6 md:grid-cols-2">
-          <div>
-            <label className="mb-2 block text-sm text-zinc-300">Widok</label>
+        <a
+          href="/admin"
+          className="rounded-xl border border-zinc-700 px-5 py-3 text-sm font-semibold text-zinc-300 transition hover:bg-zinc-900"
+        >
+          ← Panel admina
+        </a>
+      </div>
 
-            <select
-              value={mode}
-              onChange={(event) => setMode(event.target.value as CalendarMode)}
-              className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-white outline-none focus:border-green-600"
-            >
-              <option value="day">Dzień</option>
-              <option value="week">Tydzień</option>
-            </select>
-          </div>
-
+      {!token && (
+        <div className="mb-6 grid gap-4 rounded-2xl border border-zinc-800 bg-zinc-900 p-5 md:grid-cols-[auto_1fr_auto] md:items-end">
           <div>
-            <label className="mb-2 block text-sm text-zinc-300">
-              Data odniesienia
+            <label className="mb-2 block text-sm font-semibold text-zinc-300">
+              Data wizyt
             </label>
 
             <input
               type="date"
-              value={selectedDate}
-              onChange={(event) => setSelectedDate(event.target.value)}
+              value={dateFilter}
+              onChange={(event) => setDateFilter(event.target.value)}
+              className="rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-white outline-none focus:border-green-600"
+            />
+          </div>
+
+          <div>
+            <label className="mb-2 block text-sm font-semibold text-zinc-300">
+              Szukaj
+            </label>
+
+            <input
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder="Imię, e-mail, telefon, oś, status, uprawnienia..."
               className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-white outline-none focus:border-green-600"
             />
           </div>
+
+          <button
+            type="button"
+            onClick={loadReservations}
+            disabled={loading}
+            className="rounded-xl bg-green-700 px-5 py-3 font-semibold transition hover:bg-green-600 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {loading ? "Odświeżanie..." : "Odśwież"}
+          </button>
         </div>
+      )}
 
-        <div className="mb-8 flex flex-wrap gap-3 rounded-2xl border border-zinc-800 bg-zinc-900 p-4 text-xs font-semibold">
-          <span className="rounded-full border border-green-800 bg-green-950 px-3 py-1 text-green-300">
-            Rezerwacja
-          </span>
-
-          <span className="rounded-full border border-red-800 bg-red-950 px-3 py-1 text-red-300">
-            Blokada osi
-          </span>
-
-          <span className="rounded-full border border-purple-800 bg-purple-950 px-3 py-1 text-purple-300">
-            Event / szkolenie
-          </span>
-
-          <span className="rounded-full border border-zinc-800 bg-zinc-950 px-3 py-1 text-zinc-500">
-            Wolne
-          </span>
+      {message && (
+        <div className="mb-6 rounded-xl border border-zinc-700 bg-zinc-900 p-4 text-sm font-semibold text-zinc-200">
+          {message}
         </div>
+      )}
 
-        {loading && (
-          <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-6 text-zinc-400">
-            Ładowanie kalendarza...
-          </div>
-        )}
+      {loading ? (
+        <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-8 text-zinc-400">
+          Ładowanie check-in...
+        </div>
+      ) : mainList.length === 0 ? (
+        <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-8 text-zinc-400">
+          Brak rezerwacji do obsługi dla wybranego dnia.
+        </div>
+      ) : (
+        <div className="grid gap-4">
+          {mainList.map((reservation) => {
+            const isSaving = savingId === reservation.id;
+            const profile = reservation.user_id
+              ? profilesByUserId[reservation.user_id]
+              : null;
 
-        {!loading && message && (
-          <div className="mb-6 rounded-xl border border-red-800 bg-red-950 p-4 text-sm font-semibold text-red-300">
-            {message}
-          </div>
-        )}
+            const isProfileVerified = isVerifiedProfile(profile);
+            const permissionsVerified = arePermissionsVerified(profile);
 
-        {!loading && hasAccess && !message && (
-          <>
-            {mode === "day" && (
-              <div className="grid gap-6">
-                <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-5">
-                  <div className="mb-5 flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-                    <h2 className="text-2xl font-bold">
-                      Osie — {formatShortDate(selectedDate)}
-                    </h2>
+            const shouldVerifyAtReception =
+              Boolean(reservation.user_id) &&
+              (!isProfileVerified || !permissionsVerified);
 
-                    <span className="text-sm text-zinc-400">
-                      Rezerwacje i blokady osi
-                    </span>
-                  </div>
+            const missingFields = getMissingFields(profile);
+            const completion = getCompletionPercent(profile);
+            const declaredPermissions = getDeclaredPermissions(profile);
+            const declaredQualifications = getDeclaredQualifications(profile);
 
-                  <div className="overflow-x-auto">
-                    <table className="w-full min-w-[900px] border-collapse text-left text-sm">
-                      <thead>
-                        <tr className="border-b border-zinc-800 text-zinc-400">
-                          <th className="py-3 pr-4">Godzina</th>
-
-                          {lanes.map((lane) => (
-                            <th key={lane.id} className="py-3 pr-4">
-                              {lane.name}
-                            </th>
-                          ))}
-                        </tr>
-                      </thead>
-
-                      <tbody>
-                        {hours.map((hour) => (
-                          <tr key={hour} className="border-b border-zinc-800">
-                            <td className="py-4 pr-4 font-semibold text-zinc-300">
-                              {hour}
-                            </td>
-
-                            {lanes.map((lane) => {
-                              const slotReservations = getReservationsForSlot(
-                                selectedDate,
-                                lane.id,
-                                hour
-                              );
-
-                              const slotBlocks = getBlocksForSlot(
-                                selectedDate,
-                                lane.id,
-                                hour
-                              );
-
-                              return (
-                                <td
-                                  key={lane.id}
-                                  className="py-3 pr-4 align-top"
-                                >
-                                  {slotReservations.length === 0 &&
-                                  slotBlocks.length === 0 ? (
-                                    <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-3 text-xs text-zinc-600">
-                                      Wolne
-                                    </div>
-                                  ) : (
-                                    <div className="grid gap-2">
-                                      {slotBlocks.map((block) => (
-                                        <div
-                                          key={`${block.id}-${hour}`}
-                                          className="rounded-xl border border-red-800 bg-red-950 p-3 text-xs text-red-100"
-                                        >
-                                          <p className="font-bold text-red-300">
-                                            {block.start_time.slice(0, 5)}–
-                                            {block.end_time.slice(0, 5)}
-                                          </p>
-
-                                          <p>{block.reason || "Blokada osi"}</p>
-                                        </div>
-                                      ))}
-
-                                      {slotReservations.map((reservation) => (
-                                        <button
-                                          key={`${reservation.id}-${hour}`}
-                                          type="button"
-                                          onClick={() =>
-                                            openReservation(reservation)
-                                          }
-                                          className="rounded-xl border border-green-800 bg-green-950 p-3 text-left text-xs text-green-100 transition hover:border-green-500"
-                                        >
-                                          <p className="font-bold text-green-300">
-                                            {reservation.start_time.slice(0, 5)}–
-                                            {reservation.end_time.slice(0, 5)}
-                                          </p>
-
-                                          <p>{reservation.customer_name}</p>
-
-                                          <p className="text-green-400">
-                                            {reservation.customer_phone}
-                                          </p>
-
-                                          {reservation.reservation_note && (
-                                            <p className="mt-2 text-yellow-300">
-                                              Notatka
-                                            </p>
-                                          )}
-                                        </button>
-                                      ))}
-                                    </div>
-                                  )}
-                                </td>
-                              );
-                            })}
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-
-                <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-5">
-                  <div className="mb-5 flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-                    <h2 className="text-2xl font-bold">
-                      Eventy / szkolenia — {formatShortDate(selectedDate)}
-                    </h2>
-
-                    <span className="text-sm text-zinc-400">
-                      {getEventsForDate(selectedDate).length} wydarzenia
-                    </span>
-                  </div>
-
-                  {getEventsForDate(selectedDate).length === 0 ? (
-                    <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-4 text-sm text-zinc-500">
-                      Brak eventów lub szkoleń w tym dniu.
-                    </div>
-                  ) : (
-                    <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-                      {getEventsForDate(selectedDate).map((event) => (
-                        <div
-                          key={event.id}
-                          className="rounded-xl border border-purple-800 bg-purple-950 p-4"
-                        >
-                          <p className="font-bold text-purple-300">
-                            {event.start_time.slice(0, 5)}–
-                            {event.end_time.slice(0, 5)}
-                          </p>
-
-                          <p className="mt-1 font-semibold text-white">
-                            {event.title}
-                          </p>
-
-                          <p className="mt-2 text-sm text-purple-200">
-                            {event.location || "Brak lokalizacji"}
-                          </p>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
-
-            {mode === "week" && (
-              <div className="grid gap-5">
-                {visibleDates.map((date) => {
-                  const dayReservations = reservations.filter(
-                    (reservation) => reservation.reservation_date === date
-                  );
-
-                  const dayBlocks = laneBlocks.filter(
-                    (block) => block.block_date === date
-                  );
-
-                  const dayEvents = events.filter(
-                    (event) => event.event_date === date
-                  );
-
-                  return (
-                    <div
-                      key={date}
-                      className="rounded-2xl border border-zinc-800 bg-zinc-900 p-5"
-                    >
-                      <div className="mb-4 flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-                        <h2 className="text-2xl font-bold">
-                          {formatShortDate(date)}
-                        </h2>
-
-                        <div className="flex flex-wrap gap-2 text-xs font-semibold">
-                          <span className="rounded-full bg-green-950 px-3 py-1 text-green-400">
-                            Rezerwacje: {dayReservations.length}
-                          </span>
-
-                          <span className="rounded-full bg-red-950 px-3 py-1 text-red-300">
-                            Blokady: {dayBlocks.length}
-                          </span>
-
-                          <span className="rounded-full bg-purple-950 px-3 py-1 text-purple-300">
-                            Eventy: {dayEvents.length}
-                          </span>
-                        </div>
-                      </div>
-
-                      {dayReservations.length === 0 &&
-                      dayBlocks.length === 0 &&
-                      dayEvents.length === 0 ? (
-                        <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-4 text-sm text-zinc-500">
-                          Brak rezerwacji, blokad i eventów.
-                        </div>
-                      ) : (
-                        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-                          {dayReservations.map((reservation) => (
-                            <button
-                              key={reservation.id}
-                              type="button"
-                              onClick={() => openReservation(reservation)}
-                              className="rounded-xl border border-green-800 bg-green-950 p-4 text-left transition hover:border-green-500"
-                            >
-                              <p className="font-bold text-green-300">
-                                {reservation.start_time.slice(0, 5)}–
-                                {reservation.end_time.slice(0, 5)}
-                              </p>
-
-                              <p className="mt-1 text-white">
-                                {getLaneNameById(reservation.lane_id)}
-                              </p>
-
-                              <p className="mt-2 text-sm text-green-100">
-                                {reservation.customer_name}
-                              </p>
-
-                              <p className="text-sm text-green-400">
-                                {reservation.customer_phone}
-                              </p>
-
-                              {reservation.reservation_note && (
-                                <p className="mt-2 text-sm text-yellow-300">
-                                  Notatka
-                                </p>
-                              )}
-                            </button>
-                          ))}
-
-                          {dayBlocks.map((block) => (
-                            <div
-                              key={block.id}
-                              className="rounded-xl border border-red-800 bg-red-950 p-4"
-                            >
-                              <p className="font-bold text-red-300">
-                                {block.start_time.slice(0, 5)}–
-                                {block.end_time.slice(0, 5)}
-                              </p>
-
-                              <p className="mt-1 text-white">
-                                {getLaneNameById(block.lane_id)}
-                              </p>
-
-                              <p className="mt-2 text-sm text-red-100">
-                                {block.reason || "Blokada osi"}
-                              </p>
-                            </div>
-                          ))}
-
-                          {dayEvents.map((event) => (
-                            <div
-                              key={event.id}
-                              className="rounded-xl border border-purple-800 bg-purple-950 p-4"
-                            >
-                              <p className="font-bold text-purple-300">
-                                {event.start_time.slice(0, 5)}–
-                                {event.end_time.slice(0, 5)}
-                              </p>
-
-                              <p className="mt-1 text-white">{event.title}</p>
-
-                              <p className="mt-2 text-sm text-purple-200">
-                                {event.location || "Brak lokalizacji"}
-                              </p>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </>
-        )}
-
-        {selectedReservation && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
-            <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl border border-zinc-800 bg-zinc-900 p-6">
-              <div className="mb-6 flex items-start justify-between gap-4">
-                <div>
-                  <p className="text-xs uppercase tracking-[0.25em] text-zinc-500">
-                    Rezerwacja
-                  </p>
-
-                  <h2 className="mt-2 text-3xl font-bold">
-                    {selectedReservation.customer_name || "Brak danych"}
-                  </h2>
-
-                  <p className="mt-2 text-zinc-400">
-                    {getLaneNameById(selectedReservation.lane_id)}
-                  </p>
-                </div>
-
-                <button
-                  type="button"
-                  onClick={() => setSelectedReservation(null)}
-                  className="rounded-xl border border-zinc-700 px-4 py-2 text-sm font-semibold text-zinc-300 hover:bg-zinc-800"
-                >
-                  Zamknij
-                </button>
-              </div>
-
-              <div className="grid gap-4 md:grid-cols-2">
-                <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-4">
-                  <p className="text-xs uppercase tracking-[0.25em] text-zinc-500">
-                    Kontakt
-                  </p>
-
-                  <p className="mt-3 text-lg font-semibold">
-                    {selectedReservation.customer_phone || "Brak telefonu"}
-                  </p>
-
-                  <p className="mt-2 text-zinc-400">
-                    {selectedReservation.customer_email || "Brak e-maila"}
-                  </p>
-                </div>
-
-                <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-4">
-                  <p className="text-xs uppercase tracking-[0.25em] text-zinc-500">
-                    Termin
-                  </p>
-
-                  <p className="mt-3 text-lg font-semibold">
-                    {selectedReservation.reservation_date}
-                  </p>
-
-                  <p className="mt-2 text-zinc-400">
-                    {selectedReservation.start_time.slice(0, 5)}–
-                    {selectedReservation.end_time.slice(0, 5)}
-                  </p>
-                </div>
-
-                <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-4">
-                  <p className="text-xs uppercase tracking-[0.25em] text-zinc-500">
-                    Status wizyty
-                  </p>
-
-                  <p className="mt-3 text-lg font-semibold">
-                    {getReservationStatusLabel(
-                      selectedReservation.reservation_status
-                    )}
-                  </p>
-
-                  <p className="mt-2 text-zinc-400">
-                    Check-in:{" "}
-                    {selectedReservation.checked_in_at
-                      ? new Date(
-                          selectedReservation.checked_in_at
-                        ).toLocaleString("pl-PL")
-                      : "brak"}
-                  </p>
-                </div>
-
-                <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-4">
-                  <p className="text-xs uppercase tracking-[0.25em] text-zinc-500">
-                    Płatność
-                  </p>
-
-                  <p className="mt-3 text-lg font-semibold">
-                    {getPaymentStatusLabel(selectedReservation.payment_status)}
-                  </p>
-
-                  <p className="mt-2 text-green-400">
-                    {Number(selectedReservation.price ?? 0).toFixed(0)} zł
-                  </p>
-                </div>
-              </div>
-
-              <div className="mt-6 rounded-xl border border-zinc-800 bg-zinc-950 p-4">
-                <p className="mb-3 text-xs uppercase tracking-[0.25em] text-zinc-500">
-                  Notatka do rezerwacji
-                </p>
-
-                <textarea
-                  value={reservationNote}
-                  onChange={(event) => setReservationNote(event.target.value)}
-                  rows={4}
-                  placeholder="Np. klient pierwszy raz, broń własna, opóźnienie, uwagi organizacyjne..."
-                  className="w-full rounded-xl border border-zinc-700 bg-zinc-900 px-4 py-3 text-sm text-white outline-none focus:border-green-600"
-                />
-
-                <button
-                  type="button"
-                  onClick={saveReservationNote}
-                  disabled={savingReservationId === selectedReservation.id}
-                  className="mt-3 rounded-xl border border-green-700 px-4 py-2 text-sm font-bold text-green-300 transition hover:bg-green-950 disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  Zapisz notatkę
-                </button>
-              </div>
-
-              <div className="mt-6 rounded-xl border border-zinc-800 bg-zinc-950 p-4">
-                <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-                  <p className="text-xs uppercase tracking-[0.25em] text-zinc-500">
-                    Historia klienta
-                  </p>
-
-                  <div className="flex flex-wrap gap-2 text-xs font-semibold">
-                    <span className="rounded-full bg-zinc-800 px-3 py-1 text-zinc-300">
-                      Wizyty: {clientStats.totalReservations}
-                    </span>
-
-                    <span className="rounded-full bg-green-950 px-3 py-1 text-green-300">
-                      Completed: {clientStats.totalCompleted}
-                    </span>
-
-                    <span className="rounded-full bg-yellow-950 px-3 py-1 text-yellow-300">
-                      No-show: {clientStats.totalNoShow}
-                    </span>
-
-                    <span className="rounded-full bg-blue-950 px-3 py-1 text-blue-300">
-                      {clientStats.totalSpent.toFixed(0)} zł
-                    </span>
-                  </div>
-                </div>
-
-                {clientHistory.length === 0 ? (
-                  <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-4 text-sm text-zinc-500">
-                    Brak historii klienta.
-                  </div>
-                ) : (
-                  <div className="grid gap-3">
-                    {clientHistory.map((item) => (
-                      <div
-                        key={item.id}
-                        className="rounded-xl border border-zinc-800 bg-zinc-900 p-4"
+            return (
+              <article
+                key={reservation.id}
+                className="rounded-2xl border border-zinc-800 bg-zinc-900 p-5"
+              >
+                <div className="grid gap-5 xl:grid-cols-[1.1fr_0.8fr_0.9fr_1fr_auto] xl:items-start">
+                  <div>
+                    <div className="mb-3 flex flex-wrap gap-2">
+                      <span
+                        className={`rounded-full border px-3 py-1 text-xs font-bold ${getStatusClass(
+                          reservation.reservation_status
+                        )}`}
                       >
-                        <div className="flex flex-wrap items-center justify-between gap-2">
-                          <div>
-                            <p className="font-semibold text-white">
-                              {item.reservation_date}
-                            </p>
-
-                            <p className="text-sm text-zinc-400">
-                              {item.start_time.slice(0, 5)}–
-                              {item.end_time.slice(0, 5)}
-                            </p>
-                          </div>
-
-                          <div className="flex flex-wrap gap-2 text-xs font-semibold">
-                            <span className="rounded-full bg-zinc-800 px-3 py-1 text-zinc-300">
-                              {getReservationStatusLabel(
-                                item.reservation_status
-                              )}
-                            </span>
-
-                            <span className="rounded-full bg-green-950 px-3 py-1 text-green-300">
-                              {Number(item.price ?? 0).toFixed(0)} zł
-                            </span>
-                          </div>
-                        </div>
-
-                        {item.reservation_note && (
-                          <div className="mt-3 rounded-xl border border-yellow-800 bg-yellow-950 p-3 text-sm text-yellow-200">
-                            {item.reservation_note}
-                          </div>
+                        {getReservationStatusLabel(
+                          reservation.reservation_status
                         )}
+                      </span>
+
+                      <span
+                        className={`rounded-full border px-3 py-1 text-xs font-bold ${getPaymentClass(
+                          reservation.payment_status
+                        )}`}
+                      >
+                        {getPaymentStatusLabel(reservation.payment_status)}
+                      </span>
+
+                      <span
+                        className={`rounded-full border px-3 py-1 text-xs font-bold ${getVerificationClass(
+                          profile
+                        )}`}
+                      >
+                        Konto:{" "}
+                        {getVerificationStatusLabel(
+                          profile?.verification_status ?? null
+                        )}
+                      </span>
+
+                      <span
+                        className={`rounded-full border px-3 py-1 text-xs font-bold ${getPermissionsClass(
+                          profile
+                        )}`}
+                      >
+                        Uprawnienia:{" "}
+                        {permissionsVerified ? "sprawdzone" : "do sprawdzenia"}
+                      </span>
+                    </div>
+
+                    <p className="text-xs uppercase tracking-[0.25em] text-zinc-500">
+                      Klient
+                    </p>
+
+                    <h2 className="mt-2 text-xl font-bold">
+                      {reservation.customer_name ||
+                        profile?.full_name ||
+                        "Brak danych"}
+                    </h2>
+
+                    <p className="mt-1 text-sm text-zinc-400">
+                      {reservation.customer_email ||
+                        profile?.email ||
+                        "Brak e-maila"}
+                    </p>
+
+                    <p className="mt-1 text-sm text-zinc-500">
+                      Tel.:{" "}
+                      {reservation.customer_phone || profile?.phone || "brak"}
+                    </p>
+
+                    <div className="mt-4 rounded-xl border border-zinc-800 bg-zinc-950 p-3 text-xs text-zinc-400">
+                      <p className="font-semibold text-zinc-300">
+                        Deklarowane uprawnienia:
+                      </p>
+
+                      <p className="mt-1">
+                        {declaredPermissions.length > 0
+                          ? declaredPermissions.join(", ")
+                          : "Brak zaznaczonych uprawnień"}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div>
+                    <p className="text-xs uppercase tracking-[0.25em] text-zinc-500">
+                      Termin
+                    </p>
+
+                    <p className="mt-2 text-lg font-bold">
+                      {reservation.reservation_date || "Brak daty"}
+                    </p>
+
+                    <p className="mt-1 text-sm text-zinc-400">
+                      {normalizeTime(reservation.start_time)}–
+                      {normalizeTime(reservation.end_time)}
+                    </p>
+                  </div>
+
+                  <div>
+                    <p className="text-xs uppercase tracking-[0.25em] text-zinc-500">
+                      Oś
+                    </p>
+
+                    <p className="mt-2 text-lg font-bold">
+                      {getLaneName(reservation)}
+                    </p>
+
+                    <p className="mt-1 text-sm text-green-400">
+                      {Number(reservation.price ?? 0).toFixed(0)} zł
+                    </p>
+
+                    <p className="mt-4 text-xs uppercase tracking-[0.25em] text-zinc-500">
+                      Check-in
+                    </p>
+
+                    <p className="mt-1 text-sm text-zinc-300">
+                      {reservation.checked_in_at
+                        ? new Date(reservation.checked_in_at).toLocaleString(
+                            "pl-PL"
+                          )
+                        : "brak"}
+                    </p>
+                  </div>
+
+                  <div className="grid gap-3">
+                    <div>
+                      <label className="mb-2 block text-xs uppercase tracking-[0.25em] text-zinc-500">
+                        Płatność
+                      </label>
+
+                      <select
+                        value={reservation.payment_status || "pay_on_site"}
+                        disabled={isSaving}
+                        onChange={(event) => {
+                          if (event.target.value === "paid") {
+                            markPaymentAsPaid(reservation);
+                            return;
+                          }
+
+                          updateReservation(
+                            reservation,
+                            {
+                              payment_status: event.target.value,
+                            },
+                            "RESERVATION_PAYMENT_CHANGED"
+                          );
+                        }}
+                        className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-sm text-white outline-none focus:border-green-600 disabled:opacity-60"
+                      >
+                        <option value="pay_on_site">Płatność na miejscu</option>
+                        <option value="paid">Opłacona</option>
+                        <option value="unpaid">Nieopłacona</option>
+                        <option value="free">Darmowa</option>
+                        <option value="voucher">Voucher</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="mb-2 block text-xs uppercase tracking-[0.25em] text-zinc-500">
+                        Status wizyty
+                      </label>
+
+                      <select
+                        value={reservation.reservation_status || "confirmed"}
+                        disabled={isSaving}
+                        onChange={(event) =>
+                          updateReservation(
+                            reservation,
+                            {
+                              reservation_status: event.target.value,
+                            },
+                            "RESERVATION_STATUS_CHANGED"
+                          )
+                        }
+                        className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-sm text-white outline-none focus:border-green-600 disabled:opacity-60"
+                      >
+                        <option value="confirmed">Potwierdzona</option>
+                        <option value="completed">Zakończona</option>
+                        <option value="no_show">No-show</option>
+                        <option value="cancelled_by_admin">
+                          Anulowana przez admina
+                        </option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="grid gap-2">
+                    {shouldVerifyAtReception ? (
+                      <>
+                        <button
+                          type="button"
+                          disabled={isSaving}
+                          onClick={() =>
+                            verifyAccountAndStartVisit(reservation)
+                          }
+                          className="rounded-xl border border-orange-700 px-4 py-3 text-sm font-bold text-orange-300 transition hover:bg-orange-950 disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          Zweryfikuj konto i uprawnienia
+                        </button>
+
+                        <button
+                          type="button"
+                          disabled={isSaving}
+                          onClick={() =>
+                            markVerificationIncomplete(reservation)
+                          }
+                          className="rounded-xl border border-yellow-700 px-4 py-3 text-sm font-bold text-yellow-300 transition hover:bg-yellow-950 disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          Weryfikacja niepełna
+                        </button>
+                      </>
+                    ) : (
+                      <button
+                        type="button"
+                        disabled={isSaving}
+                        onClick={() => markCompleted(reservation)}
+                        className="rounded-xl border border-green-700 px-4 py-3 text-sm font-bold text-green-300 transition hover:bg-green-950 disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        Klient był / zakończ
+                      </button>
+                    )}
+
+                    <button
+                      type="button"
+                      disabled={isSaving}
+                      onClick={() => markNoShow(reservation)}
+                      className="rounded-xl border border-yellow-700 px-4 py-3 text-sm font-bold text-yellow-300 transition hover:bg-yellow-950 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      No-show
+                    </button>
+
+                    <button
+                      type="button"
+                      disabled={isSaving}
+                      onClick={() => cancelByAdmin(reservation)}
+                      className="rounded-xl border border-red-700 px-4 py-3 text-sm font-bold text-red-300 transition hover:bg-red-950 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      Anuluj
+                    </button>
+
+                    {isSaving && (
+                      <p className="text-xs font-semibold text-yellow-400">
+                        Zapisywanie...
+                      </p>
+                    )}
+                  </div>
+                </div>
+
+                {shouldVerifyAtReception && (
+                  <div className="mt-5 rounded-2xl border border-orange-800 bg-orange-950/40 p-5">
+                    <div className="mb-4 flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                      <div>
+                        <h3 className="text-xl font-bold text-orange-200">
+                          Pierwsza wizyta / uprawnienia do sprawdzenia
+                        </h3>
+
+                        <p className="mt-1 text-sm text-orange-100/80">
+                          Sprawdź dokumenty tylko do wglądu. Nie zapisuj numerów
+                          dokumentów, pozwoleń ani legitymacji.
+                        </p>
                       </div>
-                    ))}
+
+                      <span
+                        className={
+                          completion >= 80
+                            ? "rounded-full border border-green-700 bg-green-950 px-4 py-2 text-sm font-bold text-green-300"
+                            : "rounded-full border border-yellow-700 bg-yellow-950 px-4 py-2 text-sm font-bold text-yellow-300"
+                        }
+                      >
+                        Dane: {completion}%
+                      </span>
+                    </div>
+
+                    {missingFields.length > 0 && (
+                      <div className="mb-5 rounded-xl border border-yellow-800 bg-yellow-950 p-4 text-sm text-yellow-100">
+                        <p className="font-bold text-yellow-300">
+                          Brakujące dane:
+                        </p>
+
+                        <p className="mt-1">{missingFields.join(", ")}</p>
+                      </div>
+                    )}
+
+                    <div className="mb-5 rounded-xl border border-green-900 bg-green-950/40 p-4 text-sm text-green-200">
+                      <p className="font-semibold">
+                        Zasada minimalizacji danych
+                      </p>
+
+                      <p className="mt-1 text-green-300">
+                        Weryfikujesz uprawnienia na miejscu, ale w systemie
+                        zapisujesz tylko wynik weryfikacji i krótką notatkę. Bez
+                        numerów dokumentów.
+                      </p>
+                    </div>
+
+                    <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
+                      <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-4">
+                        <p className="mb-3 text-xs uppercase tracking-[0.25em] text-zinc-500">
+                          Dane podstawowe
+                        </p>
+
+                        <p className="text-sm text-zinc-500">Imię i nazwisko</p>
+                        <p className="mb-3 font-semibold">
+                          {valueOrMissing(
+                            profile?.full_name ??
+                              reservation.customer_name ??
+                              null
+                          )}
+                        </p>
+
+                        <p className="text-sm text-zinc-500">E-mail</p>
+                        <p className="mb-3 font-semibold">
+                          {valueOrMissing(
+                            profile?.email || reservation.customer_email
+                          )}
+                        </p>
+
+                        <p className="text-sm text-zinc-500">Telefon</p>
+                        <p className="font-semibold">
+                          {valueOrMissing(
+                            profile?.phone || reservation.customer_phone
+                          )}
+                        </p>
+                      </div>
+
+                      <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-4">
+                        <p className="mb-3 text-xs uppercase tracking-[0.25em] text-zinc-500">
+                          Adres
+                        </p>
+
+                        <p className="text-sm text-zinc-500">Kod pocztowy</p>
+                        <p className="mb-3 font-semibold">
+                          {valueOrMissing(profile?.postal_code)}
+                        </p>
+
+                        <p className="text-sm text-zinc-500">Miasto</p>
+                        <p className="mb-3 font-semibold">
+                          {valueOrMissing(profile?.city)}
+                        </p>
+
+                        <p className="text-sm text-zinc-500">Ulica</p>
+                        <p className="mb-3 font-semibold">
+                          {valueOrMissing(profile?.street)}
+                        </p>
+
+                        <p className="text-sm text-zinc-500">Dom / lokal</p>
+                        <p className="font-semibold">
+                          {valueOrMissing(profile?.house_number)}
+                          {profile?.apartment_number
+                            ? ` / ${profile.apartment_number}`
+                            : ""}
+                        </p>
+                      </div>
+
+                      <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-4">
+                        <p className="mb-3 text-xs uppercase tracking-[0.25em] text-zinc-500">
+                          Deklarowane pozwolenia / uprawnienia
+                        </p>
+
+                        <BooleanLine
+                          label="Pozwolenie sportowe"
+                          value={profile?.permission_sport}
+                        />
+
+                        <BooleanLine
+                          label="Pozwolenie kolekcjonerskie"
+                          value={profile?.permission_collector}
+                        />
+
+                        <BooleanLine
+                          label="Pozwolenie myśliwskie / łowieckie"
+                          value={profile?.permission_hunting}
+                        />
+
+                        <BooleanLine
+                          label="Szkoleniowe / dopuszczenie"
+                          value={profile?.permission_training}
+                        />
+
+                        <BooleanLine
+                          label="Ochrona osobista"
+                          value={profile?.permission_personal_protection}
+                        />
+
+                        <BooleanLine
+                          label="Inne"
+                          value={profile?.permission_other}
+                        />
+                      </div>
+
+                      <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-4">
+                        <p className="mb-3 text-xs uppercase tracking-[0.25em] text-zinc-500">
+                          Dodatkowe kwalifikacje
+                        </p>
+
+                        <BooleanLine
+                          label="Instruktor"
+                          value={profile?.qualification_instructor}
+                        />
+
+                        <BooleanLine
+                          label="Prowadzący strzelanie / RO"
+                          value={profile?.qualification_range_officer}
+                        />
+
+                        <BooleanLine
+                          label="Licencja PZSS"
+                          value={profile?.qualification_pzss_license}
+                        />
+
+                        <BooleanLine
+                          label="Myśliwy"
+                          value={profile?.qualification_hunter}
+                        />
+                      </div>
+
+                      <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-4">
+                        <p className="mb-3 text-xs uppercase tracking-[0.25em] text-zinc-500">
+                          Weryfikacja uprawnień
+                        </p>
+
+                        <p className="text-sm text-zinc-500">Status konta</p>
+                        <p className="mb-3 font-semibold">
+                          {getVerificationStatusLabel(
+                            profile?.verification_status ?? null
+                          )}
+                        </p>
+
+                        <p className="text-sm text-zinc-500">
+                          Status uprawnień
+                        </p>
+                        <p className="mb-3 font-semibold">
+                          {permissionsVerified
+                            ? "Sprawdzone przez obsługę"
+                            : "Do sprawdzenia podczas wizyty"}
+                        </p>
+
+                        <p className="text-sm text-zinc-500">
+                          Data sprawdzenia
+                        </p>
+                        <p className="mb-3 font-semibold">
+                          {profile?.permissions_verified_at
+                            ? new Date(
+                                profile.permissions_verified_at
+                              ).toLocaleString("pl-PL")
+                            : "Brak danych"}
+                        </p>
+
+                        <p className="text-sm text-zinc-500">Notatka</p>
+                        <p className="whitespace-pre-line text-sm font-semibold leading-6">
+                          {valueOrMissing(
+                            profile?.permissions_verification_note
+                          )}
+                        </p>
+                      </div>
+
+                      <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-4">
+                        <p className="mb-3 text-xs uppercase tracking-[0.25em] text-zinc-500">
+                          Notatki systemowe
+                        </p>
+
+                        <p className="text-sm text-zinc-500">
+                          Gotowa notatka po weryfikacji
+                        </p>
+
+                        <p className="mb-4 rounded-lg border border-green-900 bg-green-950/40 p-3 text-xs leading-5 text-green-200">
+                          {VERIFIED_NOTE}
+                        </p>
+
+                        <p className="text-sm text-zinc-500">
+                          Gotowa notatka przy brakach
+                        </p>
+
+                        <p className="rounded-lg border border-yellow-900 bg-yellow-950/40 p-3 text-xs leading-5 text-yellow-200">
+                          {INCOMPLETE_NOTE}
+                        </p>
+                      </div>
+                    </div>
                   </div>
                 )}
-              </div>
+              </article>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
 
-              <div className="mt-6 grid gap-3 md:grid-cols-2">
-                <button
-                  type="button"
-                  onClick={markCompleted}
-                  disabled={savingReservationId === selectedReservation.id}
-                  className="rounded-xl border border-green-700 px-5 py-4 font-bold text-green-300 hover:bg-green-950 disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  Zakończ wizytę
-                </button>
-
-                <button
-                  type="button"
-                  onClick={markNoShow}
-                  disabled={savingReservationId === selectedReservation.id}
-                  className="rounded-xl border border-yellow-700 px-5 py-4 font-bold text-yellow-300 hover:bg-yellow-950 disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  No-show
-                </button>
-
-                <button
-                  type="button"
-                  onClick={markPaid}
-                  disabled={savingReservationId === selectedReservation.id}
-                  className="rounded-xl border border-blue-700 px-5 py-4 font-bold text-blue-300 hover:bg-blue-950 disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  Oznacz jako opłacone
-                </button>
-
-                <button
-                  type="button"
-                  onClick={markPayOnSite}
-                  disabled={savingReservationId === selectedReservation.id}
-                  className="rounded-xl border border-purple-700 px-5 py-4 font-bold text-purple-300 hover:bg-purple-950 disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  Płatność na miejscu
-                </button>
-
-                <button
-                  type="button"
-                  onClick={cancelReservation}
-                  disabled={savingReservationId === selectedReservation.id}
-                  className="rounded-xl border border-red-700 px-5 py-4 font-bold text-red-300 hover:bg-red-950 disabled:cursor-not-allowed disabled:opacity-60 md:col-span-2"
-                >
-                  Anuluj rezerwację
-                </button>
-              </div>
-
-              {savingReservationId === selectedReservation.id && (
-                <p className="mt-5 text-sm font-semibold text-yellow-400">
-                  Zapisywanie zmian...
-                </p>
-              )}
-            </div>
+export default function CheckInPage() {
+  return (
+    <main className="min-h-screen bg-zinc-950 p-8 text-white">
+      <Suspense
+        fallback={
+          <div className="mx-auto max-w-xl rounded-xl border border-zinc-800 bg-zinc-900 p-6 text-zinc-400">
+            Ładowanie check-in...
           </div>
-        )}
-      </section>
+        }
+      >
+        <CheckInContent />
+      </Suspense>
     </main>
   );
 }
