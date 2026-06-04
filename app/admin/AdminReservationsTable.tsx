@@ -1,6 +1,12 @@
 "use client";
 
 import { useState } from "react";
+import {
+  cancelReservation,
+  completeReservation,
+  markNoShow,
+  markPaid,
+} from "../../lib/reservation-actions";
 import { supabase } from "../../lib/supabase";
 
 type Reservation = {
@@ -136,6 +142,31 @@ export default function AdminReservationsTable({
     setMessage("");
     setSavingId(id);
 
+    if (status === "cancelled") {
+      const result = await cancelReservation(supabase, { reservationId: id });
+
+      setSavingId("");
+
+      if (result.error) {
+        setMessage(`Błąd anulowania rezerwacji: ${result.error}`);
+        return;
+      }
+
+      setItems((currentItems) =>
+        currentItems.map((item) =>
+          item.id === id
+            ? {
+                ...item,
+                reservation_status: "cancelled",
+              }
+            : item
+        )
+      );
+
+      setMessage("Rezerwacja została anulowana.");
+      return;
+    }
+
     const { error } = await supabase
       .from("reservations")
       .update({ reservation_status: status })
@@ -164,20 +195,68 @@ export default function AdminReservationsTable({
     setMessage("");
     setSavingId(id);
 
-    const now = new Date().toISOString();
+    if (attendanceStatus === "no_show") {
+      const result = await markNoShow(supabase, { reservationId: id });
 
-    const reservationStatus =
-      attendanceStatus === "no_show"
-        ? "no_show"
-        : attendanceStatus === "completed"
-          ? "completed"
-          : "confirmed";
+      setSavingId("");
+
+      if (result.error) {
+        setMessage(`Błąd zmiany obecności: ${result.error}`);
+        return;
+      }
+
+      setItems((currentItems) =>
+        currentItems.map((item) =>
+          item.id === id
+            ? {
+                ...item,
+                attendance_status: "no_show",
+                reservation_status: "no_show",
+              }
+            : item
+        )
+      );
+
+      setMessage("Klient oznaczony jako nieobecny.");
+      return;
+    }
+
+    if (attendanceStatus === "completed") {
+      const now = new Date().toISOString();
+      const result = await completeReservation(supabase, { reservationId: id });
+
+      setSavingId("");
+
+      if (result.error) {
+        setMessage(`Błąd zmiany obecności: ${result.error}`);
+        return;
+      }
+
+      setItems((currentItems) =>
+        currentItems.map((item) =>
+          item.id === id
+            ? {
+                ...item,
+                attendance_status: "completed",
+                reservation_status: "completed",
+                checked_in_at: item.checked_in_at ?? now,
+                completed_at: now,
+              }
+            : item
+        )
+      );
+
+      setMessage("Rezerwacja oznaczona jako zakończona.");
+      return;
+    }
+
+    const now = new Date().toISOString();
 
     const updatePayload = {
       attendance_status: attendanceStatus,
-      reservation_status: reservationStatus,
+      reservation_status: "confirmed",
       checked_in_at: attendanceStatus === "present" ? now : null,
-      completed_at: attendanceStatus === "completed" ? now : null,
+      completed_at: null,
     };
 
     const { error } = await supabase
@@ -198,9 +277,9 @@ export default function AdminReservationsTable({
           ? {
               ...item,
               attendance_status: attendanceStatus,
-              reservation_status: reservationStatus,
+              reservation_status: "confirmed",
               checked_in_at: attendanceStatus === "present" ? now : null,
-              completed_at: attendanceStatus === "completed" ? now : null,
+              completed_at: null,
             }
           : item
       )
@@ -211,16 +290,6 @@ export default function AdminReservationsTable({
       return;
     }
 
-    if (attendanceStatus === "no_show") {
-      setMessage("Klient oznaczony jako nieobecny.");
-      return;
-    }
-
-    if (attendanceStatus === "completed") {
-      setMessage("Rezerwacja oznaczona jako zakończona.");
-      return;
-    }
-
     setMessage("Rezerwacja przywrócona jako zaplanowana.");
   }
 
@@ -228,21 +297,18 @@ export default function AdminReservationsTable({
     setMessage("");
     setSavingId(id);
 
-    const { error } = await supabase
-      .from("reservations")
-      .update({ payment_status: "paid_on_site" })
-      .eq("id", id);
+    const result = await markPaid(supabase, { reservationId: id });
 
     setSavingId("");
 
-    if (error) {
-      setMessage(`Błąd zmiany płatności: ${error.message}`);
+    if (result.error) {
+      setMessage(`Błąd zmiany płatności: ${result.error}`);
       return;
     }
 
     setItems((currentItems) =>
       currentItems.map((item) =>
-        item.id === id ? { ...item, payment_status: "paid_on_site" } : item
+        item.id === id ? { ...item, payment_status: "paid" } : item
       )
     );
 
@@ -483,7 +549,7 @@ export default function AdminReservationsTable({
                             onClick={() => markAsPaid(reservation.id)}
                             disabled={
                               savingId === reservation.id ||
-                              reservation.payment_status === "paid_on_site"
+                              (reservation.payment_status === "paid" || reservation.payment_status === "paid_on_site")
                             }
                             className="rounded-lg border border-green-700 px-3 py-2 text-xs font-semibold text-green-300 transition hover:bg-green-950 disabled:cursor-not-allowed disabled:opacity-50"
                           >
