@@ -14,10 +14,10 @@ export const PAYMENT_STATUSES = Object.values(PAYMENT_STATUS);
 
 export const PAYMENT_STATUS_LABELS: Record<PaymentStatus, string> = {
   [PAYMENT_STATUS.PAY_ON_SITE]: "Płatność na miejscu",
-  [PAYMENT_STATUS.PAID]: "Opłacona",
-  [PAYMENT_STATUS.PAID_ON_SITE]: "Opłacona",
-  [PAYMENT_STATUS.UNPAID]: "Nieopłacona",
-  [PAYMENT_STATUS.FREE]: "Darmowa",
+  [PAYMENT_STATUS.PAID]: "Opłacone",
+  [PAYMENT_STATUS.PAID_ON_SITE]: "Opłacone na miejscu",
+  [PAYMENT_STATUS.UNPAID]: "Nieopłacone",
+  [PAYMENT_STATUS.FREE]: "Gratis",
   [PAYMENT_STATUS.VOUCHER]: "Voucher",
 };
 
