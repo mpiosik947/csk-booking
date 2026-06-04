@@ -3,6 +3,22 @@
 import { Suspense, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { supabase } from "../../../lib/supabase";
+import {
+  cancelReservation as cancelReservationAction,
+  completeReservation as completeReservationAction,
+  markNoShow as markNoShowAction,
+  markPaid as markPaidAction,
+} from "../../../lib/reservation-actions";
+import {
+  getPaymentStatusBadgeClass,
+  getPaymentStatusLabel,
+  PAYMENT_STATUS,
+} from "../../../lib/payment-status";
+import {
+  getReservationStatusBadgeClass,
+  getReservationStatusLabel,
+  RESERVATION_STATUS,
+} from "../../../lib/reservation-status";
 
 type UserRole = "admin" | "pracownik" | "instruktor" | "user";
 
@@ -79,41 +95,6 @@ function normalizeTime(time: string | null) {
 
 function getLaneName(reservation: Reservation) {
   return reservation.shooting_lanes?.[0]?.name || "Nieznana oś";
-}
-
-function getReservationStatusLabel(status: string | null) {
-  switch (status) {
-    case "confirmed":
-      return "Potwierdzona";
-    case "completed":
-      return "Zakończona";
-    case "no_show":
-      return "No-show";
-    case "cancelled_by_admin":
-    case "cancelled_by_user":
-    case "cancelled":
-    case "canceled":
-      return "Anulowana";
-    default:
-      return status || "Brak statusu";
-  }
-}
-
-function getPaymentStatusLabel(status: string | null) {
-  switch (status) {
-    case "pay_on_site":
-      return "Płatność na miejscu";
-    case "paid":
-      return "Opłacona";
-    case "unpaid":
-      return "Nieopłacona";
-    case "free":
-      return "Darmowa";
-    case "voucher":
-      return "Voucher";
-    default:
-      return status || "Brak statusu";
-  }
 }
 
 function getVerificationStatusLabel(status: string | null) {
@@ -209,41 +190,6 @@ function getDeclaredQualifications(profile: Profile | null | undefined) {
   if (profile.qualification_hunter) qualifications.push("myśliwy");
 
   return qualifications;
-}
-
-function getStatusClass(status: string | null) {
-  switch (status) {
-    case "completed":
-      return "border-blue-700 bg-blue-950 text-blue-300";
-    case "confirmed":
-      return "border-green-700 bg-green-950 text-green-300";
-    case "no_show":
-      return "border-yellow-700 bg-yellow-950 text-yellow-300";
-    case "cancelled_by_admin":
-    case "cancelled_by_user":
-    case "cancelled":
-    case "canceled":
-      return "border-red-700 bg-red-950 text-red-300";
-    default:
-      return "border-zinc-700 bg-zinc-900 text-zinc-300";
-  }
-}
-
-function getPaymentClass(status: string | null) {
-  switch (status) {
-    case "paid":
-      return "border-green-700 bg-green-950 text-green-300";
-    case "pay_on_site":
-      return "border-yellow-700 bg-yellow-950 text-yellow-300";
-    case "unpaid":
-      return "border-red-700 bg-red-950 text-red-300";
-    case "free":
-      return "border-blue-700 bg-blue-950 text-blue-300";
-    case "voucher":
-      return "border-purple-700 bg-purple-950 text-purple-300";
-    default:
-      return "border-zinc-700 bg-zinc-900 text-zinc-300";
-  }
 }
 
 function getVerificationClass(profile: Profile | null | undefined) {
@@ -653,17 +599,68 @@ function CheckInContent() {
   }
 
   async function markCompleted(reservation: Reservation) {
-    const now = new Date().toISOString();
+    setSavingId(reservation.id);
+    setMessage("");
 
-    await updateReservation(
-      reservation,
-      {
-        attendance_status: "present",
-        reservation_status: "completed",
-        checked_in_at: now,
-      },
-      "CHECK_IN_COMPLETED"
+    const result = await completeReservationAction(supabase, {
+      reservationId: reservation.id,
+    });
+
+    if (result.error) {
+      setSavingId(null);
+      setMessage(`Błąd zapisu: ${result.error}`);
+      return;
+    }
+
+    const updatedReservation: Reservation = {
+      ...reservation,
+      attendance_status: result.data?.attendance_status ?? "present",
+      reservation_status: result.data?.reservation_status ?? RESERVATION_STATUS.COMPLETED,
+      checked_in_at: result.data?.checked_in_at ?? new Date().toISOString(),
+    };
+
+    setReservations((current) =>
+      current.map((item) =>
+        item.id === reservation.id ? updatedReservation : item
+      )
     );
+
+    if (selectedReservation?.id === reservation.id) {
+      setSelectedReservation(updatedReservation);
+    }
+
+    const profile = reservation.user_id
+      ? profilesByUserId[reservation.user_id]
+      : null;
+
+    const auditError = await createAuditLog({
+      action: "CHECK_IN_COMPLETED",
+      reservation,
+      profile,
+      details: {
+        before: {
+          reservation_status: reservation.reservation_status,
+          attendance_status: reservation.attendance_status,
+          checked_in_at: reservation.checked_in_at,
+        },
+        after: {
+          reservation_status: updatedReservation.reservation_status,
+          attendance_status: updatedReservation.attendance_status,
+          checked_in_at: updatedReservation.checked_in_at,
+        },
+      },
+    });
+
+    setSavingId(null);
+
+    if (auditError) {
+      setMessage(
+        `Wizyta zakończona, ale nie udało się dodać wpisu audit log: ${auditError}`
+      );
+      return;
+    }
+
+    setMessage("Wizyta zakończona.");
   }
 
   async function verifyAccountAndStartVisit(reservation: Reservation) {
@@ -715,19 +712,14 @@ function CheckInContent() {
       return;
     }
 
-    const { error: reservationError } = await supabase
-      .from("reservations")
-      .update({
-        attendance_status: "present",
-        reservation_status: "completed",
-        checked_in_at: now,
-      })
-      .eq("id", reservation.id);
+    const reservationResult = await completeReservationAction(supabase, {
+      reservationId: reservation.id,
+    });
 
-    if (reservationError) {
+    if (reservationResult.error) {
       setSavingId(null);
       setMessage(
-        `Konto zweryfikowane, ale błąd check-in: ${reservationError.message}`
+        `Konto zweryfikowane, ale błąd check-in: ${reservationResult.error}`
       );
       return;
     }
@@ -745,9 +737,10 @@ function CheckInContent() {
 
     const updatedReservation: Reservation = {
       ...reservation,
-      attendance_status: "present",
-      reservation_status: "completed",
-      checked_in_at: now,
+      attendance_status: reservationResult.data?.attendance_status ?? "present",
+      reservation_status:
+        reservationResult.data?.reservation_status ?? RESERVATION_STATUS.COMPLETED,
+      checked_in_at: reservationResult.data?.checked_in_at ?? now,
     };
 
     setProfilesByUserId((current) => ({
@@ -789,7 +782,7 @@ function CheckInContent() {
           checked_in_at: reservation.checked_in_at,
         },
         reservation_after: {
-          reservation_status: "completed",
+          reservation_status: RESERVATION_STATUS.COMPLETED,
           attendance_status: "present",
           checked_in_at: now,
         },
@@ -888,24 +881,184 @@ function CheckInContent() {
   }
 
   async function markNoShow(reservation: Reservation) {
-    await updateReservation(
-      reservation,
-      {
-        attendance_status: "no_show",
-        reservation_status: "no_show",
-      },
-      "RESERVATION_NO_SHOW"
+    setSavingId(reservation.id);
+    setMessage("");
+
+    const result = await markNoShowAction(supabase, {
+      reservationId: reservation.id,
+    });
+
+    if (result.error) {
+      setSavingId(null);
+      setMessage(`Błąd zapisu: ${result.error}`);
+      return;
+    }
+
+    const updatedReservation: Reservation = {
+      ...reservation,
+      attendance_status: result.data?.attendance_status ?? RESERVATION_STATUS.NO_SHOW,
+      reservation_status: result.data?.reservation_status ?? RESERVATION_STATUS.NO_SHOW,
+    };
+
+    setReservations((current) =>
+      current.map((item) =>
+        item.id === reservation.id ? updatedReservation : item
+      )
     );
+
+    if (selectedReservation?.id === reservation.id) {
+      setSelectedReservation(updatedReservation);
+    }
+
+    const profile = reservation.user_id
+      ? profilesByUserId[reservation.user_id]
+      : null;
+
+    const auditError = await createAuditLog({
+      action: "RESERVATION_NO_SHOW",
+      reservation,
+      profile,
+      details: {
+        before: {
+          reservation_status: reservation.reservation_status,
+          attendance_status: reservation.attendance_status,
+        },
+        after: {
+          reservation_status: updatedReservation.reservation_status,
+          attendance_status: updatedReservation.attendance_status,
+        },
+      },
+    });
+
+    setSavingId(null);
+
+    if (auditError) {
+      setMessage(
+        `Oznaczono no-show, ale nie udało się dodać wpisu audit log: ${auditError}`
+      );
+      return;
+    }
+
+    setMessage("Oznaczono no-show.");
   }
 
   async function cancelByAdmin(reservation: Reservation) {
-    await updateReservation(
-      reservation,
-      {
-        reservation_status: "cancelled_by_admin",
-      },
-      "RESERVATION_CANCELLED_BY_ADMIN"
+    setSavingId(reservation.id);
+    setMessage("");
+
+    const result = await cancelReservationAction(supabase, {
+      reservationId: reservation.id,
+    });
+
+    if (result.error) {
+      setSavingId(null);
+      setMessage(`Błąd zapisu: ${result.error}`);
+      return;
+    }
+
+    const updatedReservation: Reservation = {
+      ...reservation,
+      reservation_status:
+        result.data?.reservation_status ?? RESERVATION_STATUS.CANCELLED_BY_ADMIN,
+    };
+
+    setReservations((current) =>
+      current.map((item) =>
+        item.id === reservation.id ? updatedReservation : item
+      )
     );
+
+    if (selectedReservation?.id === reservation.id) {
+      setSelectedReservation(updatedReservation);
+    }
+
+    const profile = reservation.user_id
+      ? profilesByUserId[reservation.user_id]
+      : null;
+
+    const auditError = await createAuditLog({
+      action: "RESERVATION_CANCELLED_BY_ADMIN",
+      reservation,
+      profile,
+      details: {
+        before: {
+          reservation_status: reservation.reservation_status,
+        },
+        after: {
+          reservation_status: updatedReservation.reservation_status,
+        },
+      },
+    });
+
+    setSavingId(null);
+
+    if (auditError) {
+      setMessage(
+        `Anulowano rezerwację, ale nie udało się dodać wpisu audit log: ${auditError}`
+      );
+      return;
+    }
+
+    setMessage("Rezerwacja anulowana.");
+  }
+
+  async function markPaymentAsPaid(reservation: Reservation) {
+    setSavingId(reservation.id);
+    setMessage("");
+
+    const result = await markPaidAction(supabase, {
+      reservationId: reservation.id,
+    });
+
+    if (result.error) {
+      setSavingId(null);
+      setMessage(`Błąd zapisu: ${result.error}`);
+      return;
+    }
+
+    const updatedReservation: Reservation = {
+      ...reservation,
+      payment_status: result.data?.payment_status ?? PAYMENT_STATUS.PAID,
+    };
+
+    setReservations((current) =>
+      current.map((item) =>
+        item.id === reservation.id ? updatedReservation : item
+      )
+    );
+
+    if (selectedReservation?.id === reservation.id) {
+      setSelectedReservation(updatedReservation);
+    }
+
+    const profile = reservation.user_id
+      ? profilesByUserId[reservation.user_id]
+      : null;
+
+    const auditError = await createAuditLog({
+      action: "RESERVATION_PAYMENT_PAID",
+      reservation,
+      profile,
+      details: {
+        before: {
+          payment_status: reservation.payment_status,
+        },
+        after: {
+          payment_status: updatedReservation.payment_status,
+        },
+      },
+    });
+
+    setSavingId(null);
+
+    if (auditError) {
+      setMessage(
+        `Oznaczono płatność, ale nie udało się dodać wpisu audit log: ${auditError}`
+      );
+      return;
+    }
+
+    setMessage("Płatność oznaczona jako opłacona.");
   }
 
   const mainList =
@@ -1017,7 +1170,7 @@ function CheckInContent() {
                   <div>
                     <div className="mb-3 flex flex-wrap gap-2">
                       <span
-                        className={`rounded-full border px-3 py-1 text-xs font-bold ${getStatusClass(
+                        className={`rounded-full border px-3 py-1 text-xs font-bold ${getReservationStatusBadgeClass(
                           reservation.reservation_status
                         )}`}
                       >
@@ -1027,7 +1180,7 @@ function CheckInContent() {
                       </span>
 
                       <span
-                        className={`rounded-full border px-3 py-1 text-xs font-bold ${getPaymentClass(
+                        className={`rounded-full border px-3 py-1 text-xs font-bold ${getPaymentStatusBadgeClass(
                           reservation.payment_status
                         )}`}
                       >
@@ -1137,24 +1290,29 @@ function CheckInContent() {
                       </label>
 
                       <select
-                        value={reservation.payment_status || "pay_on_site"}
+                        value={reservation.payment_status || PAYMENT_STATUS.PAY_ON_SITE}
                         disabled={isSaving}
-                        onChange={(event) =>
+                        onChange={(event) => {
+                          if (event.target.value === PAYMENT_STATUS.PAID) {
+                            markPaymentAsPaid(reservation);
+                            return;
+                          }
+
                           updateReservation(
                             reservation,
                             {
                               payment_status: event.target.value,
                             },
                             "RESERVATION_PAYMENT_CHANGED"
-                          )
-                        }
+                          );
+                        }}
                         className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-sm text-white outline-none focus:border-green-600 disabled:opacity-60"
                       >
-                        <option value="pay_on_site">Płatność na miejscu</option>
-                        <option value="paid">Opłacona</option>
-                        <option value="unpaid">Nieopłacona</option>
-                        <option value="free">Darmowa</option>
-                        <option value="voucher">Voucher</option>
+                        <option value={PAYMENT_STATUS.PAY_ON_SITE}>Płatność na miejscu</option>
+                        <option value={PAYMENT_STATUS.PAID}>Opłacona</option>
+                        <option value={PAYMENT_STATUS.UNPAID}>Nieopłacona</option>
+                        <option value={PAYMENT_STATUS.FREE}>Darmowa</option>
+                        <option value={PAYMENT_STATUS.VOUCHER}>Voucher</option>
                       </select>
                     </div>
 
@@ -1164,7 +1322,7 @@ function CheckInContent() {
                       </label>
 
                       <select
-                        value={reservation.reservation_status || "confirmed"}
+                        value={reservation.reservation_status || RESERVATION_STATUS.CONFIRMED}
                         disabled={isSaving}
                         onChange={(event) =>
                           updateReservation(
@@ -1177,10 +1335,10 @@ function CheckInContent() {
                         }
                         className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-sm text-white outline-none focus:border-green-600 disabled:opacity-60"
                       >
-                        <option value="confirmed">Potwierdzona</option>
-                        <option value="completed">Zakończona</option>
-                        <option value="no_show">No-show</option>
-                        <option value="cancelled_by_admin">
+                        <option value={RESERVATION_STATUS.CONFIRMED}>Potwierdzona</option>
+                        <option value={RESERVATION_STATUS.COMPLETED}>Zakończona</option>
+                        <option value={RESERVATION_STATUS.NO_SHOW}>No-show</option>
+                        <option value={RESERVATION_STATUS.CANCELLED_BY_ADMIN}>
                           Anulowana przez admina
                         </option>
                       </select>
