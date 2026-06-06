@@ -66,6 +66,39 @@ const hours = [
   "18:00",
   "19:00",
 ];
+function getTodayDateString() {
+  const today = new Date();
+  const year = today.getFullYear();
+  const month = String(today.getMonth() + 1).padStart(2, "0");
+  const day = String(today.getDate()).padStart(2, "0");
+
+  return `${year}-${month}-${day}`;
+}
+
+function getCurrentTimeInMinutes() {
+  const now = new Date();
+  return now.getHours() * 60 + now.getMinutes();
+}
+
+function isPastReservationDate(date: string) {
+  if (!date) return false;
+
+  return date < getTodayDateString();
+}
+
+function isTodayReservationDate(date: string) {
+  return date === getTodayDateString();
+}
+
+function isPastStartHour(date: string, hour: string) {
+  if (!date || !hour) return false;
+
+  if (!isTodayReservationDate(date)) {
+    return false;
+  }
+
+  return timeToMinutes(hour) <= getCurrentTimeInMinutes();
+}
 
 function normalizeTime(time: string) {
   return time.slice(0, 5);
@@ -338,17 +371,25 @@ export default function BookingForm({ lanes }: BookingFormProps) {
     return timeToMinutes(endTime) <= timeToMinutes(lastPossibleEnd);
   }
 
-  function canSelectStartHour(hour: string) {
-    if (!hour) return false;
+ function canSelectStartHour(hour: string) {
+  if (!hour) return false;
 
-    if (!isRangeInsideOpeningHours(hour)) {
-      return false;
-    }
-
-    const unavailableHours = getUnavailableHoursInRange(hour);
-
-    return unavailableHours.length === 0;
+  if (isPastReservationDate(reservationDate)) {
+    return false;
   }
+
+  if (isPastStartHour(reservationDate, hour)) {
+    return false;
+  }
+
+  if (!isRangeInsideOpeningHours(hour)) {
+    return false;
+  }
+
+  const unavailableHours = getUnavailableHoursInRange(hour);
+
+  return unavailableHours.length === 0;
+}
 
   const hasSelectedRangeConflict =
     selectedHour !== "" && !canSelectStartHour(selectedHour);
@@ -358,22 +399,35 @@ export default function BookingForm({ lanes }: BookingFormProps) {
   const canUseBookingForm = !isRejected;
 
   const canSubmit =
-    !loading &&
-    canUseBookingForm &&
-    userId !== "" &&
-    customerName !== "" &&
-    customerEmail !== "" &&
-    customerPhone !== "" &&
-    reservationDate !== "" &&
-    laneId !== "" &&
-    selectedHour !== "" &&
-    acceptedRules &&
-    !hasSelectedRangeConflict;
+  !loading &&
+  canUseBookingForm &&
+  userId !== "" &&
+  customerName !== "" &&
+  customerEmail !== "" &&
+  customerPhone !== "" &&
+  reservationDate !== "" &&
+  !isPastReservationDate(reservationDate) &&
+  laneId !== "" &&
+  selectedHour !== "" &&
+  !isPastStartHour(reservationDate, selectedHour) &&
+  acceptedRules &&
+  !hasSelectedRangeConflict;
 
   const verificationBox = getVerificationBox(verificationStatus);
 
   function handleHourClick(hour: string) {
     setMessage("");
+      if (isPastReservationDate(reservationDate)) {
+    setSelectedHour("");
+    setMessage("Nie można dokonać rezerwacji z datą wsteczną.");
+    return;
+  }
+
+  if (isPastStartHour(reservationDate, hour)) {
+    setSelectedHour("");
+    setMessage("Nie można wybrać godziny, która już minęła.");
+    return;
+  }
 
     if (!isRangeInsideOpeningHours(hour)) {
       setSelectedHour("");
@@ -400,6 +454,17 @@ export default function BookingForm({ lanes }: BookingFormProps) {
 
   async function handleSubmit() {
     setMessage("");
+      if (isPastReservationDate(reservationDate)) {
+    setMessage("Nie można dokonać rezerwacji z datą wsteczną.");
+    setSelectedHour("");
+    return;
+  }
+
+  if (isPastStartHour(reservationDate, selectedHour)) {
+    setMessage("Nie można dokonać rezerwacji na godzinę, która już minęła.");
+    setSelectedHour("");
+    return;
+  }
 
     if (isRejected) {
       setMessage(
@@ -762,14 +827,24 @@ export default function BookingForm({ lanes }: BookingFormProps) {
           </label>
 
           <input
-            type="date"
-            value={reservationDate}
-            disabled={!canUseBookingForm}
-            onChange={(event) => {
-              setReservationDate(event.target.value);
-              setSelectedHour("");
-              setMessage("");
-            }}
+          
+  type="date"
+  value={reservationDate}
+  min={getTodayDateString()}
+  disabled={!canUseBookingForm}
+           onChange={(event) => {
+  const newDate = event.target.value;
+
+  setReservationDate(newDate);
+  setSelectedHour("");
+
+  if (isPastReservationDate(newDate)) {
+    setMessage("Nie można wybrać daty wstecznej.");
+    return;
+  }
+
+  setMessage("");
+}}
             className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-white outline-none focus:border-green-600 disabled:cursor-not-allowed disabled:bg-zinc-800 disabled:text-zinc-500"
           />
         </div>
@@ -878,8 +953,9 @@ export default function BookingForm({ lanes }: BookingFormProps) {
                   const isInsideOpeningHours = isRangeInsideOpeningHours(hour);
                   const unavailableHours = getUnavailableHoursInRange(hour);
                   const hasRangeConflict = unavailableHours.length > 0;
-                  const isStartAvailable =
-                    isInsideOpeningHours && !hasRangeConflict;
+                  const isPastHour = isPastStartHour(reservationDate, hour);
+const isStartAvailable =
+  isInsideOpeningHours && !hasRangeConflict && !isPastHour;
 
                   return (
                     <button
@@ -905,12 +981,14 @@ export default function BookingForm({ lanes }: BookingFormProps) {
 
                       <span className="mt-1 block text-xs">
                         {isInSelectedRange
-                          ? "Wybrany zakres"
-                          : !isStartAvailable
-                            ? isBooked
-                              ? "Zajęte"
-                              : "Start niedostępny"
-                            : "Wolne"}
+  ? "Wybrany zakres"
+  : !isStartAvailable
+    ? isBooked
+      ? "Zajęte"
+      : isPastHour
+        ? "Godzina minęła"
+        : "Start niedostępny"
+    : "Wolne"}
                       </span>
                     </button>
                   );
