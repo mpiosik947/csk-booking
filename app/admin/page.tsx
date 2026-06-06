@@ -3,6 +3,14 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { supabase } from "../../lib/supabase";
+import {
+  RESERVATION_STATUS,
+  isCancelledReservationStatus,
+} from "../../lib/reservation-status";
+import {
+  PAYMENT_STATUS,
+  isPaidPaymentStatus,
+} from "../../lib/payment-status";
 
 type Role = "admin" | "pracownik" | "instruktor" | "user";
 
@@ -112,18 +120,7 @@ function getCurrentTimeHHMM() {
   return `${hours}:${minutes}`;
 }
 
-function isCancelled(status: string | null) {
-  return (
-    status === "cancelled" ||
-    status === "canceled" ||
-    status === "cancelled_by_admin" ||
-    status === "cancelled_by_user"
-  );
-}
 
-function isPaid(status: string | null) {
-  return status === "paid" || status === "paid_on_site";
-}
 
 function getLaneName(reservation: Reservation) {
   const lanes = reservation.shooting_lanes;
@@ -386,11 +383,11 @@ export default function AdminPage() {
   }, [role]);
 
   const activeTodayReservations = todayReservations.filter(
-    (reservation) => !isCancelled(reservation.reservation_status)
+    (reservation) => !isCancelledReservationStatus(reservation.reservation_status)
   );
 
   const activeMonthReservations = monthReservations.filter(
-    (reservation) => !isCancelled(reservation.reservation_status)
+    (reservation) => !isCancelledReservationStatus(reservation.reservation_status)
   );
 
   const uniqueTodayClients = new Set(
@@ -413,21 +410,21 @@ export default function AdminPage() {
   const presentToday = activeTodayReservations.filter(
     (reservation) =>
       reservation.attendance_status === "present" ||
-      reservation.reservation_status === "completed"
+      reservation.reservation_status === RESERVATION_STATUS.COMPLETED
   );
 
   const noShowToday = todayReservations.filter(
     (reservation) =>
       reservation.attendance_status === "no_show" ||
-      reservation.reservation_status === "no_show"
+      reservation.reservation_status === RESERVATION_STATUS.NO_SHOW
   );
 
   const unpaidToday = activeTodayReservations.filter(
-    (reservation) => reservation.payment_status === "unpaid"
+    (reservation) => reservation.payment_status === PAYMENT_STATUS.UNPAID
   );
 
   const payOnSiteToday = activeTodayReservations.filter(
-    (reservation) => reservation.payment_status === "pay_on_site"
+    (reservation) => reservation.payment_status === PAYMENT_STATUS.PAY_ON_SITE
   );
 
   const unverifiedUsers = profiles.filter(
@@ -435,11 +432,11 @@ export default function AdminPage() {
   );
 
   const todayRevenue = activeTodayReservations
-    .filter((reservation) => isPaid(reservation.payment_status))
+    .filter((reservation) => isPaidPaymentStatus(reservation.payment_status))
     .reduce((sum, reservation) => sum + Number(reservation.price ?? 0), 0);
 
   const monthRevenue = activeMonthReservations
-    .filter((reservation) => isPaid(reservation.payment_status))
+    .filter((reservation) => isPaidPaymentStatus(reservation.payment_status))
     .reduce((sum, reservation) => sum + Number(reservation.price ?? 0), 0);
 
   const monthPlannedRevenue = activeMonthReservations.reduce(
