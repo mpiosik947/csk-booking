@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { supabase } from "../../lib/supabase";
+import { RESERVATION_STATUS } from "../../lib/reservation-status";
 import BookingForm from "./BookingForm";
 
 type Lane = {
@@ -72,7 +73,7 @@ export default function BookingPage() {
             .from("reservations")
             .select("id")
             .eq("user_id", user.id)
-            .in("reservation_status", ["confirmed"]);
+            .in("reservation_status", [RESERVATION_STATUS.CONFIRMED]);
 
         if (reservationsError) {
           setMessage(

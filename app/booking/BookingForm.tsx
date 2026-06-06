@@ -2,6 +2,11 @@
 
 import { useEffect, useState } from "react";
 import { supabase } from "../../lib/supabase";
+import { PAYMENT_STATUS } from "../../lib/payment-status";
+import {
+  RESERVATION_STATUS,
+  isCancelledReservationStatus,
+} from "../../lib/reservation-status";
 
 type Lane = {
   id: string;
@@ -104,21 +109,13 @@ function normalizeTime(time: string) {
   return time.slice(0, 5);
 }
 
-function normalizeStatus(status?: string | null) {
-  return (status ?? "confirmed").toLowerCase();
-}
-
 function isActiveReservation(status?: string | null) {
-  const normalizedStatus = normalizeStatus(status);
+  const normalizedStatus = (status ?? RESERVATION_STATUS.CONFIRMED).toLowerCase();
 
   return (
-    normalizedStatus !== "cancelled" &&
-    normalizedStatus !== "canceled" &&
-    normalizedStatus !== "anulowana" &&
-    normalizedStatus !== "cancelled_by_user" &&
-    normalizedStatus !== "cancelled_by_admin" &&
-    normalizedStatus !== "completed" &&
-    normalizedStatus !== "no_show"
+    !isCancelledReservationStatus(normalizedStatus) &&
+    normalizedStatus !== RESERVATION_STATUS.COMPLETED &&
+    normalizedStatus !== RESERVATION_STATUS.NO_SHOW
   );
 }
 
@@ -530,7 +527,7 @@ export default function BookingForm({ lanes }: BookingFormProps) {
           .from("reservations")
           .select("id")
           .eq("user_id", userId)
-          .in("reservation_status", ["confirmed"]);
+          .in("reservation_status", [RESERVATION_STATUS.CONFIRMED]);
 
       if (activeReservationsError) {
         setLoading(false);
@@ -629,8 +626,8 @@ export default function BookingForm({ lanes }: BookingFormProps) {
       end_time: endTime,
       duration_minutes: durationMinutes,
       price: price,
-      reservation_status: "confirmed",
-      payment_status: "pay_on_site",
+      reservation_status: RESERVATION_STATUS.CONFIRMED,
+      payment_status: PAYMENT_STATUS.PAY_ON_SITE,
     });
 
     setLoading(false);
@@ -1077,3 +1074,4 @@ const isStartAvailable =
     </>
   );
 }
+
