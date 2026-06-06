@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { getPaymentStatusLabel } from "../../lib/payment-status";
 import { supabase } from "../../lib/supabase";
 
 type EventRegistration = {
@@ -29,12 +30,6 @@ function translateStatus(status: string) {
   if (status === "approved") return "Zatwierdzony";
   if (status === "reserve") return "Rezerwowy";
   if (status === "cancelled") return "Anulowany";
-  return status;
-}
-
-function translatePayment(status: string) {
-  if (status === "pay_on_site") return "Płatność na miejscu";
-  if (status === "paid_on_site") return "Opłacone";
   return status;
 }
 
@@ -366,7 +361,7 @@ export default function MyEventsPage() {
                           <p className="mb-1 text-zinc-500">Cena / płatność</p>
                           <p className="font-semibold text-green-500">
                             {Number(event?.price ?? 0).toFixed(0)} zł —{" "}
-                            {translatePayment(item.payment_status)}
+                           {getPaymentStatusLabel(item.payment_status)}
                           </p>
                         </div>
                       </div>
