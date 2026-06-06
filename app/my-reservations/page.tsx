@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { getPaymentStatusLabel } from "../../lib/payment-status";
 import {
+  RESERVATION_STATUS,
   getReservationStatusBadgeClass,
   getReservationStatusLabel,
 } from "../../lib/reservation-status";
@@ -249,7 +250,7 @@ export default function MyReservationsPage() {
               );
 
               const isActiveReservation =
-                reservation.reservation_status === "confirmed";
+                reservation.reservation_status === RESERVATION_STATUS.CONFIRMED;
 
               const checkInUrl = reservation.check_in_token
                 ? getCheckInUrl(reservation.check_in_token)
@@ -304,9 +305,9 @@ export default function MyReservationsPage() {
                         </span>
 
                         <span
-                          className={`rounded-full border px-3 py-1 text-xs font-semibold ${getReservationStatusBadgeClass(
-  reservation.reservation_status
-)}`}
+                          className={getAttendanceClass(
+                            reservation.attendance_status
+                          )}
                         >
                           {translateAttendanceStatus(
                             reservation.attendance_status
@@ -314,7 +315,7 @@ export default function MyReservationsPage() {
                         </span>
                       </div>
 
-                      {reservation.reservation_status === "confirmed" &&
+                      {reservation.reservation_status === RESERVATION_STATUS.CONFIRMED &&
                         !allowedToCancel && (
                           <p className="mt-3 text-sm text-yellow-300">
                             Samodzielne anulowanie nie jest już możliwe —
@@ -332,7 +333,7 @@ export default function MyReservationsPage() {
                       )}
 
                       <div className="mt-5 flex flex-wrap gap-3">
-                        {reservation.reservation_status === "confirmed" &&
+                        {reservation.reservation_status === RESERVATION_STATUS.CONFIRMED &&
                           allowedToCancel && (
                             <button
                               type="button"
