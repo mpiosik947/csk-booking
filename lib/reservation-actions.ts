@@ -1,4 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { PAYMENT_STATUS } from "./payment-status";
+import { RESERVATION_STATUS } from "./reservation-status";
 
 export type ReservationActionResult<T = unknown> = {
   data: T | null;
@@ -83,7 +85,7 @@ export async function completeReservation(
 
   return updateReservation(supabase, options.reservationId, {
     attendance_status: "completed",
-    reservation_status: "completed",
+    reservation_status: RESERVATION_STATUS.COMPLETED,
     checked_in_at: now,
     completed_at: now,
   });
@@ -95,7 +97,7 @@ export async function markNoShow(
 ): Promise<ReservationActionResult<ReservationActionData>> {
   return updateReservation(supabase, options.reservationId, {
     attendance_status: "no_show",
-    reservation_status: "no_show",
+    reservation_status: RESERVATION_STATUS.NO_SHOW,
     completed_at: null,
   });
 }
@@ -105,7 +107,7 @@ export async function cancelReservation(
   options: ReservationActionOptions
 ): Promise<ReservationActionResult<ReservationActionData>> {
   return updateReservation(supabase, options.reservationId, {
-    reservation_status: "cancelled",
+    reservation_status: RESERVATION_STATUS.CANCELLED,
   });
 }
 
@@ -114,7 +116,7 @@ export async function markPaid(
   options: ReservationActionOptions
 ): Promise<ReservationActionResult<ReservationActionData>> {
   return updateReservation(supabase, options.reservationId, {
-    payment_status: "paid",
+    payment_status: PAYMENT_STATUS.PAID,
   });
 }
 
@@ -123,7 +125,7 @@ export async function markUnpaid(
   options: ReservationActionOptions
 ): Promise<ReservationActionResult<ReservationActionData>> {
   return updateReservation(supabase, options.reservationId, {
-    payment_status: "unpaid",
+    payment_status: PAYMENT_STATUS.UNPAID,
   });
 }
 
@@ -132,7 +134,7 @@ export async function markVoucher(
   options: ReservationActionOptions
 ): Promise<ReservationActionResult<ReservationActionData>> {
   return updateReservation(supabase, options.reservationId, {
-    payment_status: "voucher",
+    payment_status: PAYMENT_STATUS.VOUCHER,
   });
 }
 
@@ -141,7 +143,7 @@ export async function markFree(
   options: ReservationActionOptions
 ): Promise<ReservationActionResult<ReservationActionData>> {
   return updateReservation(supabase, options.reservationId, {
-    payment_status: "free",
+    payment_status: PAYMENT_STATUS.FREE,
   });
 }
 
@@ -150,7 +152,7 @@ export async function markPayOnSite(
   options: ReservationActionOptions
 ): Promise<ReservationActionResult<ReservationActionData>> {
   return updateReservation(supabase, options.reservationId, {
-    payment_status: "pay_on_site",
+    payment_status: PAYMENT_STATUS.PAY_ON_SITE,
   });
 }
 
@@ -160,7 +162,7 @@ export async function markPresent(
 ): Promise<ReservationActionResult<ReservationActionData>> {
   return updateReservation(supabase, options.reservationId, {
     attendance_status: "present",
-    reservation_status: "confirmed",
+    reservation_status: RESERVATION_STATUS.CONFIRMED,
     checked_in_at: new Date().toISOString(),
     completed_at: null,
   });
@@ -172,7 +174,7 @@ export async function markScheduled(
 ): Promise<ReservationActionResult<ReservationActionData>> {
   return updateReservation(supabase, options.reservationId, {
     attendance_status: "planned",
-    reservation_status: "confirmed",
+    reservation_status: RESERVATION_STATUS.CONFIRMED,
     checked_in_at: null,
     completed_at: null,
   });
