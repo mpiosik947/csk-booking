@@ -680,13 +680,13 @@ export default function AdminReservationsPage() {
                             }
                             className="w-full rounded-xl border border-zinc-700 bg-zinc-900 px-4 py-3 text-sm text-white outline-none transition focus:border-green-600 disabled:opacity-60"
                           >
-                            <option value="pay_on_site">
+                            <option value={PAYMENT_STATUS.PAY_ON_SITE}>
                               Płatność na miejscu
                             </option>
-                            <option value="paid">Opłacona</option>
-                            <option value="unpaid">Nieopłacona</option>
-                            <option value="free">Darmowa</option>
-                            <option value="voucher">Voucher</option>
+                            <option value={PAYMENT_STATUS.PAID}>Opłacona</option>
+                            <option value={PAYMENT_STATUS.UNPAID}>Nieopłacona</option>
+                            <option value={PAYMENT_STATUS.FREE}>Darmowa</option>
+                            <option value={PAYMENT_STATUS.VOUCHER}>Voucher</option>
                           </select>
                         </div>
                       </div>
@@ -719,4 +719,5 @@ export default function AdminReservationsPage() {
     </main>
   );
 }
+
 
