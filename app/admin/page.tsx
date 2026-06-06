@@ -574,13 +574,13 @@ export default function AdminPage() {
               <h2 className="mb-4 text-2xl font-bold">Alerty</h2>
 
               <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-                <StatCard
-                  title="Niezweryfikowani użytkownicy"
-                  value={unverifiedUsers.length}
-                  description="Konta wymagające sprawdzenia przez obsługę."
-                  href="/admin/users"
-                  tone={unverifiedUsers.length > 0 ? "yellow" : "green"}
-                />
+               <StatCard
+  title="Niezweryfikowani użytkownicy"
+  value={unverifiedUsers.length}
+  description="Konta wymagające sprawdzenia przez obsługę."
+  href={hasAccess(role, ["admin"]) ? "/admin/users" : undefined}
+  tone={unverifiedUsers.length > 0 ? "yellow" : "green"}
+/>
 
                 <StatCard
                   title="Nieopłacone dzisiaj"
@@ -717,40 +717,48 @@ export default function AdminPage() {
                 <h2 className="mb-5 text-2xl font-bold">Szybkie akcje</h2>
 
                 <div className="grid gap-3">
-                  <Link
-                    href="/booking"
-                    className="rounded-xl border border-zinc-700 px-4 py-3 text-sm font-bold text-zinc-200 transition hover:border-green-700 hover:bg-green-950/30"
-                  >
-                    + Nowa rezerwacja
-                  </Link>
+  <Link
+    href="/booking"
+    className="rounded-xl border border-zinc-700 px-4 py-3 text-sm font-bold text-zinc-200 transition hover:border-green-700 hover:bg-green-950/30"
+  >
+    + Nowa rezerwacja
+  </Link>
 
-                  <Link
-                    href="/admin/check-in"
-                    className="rounded-xl border border-zinc-700 px-4 py-3 text-sm font-bold text-zinc-200 transition hover:border-green-700 hover:bg-green-950/30"
-                  >
-                    Check-in klientów
-                  </Link>
+  {hasAccess(role, ["admin", "pracownik", "instruktor"]) && (
+    <Link
+      href="/admin/check-in"
+      className="rounded-xl border border-zinc-700 px-4 py-3 text-sm font-bold text-zinc-200 transition hover:border-green-700 hover:bg-green-950/30"
+    >
+      Check-in klientów
+    </Link>
+  )}
 
-                  <Link
-                    href="/admin/calendar"
-                    className="rounded-xl border border-zinc-700 px-4 py-3 text-sm font-bold text-zinc-200 transition hover:border-green-700 hover:bg-green-950/30"
-                  >
-                    Kalendarz
-                  </Link>
+  {hasAccess(role, ["admin", "pracownik", "instruktor"]) && (
+    <Link
+      href="/admin/calendar"
+      className="rounded-xl border border-zinc-700 px-4 py-3 text-sm font-bold text-zinc-200 transition hover:border-green-700 hover:bg-green-950/30"
+    >
+      Kalendarz
+    </Link>
+  )}
 
-                  <Link
-                    href="/admin/users"
-                    className="rounded-xl border border-zinc-700 px-4 py-3 text-sm font-bold text-zinc-200 transition hover:border-green-700 hover:bg-green-950/30"
-                  >
-                    Użytkownicy
-                  </Link>
+  {hasAccess(role, ["admin"]) && (
+    <Link
+      href="/admin/users"
+      className="rounded-xl border border-zinc-700 px-4 py-3 text-sm font-bold text-zinc-200 transition hover:border-green-700 hover:bg-green-950/30"
+    >
+      Użytkownicy
+    </Link>
+  )}
 
-                  <Link
-                    href="/admin/reports"
-                    className="rounded-xl border border-zinc-700 px-4 py-3 text-sm font-bold text-zinc-200 transition hover:border-green-700 hover:bg-green-950/30"
-                  >
-                    Raporty
-                  </Link>
+  {hasAccess(role, ["admin"]) && (
+    <Link
+      href="/admin/reports"
+      className="rounded-xl border border-zinc-700 px-4 py-3 text-sm font-bold text-zinc-200 transition hover:border-green-700 hover:bg-green-950/30"
+    >
+      Raporty
+    </Link>
+  )}
                 </div>
               </div>
             </div>

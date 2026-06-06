@@ -279,40 +279,55 @@ export default function AdminUsersPage() {
 
   const isAdmin = currentUserRole === "admin";
 
-  async function loadCurrentUser() {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+ async function loadCurrentUser() {
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
 
-    setCurrentUserId(user?.id ?? "");
+  setCurrentUserId(user?.id ?? "");
 
-    if (!user) return;
-
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("id, role, full_name, email")
-      .eq("user_id", user.id)
-      .single();
-
-    if (profile?.id) {
-      setCurrentProfileId(profile.id);
-    }
-
-    if (profile?.role) {
-      setCurrentUserRole(profile.role as UserRole);
-      setCurrentUserName(
-        profile.full_name || profile.email || "Nieznany użytkownik"
-      );
-    }
+  if (!user) {
+    return null;
   }
 
+  const { data: profile, error } = await supabase
+    .from("profiles")
+    .select("id, role, full_name, email")
+    .eq("user_id", user.id)
+    .single();
+
+  if (error || !profile) {
+    return null;
+  }
+
+  if (profile.id) {
+    setCurrentProfileId(profile.id);
+  }
+
+  const loadedRole = (profile.role as UserRole) || "user";
+
+  setCurrentUserRole(loadedRole);
+  setCurrentUserName(
+    profile.full_name || profile.email || "Nieznany użytkownik"
+  );
+
+  return loadedRole;
+}
+
   async function loadProfiles() {
-    setLoading(true);
-    setMessage("");
+  setLoading(true);
+  setMessage("");
 
-    await loadCurrentUser();
+  const loadedRole = await loadCurrentUser();
 
-    const { data, error } = await supabase
+  if (loadedRole !== "admin") {
+    setProfiles([]);
+    setMessage("Brak dostępu. Ten moduł jest dostępny tylko dla administratora.");
+    setLoading(false);
+    return;
+  }
+
+  const { data, error } = await supabase
       .from("profiles")
       .select(
         `
