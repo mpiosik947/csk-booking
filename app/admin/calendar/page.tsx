@@ -9,6 +9,16 @@ import {
   markNoShow as markNoShowAction,
   markPaid as markPaidAction,
 } from "../../../lib/reservation-actions";
+import {
+  RESERVATION_STATUS,
+  getReservationStatusBadgeClass,
+  getReservationStatusLabel,
+} from "../../../lib/reservation-status";
+import {
+  PAYMENT_STATUSES,
+  getPaymentStatusBadgeClass,
+  getPaymentStatusLabel,
+} from "../../../lib/payment-status";
 
 type UserRole = "admin" | "pracownik" | "instruktor" | "user";
 
@@ -85,41 +95,6 @@ function normalizeTime(time: string | null) {
 
 function getLaneName(reservation: Reservation) {
   return reservation.shooting_lanes?.[0]?.name || "Nieznana oś";
-}
-
-function getReservationStatusLabel(status: string | null) {
-  switch (status) {
-    case "confirmed":
-      return "Potwierdzona";
-    case "completed":
-      return "Zakończona";
-    case "no_show":
-      return "No-show";
-    case "cancelled_by_admin":
-    case "cancelled_by_user":
-    case "cancelled":
-    case "canceled":
-      return "Anulowana";
-    default:
-      return status || "Brak statusu";
-  }
-}
-
-function getPaymentStatusLabel(status: string | null) {
-  switch (status) {
-    case "pay_on_site":
-      return "Płatność na miejscu";
-    case "paid":
-      return "Opłacona";
-    case "unpaid":
-      return "Nieopłacona";
-    case "free":
-      return "Darmowa";
-    case "voucher":
-      return "Voucher";
-    default:
-      return status || "Brak statusu";
-  }
 }
 
 function getVerificationStatusLabel(status: string | null) {
@@ -215,41 +190,6 @@ function getDeclaredQualifications(profile: Profile | null | undefined) {
   if (profile.qualification_hunter) qualifications.push("myśliwy");
 
   return qualifications;
-}
-
-function getStatusClass(status: string | null) {
-  switch (status) {
-    case "completed":
-      return "border-blue-700 bg-blue-950 text-blue-300";
-    case "confirmed":
-      return "border-green-700 bg-green-950 text-green-300";
-    case "no_show":
-      return "border-yellow-700 bg-yellow-950 text-yellow-300";
-    case "cancelled_by_admin":
-    case "cancelled_by_user":
-    case "cancelled":
-    case "canceled":
-      return "border-red-700 bg-red-950 text-red-300";
-    default:
-      return "border-zinc-700 bg-zinc-900 text-zinc-300";
-  }
-}
-
-function getPaymentClass(status: string | null) {
-  switch (status) {
-    case "paid":
-      return "border-green-700 bg-green-950 text-green-300";
-    case "pay_on_site":
-      return "border-yellow-700 bg-yellow-950 text-yellow-300";
-    case "unpaid":
-      return "border-red-700 bg-red-950 text-red-300";
-    case "free":
-      return "border-blue-700 bg-blue-950 text-blue-300";
-    case "voucher":
-      return "border-purple-700 bg-purple-950 text-purple-300";
-    default:
-      return "border-zinc-700 bg-zinc-900 text-zinc-300";
-  }
 }
 
 function getVerificationClass(profile: Profile | null | undefined) {
@@ -1230,7 +1170,7 @@ function CheckInContent() {
                   <div>
                     <div className="mb-3 flex flex-wrap gap-2">
                       <span
-                        className={`rounded-full border px-3 py-1 text-xs font-bold ${getStatusClass(
+                        className={`rounded-full border px-3 py-1 text-xs font-bold ${getReservationStatusBadgeClass(
                           reservation.reservation_status
                         )}`}
                       >
@@ -1240,7 +1180,7 @@ function CheckInContent() {
                       </span>
 
                       <span
-                        className={`rounded-full border px-3 py-1 text-xs font-bold ${getPaymentClass(
+                        className={`rounded-full border px-3 py-1 text-xs font-bold ${getPaymentStatusBadgeClass(
                           reservation.payment_status
                         )}`}
                       >
@@ -1368,11 +1308,11 @@ function CheckInContent() {
                         }}
                         className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-sm text-white outline-none focus:border-green-600 disabled:opacity-60"
                       >
-                        <option value="pay_on_site">Płatność na miejscu</option>
-                        <option value="paid">Opłacona</option>
-                        <option value="unpaid">Nieopłacona</option>
-                        <option value="free">Darmowa</option>
-                        <option value="voucher">Voucher</option>
+                        {PAYMENT_STATUSES.map((status) => (
+                          <option key={status} value={status}>
+                            {getPaymentStatusLabel(status)}
+                          </option>
+                        ))}
                       </select>
                     </div>
 
@@ -1395,12 +1335,16 @@ function CheckInContent() {
                         }
                         className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-sm text-white outline-none focus:border-green-600 disabled:opacity-60"
                       >
-                        <option value="confirmed">Potwierdzona</option>
-                        <option value="completed">Zakończona</option>
-                        <option value="no_show">No-show</option>
-                        <option value="cancelled_by_admin">
-                          Anulowana przez admina
-                        </option>
+                        {[
+                          RESERVATION_STATUS.CONFIRMED,
+                          RESERVATION_STATUS.COMPLETED,
+                          RESERVATION_STATUS.NO_SHOW,
+                          RESERVATION_STATUS.CANCELLED_BY_ADMIN,
+                        ].map((status) => (
+                          <option key={status} value={status}>
+                            {getReservationStatusLabel(status)}
+                          </option>
+                        ))}
                       </select>
                     </div>
                   </div>
@@ -1723,3 +1667,5 @@ export default function CheckInPage() {
     </main>
   );
 }
+
+
