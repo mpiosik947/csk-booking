@@ -227,12 +227,12 @@ export default function AdminReservationsPage() {
     }
 
     if (statusFilter !== "all") {
-      if (statusFilter === "cancelled") {
+      if (statusFilter === RESERVATION_STATUS.CANCELLED) {
         query = query.in("reservation_status", [
-          "cancelled",
-          "canceled",
-          "cancelled_by_user",
-          "cancelled_by_admin",
+          RESERVATION_STATUS.CANCELLED,
+          RESERVATION_STATUS.CANCELED,
+          RESERVATION_STATUS.CANCELLED_BY_USER,
+          RESERVATION_STATUS.CANCELLED_BY_ADMIN,
         ]);
       } else {
         query = query.eq("reservation_status", statusFilter);
@@ -719,3 +719,4 @@ export default function AdminReservationsPage() {
     </main>
   );
 }
+
