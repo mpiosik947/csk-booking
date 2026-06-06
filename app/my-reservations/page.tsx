@@ -161,7 +161,7 @@ export default function MyReservationsPage() {
     const { error } = await supabase
       .from("reservations")
       .update({
-        reservation_status: "cancelled",
+        reservation_status: RESERVATION_STATUS.CANCELLED,
       })
       .eq("id", reservation.id)
       .eq("user_id", userId);
@@ -174,7 +174,7 @@ export default function MyReservationsPage() {
     setReservations((currentReservations) =>
       currentReservations.map((item) =>
         item.id === reservation.id
-          ? { ...item, reservation_status: "cancelled" }
+          ? { ...item, reservation_status: RESERVATION_STATUS.CANCELLED }
           : item
       )
     );
@@ -403,3 +403,4 @@ export default function MyReservationsPage() {
     </main>
   );
 }
+
