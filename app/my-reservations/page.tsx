@@ -1,6 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { getPaymentStatusLabel } from "../../lib/payment-status";
+import {
+  getReservationStatusBadgeClass,
+  getReservationStatusLabel,
+} from "../../lib/reservation-status";
 import { supabase } from "../../lib/supabase";
 
 type Reservation = {
@@ -18,48 +23,12 @@ type Reservation = {
     name: string;
   } | null;
 };
-
-function translateReservationStatus(status: string) {
-  if (status === "confirmed") return "Potwierdzona";
-  if (status === "cancelled") return "Anulowana";
-  if (status === "completed") return "Zrealizowana";
-  if (status === "no_show") return "Nieobecny";
-  return status;
-}
-
-function translatePaymentStatus(status: string) {
-  if (status === "pay_on_site") return "Płatność na miejscu";
-  if (status === "paid_on_site") return "Opłacone na miejscu";
-  return status;
-}
-
 function translateAttendanceStatus(status?: string | null) {
   if (status === "present") return "Obecny";
   if (status === "completed") return "Zakończona";
   if (status === "no_show") return "Nieobecny";
   return "Niepotwierdzony";
 }
-
-function getStatusClass(status: string) {
-  if (status === "confirmed") {
-    return "rounded-full bg-green-950 px-3 py-1 text-xs font-semibold text-green-400";
-  }
-
-  if (status === "completed") {
-    return "rounded-full bg-blue-950 px-3 py-1 text-xs font-semibold text-blue-300";
-  }
-
-  if (status === "cancelled") {
-    return "rounded-full bg-red-950 px-3 py-1 text-xs font-semibold text-red-300";
-  }
-
-  if (status === "no_show") {
-    return "rounded-full bg-yellow-950 px-3 py-1 text-xs font-semibold text-yellow-300";
-  }
-
-  return "rounded-full bg-zinc-950 px-3 py-1 text-xs font-semibold text-zinc-300";
-}
-
 function getAttendanceClass(status?: string | null) {
   if (status === "present") {
     return "rounded-full bg-green-950 px-3 py-1 text-xs font-semibold text-green-300";
@@ -319,25 +288,25 @@ export default function MyReservationsPage() {
                       <p className="mt-1 text-sm text-zinc-400">
                         Płatność:{" "}
                         <span className="font-semibold text-green-500">
-                          {translatePaymentStatus(reservation.payment_status)}
+                          {getPaymentStatusLabel(reservation.payment_status)}
                         </span>
                       </p>
 
                       <div className="mt-4 flex flex-wrap gap-2">
                         <span
-                          className={getStatusClass(
-                            reservation.reservation_status
-                          )}
+                        className={`rounded-full border px-3 py-1 text-xs font-semibold ${getReservationStatusBadgeClass(
+  reservation.reservation_status
+)}`}
                         >
-                          {translateReservationStatus(
-                            reservation.reservation_status
-                          )}
+                         {getReservationStatusLabel(
+  reservation.reservation_status
+)}
                         </span>
 
                         <span
-                          className={getAttendanceClass(
-                            reservation.attendance_status
-                          )}
+                          className={`rounded-full border px-3 py-1 text-xs font-semibold ${getReservationStatusBadgeClass(
+  reservation.reservation_status
+)}`}
                         >
                           {translateAttendanceStatus(
                             reservation.attendance_status
