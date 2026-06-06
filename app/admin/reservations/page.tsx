@@ -4,11 +4,13 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { supabase } from "../../../lib/supabase";
 import {
+  RESERVATION_STATUS,
   getReservationStatusLabel,
   getReservationStatusBadgeClass,
 } from "../../../lib/reservation-status";
 
 import {
+  PAYMENT_STATUS,
   getPaymentStatusLabel,
   getPaymentStatusBadgeClass,
 } from "../../../lib/payment-status";
@@ -58,10 +60,10 @@ const sortOptions: { label: string; value: ReservationSort }[] = [
 
 const statusOptions = [
   { label: "Wszystkie", value: "all" },
-  { label: "Potwierdzone", value: "confirmed" },
-  { label: "Zakończone", value: "completed" },
-  { label: "No-show", value: "no_show" },
-  { label: "Anulowane", value: "cancelled" },
+  { label: "Potwierdzone", value: RESERVATION_STATUS.CONFIRMED },
+  { label: "Zakończone", value: RESERVATION_STATUS.COMPLETED },
+  { label: "No-show", value: RESERVATION_STATUS.NO_SHOW },
+  { label: "Anulowane", value: RESERVATION_STATUS.CANCELLED },
 ];
 
 function normalizeTime(time: string | null) {
@@ -346,19 +348,19 @@ export default function AdminReservationsPage() {
         }
       | null = null;
 
-    if (changes.reservation_status === "completed") {
+    if (changes.reservation_status === RESERVATION_STATUS.COMPLETED) {
       result = await completeReservation(supabase, {
         reservationId: reservation.id,
       });
-    } else if (changes.reservation_status === "no_show") {
+    } else if (changes.reservation_status === RESERVATION_STATUS.NO_SHOW) {
       result = await markNoShow(supabase, {
         reservationId: reservation.id,
       });
-    } else if (changes.reservation_status === "cancelled_by_admin") {
+    } else if (changes.reservation_status === RESERVATION_STATUS.CANCELLED_BY_ADMIN) {
       result = await cancelReservation(supabase, {
         reservationId: reservation.id,
       });
-    } else if (changes.payment_status === "paid") {
+    } else if (changes.payment_status === PAYMENT_STATUS.PAID) {
       result = await markPaid(supabase, {
         reservationId: reservation.id,
       });
@@ -642,7 +644,7 @@ export default function AdminReservationsPage() {
 
                           <select
                             value={
-                              reservation.reservation_status || "confirmed"
+                              reservation.reservation_status || RESERVATION_STATUS.CONFIRMED
                             }
                             disabled={isSaving}
                             onChange={(event) =>
@@ -652,10 +654,10 @@ export default function AdminReservationsPage() {
                             }
                             className="w-full rounded-xl border border-zinc-700 bg-zinc-900 px-4 py-3 text-sm text-white outline-none transition focus:border-green-600 disabled:opacity-60"
                           >
-                            <option value="confirmed">Potwierdzona</option>
-                            <option value="completed">Zakończona</option>
-                            <option value="no_show">No-show</option>
-                            <option value="cancelled_by_admin">
+                            <option value={RESERVATION_STATUS.CONFIRMED}>Potwierdzona</option>
+                            <option value={RESERVATION_STATUS.COMPLETED}>Zakończona</option>
+                            <option value={RESERVATION_STATUS.NO_SHOW}>No-show</option>
+                            <option value={RESERVATION_STATUS.CANCELLED_BY_ADMIN}>
                               Anulowana przez admina
                             </option>
                           </select>
@@ -668,7 +670,7 @@ export default function AdminReservationsPage() {
 
                           <select
                             value={
-                              reservation.payment_status || "pay_on_site"
+                              reservation.payment_status || PAYMENT_STATUS.PAY_ON_SITE
                             }
                             disabled={isSaving}
                             onChange={(event) =>
