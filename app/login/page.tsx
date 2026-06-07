@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useState } from "react";
 import { supabase } from "../../lib/supabase";
@@ -68,9 +68,18 @@ export default function LoginPage() {
             </div>
 
             <div>
-              <label className="mb-2 block text-sm text-zinc-300">
-                Hasło
-              </label>
+              <div className="mb-2 flex items-center justify-between gap-4">
+                <label className="block text-sm text-zinc-300">
+                  Hasło
+                </label>
+
+                <a
+                  href="/forgot-password"
+                  className="text-xs font-semibold text-green-500 hover:text-green-400"
+                >
+                  Nie pamiętasz hasła?
+                </a>
+              </div>
 
               <input
                 type="password"
