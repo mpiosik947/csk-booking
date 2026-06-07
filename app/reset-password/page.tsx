@@ -3,6 +3,35 @@
 import { useEffect, useState } from "react";
 import { supabase } from "../../lib/supabase";
 
+function translatePasswordError(message: string) {
+  const normalizedMessage = message.toLowerCase();
+
+  if (
+    normalizedMessage.includes("same password") ||
+    normalizedMessage.includes("different from the old password") ||
+    normalizedMessage.includes("new password should be different")
+  ) {
+    return "Nowe hasło musi być inne niż poprzednie.";
+  }
+
+  if (
+    normalizedMessage.includes("password should be at least") ||
+    normalizedMessage.includes("weak password")
+  ) {
+    return "Hasło jest za słabe. Użyj minimum 8 znaków.";
+  }
+
+  if (
+    normalizedMessage.includes("session") ||
+    normalizedMessage.includes("expired") ||
+    normalizedMessage.includes("invalid")
+  ) {
+    return "Link resetujący jest nieprawidłowy albo wygasł. Wygeneruj nowy link.";
+  }
+
+  return "Nie udało się zmienić hasła. Spróbuj ponownie.";
+}
+
 export default function ResetPasswordPage() {
   const [password, setPassword] = useState("");
   const [passwordRepeat, setPasswordRepeat] = useState("");
@@ -88,7 +117,7 @@ export default function ResetPasswordPage() {
     setLoading(false);
 
     if (error) {
-      setMessage(`Błąd zmiany hasła: ${error.message}`);
+      setMessage(translatePasswordError(error.message));
       setMessageType("error");
       return;
     }
