@@ -637,6 +637,22 @@ export default function BookingForm({ lanes }: BookingFormProps) {
       return;
     }
 
+    const emailResponse = await fetch("/api/send-reservation-confirmation", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        customerEmail,
+        customerName,
+        reservationDate,
+        startTime: selectedHour,
+        endTime,
+        laneName,
+        price,
+      }),
+    });
+
     setConfirmationData({
       date: reservationDate,
       startTime: selectedHour,
@@ -645,7 +661,15 @@ export default function BookingForm({ lanes }: BookingFormProps) {
       price,
     });
 
-    setMessage("Rezerwacja została zapisana. Płatność na miejscu.");
+    if (!emailResponse.ok) {
+      setMessage(
+        "Rezerwacja zosta\u0142a zapisana. Nie uda\u0142o si\u0119 wys\u0142a\u0107 emaila potwierdzaj\u0105cego."
+      );
+    } else {
+      setMessage(
+        "Rezerwacja zosta\u0142a zapisana. Email potwierdzaj\u0105cy zosta\u0142 wys\u0142any. P\u0142atno\u015b\u0107 na miejscu."
+      );
+    }
 
     setReservationDate("");
     setLaneId("");
