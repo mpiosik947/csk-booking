@@ -615,6 +615,8 @@ export default function BookingForm({ lanes }: BookingFormProps) {
       return;
     }
 
+    const checkInToken = crypto.randomUUID();
+
     const { error } = await supabase.from("reservations").insert({
       user_id: userId,
       lane_id: laneId,
@@ -628,6 +630,7 @@ export default function BookingForm({ lanes }: BookingFormProps) {
       price: price,
       reservation_status: RESERVATION_STATUS.CONFIRMED,
       payment_status: PAYMENT_STATUS.PAY_ON_SITE,
+      check_in_token: checkInToken,
     });
 
     setLoading(false);
@@ -650,6 +653,7 @@ export default function BookingForm({ lanes }: BookingFormProps) {
         endTime,
         laneName,
         price,
+        checkInToken,
       }),
     });
 

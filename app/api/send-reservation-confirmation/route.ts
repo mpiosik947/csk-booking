@@ -1,4 +1,4 @@
-﻿import { NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { Resend } from "resend";
 
 type ReservationConfirmationPayload = {
@@ -9,6 +9,7 @@ type ReservationConfirmationPayload = {
   endTime?: string;
   laneName?: string;
   price?: number;
+  checkInToken?: string;
 };
 
 function formatPrice(price?: number) {
@@ -57,6 +58,7 @@ export async function POST(request: Request) {
       endTime,
       laneName,
       price,
+      checkInToken,
     } = body;
 
     if (!customerEmail) {
@@ -71,6 +73,45 @@ export async function POST(request: Request) {
     const displayName = customerName?.trim() || "Kliencie";
     const formattedDate = formatDate(reservationDate);
     const formattedPrice = formatPrice(price);
+
+    const rawSiteUrl =
+      process.env.NEXT_PUBLIC_SITE_URL ?? new URL(request.url).origin;
+
+    const siteUrl = rawSiteUrl
+      .replace(/^NEXT_PUBLIC_SITE_URL=/, "")
+      .replace(/\/$/, "");
+
+    const checkInUrl = checkInToken
+      ? `${siteUrl}/check-in/${checkInToken}`
+      : null;
+
+    const checkInHtml = checkInUrl
+      ? `
+            <div style="margin:24px 0;padding:18px;border:1px solid #365314;border-radius:14px;background:#13210d;">
+              <p style="margin:0 0 12px 0;font-size:15px;line-height:1.6;color:#d9f99d;">
+                <strong style="color:#ffffff;">Szybki check-in:</strong><br />
+                Pokaż ten link lub kod QR obsłudze podczas wizyty. Obsługa potwierdzi obecność w systemie.
+              </p>
+
+              <a href="${checkInUrl}" style="display:inline-block;padding:12px 16px;border-radius:10px;background:#22c55e;color:#052e16;text-decoration:none;font-weight:bold;font-size:14px;">
+                Otwórz check-in
+              </a>
+
+              <p style="margin:12px 0 0 0;font-size:12px;line-height:1.5;color:#a3e635;word-break:break-all;">
+                ${checkInUrl}
+              </p>
+            </div>
+        `
+      : "";
+
+    const checkInText = checkInUrl
+      ? `
+
+Szybki check-in:
+Pokaż ten link lub kod QR obsłudze podczas wizyty. Obsługa potwierdzi obecność w systemie.
+${checkInUrl}
+`
+      : "";
 
     const subject = "Potwierdzenie rezerwacji — CSK Booking";
 
@@ -105,6 +146,8 @@ export async function POST(request: Request) {
               </p>
             </div>
 
+            ${checkInHtml}
+
             <p style="margin:0 0 14px 0;font-size:14px;line-height:1.6;color:#a1a1aa;">
               Przyjedź kilka minut wcześniej, aby spokojnie przejść formalności przed wizytą.
             </p>
@@ -132,7 +175,7 @@ Data: ${formattedDate}
 Godzina: ${startTime ?? "-"} - ${endTime ?? "-"}
 Oś: ${laneName ?? "-"}
 Płatność: ${formattedPrice}, płatność na miejscu
-
+${checkInText}
 Przyjedź kilka minut wcześniej, aby spokojnie przejść formalności przed wizytą.
 W przypadku pierwszej wizyty pracownik może poprosić o okazanie wymaganych uprawnień do wglądu.
 
