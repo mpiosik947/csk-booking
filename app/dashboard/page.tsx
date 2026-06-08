@@ -1,14 +1,34 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useState } from "react";
 import { supabase } from "../../lib/supabase";
 
 type Role = "admin" | "pracownik" | "instruktor" | "user";
 
+type ProfileData = {
+  role: Role | null;
+  full_name: string | null;
+  phone: string | null;
+  postal_code: string | null;
+  city: string | null;
+  street: string | null;
+  house_number: string | null;
+  verification_status: string | null;
+  permissions_verified: boolean | null;
+};
+
+function hasValue(value: string | null | undefined) {
+  return Boolean(value && value.trim().length > 0);
+}
+
 export default function DashboardPage() {
   const [email, setEmail] = useState("");
   const [fullName, setFullName] = useState("");
   const [role, setRole] = useState<Role>("user");
+
+  const [profileComplete, setProfileComplete] = useState(false);
+  const [verificationStatus, setVerificationStatus] = useState("");
+  const [permissionsVerified, setPermissionsVerified] = useState(false);
 
   const [loading, setLoading] = useState(true);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
@@ -29,16 +49,41 @@ export default function DashboardPage() {
 
       setIsLoggedIn(true);
       setEmail(user.email ?? "");
-      setFullName(metadata.full_name ?? metadata.name ?? "U�ytkownik");
+      setFullName(metadata.full_name ?? metadata.name ?? "Użytkownik");
 
       const { data: profile } = await supabase
         .from("profiles")
-        .select("role")
+        .select(
+          "role, full_name, phone, postal_code, city, street, house_number, verification_status, permissions_verified"
+        )
         .eq("user_id", user.id)
         .single();
 
-      if (profile?.role) {
-        setRole(profile.role as Role);
+      if (profile) {
+        const profileData = profile as ProfileData;
+
+        if (profileData.role) {
+          setRole(profileData.role);
+        }
+
+        const displayedName =
+          profileData.full_name ??
+          metadata.full_name ??
+          metadata.name ??
+          "Użytkownik";
+
+        setFullName(displayedName);
+        setVerificationStatus(profileData.verification_status ?? "");
+        setPermissionsVerified(Boolean(profileData.permissions_verified));
+
+        setProfileComplete(
+          hasValue(profileData.full_name) &&
+            hasValue(profileData.phone) &&
+            hasValue(profileData.postal_code) &&
+            hasValue(profileData.city) &&
+            hasValue(profileData.street) &&
+            hasValue(profileData.house_number)
+        );
       }
 
       setLoading(false);
@@ -57,7 +102,7 @@ export default function DashboardPage() {
       <main className="min-h-screen bg-zinc-950 text-white">
         <section className="mx-auto max-w-5xl px-6 py-12">
           <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-6 text-zinc-400">
-            �adowanie panelu klienta...
+            Ładowanie panelu klienta...
           </div>
         </section>
       </main>
@@ -74,7 +119,7 @@ export default function DashboardPage() {
             </h1>
 
             <p className="mx-auto mb-6 max-w-xl text-red-100">
-              Aby przej�� do panelu klienta, musisz najpierw zalogowa� si� na
+              Aby przejść do panelu klienta, musisz najpierw zalogować się na
               swoje konto.
             </p>
 
@@ -83,14 +128,14 @@ export default function DashboardPage() {
                 href="/login"
                 className="rounded-xl bg-green-700 px-5 py-3 font-semibold text-white transition hover:bg-green-600"
               >
-                Zaloguj si�
+                Zaloguj się
               </a>
 
               <a
                 href="/register"
                 className="rounded-xl border border-red-300 px-5 py-3 font-semibold text-red-100 transition hover:bg-red-900"
               >
-                Utw�rz konto
+                Utwórz konto
               </a>
             </div>
           </div>
@@ -100,9 +145,10 @@ export default function DashboardPage() {
   }
 
   const canAccessAdmin =
-    role === "admin" ||
-    role === "pracownik" ||
-    role === "instruktor";
+    role === "admin" || role === "pracownik" || role === "instruktor";
+
+  const accountVerified =
+    verificationStatus === "verified" || permissionsVerified === true;
 
   return (
     <main className="min-h-screen bg-zinc-950 text-white">
@@ -113,29 +159,55 @@ export default function DashboardPage() {
               CSK Booking
             </p>
 
-            <h1 className="text-3xl font-bold md:text-5xl">
-              Panel klienta
-            </h1>
+            <h1 className="text-3xl font-bold md:text-5xl">Panel klienta</h1>
 
             <p className="mt-3 text-zinc-400">
               Witaj,{" "}
-              <span className="font-semibold text-green-500">
-                {fullName}
-              </span>
-              . Zarz�dzaj swoimi rezerwacjami i szkoleniami.
+              <span className="font-semibold text-green-500">{fullName}</span>.
+              Zarządzaj swoimi rezerwacjami i szkoleniami.
             </p>
           </div>
 
           <div className="rounded-2xl border border-zinc-800 bg-zinc-900 px-5 py-4 text-sm text-zinc-300">
             Zalogowany jako:{" "}
-            <span className="font-semibold text-green-500">
-              {email}
-            </span>
+            <span className="font-semibold text-green-500">{email}</span>
           </div>
         </div>
 
-        <div className="grid gap-5 md:grid-cols-2">
+        {!profileComplete && (
+          <div className="mb-6 rounded-2xl border border-yellow-800 bg-yellow-950 p-6">
+            <h2 className="mb-2 text-2xl font-bold text-yellow-100">
+              Uzupełnij profil
+            </h2>
 
+            <p className="mb-5 max-w-3xl text-yellow-100">
+              Uzupełnij dane przed pierwszą wizytą. Dzięki temu obsługa szybciej
+              zweryfikuje konto i rezerwacja przebiegnie sprawniej.
+            </p>
+
+            <a
+              href="/account"
+              className="inline-flex rounded-xl bg-yellow-600 px-5 py-3 text-sm font-semibold text-zinc-950 transition hover:bg-yellow-500"
+            >
+              Uzupełnij profil
+            </a>
+          </div>
+        )}
+
+        {profileComplete && !accountVerified && (
+          <div className="mb-6 rounded-2xl border border-zinc-700 bg-zinc-900 p-6">
+            <h2 className="mb-2 text-2xl font-bold text-zinc-100">
+              Profil uzupełniony
+            </h2>
+
+            <p className="max-w-3xl text-zinc-400">
+              Konto oczekuje na weryfikację podczas pierwszej wizyty. Profil
+              uzupełniony nie oznacza jeszcze konta zweryfikowanego.
+            </p>
+          </div>
+        )}
+
+        <div className="grid gap-5 md:grid-cols-2">
           {canAccessAdmin && (
             <a
               href="/admin"
@@ -146,7 +218,7 @@ export default function DashboardPage() {
               </h2>
 
               <p className="text-green-100">
-                Zarz�dzanie rezerwacjami, eventami, check-in oraz obs�ug� systemu.
+                Zarządzanie rezerwacjami, eventami, check-in oraz obsługą systemu.
               </p>
             </a>
           )}
@@ -155,13 +227,11 @@ export default function DashboardPage() {
             href="/booking"
             className="rounded-2xl bg-green-700 p-6 transition hover:bg-green-600"
           >
-            <h2 className="mb-2 text-2xl font-bold">
-              Zarezerwuj o�
-            </h2>
+            <h2 className="mb-2 text-2xl font-bold">Zarezerwuj oś</h2>
 
             <p className="text-green-100">
-              Wybierz dat�, o�, godzin� oraz czas rezerwacji.
-              P�atno�� na miejscu.
+              Wybierz datę, oś, godzinę oraz czas rezerwacji. Płatność na
+              miejscu.
             </p>
           </a>
 
@@ -169,12 +239,10 @@ export default function DashboardPage() {
             href="/my-reservations"
             className="rounded-2xl border border-zinc-800 bg-zinc-900 p-6 transition hover:bg-zinc-800"
           >
-            <h2 className="mb-2 text-2xl font-bold">
-              Moje rezerwacje
-            </h2>
+            <h2 className="mb-2 text-2xl font-bold">Moje rezerwacje</h2>
 
             <p className="text-zinc-400">
-              Sprawd� swoje terminy, statusy rezerwacji oraz p�atno�ci.
+              Sprawdź swoje terminy, statusy rezerwacji oraz płatności.
             </p>
           </a>
 
@@ -187,7 +255,7 @@ export default function DashboardPage() {
             </h2>
 
             <p className="text-green-100">
-              Zobacz planowane szkolenia, wydarzenia i zapisz si� na wybrany
+              Zobacz planowane szkolenia, wydarzenia i zapisz się na wybrany
               termin.
             </p>
           </a>
@@ -196,12 +264,10 @@ export default function DashboardPage() {
             href="/my-events"
             className="rounded-2xl border border-zinc-800 bg-zinc-900 p-6 transition hover:bg-zinc-800"
           >
-            <h2 className="mb-2 text-2xl font-bold">
-              Moje szkolenia
-            </h2>
+            <h2 className="mb-2 text-2xl font-bold">Moje szkolenia</h2>
 
             <p className="text-zinc-400">
-              Sprawd� szkolenia, na kt�re jeste� zapisany oraz status
+              Sprawdź szkolenia, na które jesteś zapisany oraz status
               uczestnictwa.
             </p>
           </a>
@@ -210,13 +276,11 @@ export default function DashboardPage() {
             href="/terms"
             className="rounded-2xl border border-zinc-800 bg-zinc-900 p-6 transition hover:bg-zinc-800"
           >
-            <h2 className="mb-2 text-2xl font-bold">
-              Regulamin i RODO
-            </h2>
+            <h2 className="mb-2 text-2xl font-bold">Regulamin i RODO</h2>
 
             <p className="text-zinc-400">
-              Regulamin strzelnicy, zasady bezpiecze�stwa oraz polityka
-              prywatno�ci.
+              Regulamin strzelnicy, zasady bezpieczeństwa oraz polityka
+              prywatności.
             </p>
           </a>
 
@@ -224,12 +288,10 @@ export default function DashboardPage() {
             href="/account"
             className="rounded-2xl border border-zinc-800 bg-zinc-900 p-6 transition hover:bg-zinc-800"
           >
-            <h2 className="mb-2 text-2xl font-bold">
-              Moje konto
-            </h2>
+            <h2 className="mb-2 text-2xl font-bold">Moje konto</h2>
 
             <p className="text-zinc-400">
-              Edytuj swoje dane u�ytkownika, imi�, nazwisko oraz numer telefonu.
+              Edytuj swoje dane użytkownika, imię, nazwisko oraz numer telefonu.
             </p>
           </a>
         </div>
@@ -239,7 +301,7 @@ export default function DashboardPage() {
             href="/"
             className="rounded-xl border border-zinc-700 px-5 py-3 text-center text-sm font-semibold text-zinc-300 transition hover:bg-zinc-900"
           >
-            � Strona g��wna
+            ← Strona główna
           </a>
 
           <button
