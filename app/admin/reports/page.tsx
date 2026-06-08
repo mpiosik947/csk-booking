@@ -1,11 +1,10 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useState } from "react";
 import {
   getPaymentStatusBadgeClass,
   getPaymentStatusLabel,
   isPaidPaymentStatus,
-  PAYMENT_STATUS,
 } from "../../../lib/payment-status";
 import {
   getReservationStatusBadgeClass,
@@ -19,13 +18,14 @@ type ReportMode = "day" | "week" | "month" | "year";
 
 type Reservation = {
   id: string;
-  customer_name: string;
-  customer_phone: string;
+  customer_name: string | null;
+  customer_email: string | null;
+  customer_phone: string | null;
   reservation_date: string;
   start_time: string;
   end_time: string;
-  duration_minutes: number;
-  price: number;
+  duration_minutes: number | null;
+  price: number | null;
   reservation_status: string;
   payment_status: string;
   shooting_lanes: {
@@ -63,7 +63,7 @@ function getDateRange(mode: ReportMode, selectedDate: string) {
     return {
       startDate: formatDateInput(monday),
       endDate: formatDateInput(sunday),
-      label: `${formatDateInput(monday)} – ${formatDateInput(sunday)}`,
+      label: `${formatDateInput(monday)} - ${formatDateInput(sunday)}`,
     };
   }
 
@@ -90,6 +90,32 @@ function getDateRange(mode: ReportMode, selectedDate: string) {
 
 function getBadgeClass(baseClass: string) {
   return `rounded-full border px-3 py-1 text-xs font-semibold ${baseClass}`;
+}
+
+function getReportModeLabel(mode: ReportMode) {
+  switch (mode) {
+    case "day":
+      return "dzień";
+    case "week":
+      return "tydzień";
+    case "month":
+      return "miesiąc";
+    case "year":
+      return "rok";
+    default:
+      return mode;
+  }
+}
+
+function escapeCsvValue(value: string | number | null | undefined) {
+  const text = String(value ?? "");
+  const escaped = text.replace(/"/g, '""');
+
+  return `"${escaped}"`;
+}
+
+function formatTimeRange(startTime: string, endTime: string) {
+  return `${startTime.slice(0, 5)}-${endTime.slice(0, 5)}`;
 }
 
 export default function AdminReportsPage() {
@@ -159,6 +185,7 @@ export default function AdminReportsPage() {
         `
         id,
         customer_name,
+        customer_email,
         customer_phone,
         reservation_date,
         start_time,
@@ -186,6 +213,52 @@ export default function AdminReportsPage() {
     setLanesCount((lanesData ?? []).length);
     setReservations((data as unknown as Reservation[]) ?? []);
     setLoading(false);
+  }
+
+  function exportCsv() {
+    const headers = [
+      "Data",
+      "Godzina",
+      "Oś",
+      "Klient",
+      "Email",
+      "Telefon",
+      "Status rezerwacji",
+      "Status płatności",
+      "Czas trwania min",
+      "Kwota",
+    ];
+
+    const rows = reservations.map((reservation) => [
+      reservation.reservation_date,
+      formatTimeRange(reservation.start_time, reservation.end_time),
+      reservation.shooting_lanes?.name ?? "Brak osi",
+      reservation.customer_name ?? "",
+      reservation.customer_email ?? "",
+      reservation.customer_phone ?? "",
+      getReservationStatusLabel(reservation.reservation_status),
+      getPaymentStatusLabel(reservation.payment_status),
+      Number(reservation.duration_minutes ?? 0),
+      Number(reservation.price ?? 0).toFixed(2),
+    ]);
+
+    const csvContent = [headers, ...rows]
+      .map((row) => row.map(escapeCsvValue).join(";"))
+      .join("\r\n");
+
+    const blob = new Blob([`\uFEFF${csvContent}`], {
+      type: "text/csv;charset=utf-8;",
+    });
+
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement("a");
+
+    link.href = url;
+    link.download = `csk-raport-${reportMode}-${range.startDate}-${range.endDate}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    window.URL.revokeObjectURL(url);
   }
 
   const activeReservations = reservations.filter(
@@ -305,11 +378,22 @@ export default function AdminReportsPage() {
             />
           </div>
 
-          <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-4 text-sm text-zinc-300 md:col-span-2">
+          <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-4 text-sm text-zinc-300">
             Zakres:{" "}
             <span className="font-semibold text-green-500">
-              {range.startDate} – {range.endDate}
+              {range.startDate} - {range.endDate}
             </span>
+          </div>
+
+          <div className="flex items-center justify-start rounded-xl border border-zinc-800 bg-zinc-950 p-4 md:justify-end">
+            <button
+              type="button"
+              onClick={exportCsv}
+              disabled={!hasAccess || loading}
+              className="rounded-xl bg-green-700 px-5 py-3 text-sm font-semibold text-white transition hover:bg-green-600 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              Eksportuj CSV
+            </button>
           </div>
         </div>
 
@@ -400,13 +484,19 @@ export default function AdminReportsPage() {
               <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-5">
                 <p className="text-sm text-zinc-400">Założenie obłożenia</p>
                 <p className="mt-2 text-xl font-bold">
-                  {lanesCount} osi × 16h dziennie × {daysInRange} dni
+                  {lanesCount} osi x 16h dziennie x {daysInRange} dni
                 </p>
               </div>
             </div>
 
             <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-6">
-              <h2 className="mb-5 text-2xl font-bold">Rezerwacje w okresie</h2>
+              <div className="mb-5 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                <h2 className="text-2xl font-bold">Rezerwacje w okresie</h2>
+
+                <p className="text-sm text-zinc-400">
+                  Eksport CSV: {getReportModeLabel(reportMode)}, {range.label}
+                </p>
+              </div>
 
               {reservations.length === 0 ? (
                 <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-6 text-zinc-400">
@@ -414,13 +504,14 @@ export default function AdminReportsPage() {
                 </div>
               ) : (
                 <div className="overflow-x-auto">
-                  <table className="w-full min-w-[1000px] text-left text-sm">
+                  <table className="w-full min-w-[1100px] text-left text-sm">
                     <thead>
                       <tr className="border-b border-zinc-800 text-zinc-400">
                         <th className="py-3 pr-4">Data</th>
                         <th className="py-3 pr-4">Godzina</th>
                         <th className="py-3 pr-4">Oś</th>
                         <th className="py-3 pr-4">Klient</th>
+                        <th className="py-3 pr-4">Email</th>
                         <th className="py-3 pr-4">Telefon</th>
                         <th className="py-3 pr-4">Cena</th>
                         <th className="py-3 pr-4">Status</th>
@@ -439,8 +530,10 @@ export default function AdminReportsPage() {
                           </td>
 
                           <td className="py-4 pr-4 font-semibold">
-                            {reservation.start_time.slice(0, 5)}–
-                            {reservation.end_time.slice(0, 5)}
+                            {formatTimeRange(
+                              reservation.start_time,
+                              reservation.end_time,
+                            )}
                           </td>
 
                           <td className="py-4 pr-4">
@@ -448,15 +541,19 @@ export default function AdminReportsPage() {
                           </td>
 
                           <td className="py-4 pr-4 font-semibold">
-                            {reservation.customer_name}
+                            {reservation.customer_name ?? "-"}
                           </td>
 
                           <td className="py-4 pr-4">
-                            {reservation.customer_phone}
+                            {reservation.customer_email ?? "-"}
+                          </td>
+
+                          <td className="py-4 pr-4">
+                            {reservation.customer_phone ?? "-"}
                           </td>
 
                           <td className="py-4 pr-4 text-green-500">
-                            {Number(reservation.price).toFixed(0)} zł
+                            {Number(reservation.price ?? 0).toFixed(0)} zł
                           </td>
 
                           <td className="py-4 pr-4">
