@@ -35,7 +35,7 @@ function getVerificationLabel(status: string) {
     case "verified":
       return "Zweryfikowane";
     case "pending":
-      return "Oczekuje na weryfikację";
+      return "Oczekuje na weryfikacj�";
     case "rejected":
       return "Wymaga poprawy";
     case "niezweryfikowane":
@@ -155,7 +155,7 @@ export default function AccountPage() {
     } = await supabase.auth.getUser();
 
     if (userError) {
-      setMessage(`Błąd pobierania użytkownika: ${userError.message}`);
+      setMessage(`B��d pobierania u�ytkownika: ${userError.message}`);
       setIsLoggedIn(false);
       setLoading(false);
       return;
@@ -215,7 +215,7 @@ export default function AccountPage() {
       .maybeSingle();
 
     if (profileError) {
-      setMessage(`Błąd pobierania profilu: ${profileError.message}`);
+      setMessage(`B��d pobierania profilu: ${profileError.message}`);
       setLoading(false);
       return;
     }
@@ -266,27 +266,27 @@ export default function AccountPage() {
 
   function validateProfile() {
     if (!fullName.trim()) {
-      return "Uzupełnij imię i nazwisko.";
+      return "Uzupe�nij imi� i nazwisko.";
     }
 
     if (!phone.trim()) {
-      return "Uzupełnij numer telefonu.";
+      return "Uzupe�nij numer telefonu.";
     }
 
     if (!postalCode.trim()) {
-      return "Uzupełnij kod pocztowy.";
+      return "Uzupe�nij kod pocztowy.";
     }
 
     if (!city.trim()) {
-      return "Uzupełnij miasto.";
+      return "Uzupe�nij miasto.";
     }
 
     if (!street.trim()) {
-      return "Uzupełnij ulicę.";
+      return "Uzupe�nij ulic�.";
     }
 
     if (!houseNumber.trim()) {
-      return "Uzupełnij numer domu.";
+      return "Uzupe�nij numer domu.";
     }
 
     return "";
@@ -311,7 +311,7 @@ export default function AccountPage() {
 
     if (userError || !user) {
       setSavingProfile(false);
-      setMessage("Nie udało się pobrać zalogowanego użytkownika.");
+      setMessage("Nie uda�o si� pobra� zalogowanego u�ytkownika.");
       return;
     }
 
@@ -336,7 +336,7 @@ export default function AccountPage() {
 
     if (authError) {
       setSavingProfile(false);
-      setMessage(`Błąd zapisu danych konta: ${authError.message}`);
+      setMessage(`B��d zapisu danych konta: ${authError.message}`);
       return;
     }
 
@@ -371,29 +371,29 @@ export default function AccountPage() {
 
     if (profileError) {
       setMessage(
-        `Dane konta zapisane, ale nie udało się zaktualizować profilu: ${profileError.message}`
+        `Dane konta zapisane, ale nie uda�o si� zaktualizowa� profilu: ${profileError.message}`
       );
       return;
     }
 
-    setMessage("Dane zostały zapisane.");
+    setMessage("Dane zosta�y zapisane.");
   }
 
   async function changePassword() {
     setMessage("");
 
     if (!newPassword || !repeatPassword) {
-      setMessage("Uzupełnij oba pola hasła.");
+      setMessage("Uzupe�nij oba pola has�a.");
       return;
     }
 
     if (newPassword.length < 8) {
-      setMessage("Hasło musi mieć minimum 8 znaków.");
+      setMessage("Has�o musi mie� minimum 8 znak�w.");
       return;
     }
 
     if (newPassword !== repeatPassword) {
-      setMessage("Hasła nie są identyczne.");
+      setMessage("Has�a nie s� identyczne.");
       return;
     }
 
@@ -406,13 +406,13 @@ export default function AccountPage() {
     setSavingPassword(false);
 
     if (error) {
-      setMessage(`Błąd zmiany hasła: ${error.message}`);
+      setMessage(`B��d zmiany has�a: ${error.message}`);
       return;
     }
 
     setNewPassword("");
     setRepeatPassword("");
-    setMessage("Hasło zostało zmienione.");
+    setMessage("Has�o zosta�o zmienione.");
   }
 
   return (
@@ -425,13 +425,13 @@ export default function AccountPage() {
         <h1 className="mb-3 text-4xl font-bold">Moje konto</h1>
 
         <p className="mb-8 text-zinc-400">
-          Zarządzaj swoimi danymi użytkownika, adresem, deklarowanymi
-          uprawnieniami i bezpieczeństwem konta.
+          Zarz�dzaj swoimi danymi u�ytkownika, adresem, deklarowanymi
+          uprawnieniami i bezpiecze�stwem konta.
         </p>
 
         {loading && (
           <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-6 text-zinc-400">
-            Ładowanie konta...
+            �adowanie konta...
           </div>
         )}
 
@@ -442,7 +442,7 @@ export default function AccountPage() {
             </h2>
 
             <p className="mx-auto mb-6 max-w-xl text-red-100">
-              Aby przejść do swojego konta, musisz się zalogować.
+              Aby przej�� do swojego konta, musisz si� zalogowa�.
             </p>
 
             <div className="flex flex-col gap-3 sm:flex-row sm:justify-center">
@@ -450,14 +450,14 @@ export default function AccountPage() {
                 href="/login"
                 className="rounded-xl bg-green-700 px-5 py-3 font-semibold text-white transition hover:bg-green-600"
               >
-                Zaloguj się
+                Zaloguj si�
               </a>
 
               <a
                 href="/register"
                 className="rounded-xl border border-red-300 px-5 py-3 font-semibold text-red-100 transition hover:bg-red-900"
               >
-                Utwórz konto
+                Utw�rz konto
               </a>
             </div>
           </div>
@@ -483,7 +483,7 @@ export default function AccountPage() {
                 <div className="grid gap-5 md:grid-cols-2">
                   <div>
                     <label className="mb-2 block text-sm text-zinc-300">
-                      Imię i nazwisko *
+                      Imi� i nazwisko *
                     </label>
 
                     <input
@@ -526,7 +526,7 @@ export default function AccountPage() {
                     <p className="mt-1">
                       Uprawnienia:{" "}
                       {permissionsVerified
-                        ? "sprawdzone przez obsługę"
+                        ? "sprawdzone przez obs�ug�"
                         : "do sprawdzenia podczas wizyty"}
                     </p>
 
@@ -546,8 +546,8 @@ export default function AccountPage() {
                     )}
 
                     <p className="mt-3 text-xs opacity-80">
-                      Pełna możliwość korzystania z systemu może wymagać
-                      sprawdzenia uprawnień przez pracownika CSK podczas wizyty
+                      Pe�na mo�liwo�� korzystania z systemu mo�e wymaga�
+                      sprawdzenia uprawnie� przez pracownika CSK podczas wizyty
                       na strzelnicy.
                     </p>
                   </div>
@@ -559,8 +559,8 @@ export default function AccountPage() {
                   </h2>
 
                   <p className="mb-5 text-sm leading-6 text-zinc-400">
-                    Zaznacz, jakie uprawnienia posiadasz. Nie wpisuj numerów
-                    dokumentów. Dokumenty okazujesz wyłącznie do wglądu
+                    Zaznacz, jakie uprawnienia posiadasz. Nie wpisuj numer�w
+                    dokument�w. Dokumenty okazujesz wy��cznie do wgl�du
                     pracownikowi podczas wizyty.
                   </p>
 
@@ -570,8 +570,8 @@ export default function AccountPage() {
                     </p>
 
                     <p className="mt-1 text-green-300">
-                      System zapisuje tylko deklarowany typ uprawnień i fakt
-                      późniejszej weryfikacji. Numery dokumentów nie są tutaj
+                      System zapisuje tylko deklarowany typ uprawnie� i fakt
+                      p�niejszej weryfikacji. Numery dokument�w nie s� tutaj
                       wymagane.
                     </p>
                   </div>
@@ -581,42 +581,42 @@ export default function AccountPage() {
                       checked={permissionSport}
                       onChange={setPermissionSport}
                       title="Pozwolenie sportowe"
-                      description="Zaznacz, jeżeli posiadasz uprawnienia/pozwolenie do celów sportowych."
+                      description="Zaznacz, je�eli posiadasz uprawnienia/pozwolenie do cel�w sportowych."
                     />
 
                     <CheckboxField
                       checked={permissionCollector}
                       onChange={setPermissionCollector}
                       title="Pozwolenie kolekcjonerskie"
-                      description="Zaznacz, jeżeli posiadasz uprawnienia/pozwolenie do celów kolekcjonerskich."
+                      description="Zaznacz, je�eli posiadasz uprawnienia/pozwolenie do cel�w kolekcjonerskich."
                     />
 
                     <CheckboxField
                       checked={permissionHunting}
                       onChange={setPermissionHunting}
-                      title="Pozwolenie myśliwskie / łowieckie"
-                      description="Zaznacz, jeżeli posiadasz uprawnienia związane z łowiectwem."
+                      title="Pozwolenie my�liwskie / �owieckie"
+                      description="Zaznacz, je�eli posiadasz uprawnienia zwi�zane z �owiectwem."
                     />
 
                     <CheckboxField
                       checked={permissionTraining}
                       onChange={setPermissionTraining}
                       title="Uprawnienia szkoleniowe / dopuszczenie"
-                      description="Zaznacz, jeżeli posiadasz inne uprawnienia związane ze szkoleniem lub użytkowaniem broni."
+                      description="Zaznacz, je�eli posiadasz inne uprawnienia zwi�zane ze szkoleniem lub u�ytkowaniem broni."
                     />
 
                     <CheckboxField
                       checked={permissionPersonalProtection}
                       onChange={setPermissionPersonalProtection}
                       title="Ochrona osobista"
-                      description="Zaznacz, jeżeli posiadasz uprawnienia w zakresie ochrony osobistej."
+                      description="Zaznacz, je�eli posiadasz uprawnienia w zakresie ochrony osobistej."
                     />
 
                     <CheckboxField
                       checked={permissionOther}
                       onChange={setPermissionOther}
                       title="Inne uprawnienia"
-                      description="Zaznacz, jeżeli posiadasz inne uprawnienia niewymienione powyżej."
+                      description="Zaznacz, je�eli posiadasz inne uprawnienia niewymienione powy�ej."
                     />
                   </div>
 
@@ -629,28 +629,28 @@ export default function AccountPage() {
                       checked={qualificationInstructor}
                       onChange={setQualificationInstructor}
                       title="Instruktor strzelectwa"
-                      description="Zaznacz, jeżeli posiadasz kwalifikacje instruktorskie."
+                      description="Zaznacz, je�eli posiadasz kwalifikacje instruktorskie."
                     />
 
                     <CheckboxField
                       checked={qualificationRangeOfficer}
                       onChange={setQualificationRangeOfficer}
-                      title="Prowadzący strzelanie / Range Officer"
-                      description="Zaznacz, jeżeli posiadasz uprawnienia prowadzącego strzelanie."
+                      title="Prowadz�cy strzelanie / Range Officer"
+                      description="Zaznacz, je�eli posiadasz uprawnienia prowadz�cego strzelanie."
                     />
 
                     <CheckboxField
                       checked={qualificationPzssLicense}
                       onChange={setQualificationPzssLicense}
                       title="Licencja PZSS"
-                      description="Zaznacz, jeżeli posiadasz aktualną licencję PZSS."
+                      description="Zaznacz, je�eli posiadasz aktualn� licencj� PZSS."
                     />
 
                     <CheckboxField
                       checked={qualificationHunter}
                       onChange={setQualificationHunter}
-                      title="Myśliwy"
-                      description="Zaznacz, jeżeli jesteś myśliwym i posiadasz odpowiednie uprawnienia."
+                      title="My�liwy"
+                      description="Zaznacz, je�eli jeste� my�liwym i posiadasz odpowiednie uprawnienia."
                     />
                   </div>
                 </div>
@@ -697,7 +697,7 @@ export default function AccountPage() {
                       type="text"
                       value={street}
                       onChange={(event) => setStreet(event.target.value)}
-                      placeholder="ul. Przykładowa"
+                      placeholder="ul. Przyk�adowa"
                       className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-white outline-none focus:border-green-600"
                     />
                   </div>
@@ -737,18 +737,18 @@ export default function AccountPage() {
 
                 <div className="mt-2 border-t border-zinc-800 pt-5">
                   <h2 className="mb-4 text-xl font-semibold">
-                    Bezpieczeństwo konta
+                    Bezpiecze�stwo konta
                   </h2>
 
                   <p className="mb-5 text-sm text-zinc-400">
-                    Zmień hasło do swojego konta. Nowe hasło musi mieć minimum
-                    8 znaków.
+                    Zmie� has�o do swojego konta. Nowe has�o musi mie� minimum
+                    8 znak�w.
                   </p>
 
                   <div className="grid gap-5 md:grid-cols-2">
                     <div>
                       <label className="mb-2 block text-sm text-zinc-300">
-                        Nowe hasło
+                        Nowe has�o
                       </label>
 
                       <input
@@ -757,14 +757,14 @@ export default function AccountPage() {
                         onChange={(event) =>
                           setNewPassword(event.target.value)
                         }
-                        placeholder="Minimum 8 znaków"
+                        placeholder="Minimum 8 znak�w"
                         className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-white outline-none focus:border-yellow-600"
                       />
                     </div>
 
                     <div>
                       <label className="mb-2 block text-sm text-zinc-300">
-                        Powtórz hasło
+                        Powt�rz has�o
                       </label>
 
                       <input
@@ -773,7 +773,7 @@ export default function AccountPage() {
                         onChange={(event) =>
                           setRepeatPassword(event.target.value)
                         }
-                        placeholder="Powtórz nowe hasło"
+                        placeholder="Powt�rz nowe has�o"
                         className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-white outline-none focus:border-yellow-600"
                       />
                     </div>
@@ -785,7 +785,7 @@ export default function AccountPage() {
                     disabled={savingPassword}
                     className="mt-5 rounded-xl border border-yellow-700 bg-yellow-950 px-5 py-3 font-semibold text-yellow-300 transition hover:bg-yellow-900 disabled:cursor-not-allowed disabled:opacity-60"
                   >
-                    {savingPassword ? "Zmiana hasła..." : "Zmień hasło"}
+                    {savingPassword ? "Zmiana has�a..." : "Zmie� has�o"}
                   </button>
                 </div>
 
@@ -811,7 +811,7 @@ export default function AccountPage() {
             href="/dashboard"
             className="rounded-xl border border-zinc-700 px-5 py-3 text-center text-sm font-semibold text-zinc-300 transition hover:bg-zinc-900"
           >
-            ← Panel klienta
+            � Panel klienta
           </a>
 
           <a
