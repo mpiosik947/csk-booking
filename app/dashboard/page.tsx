@@ -29,7 +29,7 @@ export default function DashboardPage() {
 
       setIsLoggedIn(true);
       setEmail(user.email ?? "");
-      setFullName(metadata.full_name ?? metadata.name ?? "Użytkownik");
+      setFullName(metadata.full_name ?? metadata.name ?? "U�ytkownik");
 
       const { data: profile } = await supabase
         .from("profiles")
@@ -57,7 +57,7 @@ export default function DashboardPage() {
       <main className="min-h-screen bg-zinc-950 text-white">
         <section className="mx-auto max-w-5xl px-6 py-12">
           <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-6 text-zinc-400">
-            Ładowanie panelu klienta...
+            �adowanie panelu klienta...
           </div>
         </section>
       </main>
@@ -74,7 +74,7 @@ export default function DashboardPage() {
             </h1>
 
             <p className="mx-auto mb-6 max-w-xl text-red-100">
-              Aby przejść do panelu klienta, musisz najpierw zalogować się na
+              Aby przej�� do panelu klienta, musisz najpierw zalogowa� si� na
               swoje konto.
             </p>
 
@@ -83,14 +83,14 @@ export default function DashboardPage() {
                 href="/login"
                 className="rounded-xl bg-green-700 px-5 py-3 font-semibold text-white transition hover:bg-green-600"
               >
-                Zaloguj się
+                Zaloguj si�
               </a>
 
               <a
                 href="/register"
                 className="rounded-xl border border-red-300 px-5 py-3 font-semibold text-red-100 transition hover:bg-red-900"
               >
-                Utwórz konto
+                Utw�rz konto
               </a>
             </div>
           </div>
@@ -122,7 +122,7 @@ export default function DashboardPage() {
               <span className="font-semibold text-green-500">
                 {fullName}
               </span>
-              . Zarządzaj swoimi rezerwacjami i szkoleniami.
+              . Zarz�dzaj swoimi rezerwacjami i szkoleniami.
             </p>
           </div>
 
@@ -146,7 +146,7 @@ export default function DashboardPage() {
               </h2>
 
               <p className="text-green-100">
-                Zarządzanie rezerwacjami, eventami, check-in oraz obsługą systemu.
+                Zarz�dzanie rezerwacjami, eventami, check-in oraz obs�ug� systemu.
               </p>
             </a>
           )}
@@ -156,12 +156,12 @@ export default function DashboardPage() {
             className="rounded-2xl bg-green-700 p-6 transition hover:bg-green-600"
           >
             <h2 className="mb-2 text-2xl font-bold">
-              Zarezerwuj oś
+              Zarezerwuj o�
             </h2>
 
             <p className="text-green-100">
-              Wybierz datę, oś, godzinę oraz czas rezerwacji.
-              Płatność na miejscu.
+              Wybierz dat�, o�, godzin� oraz czas rezerwacji.
+              P�atno�� na miejscu.
             </p>
           </a>
 
@@ -174,7 +174,7 @@ export default function DashboardPage() {
             </h2>
 
             <p className="text-zinc-400">
-              Sprawdź swoje terminy, statusy rezerwacji oraz płatności.
+              Sprawd� swoje terminy, statusy rezerwacji oraz p�atno�ci.
             </p>
           </a>
 
@@ -187,7 +187,7 @@ export default function DashboardPage() {
             </h2>
 
             <p className="text-green-100">
-              Zobacz planowane szkolenia, wydarzenia i zapisz się na wybrany
+              Zobacz planowane szkolenia, wydarzenia i zapisz si� na wybrany
               termin.
             </p>
           </a>
@@ -201,7 +201,7 @@ export default function DashboardPage() {
             </h2>
 
             <p className="text-zinc-400">
-              Sprawdź szkolenia, na które jesteś zapisany oraz status
+              Sprawd� szkolenia, na kt�re jeste� zapisany oraz status
               uczestnictwa.
             </p>
           </a>
@@ -215,8 +215,8 @@ export default function DashboardPage() {
             </h2>
 
             <p className="text-zinc-400">
-              Regulamin strzelnicy, zasady bezpieczeństwa oraz polityka
-              prywatności.
+              Regulamin strzelnicy, zasady bezpiecze�stwa oraz polityka
+              prywatno�ci.
             </p>
           </a>
 
@@ -229,7 +229,7 @@ export default function DashboardPage() {
             </h2>
 
             <p className="text-zinc-400">
-              Edytuj swoje dane użytkownika, imię, nazwisko oraz numer telefonu.
+              Edytuj swoje dane u�ytkownika, imi�, nazwisko oraz numer telefonu.
             </p>
           </a>
         </div>
@@ -239,7 +239,7 @@ export default function DashboardPage() {
             href="/"
             className="rounded-xl border border-zinc-700 px-5 py-3 text-center text-sm font-semibold text-zinc-300 transition hover:bg-zinc-900"
           >
-            ← Strona główna
+            � Strona g��wna
           </a>
 
           <button
