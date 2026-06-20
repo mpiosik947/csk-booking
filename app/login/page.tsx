@@ -35,6 +35,11 @@ export default function LoginPage() {
         return;
       }
 
+      if (error.message === "Invalid login credentials") {
+        setMessage("Nieprawidłowy adres e-mail lub hasło.");
+        return;
+      }
+
       setMessage(`Błąd logowania: ${error.message}`);
       return;
     }
@@ -131,4 +136,5 @@ export default function LoginPage() {
     </main>
   );
 }
+
 
