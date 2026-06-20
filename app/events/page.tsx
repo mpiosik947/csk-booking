@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useState } from "react";
 import { supabase } from "../../lib/supabase";
@@ -196,6 +196,30 @@ export default function EventsPage() {
       setMessage(`Błąd zapisu: ${error.message}`);
       return;
     }
+
+        fetch("/api/send-event-registration-confirmation", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        customerEmail,
+        customerName,
+        eventTitle: eventItem.title,
+        eventDate: eventItem.event_date,
+        startTime: eventItem.start_time,
+        endTime: eventItem.end_time,
+        location: eventItem.location,
+        price: Number(eventItem.price),
+        registrationStatus,
+      }),
+    }).catch((emailError) => {
+      console.error(
+        "Event registration confirmation email error:",
+        emailError
+      );
+    });
+
 
     setRegistrationSuccess({
       title: eventItem.title,
@@ -635,7 +659,7 @@ export default function EventsPage() {
             href="/dashboard"
             className="rounded-xl border border-zinc-700 px-5 py-3 text-center text-sm font-semibold text-zinc-300 transition hover:bg-zinc-900"
           >
-            ← Panel klienta
+            ← Panel klienta
           </a>
 
           <a
@@ -649,3 +673,4 @@ export default function EventsPage() {
     </main>
   );
 }
+
