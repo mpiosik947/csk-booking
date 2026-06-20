@@ -28,6 +28,13 @@ export default function LoginPage() {
     setLoading(false);
 
     if (error) {
+      if (error.message === "Email not confirmed") {
+        setMessage(
+          "Wymagana jest weryfikacja adresu e-mail. Sprawdź skrzynkę pocztową i kliknij link aktywacyjny wysłany podczas rejestracji."
+        );
+        return;
+      }
+
       setMessage(`Błąd logowania: ${error.message}`);
       return;
     }
@@ -124,3 +131,4 @@ export default function LoginPage() {
     </main>
   );
 }
+
