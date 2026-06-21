@@ -38,6 +38,10 @@ export default function EventsPage() {
   const [message, setMessage] = useState("");
   const [registrationSuccess, setRegistrationSuccess] =
     useState<RegistrationSuccess | null>(null);
+  const [registrationConfirmation, setRegistrationConfirmation] = useState<{
+    eventItem: Event;
+    asReserve: boolean;
+  } | null>(null);
 
   const [userId, setUserId] = useState("");
   const [customerName, setCustomerName] = useState("");
@@ -337,7 +341,7 @@ export default function EventsPage() {
           {isFull ? (
             <button
               type="button"
-              onClick={() => registerForEvent(event, true)}
+              onClick={() => setRegistrationConfirmation({ eventItem: event, asReserve: true })}
               className="w-full rounded-xl border border-yellow-700 bg-yellow-950 px-5 py-3 font-semibold text-yellow-300 transition hover:bg-yellow-900"
             >
               Dołącz do listy rezerwowej
@@ -345,7 +349,7 @@ export default function EventsPage() {
           ) : (
             <button
               type="button"
-              onClick={() => registerForEvent(event, false)}
+              onClick={() => setRegistrationConfirmation({ eventItem: event, asReserve: false })}
               className="w-full rounded-xl bg-green-700 px-5 py-3 font-semibold text-white transition hover:bg-green-600"
             >
               Zapisz się
@@ -374,6 +378,80 @@ export default function EventsPage() {
           </p>
         </div>
 
+        {registrationConfirmation && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 px-4">
+            <div className="w-full max-w-xl rounded-2xl border border-yellow-800 bg-zinc-950 p-6 text-white shadow-2xl">
+              <div className="mb-4 rounded-full border border-yellow-800 bg-yellow-950 px-4 py-2 text-center text-sm font-bold uppercase tracking-[0.25em] text-yellow-300">
+                Potwierdzenie zapisu
+              </div>
+
+              <h2 className="mb-3 text-3xl font-bold">
+                Czy na pewno chcesz się zapisać?
+              </h2>
+
+              <p className="mb-6 text-zinc-400">
+                Potwierdź zapis na wybrane szkolenie. Po zapisaniu otrzymasz potwierdzenie na adres e-mail.
+              </p>
+
+              <div className="grid gap-3 rounded-2xl border border-zinc-800 bg-zinc-900 p-5 text-sm">
+                <div>
+                  <p className="text-zinc-500">Szkolenie</p>
+                  <p className="text-lg font-semibold text-white">
+                    {registrationConfirmation.eventItem.title}
+                  </p>
+                </div>
+
+                <div>
+                  <p className="text-zinc-500">Data</p>
+                  <p className="text-lg font-semibold text-white">
+                    {formatDate(registrationConfirmation.eventItem.event_date)}
+                  </p>
+                </div>
+
+                <div>
+                  <p className="text-zinc-500">Godzina</p>
+                  <p className="text-lg font-semibold text-white">
+                    {registrationConfirmation.eventItem.start_time.slice(0, 5)} -{" "}
+                    {registrationConfirmation.eventItem.end_time.slice(0, 5)}
+                  </p>
+                </div>
+
+                <div>
+                  <p className="text-zinc-500">Tryb zapisu</p>
+                  <p className="text-lg font-semibold text-yellow-400">
+                    {registrationConfirmation.asReserve
+                      ? "Lista rezerwowa"
+                      : "Uczestnik szkolenia"}
+                  </p>
+                </div>
+              </div>
+
+              <div className="mt-6 grid gap-3 sm:grid-cols-2">
+                <button
+                  type="button"
+                  onClick={() => setRegistrationConfirmation(null)}
+                  className="rounded-xl border border-zinc-700 px-5 py-3 font-semibold text-zinc-300 transition hover:bg-zinc-900"
+                >
+                  Wróć do szkoleń
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    registerForEvent(
+                      registrationConfirmation.eventItem,
+                      registrationConfirmation.asReserve
+                    );
+                    setRegistrationConfirmation(null);
+                  }}
+                  className="rounded-xl bg-green-700 px-5 py-3 font-semibold text-white transition hover:bg-green-600"
+                >
+                  Zapisz się
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
         {registrationSuccess && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 px-4">
             <div className="w-full max-w-xl rounded-2xl border border-green-800 bg-zinc-950 p-6 text-white shadow-2xl">
@@ -454,7 +532,31 @@ export default function EventsPage() {
           </div>
         )}
 
-        {message && <div className={getMessageClass(message)}>{message}</div>}
+        {message && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 px-4">
+            <div className="w-full max-w-lg rounded-2xl border border-red-800 bg-zinc-950 p-6 text-white shadow-2xl">
+              <div className="mb-4 rounded-full border border-red-800 bg-red-950 px-4 py-2 text-center text-sm font-bold uppercase tracking-[0.25em] text-red-300">
+                Komunikat
+              </div>
+
+              <h2 className="mb-3 text-2xl font-bold">
+                Nie można wykonać zapisu
+              </h2>
+
+              <p className="text-zinc-300">{message}</p>
+
+              <div className="mt-6 flex justify-end">
+                <button
+                  type="button"
+                  onClick={() => setMessage("")}
+                  className="rounded-xl border border-zinc-700 px-5 py-3 font-semibold text-zinc-300 transition hover:bg-zinc-900"
+                >
+                  Zamknij
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {loading && (
           <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-6 text-zinc-400">
@@ -673,4 +775,9 @@ export default function EventsPage() {
     </main>
   );
 }
+
+
+
+
+
 
