@@ -179,6 +179,28 @@ export default function MyReservationsPage() {
       )
     );
 
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (user?.email) {
+      await fetch("/api/send-reservation-cancellation", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          customerEmail: user.email,
+          customerName: String(user.user_metadata?.full_name ?? user.email),
+          reservationDate: reservation.reservation_date,
+          startTime: reservation.start_time,
+          endTime: reservation.end_time,
+          laneName: reservation.shooting_lanes?.name ?? "Brak osi",
+          cancelledBy: "user",
+        }),
+      }).catch(() => null);
+    }
+
     setMessage("Rezerwacja została anulowana.");
   }
 

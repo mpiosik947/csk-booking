@@ -403,6 +403,42 @@ export default function AdminReservationsPage() {
       )
     );
 
+    if (changes.reservation_status === RESERVATION_STATUS.CANCELLED_BY_ADMIN) {
+      if (!reservation.customer_email) {
+        setMessage("Rezerwacja anulowana, ale klient nie ma zapisanego adresu email.");
+        return;
+      }
+
+      const emailResponse = await fetch("/api/send-reservation-cancellation", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          customerEmail: reservation.customer_email,
+          customerName: reservation.customer_name,
+          reservationDate: reservation.reservation_date,
+          startTime: reservation.start_time,
+          endTime: reservation.end_time,
+          laneName: Array.isArray(reservation.shooting_lanes)
+            ? reservation.shooting_lanes[0]?.name ?? "Brak osi"
+            : reservation.shooting_lanes?.name ?? "Brak osi",
+          cancelledBy: "admin",
+        }),
+      });
+
+      if (!emailResponse.ok) {
+        const emailResult = await emailResponse.json().catch(() => null);
+        setMessage(
+          `Rezerwacja anulowana, ale email nie został wysłany: ${emailResult?.error ?? "nieznany błąd"}`
+        );
+        return;
+      }
+
+      setMessage("Rezerwacja została anulowana. Email anulowania został wysłany.");
+      return;
+    }
+
     setMessage("Zapisano zmiany w rezerwacji.");
   }
 
