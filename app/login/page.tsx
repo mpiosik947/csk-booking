@@ -1,5 +1,6 @@
 ﻿"use client";
 
+import Image from "next/image";
 import { useState } from "react";
 import { supabase } from "../../lib/supabase";
 
@@ -54,9 +55,16 @@ export default function LoginPage() {
     <main className="min-h-screen bg-zinc-950 text-white">
       <section className="mx-auto flex min-h-screen max-w-md items-center px-6 py-12">
         <div className="w-full rounded-2xl border border-zinc-800 bg-zinc-900 p-8">
-          <p className="mb-4 text-sm uppercase tracking-[0.35em] text-green-500">
-            CSK Booking
-          </p>
+          <div className="mb-8 flex justify-center">
+  <Image
+    src="/login-brand.png"
+    alt="CSK - Centrum Szkolenia Krutla"
+    width={420}
+    height={220}
+    priority
+    className="h-auto w-full max-w-[280px] rounded-xl"
+  />
+</div>
 
           <h1 className="mb-2 text-3xl font-bold">Logowanie</h1>
 
@@ -136,5 +144,9 @@ export default function LoginPage() {
     </main>
   );
 }
+
+
+
+
 
 
