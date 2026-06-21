@@ -1,5 +1,6 @@
-"use client";
+﻿"use client";
 
+import Image from "next/image";
 import { useEffect, useState } from "react";
 import { supabase } from "../lib/supabase";
 
@@ -54,17 +55,23 @@ export default function Home() {
           WERSJA TESTOWA
         </div>
 
-        <p className="mb-4 text-sm uppercase tracking-[0.35em] text-green-500">
-          Centrum Szkolenia Krutla
-        </p>
+        <div className="mb-8 flex justify-center">
+          <Image
+            src="/login-brand.png"
+            alt="CSK - Centrum Szkolenia Krutla"
+            width={520}
+            height={260}
+            priority
+            className="h-auto w-full max-w-[360px] rounded-xl"
+          />
+        </div>
 
         <h1 className="mb-6 text-4xl font-bold tracking-tight md:text-6xl">
-          Panel Rezerwacji CSK
+          Centrum Szkolenia Krutla
         </h1>
 
         <p className="mb-6 max-w-2xl text-lg text-zinc-300">
-          Testowa wersja systemu rezerwacji osi, szkoleń i eventów. System może
-          być jeszcze rozwijany i poprawiany.
+          System rezerwacji osi strzeleckich, szkoleń i eventów.
         </p>
 
         {email ? (
@@ -179,3 +186,5 @@ export default function Home() {
     </main>
   );
 }
+
+
