@@ -26,7 +26,7 @@ type Reservation = {
 };
 function translateAttendanceStatus(status?: string | null) {
   if (status === "present") return "Obecny";
-  if (status === "completed") return "ZakoĹ„czona";
+  if (status === "completed") return "Zakończona";
   if (status === "no_show") return "Nieobecny";
   return "Niepotwierdzony";
 }
@@ -123,7 +123,7 @@ export default function MyReservationsPage() {
         .order("start_time", { ascending: false });
 
       if (error) {
-        setMessage(`BĹ‚Ä…d pobierania rezerwacji: ${error.message}`);
+        setMessage(`Błąd pobierania rezerwacji: ${error.message}`);
         setLoading(false);
         return;
       }
@@ -145,13 +145,13 @@ export default function MyReservationsPage() {
 
     if (!allowedToCancel) {
       setMessage(
-        "Nie moĹĽna anulowaÄ‡ rezerwacji pĂłĹşniej niĹĽ 12 godzin przed terminem. Skontaktuj siÄ™ z obsĹ‚ugÄ… strzelnicy."
+        "Nie można anulować rezerwacji później niż 12 godzin przed terminem. Skontaktuj się z obsługą strzelnicy."
       );
       return;
     }
 
     const confirmed = window.confirm(
-      "Czy na pewno chcesz anulowaÄ‡ tÄ™ rezerwacjÄ™?"
+      "Czy na pewno chcesz anulować tę rezerwację?"
     );
 
     if (!confirmed) {
@@ -167,7 +167,7 @@ export default function MyReservationsPage() {
       .eq("user_id", userId);
 
     if (error) {
-      setMessage(`BĹ‚Ä…d anulowania rezerwacji: ${error.message}`);
+      setMessage(`Błąd anulowania rezerwacji: ${error.message}`);
       return;
     }
 
@@ -201,7 +201,7 @@ export default function MyReservationsPage() {
       }).catch(() => null);
     }
 
-    setMessage("Rezerwacja zostaĹ‚a anulowana.");
+    setMessage("Rezerwacja została anulowana.");
   }
 
   return (
@@ -214,13 +214,13 @@ export default function MyReservationsPage() {
         <h1 className="mb-3 text-3xl font-bold">Moje rezerwacje</h1>
 
         <p className="mb-8 text-zinc-400">
-          Tutaj widzisz rezerwacje przypisane do Twojego konta. RezerwacjÄ™
-          moĹĽesz anulowaÄ‡ samodzielnie najpĂłĹşniej 12 godzin przed terminem.
+          Tutaj widzisz rezerwacje przypisane do Twojego konta. Rezerwację
+          możesz anulować samodzielnie najpóźniej 12 godzin przed terminem.
         </p>
 
         {loading && (
           <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-6 text-zinc-400">
-            Ĺadowanie rezerwacji...
+            Ładowanie rezerwacji...
           </div>
         )}
 
@@ -231,8 +231,8 @@ export default function MyReservationsPage() {
             </h2>
 
             <p className="mx-auto mb-6 max-w-xl text-red-100">
-              Aby zobaczyÄ‡ swoje rezerwacje, musisz najpierw zalogowaÄ‡ siÄ™ na
-              konto uĹĽytkownika albo utworzyÄ‡ nowe konto.
+              Aby zobaczyć swoje rezerwacje, musisz najpierw zalogować się na
+              konto użytkownika albo utworzyć nowe konto.
             </p>
 
             <div className="flex flex-col gap-3 sm:flex-row sm:justify-center">
@@ -240,14 +240,14 @@ export default function MyReservationsPage() {
                 href="/login"
                 className="rounded-xl bg-green-700 px-5 py-3 font-semibold text-white transition hover:bg-green-600"
               >
-                Zaloguj siÄ™
+                Zaloguj się
               </a>
 
               <a
                 href="/register"
                 className="rounded-xl border border-red-300 px-5 py-3 font-semibold text-red-100 transition hover:bg-red-900"
               >
-                UtwĂłrz konto
+                Utwórz konto
               </a>
             </div>
           </div>
@@ -259,7 +259,7 @@ export default function MyReservationsPage() {
 
         {!loading && isLoggedIn && reservations.length === 0 && (
           <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-6 text-zinc-400">
-            Nie masz jeszcze ĹĽadnych rezerwacji.
+            Nie masz jeszcze żadnych rezerwacji.
           </div>
         )}
 
@@ -297,19 +297,19 @@ export default function MyReservationsPage() {
 
                       <h2 className="text-xl font-semibold">
                         {reservation.reservation_date} |{" "}
-                        {reservation.start_time.slice(0, 5)}â€“
+                        {reservation.start_time.slice(0, 5)}–
                         {reservation.end_time.slice(0, 5)}
                       </h2>
 
                       <p className="mt-2 text-sm text-zinc-400">
                         Cena:{" "}
                         <span className="font-semibold text-green-500">
-                          {Number(reservation.price).toFixed(0)} zĹ‚
+                          {Number(reservation.price).toFixed(0)} zł
                         </span>
                       </p>
 
                       <p className="mt-1 text-sm text-zinc-400">
-                        PĹ‚atnoĹ›Ä‡:{" "}
+                        Płatność:{" "}
                         <span className="font-semibold text-green-500">
                           {getPaymentStatusLabel(reservation.payment_status)}
                         </span>
@@ -340,8 +340,8 @@ export default function MyReservationsPage() {
                       {reservation.reservation_status === RESERVATION_STATUS.CONFIRMED &&
                         !allowedToCancel && (
                           <p className="mt-3 text-sm text-yellow-300">
-                            Samodzielne anulowanie nie jest juĹĽ moĹĽliwe â€”
-                            zostaĹ‚o mniej niĹĽ 12 godzin do terminu.
+                            Samodzielne anulowanie nie jest już możliwe —
+                            zostało mniej niż 12 godzin do terminu.
                           </p>
                         )}
 
@@ -362,7 +362,7 @@ export default function MyReservationsPage() {
                               onClick={() => cancelReservation(reservation)}
                               className="rounded-xl border border-red-800 px-4 py-2 text-sm font-semibold text-red-400 transition hover:bg-red-950"
                             >
-                              Anuluj rezerwacjÄ™
+                              Anuluj rezerwację
                             </button>
                           )}
 
@@ -389,19 +389,19 @@ export default function MyReservationsPage() {
                           />
 
                           <p className="mt-3 text-xs text-zinc-500">
-                            PokaĹĽ ten kod pracownikowi strzelnicy przy wejĹ›ciu.
+                            Pokaż ten kod pracownikowi strzelnicy przy wejściu.
                           </p>
 
                           <a
                             href={checkInUrl}
                             className="mt-3 inline-block text-xs text-cyan-300 hover:text-cyan-200"
                           >
-                            OtwĂłrz link check-in
+                            Otwórz link check-in
                           </a>
                         </>
                       ) : (
                         <div className="text-sm text-zinc-500">
-                          QR dostÄ™pny tylko dla aktywnych rezerwacji.
+                          QR dostępny tylko dla aktywnych rezerwacji.
                         </div>
                       )}
                     </div>
@@ -418,7 +418,7 @@ export default function MyReservationsPage() {
           </a>
 
           <a href="/dashboard" className="hover:text-white">
-            â† Panel klienta
+            ← Panel klienta
           </a>
         </div>
       </section>
