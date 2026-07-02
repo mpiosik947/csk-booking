@@ -63,6 +63,42 @@ function getPaidRegistrationsCount(registrations: Registration[]) {
   ).length;
 }
 
+function getReserveRegistrationsCount(registrations: Registration[]) {
+  return registrations.filter(
+    (registration) => registration.registration_status === "reserve"
+  ).length;
+}
+
+function getCancelledRegistrationsCount(registrations: Registration[]) {
+  return registrations.filter(
+    (registration) => registration.registration_status === "cancelled"
+  ).length;
+}
+
+function getParticipantRegistrations(registrations: Registration[]) {
+  return registrations.filter(
+    (registration) =>
+      registration.registration_status === "registered" ||
+      registration.registration_status === "approved"
+  );
+}
+
+function getReserveRegistrations(registrations: Registration[]) {
+  return registrations
+    .filter((registration) => registration.registration_status === "reserve")
+    .sort(
+      (first, second) =>
+        new Date(first.created_at).getTime() -
+        new Date(second.created_at).getTime()
+    );
+}
+
+function getCancelledRegistrations(registrations: Registration[]) {
+  return registrations.filter(
+    (registration) => registration.registration_status === "cancelled"
+  );
+}
+
 function FieldHelp({ children }: { children: React.ReactNode }) {
   return <p className="mt-2 text-xs leading-relaxed text-zinc-500">{children}</p>;
 }
@@ -621,10 +657,26 @@ export default function AdminEventsPage() {
 
         <div className="grid gap-6">
           {events.map((event) => {
+            const selectedRegistrations =
+              selectedEventId === event.id ? registrations : [];
+
             const activeRegistrationsCount =
-              selectedEventId === event.id
-                ? getPaidRegistrationsCount(registrations)
-                : 0;
+              getPaidRegistrationsCount(selectedRegistrations);
+
+            const reserveRegistrationsCount =
+              getReserveRegistrationsCount(selectedRegistrations);
+
+            const cancelledRegistrationsCount =
+              getCancelledRegistrationsCount(selectedRegistrations);
+
+            const participantRegistrations =
+              getParticipantRegistrations(selectedRegistrations);
+
+            const reserveRegistrations =
+              getReserveRegistrations(selectedRegistrations);
+
+            const cancelledRegistrations =
+              getCancelledRegistrations(selectedRegistrations);
 
             const freePlaces =
               selectedEventId === event.id
@@ -872,6 +924,20 @@ export default function AdminEventsPage() {
                                 Wolne: {freePlaces}
                               </p>
                             )}
+
+                            {selectedEventId === event.id && (
+                              <div className="mt-3 space-y-1 border-t border-zinc-800 pt-3 text-xs">
+                                <p className="font-semibold text-green-400">
+                                  Uczestnicy: {activeRegistrationsCount} / {event.max_participants}
+                                </p>
+                                <p className="font-semibold text-yellow-300">
+                                  Lista rezerwowa: {reserveRegistrationsCount}
+                                </p>
+                                <p className="font-semibold text-red-300">
+                                  Anulowani: {cancelledRegistrationsCount}
+                                </p>
+                              </div>
+                            )}
                           </div>
                         </div>
                       </div>
@@ -926,114 +992,243 @@ export default function AdminEventsPage() {
                             Brak zapisanych osób.
                           </div>
                         ) : (
-                          <div className="overflow-x-auto">
-                            <table className="min-w-full text-sm">
-                              <thead>
-                                <tr className="border-b border-zinc-800 text-left text-zinc-500">
-                                  <th className="px-4 py-3">Imię i nazwisko</th>
-                                  <th className="px-4 py-3">E-mail</th>
-                                  <th className="px-4 py-3">Telefon</th>
-                                  <th className="px-4 py-3">Status</th>
-                                  <th className="px-4 py-3">Płatność</th>
-                                  <th className="px-4 py-3">Akcje</th>
-                                </tr>
-                              </thead>
+                          <div className="grid gap-5">
+                            {participantRegistrations.length > 0 && (
+                              <div className="rounded-xl border border-green-900 bg-green-950/20 p-4">
+                                <div className="mb-4 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                                  <div>
+                                    <h4 className="text-lg font-bold text-green-300">
+                                      Uczestnicy
+                                    </h4>
+                                    <p className="text-sm text-zinc-400">
+                                      Osoby zapisane jako uczestnicy szkolenia.
+                                    </p>
+                                  </div>
 
-                              <tbody>
-                                {registrations.map((registration) => (
-                                  <tr
-                                    key={registration.id}
-                                    className="border-b border-zinc-900"
-                                  >
-                                    <td className="px-4 py-4 font-semibold">
-                                      {registration.customer_name}
-                                    </td>
+                                  <span className="rounded-full bg-green-950 px-3 py-1 text-xs font-semibold text-green-300">
+                                    {participantRegistrations.length} / {event.max_participants}
+                                  </span>
+                                </div>
 
-                                    <td className="px-4 py-4 text-zinc-300">
-                                      {registration.customer_email}
-                                    </td>
+                                <div className="overflow-x-auto">
+                                  <table className="min-w-full text-sm">
+                                    <thead>
+                                      <tr className="border-b border-zinc-800 text-left text-zinc-500">
+                                        <th className="px-4 py-3">Imię i nazwisko</th>
+                                        <th className="px-4 py-3">E-mail</th>
+                                        <th className="px-4 py-3">Telefon</th>
+                                        <th className="px-4 py-3">Status</th>
+                                        <th className="px-4 py-3">Płatność</th>
+                                        <th className="px-4 py-3">Akcje</th>
+                                      </tr>
+                                    </thead>
 
-                                    <td className="px-4 py-4 text-zinc-300">
-                                      {registration.customer_phone}
-                                    </td>
+                                    <tbody>
+                                      {participantRegistrations.map((registration) => (
+                                        <tr key={registration.id} className="border-b border-zinc-900">
+                                          <td className="px-4 py-4 font-semibold">
+                                            {registration.customer_name}
+                                          </td>
+                                          <td className="px-4 py-4 text-zinc-300">
+                                            {registration.customer_email}
+                                          </td>
+                                          <td className="px-4 py-4 text-zinc-300">
+                                            {registration.customer_phone}
+                                          </td>
+                                          <td className="px-4 py-4">
+                                            <span className={getStatusClass(registration.registration_status)}>
+                                              {translateRegistrationStatus(registration.registration_status)}
+                                            </span>
+                                          </td>
+                                          <td className="px-4 py-4 text-zinc-300">
+                                            {registration.payment_status === "paid_on_site"
+                                              ? "Opłacone"
+                                              : "Płatność na miejscu"}
+                                          </td>
+                                          <td className="px-4 py-4">
+                                            <div className="flex flex-wrap gap-2">
+                                              <button
+                                                type="button"
+                                                onClick={() => updateRegistrationStatus(registration.id, "approved")}
+                                                className="rounded-lg border border-green-800 px-3 py-2 text-xs text-green-300 hover:bg-green-950"
+                                              >
+                                                Zatwierdź
+                                              </button>
 
-                                    <td className="px-4 py-4">
-                                      <span
-                                        className={getStatusClass(
-                                          registration.registration_status
-                                        )}
-                                      >
-                                        {translateRegistrationStatus(
-                                          registration.registration_status
-                                        )}
-                                      </span>
-                                    </td>
+                                              <button
+                                                type="button"
+                                                onClick={() => updateRegistrationStatus(registration.id, "reserve")}
+                                                className="rounded-lg border border-yellow-800 px-3 py-2 text-xs text-yellow-300 hover:bg-yellow-950"
+                                              >
+                                                Rezerwowy
+                                              </button>
 
-                                    <td className="px-4 py-4 text-zinc-300">
-                                      {registration.payment_status ===
-                                      "paid_on_site"
-                                        ? "Opłacone"
-                                        : "Płatność na miejscu"}
-                                    </td>
+                                              <button
+                                                type="button"
+                                                onClick={() => markRegistrationPaid(registration.id)}
+                                                className="rounded-lg border border-blue-800 px-3 py-2 text-xs text-blue-300 hover:bg-blue-950"
+                                              >
+                                                Opłacone
+                                              </button>
 
-                                    <td className="px-4 py-4">
-                                      <div className="flex flex-wrap gap-2">
-                                        <button
-                                          type="button"
-                                          onClick={() =>
-                                            updateRegistrationStatus(
-                                              registration.id,
-                                              "approved"
-                                            )
-                                          }
-                                          className="rounded-lg border border-green-800 px-3 py-2 text-xs text-green-300 hover:bg-green-950"
-                                        >
-                                          Zatwierdź
-                                        </button>
+                                              <button
+                                                type="button"
+                                                onClick={() => updateRegistrationStatus(registration.id, "cancelled")}
+                                                className="rounded-lg border border-red-800 px-3 py-2 text-xs text-red-300 hover:bg-red-950"
+                                              >
+                                                Anuluj
+                                              </button>
+                                            </div>
+                                          </td>
+                                        </tr>
+                                      ))}
+                                    </tbody>
+                                  </table>
+                                </div>
+                              </div>
+                            )}
 
-                                        <button
-                                          type="button"
-                                          onClick={() =>
-                                            updateRegistrationStatus(
-                                              registration.id,
-                                              "reserve"
-                                            )
-                                          }
-                                          className="rounded-lg border border-yellow-800 px-3 py-2 text-xs text-yellow-300 hover:bg-yellow-950"
-                                        >
-                                          Rezerwowy
-                                        </button>
+                            {reserveRegistrations.length > 0 && (
+                              <div className="rounded-xl border border-yellow-900 bg-yellow-950/20 p-4">
+                                <div className="mb-4 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                                  <div>
+                                    <h4 className="text-lg font-bold text-yellow-300">
+                                      Lista rezerwowa
+                                    </h4>
+                                    <p className="text-sm text-zinc-400">
+                                      Kolejność według daty zapisu. Pierwsza osoba na liście ma najwyższy priorytet.
+                                    </p>
+                                  </div>
 
-                                        <button
-                                          type="button"
-                                          onClick={() =>
-                                            markRegistrationPaid(
-                                              registration.id
-                                            )
-                                          }
-                                          className="rounded-lg border border-blue-800 px-3 py-2 text-xs text-blue-300 hover:bg-blue-950"
-                                        >
-                                          Opłacone
-                                        </button>
+                                  <span className="rounded-full bg-yellow-950 px-3 py-1 text-xs font-semibold text-yellow-300">
+                                    {reserveRegistrations.length}
+                                  </span>
+                                </div>
 
-                                        <button
-                                          type="button"
-                                          onClick={() =>
-                                            updateRegistrationStatus(
-                                              registration.id,
-                                              "cancelled"
-                                            )
-                                          }
-                                          className="rounded-lg border border-red-800 px-3 py-2 text-xs text-red-300 hover:bg-red-950"
-                                        >
-                                          Anuluj
-                                        </button>
-                                      </div>
-                                    </td>
-                                  </tr>
-                                ))}
-                              </tbody>
-                            </table>
+                                <div className="overflow-x-auto">
+                                  <table className="min-w-full text-sm">
+                                    <thead>
+                                      <tr className="border-b border-zinc-800 text-left text-zinc-500">
+                                        <th className="px-4 py-3">Kolejka</th>
+                                        <th className="px-4 py-3">Imię i nazwisko</th>
+                                        <th className="px-4 py-3">E-mail</th>
+                                        <th className="px-4 py-3">Telefon</th>
+                                        <th className="px-4 py-3">Status</th>
+                                        <th className="px-4 py-3">Płatność</th>
+                                        <th className="px-4 py-3">Akcje</th>
+                                      </tr>
+                                    </thead>
+
+                                    <tbody>
+                                      {reserveRegistrations.map((registration, index) => (
+                                        <tr key={registration.id} className="border-b border-zinc-900">
+                                          <td className="px-4 py-4 font-bold text-yellow-300">
+                                            #{index + 1}
+                                          </td>
+                                          <td className="px-4 py-4 font-semibold">
+                                            {registration.customer_name}
+                                          </td>
+                                          <td className="px-4 py-4 text-zinc-300">
+                                            {registration.customer_email}
+                                          </td>
+                                          <td className="px-4 py-4 text-zinc-300">
+                                            {registration.customer_phone}
+                                          </td>
+                                          <td className="px-4 py-4">
+                                            <span className={getStatusClass(registration.registration_status)}>
+                                              {translateRegistrationStatus(registration.registration_status)}
+                                            </span>
+                                          </td>
+                                          <td className="px-4 py-4 text-zinc-300">
+                                            {registration.payment_status === "paid_on_site"
+                                              ? "Opłacone"
+                                              : "Płatność na miejscu"}
+                                          </td>
+                                          <td className="px-4 py-4">
+                                            <div className="flex flex-wrap gap-2">
+                                              <button
+                                                type="button"
+                                                onClick={() => markRegistrationPaid(registration.id)}
+                                                className="rounded-lg border border-blue-800 px-3 py-2 text-xs text-blue-300 hover:bg-blue-950"
+                                              >
+                                                Opłacone
+                                              </button>
+
+                                              <button
+                                                type="button"
+                                                onClick={() => updateRegistrationStatus(registration.id, "cancelled")}
+                                                className="rounded-lg border border-red-800 px-3 py-2 text-xs text-red-300 hover:bg-red-950"
+                                              >
+                                                Anuluj
+                                              </button>
+                                            </div>
+                                          </td>
+                                        </tr>
+                                      ))}
+                                    </tbody>
+                                  </table>
+                                </div>
+                              </div>
+                            )}
+
+                            {cancelledRegistrations.length > 0 && (
+                              <div className="rounded-xl border border-red-900 bg-red-950/20 p-4">
+                                <div className="mb-4 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                                  <div>
+                                    <h4 className="text-lg font-bold text-red-300">
+                                      Anulowani
+                                    </h4>
+                                    <p className="text-sm text-zinc-400">
+                                      Osoby, których zapis został anulowany.
+                                    </p>
+                                  </div>
+
+                                  <span className="rounded-full bg-red-950 px-3 py-1 text-xs font-semibold text-red-300">
+                                    {cancelledRegistrations.length}
+                                  </span>
+                                </div>
+
+                                <div className="overflow-x-auto">
+                                  <table className="min-w-full text-sm">
+                                    <thead>
+                                      <tr className="border-b border-zinc-800 text-left text-zinc-500">
+                                        <th className="px-4 py-3">Imię i nazwisko</th>
+                                        <th className="px-4 py-3">E-mail</th>
+                                        <th className="px-4 py-3">Telefon</th>
+                                        <th className="px-4 py-3">Status</th>
+                                        <th className="px-4 py-3">Płatność</th>
+                                      </tr>
+                                    </thead>
+
+                                    <tbody>
+                                      {cancelledRegistrations.map((registration) => (
+                                        <tr key={registration.id} className="border-b border-zinc-900">
+                                          <td className="px-4 py-4 font-semibold">
+                                            {registration.customer_name}
+                                          </td>
+                                          <td className="px-4 py-4 text-zinc-300">
+                                            {registration.customer_email}
+                                          </td>
+                                          <td className="px-4 py-4 text-zinc-300">
+                                            {registration.customer_phone}
+                                          </td>
+                                          <td className="px-4 py-4">
+                                            <span className={getStatusClass(registration.registration_status)}>
+                                              {translateRegistrationStatus(registration.registration_status)}
+                                            </span>
+                                          </td>
+                                          <td className="px-4 py-4 text-zinc-300">
+                                            {registration.payment_status === "paid_on_site"
+                                              ? "Opłacone"
+                                              : "Płatność na miejscu"}
+                                          </td>
+                                        </tr>
+                                      ))}
+                                    </tbody>
+                                  </table>
+                                </div>
+                              </div>
+                            )}
                           </div>
                         )}
                       </div>
