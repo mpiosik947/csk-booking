@@ -551,6 +551,15 @@ export default function AdminPage() {
       reservation.user_id && unverifiedProfileIds.has(reservation.user_id)
   );
 
+  const upcomingEventsWithReserve = upcomingEvents.filter(
+    (eventItem) => getEventReserveCount(eventItem) > 0
+  );
+
+  const upcomingEventsReserveCount = upcomingEventsWithReserve.reduce(
+    (sum, eventItem) => sum + getEventReserveCount(eventItem),
+    0
+  );
+
   return (
     <main className="min-h-screen bg-zinc-950 px-6 py-10 text-white">
       <section className="mx-auto max-w-7xl">
@@ -690,11 +699,15 @@ export default function AdminPage() {
                 />
 
                 <StatCard
-                  title="Płatność na miejscu"
-                  value={payOnSiteToday.length}
-                  description="Klienci, od których trzeba pobrać płatność."
-                  href="/admin/check-in"
-                  tone={payOnSiteToday.length > 0 ? "yellow" : "green"}
+                  title="Lista rezerwowa szkoleń"
+                  value={upcomingEventsReserveCount}
+                  description={
+                    upcomingEventsWithReserve.length > 0
+                      ? `${upcomingEventsWithReserve.length} najbliższe szkolenia z rezerwą.`
+                      : "Brak rezerwy w najbliższych szkoleniach."
+                  }
+                  href="/admin/events"
+                  tone={upcomingEventsReserveCount > 0 ? "yellow" : "green"}
                 />
 
                 <StatCard
