@@ -160,6 +160,13 @@ function getRoleBadgeClass(role: string | null) {
   }
 }
 
+function getPaymentStatusLabel(status: string | null) {
+  if (isPaidPaymentStatus(status)) return "Opłacone";
+  if (status === PAYMENT_STATUS.PAY_ON_SITE) return "Płatność na miejscu";
+  if (status === PAYMENT_STATUS.UNPAID) return "Nieopłacone";
+  return status || "Brak danych";
+}
+
 function hasAccess(role: Role | null, allowedRoles: Role[]) {
   if (!role) return false;
   return allowedRoles.includes(role);
@@ -390,27 +397,10 @@ export default function AdminPage() {
     (reservation) => !isCancelledReservationStatus(reservation.reservation_status)
   );
 
-  const uniqueTodayClients = new Set(
-    activeTodayReservations.map(
-      (reservation) =>
-        reservation.user_id ||
-        reservation.customer_email ||
-        reservation.customer_phone ||
-        reservation.customer_name ||
-        reservation.id
-    )
-  ).size;
-
   const pendingCheckIns = activeTodayReservations.filter(
     (reservation) =>
       reservation.attendance_status === "planned" ||
       reservation.attendance_status === null
-  );
-
-  const presentToday = activeTodayReservations.filter(
-    (reservation) =>
-      reservation.attendance_status === "present" ||
-      reservation.reservation_status === RESERVATION_STATUS.COMPLETED
   );
 
   const noShowToday = todayReservations.filter(
@@ -461,7 +451,23 @@ export default function AdminPage() {
 
   const upcomingReservations = activeTodayReservations
     .filter((reservation) => normalizeTime(reservation.start_time) >= nowHHMM)
-    .slice(0, 5);
+    .slice(0, 6);
+
+  const nextReservation = upcomingReservations[0] ?? null;
+
+  const paymentToCollectToday = payOnSiteToday.reduce(
+    (sum, reservation) => sum + Number(reservation.price ?? 0),
+    0
+  );
+
+  const unverifiedProfileIds = new Set(
+    unverifiedUsers.map((profile) => profile.id)
+  );
+
+  const unverifiedTodayReservations = activeTodayReservations.filter(
+    (reservation) =>
+      reservation.user_id && unverifiedProfileIds.has(reservation.user_id)
+  );
 
   return (
     <main className="min-h-screen bg-zinc-950 px-6 py-10 text-white">
@@ -529,13 +535,18 @@ export default function AdminPage() {
           <>
             <div className="mb-10">
               <div className="mb-4 flex items-center justify-between gap-4">
-                <h2 className="text-2xl font-bold">Dzisiaj</h2>
+                <div>
+                  <h2 className="text-2xl font-bold">Dzisiaj — najważniejsze</h2>
+                  <p className="mt-1 text-sm text-zinc-500">
+                    Operacyjny skrót dnia dla obsługi strzelnicy.
+                  </p>
+                </div>
                 <p className="text-sm text-zinc-500">{today}</p>
               </div>
 
               <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
                 <StatCard
-                  title="Rezerwacje dzisiaj"
+                  title="Rezerwacje dziś"
                   value={activeTodayReservations.length}
                   description="Aktywne rezerwacje bez anulowanych."
                   href="/admin/reservations"
@@ -543,44 +554,53 @@ export default function AdminPage() {
                 />
 
                 <StatCard
-                  title="Klienci dzisiaj"
-                  value={uniqueTodayClients}
-                  description="Unikalni klienci z dzisiejszych rezerwacji."
+                  title="Najbliższy przyjazd"
+                  value={
+                    nextReservation
+                      ? normalizeTime(nextReservation.start_time)
+                      : "Brak"
+                  }
+                  description={
+                    nextReservation
+                      ? `${nextReservation.customer_name || "Klient"} · ${getLaneName(nextReservation)}`
+                      : "Brak kolejnych rezerwacji na dziś."
+                  }
                   href="/admin/check-in"
+                  tone={nextReservation ? "yellow" : "green"}
                 />
 
                 <StatCard
-                  title="Oczekujące check-in"
+                  title="Do check-in"
                   value={pendingCheckIns.length}
                   description="Wizyty zaplanowane, jeszcze nieobsłużone."
                   href="/admin/check-in"
-                  tone="yellow"
+                  tone={pendingCheckIns.length > 0 ? "yellow" : "green"}
                 />
 
                 <StatCard
-                  title="Klienci obsłużeni"
-                  value={presentToday.length}
-                  description="Wizyty oznaczone jako obecne lub zakończone."
+                  title="Do pobrania"
+                  value={`${paymentToCollectToday.toFixed(0)} zł`}
+                  description={`${payOnSiteToday.length} wizyt z płatnością na miejscu.`}
                   href="/admin/check-in"
-                  tone="green"
+                  tone={payOnSiteToday.length > 0 ? "yellow" : "green"}
                 />
               </div>
             </div>
 
             <div className="mb-10">
-              <h2 className="mb-4 text-2xl font-bold">Alerty</h2>
+              <h2 className="mb-4 text-2xl font-bold">Alerty wymagające reakcji</h2>
 
               <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-               <StatCard
-  title="Niezweryfikowani użytkownicy"
-  value={unverifiedUsers.length}
-  description="Konta wymagające sprawdzenia przez obsługę."
-  href={hasAccess(role, ["admin"]) ? "/admin/users" : undefined}
-  tone={unverifiedUsers.length > 0 ? "yellow" : "green"}
-/>
+                <StatCard
+                  title="Niezweryfikowani dziś"
+                  value={unverifiedTodayReservations.length}
+                  description="Klienci z dzisiejszą rezerwacją i niepełną weryfikacją."
+                  href={hasAccess(role, ["admin"]) ? "/admin/users" : "/admin/check-in"}
+                  tone={unverifiedTodayReservations.length > 0 ? "yellow" : "green"}
+                />
 
                 <StatCard
-                  title="Nieopłacone dzisiaj"
+                  title="Nieopłacone dziś"
                   value={unpaidToday.length}
                   description="Rezerwacje ze statusem nieopłacona."
                   href="/admin/check-in"
@@ -592,7 +612,7 @@ export default function AdminPage() {
                   value={payOnSiteToday.length}
                   description="Klienci, od których trzeba pobrać płatność."
                   href="/admin/check-in"
-                  tone="yellow"
+                  tone={payOnSiteToday.length > 0 ? "yellow" : "green"}
                 />
 
                 <StatCard
@@ -605,57 +625,23 @@ export default function AdminPage() {
               </div>
             </div>
 
-            <div className="mb-10">
-              <h2 className="mb-4 text-2xl font-bold">Biznes</h2>
-
-              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-                <StatCard
-                  title="Dzisiejszy przychód"
-                  value={`${todayRevenue.toFixed(0)} zł`}
-                  description="Tylko rezerwacje opłacone."
-                  href="/admin/reports"
-                  tone="green"
-                />
-
-                <StatCard
-                  title="Przychód miesiąca"
-                  value={`${monthRevenue.toFixed(0)} zł`}
-                  description="Suma opłaconych rezerwacji w tym miesiącu."
-                  href="/admin/reports"
-                  tone="green"
-                />
-
-                <StatCard
-                  title="Średnia wartość rezerwacji"
-                  value={`${averageReservationValue} zł`}
-                  description="Na podstawie aktywnych rezerwacji w miesiącu."
-                  href="/admin/reports"
-                />
-
-                <StatCard
-                  title="Najpopularniejsza oś"
-                  value={topLane ? topLane[0] : "Brak"}
-                  description={
-                    topLane ? `${topLane[1]} rez. w miesiącu` : "Brak danych"
-                  }
-                  href="/admin/reports"
-                  tone="blue"
-                />
-              </div>
-            </div>
-
-            <div className="mb-10 grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
+            <div className="mb-10 grid gap-6 xl:grid-cols-[1.45fr_0.55fr]">
               <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-6">
                 <div className="mb-5 flex items-center justify-between gap-4">
-                  <h2 className="text-2xl font-bold">
-                    Najbliższe rezerwacje
-                  </h2>
+                  <div>
+                    <h2 className="text-2xl font-bold">
+                      Najbliższe rezerwacje
+                    </h2>
+                    <p className="mt-1 text-sm text-zinc-500">
+                      Najważniejsza lista dla bieżącej obsługi recepcji.
+                    </p>
+                  </div>
 
                   <Link
                     href="/admin/check-in"
                     className="text-sm font-semibold text-green-400 hover:text-green-300"
                   >
-                    Przejdź do check-in →
+                    Check-in →
                   </Link>
                 </div>
 
@@ -665,13 +651,14 @@ export default function AdminPage() {
                   </div>
                 ) : (
                   <div className="overflow-x-auto">
-                    <table className="w-full min-w-[650px] text-left text-sm">
+                    <table className="w-full min-w-[760px] text-left text-sm">
                       <thead>
                         <tr className="border-b border-zinc-800 text-zinc-400">
                           <th className="py-3 pr-4">Godzina</th>
                           <th className="py-3 pr-4">Klient</th>
                           <th className="py-3 pr-4">Oś</th>
                           <th className="py-3 pr-4">Płatność</th>
+                          <th className="py-3 pr-4">Akcja</th>
                         </tr>
                       </thead>
 
@@ -700,7 +687,18 @@ export default function AdminPage() {
                             </td>
 
                             <td className="py-4 pr-4">
-                              {reservation.payment_status || "brak"}
+                              <span className="rounded-full border border-zinc-700 bg-zinc-950 px-3 py-1 text-xs font-semibold text-zinc-300">
+                                {getPaymentStatusLabel(reservation.payment_status)}
+                              </span>
+                            </td>
+
+                            <td className="py-4 pr-4">
+                              <Link
+                                href="/admin/check-in"
+                                className="rounded-lg border border-green-800 px-3 py-2 text-xs font-bold text-green-300 transition hover:bg-green-950"
+                              >
+                                Check-in
+                              </Link>
                             </td>
                           </tr>
                         ))}
@@ -711,54 +709,98 @@ export default function AdminPage() {
               </div>
 
               <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-6">
-                <h2 className="mb-5 text-2xl font-bold">Szybkie akcje</h2>
+                <h2 className="mb-2 text-2xl font-bold">Szybkie akcje</h2>
+                <p className="mb-5 text-sm text-zinc-500">
+                  Najczęściej używane skróty w pracy obsługi.
+                </p>
 
                 <div className="grid gap-3">
-  <Link
-    href="/booking"
-    className="rounded-xl border border-zinc-700 px-4 py-3 text-sm font-bold text-zinc-200 transition hover:border-green-700 hover:bg-green-950/30"
-  >
-    + Nowa rezerwacja
-  </Link>
+                  <Link
+                    href="/booking"
+                    className="rounded-xl border border-zinc-700 px-4 py-3 text-sm font-bold text-zinc-200 transition hover:border-green-700 hover:bg-green-950/30"
+                  >
+                    + Nowa rezerwacja
+                  </Link>
 
-  {hasAccess(role, ["admin", "pracownik", "instruktor"]) && (
-    <Link
-      href="/admin/check-in"
-      className="rounded-xl border border-zinc-700 px-4 py-3 text-sm font-bold text-zinc-200 transition hover:border-green-700 hover:bg-green-950/30"
-    >
-      Check-in klientów
-    </Link>
-  )}
+                  {hasAccess(role, ["admin", "pracownik", "instruktor"]) && (
+                    <Link
+                      href="/admin/check-in"
+                      className="rounded-xl border border-zinc-700 px-4 py-3 text-sm font-bold text-zinc-200 transition hover:border-green-700 hover:bg-green-950/30"
+                    >
+                      Check-in klientów
+                    </Link>
+                  )}
 
-  {hasAccess(role, ["admin", "pracownik", "instruktor"]) && (
-    <Link
-      href="/admin/calendar"
-      className="rounded-xl border border-zinc-700 px-4 py-3 text-sm font-bold text-zinc-200 transition hover:border-green-700 hover:bg-green-950/30"
-    >
-      Kalendarz
-    </Link>
-  )}
+                  {hasAccess(role, ["admin", "pracownik", "instruktor"]) && (
+                    <Link
+                      href="/admin/calendar"
+                      className="rounded-xl border border-zinc-700 px-4 py-3 text-sm font-bold text-zinc-200 transition hover:border-green-700 hover:bg-green-950/30"
+                    >
+                      Kalendarz
+                    </Link>
+                  )}
 
-  {hasAccess(role, ["admin"]) && (
-    <Link
-      href="/admin/users"
-      className="rounded-xl border border-zinc-700 px-4 py-3 text-sm font-bold text-zinc-200 transition hover:border-green-700 hover:bg-green-950/30"
-    >
-      Użytkownicy
-    </Link>
-  )}
+                  {hasAccess(role, ["admin", "pracownik"]) && (
+                    <Link
+                      href="/admin/lane-blocks"
+                      className="rounded-xl border border-zinc-700 px-4 py-3 text-sm font-bold text-zinc-200 transition hover:border-green-700 hover:bg-green-950/30"
+                    >
+                      Blokady osi
+                    </Link>
+                  )}
 
-  {hasAccess(role, ["admin"]) && (
-    <Link
-      href="/admin/reports"
-      className="rounded-xl border border-zinc-700 px-4 py-3 text-sm font-bold text-zinc-200 transition hover:border-green-700 hover:bg-green-950/30"
-    >
-      Raporty
-    </Link>
-  )}
+                  {hasAccess(role, ["admin", "pracownik", "instruktor"]) && (
+                    <Link
+                      href="/admin/events"
+                      className="rounded-xl border border-zinc-700 px-4 py-3 text-sm font-bold text-zinc-200 transition hover:border-green-700 hover:bg-green-950/30"
+                    >
+                      Szkolenia
+                    </Link>
+                  )}
                 </div>
               </div>
             </div>
+
+            {hasAccess(role, ["admin"]) && (
+              <div className="mb-10">
+                <h2 className="mb-4 text-2xl font-bold">Biznes</h2>
+
+                <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+                  <StatCard
+                    title="Dzisiejszy przychód"
+                    value={`${todayRevenue.toFixed(0)} zł`}
+                    description="Tylko rezerwacje opłacone."
+                    href="/admin/reports"
+                    tone="green"
+                  />
+
+                  <StatCard
+                    title="Przychód miesiąca"
+                    value={`${monthRevenue.toFixed(0)} zł`}
+                    description="Suma opłaconych rezerwacji w tym miesiącu."
+                    href="/admin/reports"
+                    tone="green"
+                  />
+
+                  <StatCard
+                    title="Średnia wartość rezerwacji"
+                    value={`${averageReservationValue} zł`}
+                    description="Na podstawie aktywnych rezerwacji w miesiącu."
+                    href="/admin/reports"
+                  />
+
+                  <StatCard
+                    title="Najpopularniejsza oś"
+                    value={topLane ? topLane[0] : "Brak"}
+                    description={
+                      topLane ? `${topLane[1]} rez. w miesiącu` : "Brak danych"
+                    }
+                    href="/admin/reports"
+                    tone="blue"
+                  />
+                </div>
+              </div>
+            )}
 
             <div>
               <div className="mb-4 flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
