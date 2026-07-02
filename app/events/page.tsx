@@ -270,7 +270,9 @@ export default function EventsPage() {
     const participantsCount = getParticipantsCount(event);
     const reserveCount = getReserveCount(event);
     const freePlaces = event.max_participants - participantsCount;
-    const isFull = freePlaces <= 0;
+    const hasReserveList = reserveCount > 0;
+    const publicFreePlaces = hasReserveList ? 0 : Math.max(freePlaces, 0);
+    const isFull = publicFreePlaces <= 0;
     const status = getEventStatus(event);
 
     return (
@@ -318,7 +320,7 @@ export default function EventsPage() {
                   : "font-semibold text-green-500"
               }
             >
-              {Math.max(freePlaces, 0)}
+              {publicFreePlaces}
             </p>
 
             {reserveCount > 0 && (
@@ -775,9 +777,4 @@ export default function EventsPage() {
     </main>
   );
 }
-
-
-
-
-
 

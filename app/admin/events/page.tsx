@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { supabase } from "../../../lib/supabase";
+import { handleFreedEventPlace } from "../../../lib/event-registration-actions";
 
 type Event = {
   id: string;
@@ -319,6 +320,16 @@ export default function AdminEventsPage() {
     registrationId: string,
     status: string
   ) {
+    const currentRegistration = registrations.find(
+      (registration) => registration.id === registrationId
+    );
+
+    const shouldNotifyReserveList =
+      status === "cancelled" &&
+      selectedEventId &&
+      (currentRegistration?.registration_status === "registered" ||
+        currentRegistration?.registration_status === "approved");
+
     const { error } = await supabase
       .from("event_registrations")
       .update({ registration_status: status })
@@ -329,6 +340,16 @@ export default function AdminEventsPage() {
       return;
     }
 
+    let reserveResult = {
+      reserveFound: false,
+      emailsSent: 0,
+      error: "",
+    };
+
+    if (shouldNotifyReserveList) {
+      reserveResult = await handleFreedEventPlace(selectedEventId);
+    }
+
     setRegistrations((current) =>
       current.map((item) =>
         item.id === registrationId
@@ -336,6 +357,20 @@ export default function AdminEventsPage() {
           : item
       )
     );
+
+    if (reserveResult.error) {
+      setMessage(
+        `Status uczestnika został zaktualizowany, ale nie udało się obsłużyć listy rezerwowej: ${reserveResult.error}`
+      );
+      return;
+    }
+
+    if (reserveResult.reserveFound) {
+      setMessage(
+        `Status uczestnika został zaktualizowany. Wysłano powiadomienia do listy rezerwowej: ${reserveResult.emailsSent}.`
+      );
+      return;
+    }
 
     setMessage("Status uczestnika został zaktualizowany.");
   }

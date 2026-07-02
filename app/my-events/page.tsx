@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { getPaymentStatusLabel } from "../../lib/payment-status";
+import { handleFreedEventPlace } from "../../lib/event-registration-actions";
 import { supabase } from "../../lib/supabase";
 
 type EventRegistration = {
@@ -132,53 +133,6 @@ export default function MyEventsPage() {
     loadMyEvents();
   }, []);
 
-  async function promoteFirstReservePerson(eventId: string) {
-    const { data: reserveList, error: reserveError } = await supabase
-      .from("event_registrations")
-      .select("id")
-      .eq("event_id", eventId)
-      .eq("registration_status", "reserve")
-      .order("created_at", { ascending: true })
-      .limit(1);
-
-    if (reserveError) {
-      return {
-        promoted: false,
-        error: reserveError.message,
-      };
-    }
-
-    const firstReserve = ((reserveList as any) ?? [])[0] as
-      | ReserveRegistration
-      | undefined;
-
-    if (!firstReserve) {
-      return {
-        promoted: false,
-        error: "",
-      };
-    }
-
-    const { error: updateError } = await supabase
-      .from("event_registrations")
-      .update({
-        registration_status: "registered",
-      })
-      .eq("id", firstReserve.id);
-
-    if (updateError) {
-      return {
-        promoted: false,
-        error: updateError.message,
-      };
-    }
-
-    return {
-      promoted: true,
-      error: "",
-    };
-  }
-
   async function cancelRegistration(item: EventRegistration) {
     setMessage("");
 
@@ -217,17 +171,27 @@ export default function MyEventsPage() {
       return;
     }
 
-    const reserveResult = await promoteFirstReservePerson(item.events.id);
+    const shouldNotifyReserveList =
+      item.registration_status === "registered" ||
+      item.registration_status === "approved";
+
+    const reserveResult = shouldNotifyReserveList
+      ? await handleFreedEventPlace(item.events.id)
+      : {
+          reserveFound: false,
+          emailsSent: 0,
+          error: "",
+        };
 
     setProcessingId("");
 
     if (reserveResult.error) {
       setMessage(
-        `Udział został anulowany, ale nie udało się automatycznie przenieść osoby z listy rezerwowej: ${reserveResult.error}`
+        `Udział został anulowany, ale nie udało się sprawdzić listy rezerwowej: ${reserveResult.error}`
       );
-    } else if (reserveResult.promoted) {
+    } else if (reserveResult.reserveFound) {
       setMessage(
-        "Udział w szkoleniu został anulowany. Pierwsza osoba z listy rezerwowej została automatycznie przeniesiona na listę uczestników."
+        "Udział w szkoleniu został anulowany. System wysłał powiadomienie o wolnym miejscu do osób z listy rezerwowej."
       );
     } else {
       setMessage("Udział w szkoleniu został anulowany.");
