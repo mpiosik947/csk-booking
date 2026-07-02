@@ -39,6 +39,21 @@ type Profile = {
   verification_status: string | null;
 };
 
+type EventRegistrationSummary = {
+  registration_status: string | null;
+};
+
+type EventSummary = {
+  id: string;
+  title: string;
+  event_date: string | null;
+  start_time: string | null;
+  end_time: string | null;
+  max_participants: number | null;
+  is_active: boolean | null;
+  event_registrations: EventRegistrationSummary[] | null;
+};
+
 type AdminTile = {
   title: string;
   description: string;
@@ -167,6 +182,38 @@ function getPaymentStatusLabel(status: string | null) {
   return status || "Brak danych";
 }
 
+function formatDisplayDate(date: string | null) {
+  if (!date) return "Brak daty";
+
+  const [year, month, day] = date.split("-");
+
+  if (!year || !month || !day) {
+    return date;
+  }
+
+  return `${day}.${month}.${year}`;
+}
+
+function getEventRegistrations(event: EventSummary) {
+  return Array.isArray(event.event_registrations)
+    ? event.event_registrations
+    : [];
+}
+
+function getEventParticipantsCount(event: EventSummary) {
+  return getEventRegistrations(event).filter(
+    (registration) =>
+      registration.registration_status === "registered" ||
+      registration.registration_status === "approved"
+  ).length;
+}
+
+function getEventReserveCount(event: EventSummary) {
+  return getEventRegistrations(event).filter(
+    (registration) => registration.registration_status === "reserve"
+  ).length;
+}
+
 function hasAccess(role: Role | null, allowedRoles: Role[]) {
   if (!role) return false;
   return allowedRoles.includes(role);
@@ -269,6 +316,7 @@ export default function AdminPage() {
   const [todayReservations, setTodayReservations] = useState<Reservation[]>([]);
   const [monthReservations, setMonthReservations] = useState<Reservation[]>([]);
   const [profiles, setProfiles] = useState<Profile[]>([]);
+  const [upcomingEvents, setUpcomingEvents] = useState<EventSummary[]>([]);
 
   useEffect(() => {
     loadDashboard();
@@ -295,6 +343,7 @@ export default function AdminPage() {
       todayReservationsResult,
       monthReservationsResult,
       profilesResult,
+      upcomingEventsResult,
     ] = await Promise.all([
       supabase
         .from("reservations")
@@ -349,6 +398,28 @@ export default function AdminPage() {
         .order("start_time", { ascending: true }),
 
       supabase.from("profiles").select("id, verification_status"),
+
+      supabase
+        .from("events")
+        .select(
+          `
+          id,
+          title,
+          event_date,
+          start_time,
+          end_time,
+          max_participants,
+          is_active,
+          event_registrations (
+            registration_status
+          )
+        `
+        )
+        .eq("is_active", true)
+        .gte("event_date", today)
+        .order("event_date", { ascending: true })
+        .order("start_time", { ascending: true })
+        .limit(4),
     ]);
 
     if (todayReservationsResult.error) {
@@ -373,6 +444,14 @@ export default function AdminPage() {
       return;
     }
 
+    if (upcomingEventsResult.error) {
+      setMessage(
+        `Błąd pobierania najbliższych szkoleń: ${upcomingEventsResult.error.message}`
+      );
+      setLoading(false);
+      return;
+    }
+
     setTodayReservations(
       (todayReservationsResult.data ?? []) as unknown as Reservation[]
     );
@@ -380,6 +459,9 @@ export default function AdminPage() {
       (monthReservationsResult.data ?? []) as unknown as Reservation[]
     );
     setProfiles((profilesResult.data ?? []) as Profile[]);
+    setUpcomingEvents(
+      (upcomingEventsResult.data ?? []) as unknown as EventSummary[]
+    );
 
     setLoading(false);
   }
@@ -760,6 +842,98 @@ export default function AdminPage() {
                 </div>
               </div>
             </div>
+
+            {hasAccess(role, ["admin", "pracownik", "instruktor"]) && (
+              <div className="mb-10 rounded-2xl border border-zinc-800 bg-zinc-900 p-6">
+                <div className="mb-5 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                  <div>
+                    <h2 className="text-2xl font-bold">Najbliższe szkolenia</h2>
+                    <p className="mt-1 text-sm text-zinc-500">
+                      Podgląd najbliższych wydarzeń, miejsc i listy rezerwowej.
+                    </p>
+                  </div>
+
+                  <Link
+                    href="/admin/events"
+                    className="text-sm font-semibold text-green-400 hover:text-green-300"
+                  >
+                    Zarządzaj szkoleniami →
+                  </Link>
+                </div>
+
+                {upcomingEvents.length === 0 ? (
+                  <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-5 text-zinc-400">
+                    Brak zaplanowanych aktywnych szkoleń.
+                  </div>
+                ) : (
+                  <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+                    {upcomingEvents.map((eventItem) => {
+                      const participantsCount =
+                        getEventParticipantsCount(eventItem);
+                      const reserveCount = getEventReserveCount(eventItem);
+                      const maxParticipants = Number(
+                        eventItem.max_participants ?? 0
+                      );
+                      const isFull =
+                        maxParticipants > 0 &&
+                        participantsCount >= maxParticipants;
+
+                      return (
+                        <Link
+                          key={eventItem.id}
+                          href="/admin/events"
+                          className="rounded-xl border border-zinc-800 bg-zinc-950 p-5 transition hover:border-green-700"
+                        >
+                          <div className="mb-3 flex items-start justify-between gap-3">
+                            <h3 className="font-bold text-white">
+                              {eventItem.title}
+                            </h3>
+
+                            <span
+                              className={
+                                isFull
+                                  ? "rounded-full bg-yellow-950 px-3 py-1 text-xs font-semibold text-yellow-300"
+                                  : "rounded-full bg-green-950 px-3 py-1 text-xs font-semibold text-green-300"
+                              }
+                            >
+                              {isFull ? "Pełne" : "Aktywne"}
+                            </span>
+                          </div>
+
+                          <p className="text-sm text-zinc-400">
+                            {formatDisplayDate(eventItem.event_date)} ·{" "}
+                            {normalizeTime(eventItem.start_time)}–
+                            {normalizeTime(eventItem.end_time)}
+                          </p>
+
+                          <div className="mt-4 grid gap-2 text-sm">
+                            <div className="flex items-center justify-between rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2">
+                              <span className="text-zinc-500">Uczestnicy</span>
+                              <span className="font-bold text-white">
+                                {participantsCount} / {maxParticipants}
+                              </span>
+                            </div>
+
+                            <div className="flex items-center justify-between rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2">
+                              <span className="text-zinc-500">Rezerwa</span>
+                              <span
+                                className={
+                                  reserveCount > 0
+                                    ? "font-bold text-yellow-300"
+                                    : "font-bold text-zinc-400"
+                                }
+                              >
+                                {reserveCount}
+                              </span>
+                            </div>
+                          </div>
+                        </Link>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
 
             {hasAccess(role, ["admin"]) && (
               <div className="mb-10">
