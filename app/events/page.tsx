@@ -168,38 +168,42 @@ export default function EventsPage() {
       return;
     }
 
-    const { data: existingRegistration } = await supabase
-      .from("event_registrations")
-      .select("id")
-      .eq("event_id", eventItem.id)
-      .eq("user_id", userId)
-      .neq("registration_status", "cancelled")
-      .maybeSingle();
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
 
-    if (existingRegistration) {
-      setMessage("Jesteś już zapisany na to szkolenie lub listę rezerwową.");
+    if (!session?.access_token) {
+      setMessage("Sesja wygasła. Zaloguj się ponownie.");
       return;
     }
 
-    const participantsCount = getParticipantsCount(eventItem);
-    const isFull = participantsCount >= eventItem.max_participants;
-
-    const registrationStatus = asReserve || isFull ? "reserve" : "registered";
-
-    const { error } = await supabase.from("event_registrations").insert({
-      event_id: eventItem.id,
-      user_id: userId,
-      customer_name: customerName,
-      customer_email: customerEmail,
-      customer_phone: customerPhone,
-      registration_status: registrationStatus,
-      payment_status: "pay_on_site",
+    const registrationResponse = await fetch("/api/register-event", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${session.access_token}`,
+      },
+      body: JSON.stringify({
+        eventId: eventItem.id,
+        asReserve,
+        customerName,
+        customerEmail,
+        customerPhone,
+      }),
     });
 
-    if (error) {
-      setMessage(`Błąd zapisu: ${error.message}`);
+    const registrationResult = await registrationResponse
+      .json()
+      .catch(() => null);
+
+    if (!registrationResponse.ok) {
+      setMessage(
+        registrationResult?.error ?? "Nie udało się zapisać na szkolenie."
+      );
       return;
     }
+
+    const registrationStatus = registrationResult.registrationStatus as string;
 
         fetch("/api/send-event-registration-confirmation", {
       method: "POST",
@@ -246,7 +250,7 @@ export default function EventsPage() {
               event_registrations: [
                 ...event.event_registrations,
                 {
-                  id: crypto.randomUUID(),
+                  id: registrationResult.registrationId ?? crypto.randomUUID(),
                   registration_status: registrationStatus,
                 },
               ],
