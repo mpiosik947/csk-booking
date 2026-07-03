@@ -126,6 +126,60 @@ function buildUrlParams(params: {
   return urlParams.toString();
 }
 
+function formatCsvValue(value: string | number | null | undefined) {
+  if (value === null || value === undefined) return "";
+
+  const csvText = String(value).replace(/\r?\n|\r/g, " ").trim();
+
+  if (csvText.includes(";") || csvText.includes('"') || csvText.includes(",")) {
+    return '"' + csvText.replace(/"/g, '""') + '"';
+  }
+
+  return csvText;
+}
+
+function formatCsvDate(dateString: string | null) {
+  if (!dateString) return "";
+
+  const [year, month, day] = dateString.split("-");
+
+  if (!year || !month || !day) {
+    return dateString;
+  }
+
+  return day + "." + month + "." + year;
+}
+
+function formatCsvPrice(price: number | null) {
+  if (price === null || price === undefined) return "";
+
+  return price.toFixed(2).replace(".", ",");
+}
+
+function formatCsvDateTime(dateString: string | null) {
+  if (!dateString) return "";
+
+  const date = new Date(dateString);
+
+  if (Number.isNaN(date.getTime())) {
+    return dateString;
+  }
+
+  return new Intl.DateTimeFormat("pl-PL", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(date);
+}
+
+function formatCsvTextForExcel(value: string | null) {
+  if (!value) return "";
+
+  return `="${value.replace(/"/g, "\"\"")}"`;
+}
+
 export default function AdminReservationsPage() {
   const [reservations, setReservations] = useState<Reservation[]>([]);
   const [loading, setLoading] = useState(false);
@@ -449,6 +503,61 @@ export default function AdminReservationsPage() {
     setSort(DEFAULT_SORT);
   }
 
+  function downloadReservationsCsv() {
+    const headers = [
+      "Data rezerwacji",
+      "Godzina od",
+      "Godzina do",
+      "Czas trwania (min)",
+      "Oś",
+      "Klient",
+      "E-mail",
+      "Telefon",
+      "Status rezerwacji",
+      "Status płatności",
+      "Cena",
+      "Data utworzenia",
+    ];
+
+    const rows = reservations.map((reservation) => [
+      formatCsvDate(reservation.reservation_date),
+      normalizeTime(reservation.start_time),
+      normalizeTime(reservation.end_time),
+      reservation.duration_minutes,
+      getLaneName(reservation),
+      reservation.customer_name ?? "",
+      reservation.customer_email ?? "",
+      formatCsvTextForExcel(reservation.customer_phone),
+      getReservationStatusLabel(reservation.reservation_status),
+      getPaymentStatusLabel(reservation.payment_status),
+      formatCsvPrice(reservation.price),
+      formatCsvDateTime(reservation.created_at),
+    ]);
+
+    const csvContent = [headers, ...rows]
+      .map((row) => row.map(formatCsvValue).join(";"))
+      .join("\r\n");
+
+    const blob = new Blob(["\uFEFF" + csvContent], {
+      type: "text/csv;charset=utf-8;",
+    });
+
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    const today = new Date().toISOString().slice(0, 10);
+
+    link.href = url;
+    link.download = "rezerwacje-" + today + ".csv";
+
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+
+    URL.revokeObjectURL(url);
+
+    setMessage("Wyeksportowano " + reservations.length + " rezerwacji do CSV.");
+  }
+
   return (
     <main className="min-h-screen bg-zinc-950 px-6 py-10 text-white">
       <section className="mx-auto max-w-7xl">
@@ -575,13 +684,22 @@ export default function AdminReservationsPage() {
         )}
 
         <div className="overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-900">
-          <div className="border-b border-zinc-800 px-5 py-4">
+          <div className="flex flex-col gap-3 border-b border-zinc-800 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
             <p className="text-sm text-zinc-400">
               Liczba rezerwacji w widoku:{" "}
               <span className="font-bold text-white">
                 {reservations.length}
               </span>
             </p>
+
+            <button
+              type="button"
+              onClick={downloadReservationsCsv}
+              disabled={!urlParamsLoaded || loading || reservations.length === 0}
+              className="rounded-xl border border-green-700 bg-green-950 px-4 py-2 text-sm font-semibold text-green-300 transition hover:bg-green-900 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Eksport CSV
+            </button>
           </div>
 
           {!urlParamsLoaded || loading ? (
