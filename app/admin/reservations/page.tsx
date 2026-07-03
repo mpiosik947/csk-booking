@@ -710,13 +710,15 @@ export default function AdminReservationsPage() {
             </div>
           ) : (
             <div className="grid gap-4 p-4">
-              {reservations.map((reservation) => {
+              {reservations.map((reservation, index) => {
                 const isSaving = savingReservationId === reservation.id;
 
                 return (
                   <article
                     key={reservation.id}
-                    className="rounded-2xl border border-zinc-800 bg-zinc-950 p-5"
+                    className={`rounded-2xl border border-zinc-800 p-5 ${
+                      index % 2 === 0 ? "bg-zinc-950" : "bg-zinc-900/70"
+                    }`}
                   >
                     <div className="grid gap-5 xl:grid-cols-[1.1fr_0.8fr_0.8fr_1fr_auto] xl:items-start">
                       <div>
