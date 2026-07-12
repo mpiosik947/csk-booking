@@ -418,7 +418,7 @@ export default function MyReservationsPage() {
           </a>
 
           <a href="/dashboard" className="hover:text-white">
-            ← Panel klienta
+            ← Panel klienta
           </a>
         </div>
       </section>
