@@ -391,6 +391,8 @@ export default function BookingForm({ lanes }: BookingFormProps) {
   const hasSelectedRangeConflict =
     selectedHour !== "" && !canSelectStartHour(selectedHour);
 
+  const hasAvailableStartHour = hours.some(canSelectStartHour);
+
   const isVerified = verificationStatus === "verified";
   const isRejected = verificationStatus === "rejected";
   const canUseBookingForm = !isRejected;
@@ -995,6 +997,25 @@ export default function BookingForm({ lanes }: BookingFormProps) {
                   — godziny objęte Twoją aktualną rezerwacją.
                 </p>
               </div>
+
+              {reservationDate &&
+                laneId &&
+                durationMinutes > 0 &&
+                !checkingAvailability &&
+                !hasAvailableStartHour && (
+                  <div
+                    role="status"
+                    className="mb-3 rounded-xl border border-zinc-700 bg-zinc-950 p-4 text-sm text-zinc-300"
+                  >
+                    <p className="font-semibold text-zinc-100">
+                      Brak wolnych godzin dla wybranej daty, osi i czasu
+                      rezerwacji.
+                    </p>
+                    <p className="mt-1 text-zinc-400">
+                      Wybierz inną datę, oś lub czas rezerwacji.
+                    </p>
+                  </div>
+                )}
 
               <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
                 {hours.map((hour) => {
