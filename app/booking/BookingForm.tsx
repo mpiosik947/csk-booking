@@ -837,7 +837,7 @@ export default function BookingForm({ lanes }: BookingFormProps) {
                 onClick={() => setConfirmationData(null)}
                 className="rounded-xl bg-green-700 px-5 py-3 font-semibold transition hover:bg-green-600"
               >
-                OK
+                Gotowe
               </button>
 
               <a
