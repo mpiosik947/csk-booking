@@ -809,11 +809,15 @@ export default function BookingForm({ lanes }: BookingFormProps) {
 
         <div className="grid gap-4 md:grid-cols-3">
           <div>
-            <label className="mb-2 block text-sm text-zinc-300">
+            <label
+              htmlFor="booking-full-name"
+              className="mb-2 block text-sm text-zinc-300"
+            >
               Imię i nazwisko
             </label>
 
             <input
+              id="booking-full-name"
               type="text"
               value={customerName}
               disabled
@@ -822,9 +826,15 @@ export default function BookingForm({ lanes }: BookingFormProps) {
           </div>
 
           <div>
-            <label className="mb-2 block text-sm text-zinc-300">E-mail</label>
+            <label
+              htmlFor="booking-email"
+              className="mb-2 block text-sm text-zinc-300"
+            >
+              E-mail
+            </label>
 
             <input
+              id="booking-email"
               type="email"
               value={customerEmail}
               disabled
@@ -833,9 +843,15 @@ export default function BookingForm({ lanes }: BookingFormProps) {
           </div>
 
           <div>
-            <label className="mb-2 block text-sm text-zinc-300">Telefon</label>
+            <label
+              htmlFor="booking-phone"
+              className="mb-2 block text-sm text-zinc-300"
+            >
+              Telefon
+            </label>
 
             <input
+              id="booking-phone"
               type="tel"
               value={customerPhone}
               onChange={(event) => setCustomerPhone(event.target.value)}
@@ -847,39 +863,46 @@ export default function BookingForm({ lanes }: BookingFormProps) {
         </div>
 
         <div>
-          <label className="mb-2 block text-sm text-zinc-300">
+          <label
+            htmlFor="booking-date"
+            className="mb-2 block text-sm text-zinc-300"
+          >
             Data rezerwacji
           </label>
 
           <input
-          
-  type="date"
-  value={reservationDate}
-  min={getTodayDateString()}
-  disabled={!canUseBookingForm}
-           onChange={(event) => {
-  const newDate = event.target.value;
+            id="booking-date"
+            type="date"
+            value={reservationDate}
+            min={getTodayDateString()}
+            disabled={!canUseBookingForm}
+            onChange={(event) => {
+              const newDate = event.target.value;
 
-  setReservationDate(newDate);
-  setSelectedHour("");
+              setReservationDate(newDate);
+              setSelectedHour("");
 
-  if (isPastReservationDate(newDate)) {
-    setMessage("Nie można wybrać daty wstecznej.");
-    return;
-  }
+              if (isPastReservationDate(newDate)) {
+                setMessage("Nie można wybrać daty wstecznej.");
+                return;
+              }
 
-  setMessage("");
-}}
+              setMessage("");
+            }}
             className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-white outline-none focus:border-green-600 disabled:cursor-not-allowed disabled:bg-zinc-800 disabled:text-zinc-500"
           />
         </div>
 
         <div>
-          <label className="mb-2 block text-sm text-zinc-300">
+          <label
+            htmlFor="booking-lane"
+            className="mb-2 block text-sm text-zinc-300"
+          >
             Oś / stanowisko
           </label>
 
           <select
+            id="booking-lane"
             value={laneId}
             disabled={!canUseBookingForm}
             onChange={(event) => {
@@ -900,11 +923,15 @@ export default function BookingForm({ lanes }: BookingFormProps) {
         </div>
 
         <div>
-          <label className="mb-2 block text-sm text-zinc-300">
+          <label
+            htmlFor="booking-duration"
+            className="mb-2 block text-sm text-zinc-300"
+          >
             Czas rezerwacji
           </label>
 
           <select
+            id="booking-duration"
             value={durationMinutes}
             disabled={!canUseBookingForm}
             onChange={(event) => {
