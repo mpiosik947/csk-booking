@@ -80,6 +80,21 @@ function getTodayDateString() {
   return `${year}-${month}-${day}`;
 }
 
+const reservationDateFormatter = new Intl.DateTimeFormat("pl-PL", {
+  day: "numeric",
+  month: "long",
+  year: "numeric",
+  timeZone: "UTC",
+});
+
+function formatReservationDate(date: string) {
+  const [year, month, day] = date.split("-").map(Number);
+
+  return reservationDateFormatter.format(
+    new Date(Date.UTC(year, month - 1, day))
+  );
+}
+
 function getCurrentTimeInMinutes() {
   const now = new Date();
   return now.getHours() * 60 + now.getMinutes();
@@ -745,7 +760,7 @@ export default function BookingForm({ lanes }: BookingFormProps) {
               <div>
                 <p className="text-zinc-500">Data</p>
                 <p className="text-lg font-semibold text-white">
-                  {confirmationData.date}
+                  {formatReservationDate(confirmationData.date)}
                 </p>
               </div>
 
