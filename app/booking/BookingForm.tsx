@@ -727,7 +727,11 @@ export default function BookingForm({ lanes }: BookingFormProps) {
 
   if (checkingUser) {
     return (
-      <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-6 text-zinc-400">
+      <div
+        role="status"
+        aria-live="polite"
+        className="rounded-2xl border border-zinc-800 bg-zinc-900 p-6 text-zinc-400"
+      >
         Sprawdzanie użytkownika...
       </div>
     );
@@ -735,7 +739,10 @@ export default function BookingForm({ lanes }: BookingFormProps) {
 
   if (!isLoggedIn) {
     return (
-      <div className="rounded-2xl border border-red-800 bg-red-950 p-8 text-center">
+      <div
+        role="alert"
+        className="rounded-2xl border border-red-800 bg-red-950 p-8 text-center"
+      >
         <h2 className="mb-3 text-2xl font-bold text-red-200">
           Logowanie wymagane
         </h2>
@@ -853,7 +860,11 @@ export default function BookingForm({ lanes }: BookingFormProps) {
 
       <form className="grid gap-6 rounded-2xl border border-zinc-800 bg-zinc-900 p-6">
         {verificationBox && (
-          <div className={verificationBox.className}>
+          <div
+            role={isRejected ? "alert" : "status"}
+            aria-live={isRejected ? undefined : "polite"}
+            className={verificationBox.className}
+          >
             <p className={verificationBox.titleClassName}>
               {verificationBox.title}
             </p>
@@ -1019,15 +1030,26 @@ export default function BookingForm({ lanes }: BookingFormProps) {
           </div>
 
           {!canUseBookingForm ? (
-            <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-4 text-sm text-zinc-400">
+            <div
+              role="alert"
+              className="rounded-xl border border-zinc-800 bg-zinc-950 p-4 text-sm text-zinc-400"
+            >
               Godziny rezerwacji są niedostępne dla kont odrzuconych.
             </div>
           ) : !reservationDate || !laneId ? (
-            <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-4 text-sm text-zinc-400">
+            <div
+              role="status"
+              aria-live="polite"
+              className="rounded-xl border border-zinc-800 bg-zinc-950 p-4 text-sm text-zinc-400"
+            >
               Najpierw wybierz datę oraz oś, aby zobaczyć dostępne godziny.
             </div>
           ) : checkingAvailability ? (
-            <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-4 text-sm text-zinc-400">
+            <div
+              role="status"
+              aria-live="polite"
+              className="rounded-xl border border-zinc-800 bg-zinc-950 p-4 text-sm text-zinc-400"
+            >
               Sprawdzanie dostępnych godzin...
             </div>
           ) : (
@@ -1058,6 +1080,7 @@ export default function BookingForm({ lanes }: BookingFormProps) {
                 !hasAvailableStartHour && (
                   <div
                     role="status"
+                    aria-live="polite"
                     className="mb-3 rounded-xl border border-zinc-700 bg-zinc-950 p-4 text-sm text-zinc-300"
                   >
                     <p className="font-semibold text-zinc-100">
@@ -1185,7 +1208,15 @@ const isStartAvailable =
           </span>
         </label>
 
-        {message && <div className={getMessageClass(message)}>{message}</div>}
+        {message && (
+          <div
+            role={message.includes("zapisana") ? "status" : "alert"}
+            aria-live={message.includes("zapisana") ? "polite" : undefined}
+            className={getMessageClass(message)}
+          >
+            {message}
+          </div>
+        )}
 
         <button
           type="button"
