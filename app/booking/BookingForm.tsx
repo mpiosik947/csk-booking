@@ -549,7 +549,7 @@ export default function BookingForm({ lanes }: BookingFormProps) {
       if (activeReservationsError) {
         setLoading(false);
         setMessage(
-          `Błąd sprawdzania aktywnych rezerwacji: ${activeReservationsError.message}`
+          "Nie udało się sprawdzić możliwości utworzenia rezerwacji. Spróbuj ponownie."
         );
         return;
       }
@@ -653,7 +653,7 @@ export default function BookingForm({ lanes }: BookingFormProps) {
     setLoading(false);
 
     if (error) {
-      setMessage(`Błąd zapisu rezerwacji: ${error.message}`);
+      setMessage("Nie udało się utworzyć rezerwacji. Spróbuj ponownie.");
       return;
     }
 
