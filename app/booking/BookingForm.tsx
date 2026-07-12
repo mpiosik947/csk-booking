@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { supabase } from "../../lib/supabase";
 import { PAYMENT_STATUS } from "../../lib/payment-status";
 import {
@@ -250,9 +250,29 @@ export default function BookingForm({ lanes }: BookingFormProps) {
 
   const [confirmationData, setConfirmationData] =
     useState<ConfirmationData | null>(null);
+  const confirmationButtonRef = useRef<HTMLButtonElement>(null);
+  const confirmationTriggerRef = useRef<HTMLElement | null>(null);
 
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
+
+  useEffect(() => {
+    if (!confirmationData) return;
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        setConfirmationData(null);
+      }
+    }
+
+    confirmationButtonRef.current?.focus();
+    document.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      document.removeEventListener("keydown", handleKeyDown);
+      confirmationTriggerRef.current?.focus();
+    };
+  }, [confirmationData]);
 
   useEffect(() => {
     async function loadUser() {
@@ -536,6 +556,11 @@ export default function BookingForm({ lanes }: BookingFormProps) {
     const endTime = addMinutesToTime(selectedHour, durationMinutes);
     const laneName = selectedLane?.name ?? "Wybrana oś";
 
+    confirmationTriggerRef.current =
+      document.activeElement instanceof HTMLElement
+        ? document.activeElement
+        : null;
+
     setLoading(true);
 
     if (!isVerified) {
@@ -743,16 +768,28 @@ export default function BookingForm({ lanes }: BookingFormProps) {
     <>
       {confirmationData && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 px-4">
-          <div className="w-full max-w-lg rounded-2xl border border-green-800 bg-zinc-950 p-6 text-white shadow-2xl">
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="booking-confirmation-title"
+            aria-describedby="booking-confirmation-description"
+            className="w-full max-w-lg rounded-2xl border border-green-800 bg-zinc-950 p-6 text-white shadow-2xl"
+          >
             <div className="mb-4 rounded-full border border-green-800 bg-green-950 px-4 py-2 text-center text-sm font-bold uppercase tracking-[0.25em] text-green-300">
               Rezerwacja przyjęta
             </div>
 
-            <h2 className="mb-3 text-3xl font-bold">
+            <h2
+              id="booking-confirmation-title"
+              className="mb-3 text-3xl font-bold"
+            >
               Udało się dokonać rezerwacji
             </h2>
 
-            <p className="mb-6 text-zinc-400">
+            <p
+              id="booking-confirmation-description"
+              className="mb-6 text-zinc-400"
+            >
               Poniżej znajduje się podsumowanie Twojej rezerwacji.
             </p>
 
@@ -795,6 +832,7 @@ export default function BookingForm({ lanes }: BookingFormProps) {
 
             <div className="mt-6 grid gap-3 sm:grid-cols-2">
               <button
+                ref={confirmationButtonRef}
                 type="button"
                 onClick={() => setConfirmationData(null)}
                 className="rounded-xl bg-green-700 px-5 py-3 font-semibold transition hover:bg-green-600"
