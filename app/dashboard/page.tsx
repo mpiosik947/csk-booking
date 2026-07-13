@@ -32,9 +32,13 @@ export default function DashboardPage() {
 
   const [loading, setLoading] = useState(true);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [emailConfirmed, setEmailConfirmed] = useState(false);
 
   useEffect(() => {
     async function loadUser() {
+      const params = new URLSearchParams(window.location.search);
+      setEmailConfirmed(params.get("emailConfirmed") === "1");
+
       const {
         data: { user },
       } = await supabase.auth.getUser();
@@ -173,6 +177,15 @@ export default function DashboardPage() {
             <span className="font-semibold text-green-500">{email}</span>
           </div>
         </div>
+
+        {emailConfirmed && (
+          <div
+            role="status"
+            className="mb-6 rounded-2xl border border-green-800 bg-green-950 p-4 text-green-200"
+          >
+            Adres e-mail został potwierdzony. Konto jest aktywne.
+          </div>
+        )}
 
         {!profileComplete && (
           <div className="mb-6 rounded-2xl border border-yellow-800 bg-yellow-950 p-6">

@@ -1,7 +1,7 @@
 ﻿"use client";
 
 import Image from "next/image";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { supabase } from "../../lib/supabase";
 
 export default function LoginPage() {
@@ -10,6 +10,12 @@ export default function LoginPage() {
 
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
+  const [confirmationError, setConfirmationError] = useState(false);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    setConfirmationError(params.get("confirmationError") === "1");
+  }, []);
 
   async function handleLogin() {
     setMessage("");
@@ -109,6 +115,16 @@ export default function LoginPage() {
                 className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-white outline-none focus:border-green-600"
               />
             </div>
+
+            {confirmationError && (
+              <div
+                role="alert"
+                className="rounded-xl border border-red-800 bg-red-950 p-4 text-sm font-semibold text-red-300"
+              >
+                Nie udało się potwierdzić adresu e-mail. Link mógł wygasnąć
+                lub zostać już wykorzystany.
+              </div>
+            )}
 
             {message && (
               <div className="rounded-xl border border-red-800 bg-red-950 p-4 text-sm font-semibold text-red-300">
