@@ -841,7 +841,9 @@ export default function BookingForm({ lanes }: BookingFormProps) {
               <button
                 ref={confirmationButtonRef}
                 type="button"
-                onClick={() => setConfirmationData(null)}
+                onClick={() => {
+                  window.location.href = "/my-reservations";
+                }}
                 className="rounded-xl bg-green-700 px-5 py-3 font-semibold transition hover:bg-green-600"
               >
                 Gotowe
