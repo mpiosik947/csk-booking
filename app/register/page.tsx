@@ -94,15 +94,16 @@ export default function RegisterPage() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 px-4">
           <div className="w-full max-w-lg rounded-2xl border border-green-800 bg-zinc-950 p-6 text-white shadow-2xl">
             <div className="mb-4 rounded-full border border-green-800 bg-green-950 px-4 py-2 text-center text-sm font-bold uppercase tracking-[0.25em] text-green-300">
-              Konto utworzone
+              Potwierdź e-mail
             </div>
 
             <h2 className="mb-3 text-3xl font-bold">
-              Udało się założyć konto
+              Konto zostało utworzone
             </h2>
 
             <p className="mb-6 text-zinc-400">
-              Konto użytkownika zostało utworzone w systemie CSK Booking.
+              Aby je aktywować, kliknij link potwierdzający wysłany na Twój
+              adres e-mail.
             </p>
 
             <div className="grid gap-3 rounded-2xl border border-zinc-800 bg-zinc-900 p-5 text-sm">
@@ -123,7 +124,7 @@ export default function RegisterPage() {
               <div>
                 <p className="text-zinc-500">Status</p>
                 <p className="text-lg font-semibold text-green-500">
-                  Konto aktywne
+                  Oczekuje na potwierdzenie e-mail
                 </p>
               </div>
             </div>
