@@ -24,6 +24,170 @@ type Reservation = {
     name: string;
   } | null;
 };
+
+const WARSAW_TIME_ZONE = "Europe/Warsaw";
+
+const ACTIVE_RESERVATION_STATUSES = new Set<string>([
+  RESERVATION_STATUS.CONFIRMED,
+  "scheduled",
+]);
+
+const TERMINAL_RESERVATION_STATUSES = new Set<string>([
+  RESERVATION_STATUS.COMPLETED,
+  RESERVATION_STATUS.NO_SHOW,
+  RESERVATION_STATUS.CANCELLED,
+  RESERVATION_STATUS.CANCELED,
+  RESERVATION_STATUS.CANCELLED_BY_USER,
+  RESERVATION_STATUS.CANCELLED_BY_ADMIN,
+]);
+
+const warsawDateTimeFormatter = new Intl.DateTimeFormat("en-GB", {
+  timeZone: WARSAW_TIME_ZONE,
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+  hour: "2-digit",
+  minute: "2-digit",
+  second: "2-digit",
+  hourCycle: "h23",
+  numberingSystem: "latn",
+});
+
+function normalizeReservationStatus(status?: string | null) {
+  return status?.trim().toLowerCase() ?? "";
+}
+
+function getWarsawDateTimeKey(date: Date) {
+  const parts = warsawDateTimeFormatter.formatToParts(date);
+  const getPart = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find((part) => part.type === type)?.value;
+
+  const year = getPart("year");
+  const month = getPart("month");
+  const day = getPart("day");
+  const hour = getPart("hour");
+  const minute = getPart("minute");
+  const second = getPart("second");
+
+  if (!year || !month || !day || !hour || !minute || !second) {
+    return null;
+  }
+
+  return `${year}-${month}-${day}T${hour}:${minute}:${second}`;
+}
+
+function getReservationDateTimeKey(
+  reservationDate?: string | null,
+  reservationTime?: string | null
+) {
+  const dateMatch = reservationDate?.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  const timeMatch = reservationTime?.match(
+    /^(\d{2}):(\d{2})(?::(\d{2}))?(?:\.\d+)?$/
+  );
+
+  if (!dateMatch || !timeMatch) {
+    return null;
+  }
+
+  const [, year, month, day] = dateMatch;
+  const [, hour, minute, matchedSecond] = timeMatch;
+  const second = matchedSecond ?? "00";
+  const yearNumber = Number(year);
+  const monthNumber = Number(month);
+  const dayNumber = Number(day);
+  const hourNumber = Number(hour);
+  const minuteNumber = Number(minute);
+  const secondNumber = Number(second);
+  const validatedDate = new Date(
+    Date.UTC(yearNumber, monthNumber - 1, dayNumber)
+  );
+
+  const isValidDate =
+    validatedDate.getUTCFullYear() === yearNumber &&
+    validatedDate.getUTCMonth() === monthNumber - 1 &&
+    validatedDate.getUTCDate() === dayNumber;
+
+  const isValidTime =
+    hourNumber >= 0 &&
+    hourNumber <= 23 &&
+    minuteNumber >= 0 &&
+    minuteNumber <= 59 &&
+    secondNumber >= 0 &&
+    secondNumber <= 59;
+
+  if (!isValidDate || !isValidTime) {
+    return null;
+  }
+
+  return `${year}-${month}-${day}T${hour}:${minute}:${second}`;
+}
+
+function isActiveReservation(
+  reservation: Reservation,
+  warsawNowKey: string | null
+) {
+  const status = normalizeReservationStatus(reservation.reservation_status);
+  const reservationStartKey = getReservationDateTimeKey(
+    reservation.reservation_date,
+    reservation.start_time
+  );
+  const reservationEndKey = getReservationDateTimeKey(
+    reservation.reservation_date,
+    reservation.end_time
+  );
+
+  return Boolean(
+    warsawNowKey &&
+      reservationStartKey &&
+      reservationEndKey &&
+      ACTIVE_RESERVATION_STATUSES.has(status) &&
+      !TERMINAL_RESERVATION_STATUSES.has(status) &&
+      reservationEndKey > reservationStartKey &&
+      reservationEndKey > warsawNowKey
+  );
+}
+
+function getHistoryStatusLabel(
+  reservation: Reservation,
+  warsawNowKey: string | null
+) {
+  const status = normalizeReservationStatus(reservation.reservation_status);
+
+  if (status === RESERVATION_STATUS.COMPLETED) return "Zakończona";
+  if (status === RESERVATION_STATUS.NO_SHOW) return "Nieobecność";
+
+  if (
+    status === RESERVATION_STATUS.CANCELLED ||
+    status === RESERVATION_STATUS.CANCELED
+  ) {
+    return "Anulowana";
+  }
+
+  if (status === RESERVATION_STATUS.CANCELLED_BY_USER) {
+    return "Anulowana przez Ciebie";
+  }
+
+  if (status === RESERVATION_STATUS.CANCELLED_BY_ADMIN) {
+    return "Anulowana przez obsługę";
+  }
+
+  const reservationEndKey = getReservationDateTimeKey(
+    reservation.reservation_date,
+    reservation.end_time
+  );
+
+  if (
+    warsawNowKey &&
+    reservationEndKey &&
+    ACTIVE_RESERVATION_STATUSES.has(status) &&
+    reservationEndKey <= warsawNowKey
+  ) {
+    return "Termin minął";
+  }
+
+  return "Archiwalna";
+}
+
 function translateAttendanceStatus(status?: string | null) {
   if (status === "present") return "Obecny";
   if (status === "completed") return "Zakończona";
@@ -204,6 +368,42 @@ export default function MyReservationsPage() {
     setMessage("Rezerwacja została anulowana.");
   }
 
+  const warsawNowKey = getWarsawDateTimeKey(new Date());
+
+  const activeReservations = reservations
+    .filter((reservation) => isActiveReservation(reservation, warsawNowKey))
+    .sort((firstReservation, secondReservation) => {
+      const firstStartKey =
+        getReservationDateTimeKey(
+          firstReservation.reservation_date,
+          firstReservation.start_time
+        ) ?? "";
+      const secondStartKey =
+        getReservationDateTimeKey(
+          secondReservation.reservation_date,
+          secondReservation.start_time
+        ) ?? "";
+
+      return firstStartKey.localeCompare(secondStartKey);
+    });
+
+  const reservationHistory = reservations
+    .filter((reservation) => !isActiveReservation(reservation, warsawNowKey))
+    .sort((firstReservation, secondReservation) => {
+      const firstEndKey =
+        getReservationDateTimeKey(
+          firstReservation.reservation_date,
+          firstReservation.end_time
+        ) ?? "";
+      const secondEndKey =
+        getReservationDateTimeKey(
+          secondReservation.reservation_date,
+          secondReservation.end_time
+        ) ?? "";
+
+      return secondEndKey.localeCompare(firstEndKey);
+    });
+
   return (
     <main className="min-h-screen bg-zinc-950 text-white">
       <section className="mx-auto max-w-5xl px-6 py-12">
@@ -257,22 +457,21 @@ export default function MyReservationsPage() {
           <div className={getMessageClass(message)}>{message}</div>
         )}
 
-        {!loading && isLoggedIn && reservations.length === 0 && (
-          <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-6 text-zinc-400">
-            Nie masz jeszcze żadnych rezerwacji.
-          </div>
-        )}
+        {!loading && isLoggedIn && (
+          <div>
+            <h2 className="mb-4 text-2xl font-bold">Aktywne rezerwacje</h2>
 
-        {!loading && isLoggedIn && reservations.length > 0 && (
-          <div className="space-y-4">
-            {reservations.map((reservation) => {
+            {activeReservations.length === 0 ? (
+              <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-6 text-zinc-400">
+                Nie masz obecnie aktywnych rezerwacji osi.
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {activeReservations.map((reservation) => {
               const allowedToCancel = canCancelReservation(
                 reservation.reservation_date,
                 reservation.start_time
               );
-
-              const isActiveReservation =
-                reservation.reservation_status === RESERVATION_STATUS.CONFIRMED;
 
               const checkInUrl = reservation.check_in_token
                 ? getCheckInUrl(reservation.check_in_token)
@@ -366,17 +565,11 @@ export default function MyReservationsPage() {
                             </button>
                           )}
 
-                        <a
-                          href="/booking"
-                          className="rounded-xl border border-zinc-700 px-4 py-2 text-sm font-semibold text-zinc-300 transition hover:bg-zinc-950"
-                        >
-                          Nowa rezerwacja
-                        </a>
                       </div>
                     </div>
 
                     <div className="rounded-2xl border border-zinc-800 bg-zinc-950 p-4 text-center">
-                      {isActiveReservation && qrUrl ? (
+                      {qrUrl ? (
                         <>
                           <p className="mb-3 text-xs font-semibold uppercase tracking-[0.2em] text-cyan-300">
                             QR Check-in
@@ -408,13 +601,46 @@ export default function MyReservationsPage() {
                   </div>
                 </div>
               );
-            })}
+                })}
+              </div>
+            )}
+
+            {reservationHistory.length > 0 && (
+              <div className="mt-10">
+                <h2 className="mb-4 text-2xl font-bold">Historia rezerwacji</h2>
+
+                <div className="space-y-3">
+                  {reservationHistory.map((reservation) => (
+                    <div
+                      key={reservation.id}
+                      className="flex flex-col gap-3 rounded-xl border border-zinc-800 bg-zinc-900 p-4 sm:flex-row sm:items-center sm:justify-between"
+                    >
+                      <div>
+                        <p className="font-semibold text-zinc-100">
+                          {reservation.reservation_date || "Brak daty"} |{" "}
+                          {reservation.start_time?.slice(0, 5) || "--:--"}–
+                          {reservation.end_time?.slice(0, 5) || "--:--"}
+                        </p>
+
+                        <p className="mt-1 text-sm text-zinc-400">
+                          {reservation.shooting_lanes?.name ?? "Brak osi"}
+                        </p>
+                      </div>
+
+                      <span className="self-start rounded-full border border-zinc-700 bg-zinc-950 px-3 py-1 text-xs font-semibold text-zinc-300 sm:self-auto">
+                        {getHistoryStatusLabel(reservation, warsawNowKey)}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         )}
 
         <div className="mt-8 flex gap-4 text-sm text-zinc-400">
           <a href="/booking" className="hover:text-white">
-            + Nowa rezerwacja
+            Nowa rezerwacja
           </a>
 
           <a href="/dashboard" className="hover:text-white">
