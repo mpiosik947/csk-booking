@@ -51,10 +51,6 @@ export default function Home() {
   return (
     <main className="min-h-screen bg-zinc-950 text-white">
       <section className="mx-auto flex min-h-screen max-w-5xl flex-col items-center justify-center px-6 py-10 text-center sm:py-12">
-        <div className="mb-6 rounded-full border border-yellow-700 bg-yellow-950 px-5 py-2 text-sm font-bold uppercase tracking-[0.35em] text-yellow-300">
-          WERSJA TESTOWA
-        </div>
-
         <div className="mb-8 flex justify-center">
           <Image
             src="/login-brand.png"
@@ -146,35 +142,7 @@ export default function Home() {
           </div>
         )}
 
-        <div className="grid w-full max-w-3xl gap-4 md:grid-cols-2">
-          <a
-            href="/terms"
-            className="rounded-2xl border border-zinc-700 px-6 py-5 text-lg font-semibold transition hover:bg-zinc-900"
-          >
-            Regulamin i RODO
-          </a>
-
-          {canSeeAdminPanel && (
-            <a
-              href="/admin"
-              className="rounded-2xl border border-green-800 px-6 py-5 text-lg font-semibold text-green-400 transition hover:bg-green-950 md:col-span-2"
-            >
-              Panel administratora
-            </a>
-          )}
-
-          {email && (
-            <button
-              type="button"
-              onClick={handleLogout}
-              className="rounded-2xl border border-red-800 px-6 py-5 text-lg font-semibold text-red-400 transition hover:bg-red-950 md:col-span-2"
-            >
-              Wyloguj
-            </button>
-          )}
-        </div>
-
-        <div className="mt-12 grid w-full max-w-4xl gap-4 text-left md:grid-cols-4">
+        <div className="mt-12 grid w-full max-w-3xl gap-4 text-left">
           <div className="rounded-2xl border border-blue-800 bg-blue-950/40 p-5 opacity-70">
             <div className="mb-2 flex items-center justify-between gap-3">
               <h2 className="font-semibold">Strzelanie z instruktorem</h2>
@@ -189,14 +157,39 @@ export default function Home() {
               instruktor zapewnione na miejscu.
             </p>
           </div>
-
-          <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-5">
-            <h2 className="mb-2 font-semibold">Status</h2>
-            <p className="text-sm text-yellow-300">
-              Wersja testowa — system w fazie sprawdzania.
-            </p>
-          </div>
         </div>
+
+        <div className="mt-6 flex w-full max-w-3xl flex-col items-center gap-3 text-sm sm:flex-row sm:flex-wrap sm:justify-center">
+          <a
+            href="/terms"
+            className="rounded-lg px-3 py-2 text-zinc-400 transition hover:text-zinc-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-400 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950"
+          >
+            Regulamin i RODO
+          </a>
+
+          {canSeeAdminPanel && (
+            <a
+              href="/admin"
+              className="rounded-xl border border-zinc-700 px-4 py-2 font-semibold text-green-400 transition hover:bg-zinc-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-400 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950"
+            >
+              Panel administratora
+            </a>
+          )}
+
+          {email && (
+            <button
+              type="button"
+              onClick={handleLogout}
+              className="rounded-lg px-3 py-2 font-semibold text-red-400 transition hover:text-red-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950"
+            >
+              Wyloguj
+            </button>
+          )}
+        </div>
+
+        <p className="mt-6 text-xs font-medium text-zinc-400">
+          WERSJA TESTOWA
+        </p>
       </section>
     </main>
   );
