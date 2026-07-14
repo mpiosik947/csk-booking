@@ -740,7 +740,7 @@ export default function EventsPage() {
             </div>
 
             {/* DESKTOP */}
-            <div className="hidden gap-6 lg:grid lg:grid-cols-[1.3fr_1fr]">
+            <div className="hidden lg:block">
               <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-5">
                 <h2 className="mb-5 text-2xl font-bold">Lista szkoleń</h2>
 
@@ -835,19 +835,11 @@ export default function EventsPage() {
                 </p>
               </div>
 
-              <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-6">
-                {!selectedEvent && (
-                  <div className="text-zinc-400">
-                    <h2 className="mb-3 text-2xl font-bold text-white">
-                      Szczegóły szkolenia
-                    </h2>
-
-                    <p>Wybierz szkolenie z tabeli po lewej stronie.</p>
-                  </div>
-                )}
-
-                {selectedEvent && <EventDetails event={selectedEvent} />}
-              </div>
+              {selectedEvent && (
+                <div className="mt-6 rounded-2xl border border-zinc-800 bg-zinc-900 p-6 xl:p-8">
+                  <EventDetails event={selectedEvent} />
+                </div>
+              )}
             </div>
           </>
         )}
