@@ -18,7 +18,7 @@ type Event = {
   location: string;
   price: number;
   max_participants: number;
-  event_registrations: EventRegistration[];
+  event_registrations?: EventRegistration[];
 };
 
 type RegistrationSuccess = {
@@ -35,6 +35,7 @@ export default function EventsPage() {
   const [events, setEvents] = useState<Event[]>([]);
   const [selectedEventId, setSelectedEventId] = useState("");
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
   const [message, setMessage] = useState("");
   const [registrationSuccess, setRegistrationSuccess] =
     useState<RegistrationSuccess | null>(null);
@@ -85,32 +86,38 @@ export default function EventsPage() {
         );
       }
 
-      const { data, error } = await supabase
-        .from("events")
-        .select(
-          `
-          id,
-          title,
-          description,
-          event_date,
-          start_time,
-          end_time,
-          location,
-          price,
-          max_participants,
+      const publicEventFields = `
+        id,
+        title,
+        description,
+        event_date,
+        start_time,
+        end_time,
+        location,
+        price,
+        max_participants
+      `;
+
+      const eventFields = user
+        ? `${publicEventFields},
           event_registrations (
             id,
             registration_status
           )
         `
-        )
+        : publicEventFields;
+
+      const { data, error } = await supabase
+        .from("events")
+        .select(eventFields)
         .eq("is_active", true)
         .order("event_date", { ascending: true });
 
       setLoading(false);
 
       if (error) {
-        setMessage(`Błąd pobierania szkoleń: ${error.message}`);
+        console.error("Błąd pobierania szkoleń:", error);
+        setLoadError(true);
         return;
       }
 
@@ -121,7 +128,7 @@ export default function EventsPage() {
   }, []);
 
   function getParticipantsCount(eventItem: Event) {
-    return eventItem.event_registrations.filter(
+    return (eventItem.event_registrations ?? []).filter(
       (registration) =>
         registration.registration_status !== "cancelled" &&
         registration.registration_status !== "reserve"
@@ -129,7 +136,7 @@ export default function EventsPage() {
   }
 
   function getReserveCount(eventItem: Event) {
-    return eventItem.event_registrations.filter(
+    return (eventItem.event_registrations ?? []).filter(
       (registration) => registration.registration_status === "reserve"
     ).length;
   }
@@ -264,7 +271,7 @@ export default function EventsPage() {
           ? {
               ...event,
               event_registrations: [
-                ...event.event_registrations,
+                ...(event.event_registrations ?? []),
                 {
                   id: registrationResult.registrationId ?? crypto.randomUUID(),
                   registration_status: registrationStatus,
@@ -284,20 +291,29 @@ export default function EventsPage() {
     return "mb-6 rounded-xl border border-red-800 bg-red-950 p-4 text-sm font-semibold text-red-300";
   }
 
+  const isLoggedIn = Boolean(userId);
   const selectedEvent = events.find((event) => event.id === selectedEventId);
 
   function EventDetails({ event }: { event: Event }) {
-    const participantsCount = getParticipantsCount(event);
-    const reserveCount = getReserveCount(event);
-    const freePlaces = event.max_participants - participantsCount;
-    const hasReserveList = reserveCount > 0;
-    const publicFreePlaces = hasReserveList ? 0 : Math.max(freePlaces, 0);
-    const isFull = publicFreePlaces <= 0;
-    const status = getEventStatus(event);
+    const participantsCount = isLoggedIn ? getParticipantsCount(event) : null;
+    const reserveCount = isLoggedIn ? getReserveCount(event) : null;
+    const freePlaces =
+      participantsCount === null
+        ? null
+        : event.max_participants - participantsCount;
+    const hasReserveList = reserveCount !== null && reserveCount > 0;
+    const publicFreePlaces =
+      freePlaces === null
+        ? null
+        : hasReserveList
+          ? 0
+          : Math.max(freePlaces, 0);
+    const isFull = publicFreePlaces !== null && publicFreePlaces <= 0;
+    const status = isLoggedIn ? getEventStatus(event) : null;
 
     return (
       <div>
-        <span className={status.className}>{status.label}</span>
+        {status && <span className={status.className}>{status.label}</span>}
 
         <h2 className="mt-4 text-2xl font-bold sm:text-3xl">{event.title}</h2>
 
@@ -326,29 +342,37 @@ export default function EventsPage() {
             <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-4">
               <p className="text-zinc-500">Miejsca</p>
               <p className="font-semibold text-white">
-                {participantsCount} / {event.max_participants}
+                {isLoggedIn
+                  ? `${participantsCount} / ${event.max_participants}`
+                  : `Limit: ${event.max_participants}`}
               </p>
             </div>
           </div>
 
-          <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-4">
-            <p className="text-zinc-500">Wolne miejsca</p>
-            <p
-              className={
-                isFull
-                  ? "font-semibold text-red-400"
-                  : "font-semibold text-green-500"
-              }
-            >
-              {publicFreePlaces}
-            </p>
-
-            {reserveCount > 0 && (
-              <p className="mt-2 text-yellow-300">
-                Lista rezerwowa: {reserveCount}
+          {isLoggedIn ? (
+            <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-4">
+              <p className="text-zinc-500">Wolne miejsca</p>
+              <p
+                className={
+                  isFull
+                    ? "font-semibold text-red-400"
+                    : "font-semibold text-green-500"
+                }
+              >
+                {publicFreePlaces}
               </p>
-            )}
-          </div>
+
+              {reserveCount !== null && reserveCount > 0 && (
+                <p className="mt-2 text-yellow-300">
+                  Lista rezerwowa: {reserveCount}
+                </p>
+              )}
+            </div>
+          ) : (
+            <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-4 text-zinc-300">
+              Zaloguj się, aby sprawdzić aktualną dostępność i zapisać się.
+            </div>
+          )}
         </div>
 
         <div className="mt-6 rounded-2xl border border-zinc-800 bg-zinc-950 p-5">
@@ -360,7 +384,7 @@ export default function EventsPage() {
         </div>
 
         <div className="mt-6">
-          {loading ? null : !userId ? (
+          {loading ? null : !isLoggedIn ? (
             <div className="grid gap-3 sm:grid-cols-2">
               <a
                 href="/login?redirectTo=%2Fevents"
@@ -597,20 +621,33 @@ export default function EventsPage() {
           </div>
         )}
 
-        {!loading && events.length === 0 && (
+        {!loading && loadError && (
+          <div
+            role="alert"
+            className="rounded-xl border border-red-800 bg-red-950 p-6 text-red-200"
+          >
+            Nie udało się pobrać szkoleń. Spróbuj ponownie później.
+          </div>
+        )}
+
+        {!loading && !loadError && events.length === 0 && (
           <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-6 text-zinc-400">
             Brak dostępnych szkoleń.
           </div>
         )}
 
-        {!loading && events.length > 0 && (
+        {!loading && !loadError && events.length > 0 && (
           <>
             {/* MOBILE */}
             <div className="grid gap-4 lg:hidden">
               {events.map((event) => {
-                const participantsCount = getParticipantsCount(event);
-                const reserveCount = getReserveCount(event);
-                const status = getEventStatus(event);
+                const participantsCount = isLoggedIn
+                  ? getParticipantsCount(event)
+                  : null;
+                const reserveCount = isLoggedIn
+                  ? getReserveCount(event)
+                  : null;
+                const status = isLoggedIn ? getEventStatus(event) : null;
                 const isOpen = selectedEventId === event.id;
 
                 return (
@@ -630,11 +667,13 @@ export default function EventsPage() {
                       className="w-full text-left"
                     >
                       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-                        <span className={status.className}>
-                          {status.label}
-                        </span>
+                        {status && (
+                          <span className={status.className}>
+                            {status.label}
+                          </span>
+                        )}
 
-                        <span className="text-sm font-semibold text-green-500">
+                        <span className="ml-auto text-sm font-semibold text-green-500">
                           {Number(event.price).toFixed(0)} zł
                         </span>
                       </div>
@@ -660,11 +699,13 @@ export default function EventsPage() {
                         <div className="flex justify-between gap-3 border-b border-zinc-800 pb-2">
                           <span className="text-zinc-500">Miejsca</span>
                           <span className="font-semibold text-white">
-                            {participantsCount} / {event.max_participants}
+                            {isLoggedIn
+                              ? `${participantsCount} / ${event.max_participants}`
+                              : `Limit: ${event.max_participants}`}
                           </span>
                         </div>
 
-                        {reserveCount > 0 && (
+                        {reserveCount !== null && reserveCount > 0 && (
                           <div className="flex justify-between gap-3 border-b border-zinc-800 pb-2">
                             <span className="text-zinc-500">
                               Lista rezerwowa
@@ -673,6 +714,13 @@ export default function EventsPage() {
                               {reserveCount}
                             </span>
                           </div>
+                        )}
+
+                        {!isLoggedIn && (
+                          <p className="text-zinc-400">
+                            Zaloguj się, aby sprawdzić aktualną dostępność i
+                            zapisać się.
+                          </p>
                         )}
                       </div>
 
@@ -711,9 +759,15 @@ export default function EventsPage() {
 
                     <tbody>
                       {events.map((event) => {
-                        const participantsCount = getParticipantsCount(event);
-                        const reserveCount = getReserveCount(event);
-                        const status = getEventStatus(event);
+                        const participantsCount = isLoggedIn
+                          ? getParticipantsCount(event)
+                          : null;
+                        const reserveCount = isLoggedIn
+                          ? getReserveCount(event)
+                          : null;
+                        const status = isLoggedIn
+                          ? getEventStatus(event)
+                          : null;
                         const isSelected = selectedEventId === event.id;
 
                         return (
@@ -728,7 +782,7 @@ export default function EventsPage() {
                           >
                             <td className="py-4 pr-4 font-semibold">
                               {event.title}
-                              {reserveCount > 0 && (
+                              {reserveCount !== null && reserveCount > 0 && (
                                 <span className="mt-1 block text-xs text-yellow-300">
                                   Lista rezerwowa: {reserveCount}
                                 </span>
@@ -751,13 +805,22 @@ export default function EventsPage() {
                             </td>
 
                             <td className="py-4 pr-4">
-                              {participantsCount} / {event.max_participants}
+                              {isLoggedIn
+                                ? `${participantsCount} / ${event.max_participants}`
+                                : `Limit: ${event.max_participants}`}
                             </td>
 
                             <td className="py-4 pr-4">
-                              <span className={status.className}>
-                                {status.label}
-                              </span>
+                              {status ? (
+                                <span className={status.className}>
+                                  {status.label}
+                                </span>
+                              ) : (
+                                <span className="text-zinc-400">
+                                  Zaloguj się, aby sprawdzić aktualną dostępność
+                                  i zapisać się.
+                                </span>
+                              )}
                             </td>
                           </tr>
                         );
