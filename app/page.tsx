@@ -85,6 +85,30 @@ export default function Home() {
           </div>
         )}
 
+        <div className="mb-4 grid w-full max-w-3xl gap-4 md:grid-cols-2">
+          <a
+            href="/booking"
+            className="rounded-2xl border border-green-800 bg-green-950 p-6 text-left transition hover:bg-green-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-400 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950"
+          >
+            <h2 className="text-2xl font-bold text-green-300">
+              Zarezerwuj oś
+            </h2>
+            <p className="mt-2 text-green-100">
+              Wybierz oś, termin i godzinę rezerwacji.
+            </p>
+          </a>
+
+          <a
+            href="/events"
+            className="rounded-2xl border border-green-800 bg-green-950 p-6 text-left transition hover:bg-green-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-400 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950"
+          >
+            <h2 className="text-2xl font-bold text-green-300">Szkolenia</h2>
+            <p className="mt-2 text-green-100">
+              Sprawdź dostępne szkolenia i zapisz się online.
+            </p>
+          </a>
+        </div>
+
         <div className="grid w-full max-w-3xl gap-4 md:grid-cols-2">
           {email ? (
             <a
@@ -110,13 +134,6 @@ export default function Home() {
               </a>
             </>
           )}
-
-          <a
-            href="/events"
-            className="rounded-2xl border border-green-800 bg-green-950 px-6 py-5 text-lg font-semibold text-green-300 transition hover:bg-green-900"
-          >
-            Eventy / Szkolenia
-          </a>
 
           <a
             href="/terms"
@@ -146,20 +163,6 @@ export default function Home() {
         </div>
 
         <div className="mt-12 grid w-full max-w-4xl gap-4 text-left md:grid-cols-4">
-          <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-5">
-            <h2 className="mb-2 font-semibold">Rezerwacje</h2>
-            <p className="text-sm text-zinc-400">
-              Testowy system rezerwacji osi strzeleckich.
-            </p>
-          </div>
-
-          <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-5">
-            <h2 className="mb-2 font-semibold">Szkolenia</h2>
-            <p className="text-sm text-zinc-400">
-              Zapisy na eventy i szkolenia organizowane na obiekcie.
-            </p>
-          </div>
-
           <div className="rounded-2xl border border-blue-800 bg-blue-950/40 p-5 opacity-70">
             <div className="mb-2 flex items-center justify-between gap-3">
               <h2 className="font-semibold">Strzelanie z instruktorem</h2>
