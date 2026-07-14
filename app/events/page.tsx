@@ -49,6 +49,22 @@ export default function EventsPage() {
   const [customerPhone, setCustomerPhone] = useState("");
 
   useEffect(() => {
+    if (!registrationSuccess) return;
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        setRegistrationSuccess(null);
+      }
+    }
+
+    document.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [registrationSuccess]);
+
+  useEffect(() => {
     async function loadData() {
       const {
         data: { user },
@@ -518,20 +534,15 @@ export default function EventsPage() {
                 </div>
               </div>
 
-              <div className="mt-6 grid gap-3 sm:grid-cols-2">
-                <a
-                  href="/my-events"
-                  className="rounded-xl bg-green-700 px-5 py-3 text-center font-semibold transition hover:bg-green-600"
-                >
-                  Moje szkolenia
-                </a>
-
+              <div className="mt-6 grid gap-3">
                 <button
                   type="button"
-                  onClick={() => setRegistrationSuccess(null)}
-                  className="rounded-xl border border-zinc-700 px-5 py-3 font-semibold text-zinc-300 transition hover:bg-zinc-900"
+                  onClick={() => {
+                    window.location.href = "/my-events";
+                  }}
+                  className="rounded-xl bg-green-700 px-5 py-3 font-semibold transition hover:bg-green-600"
                 >
-                  Zamknij
+                  Gotowe
                 </button>
               </div>
             </div>
