@@ -4,6 +4,28 @@ import Image from "next/image";
 import { useEffect, useState } from "react";
 import { supabase } from "../../lib/supabase";
 
+const ALLOWED_LOGIN_REDIRECTS: ReadonlySet<string> = new Set([
+  "/dashboard",
+  "/booking",
+  "/events",
+  "/my-reservations",
+  "/my-events",
+  "/admin",
+  "/admin/users",
+  "/admin/check-in",
+  "/admin/events",
+  "/admin/reservations",
+  "/admin/reports",
+  "/admin/calendar",
+  "/admin/lane-blocks",
+]);
+
+function getSafeLoginRedirect(redirectTo: string | null) {
+  return redirectTo && ALLOWED_LOGIN_REDIRECTS.has(redirectTo)
+    ? redirectTo
+    : "/dashboard";
+}
+
 export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -52,7 +74,7 @@ export default function LoginPage() {
     }
 
     const params = new URLSearchParams(window.location.search);
-    const redirectTo = params.get("redirectTo") || "/dashboard";
+    const redirectTo = getSafeLoginRedirect(params.get("redirectTo"));
 
     window.location.href = redirectTo;
   }
