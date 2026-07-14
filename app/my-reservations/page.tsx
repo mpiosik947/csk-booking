@@ -1,6 +1,7 @@
 ﻿"use client";
 
 import { useEffect, useState } from "react";
+import QRCode from "react-qr-code";
 import { getPaymentStatusLabel } from "../../lib/payment-status";
 import {
   RESERVATION_STATUS,
@@ -26,6 +27,10 @@ type Reservation = {
 };
 
 const WARSAW_TIME_ZONE = "Europe/Warsaw";
+const CONFIGURED_SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL ?? "").replace(
+  /\/+$/,
+  ""
+);
 
 const ACTIVE_RESERVATION_STATUSES = new Set<string>([
   RESERVATION_STATUS.CONFIRMED,
@@ -230,15 +235,12 @@ function canCancelReservation(reservationDate: string, startTime: string) {
   return differenceInHours > 12;
 }
 
-function getCheckInUrl(token: string) {
-  if (typeof window === "undefined") {
+function getCheckInUrl(token: string, siteUrl: string) {
+  if (!siteUrl) {
     return "";
   }
 
- const siteUrl =
-  "https://csk-booking-5nwh-git-main-mpiosik94-9167s-projects.vercel.app";
-
-return `${siteUrl}/admin/check-in?token=${token}`;
+  return `${siteUrl}/admin/check-in?token=${token}`;
 }
 
 export default function MyReservationsPage() {
@@ -247,6 +249,13 @@ export default function MyReservationsPage() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [userId, setUserId] = useState("");
   const [message, setMessage] = useState("");
+  const [siteUrl, setSiteUrl] = useState(CONFIGURED_SITE_URL);
+
+  useEffect(() => {
+    if (!CONFIGURED_SITE_URL) {
+      setSiteUrl(window.location.origin.replace(/\/+$/, ""));
+    }
+  }, []);
 
   useEffect(() => {
     async function loadReservations() {
@@ -474,13 +483,7 @@ export default function MyReservationsPage() {
               );
 
               const checkInUrl = reservation.check_in_token
-                ? getCheckInUrl(reservation.check_in_token)
-                : "";
-
-              const qrUrl = checkInUrl
-                ? `https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(
-                    checkInUrl
-                  )}`
+                ? getCheckInUrl(reservation.check_in_token, siteUrl)
                 : "";
 
               return (
@@ -569,15 +572,16 @@ export default function MyReservationsPage() {
                     </div>
 
                     <div className="rounded-2xl border border-zinc-800 bg-zinc-950 p-4 text-center">
-                      {qrUrl ? (
+                      {checkInUrl ? (
                         <>
                           <p className="mb-3 text-xs font-semibold uppercase tracking-[0.2em] text-cyan-300">
                             QR Check-in
                           </p>
 
-                          <img
-                            src={qrUrl}
-                            alt="Kod QR check-in"
+                          <QRCode
+                            value={checkInUrl}
+                            size={180}
+                            aria-label="Kod QR do zameldowania rezerwacji"
                             className="mx-auto rounded-xl bg-white p-2"
                           />
 
