@@ -360,7 +360,23 @@ export default function EventsPage() {
         </div>
 
         <div className="mt-6">
-          {isFull ? (
+          {loading ? null : !userId ? (
+            <div className="grid gap-3 sm:grid-cols-2">
+              <a
+                href="/login?redirectTo=%2Fevents"
+                className="rounded-xl bg-green-700 px-5 py-3 text-center font-semibold text-white transition hover:bg-green-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-400 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950"
+              >
+                Zaloguj się, aby się zapisać
+              </a>
+
+              <a
+                href="/register"
+                className="rounded-xl border border-zinc-700 px-5 py-3 text-center font-semibold text-zinc-200 transition hover:bg-zinc-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-400 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950"
+              >
+                Załóż konto
+              </a>
+            </div>
+          ) : isFull ? (
             <button
               type="button"
               onClick={() => setRegistrationConfirmation({ eventItem: event, asReserve: true })}
@@ -773,23 +789,15 @@ export default function EventsPage() {
           </>
         )}
 
-        <div className="mt-8 flex flex-col gap-3 sm:flex-row">
+        <div className="mt-8">
           <a
-            href="/dashboard"
-            className="rounded-xl border border-zinc-700 px-5 py-3 text-center text-sm font-semibold text-zinc-300 transition hover:bg-zinc-900"
+            href="/"
+            className="inline-flex rounded-xl border border-zinc-700 px-5 py-3 text-center text-sm font-semibold text-zinc-300 transition hover:bg-zinc-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-400 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950"
           >
-            ← Panel klienta
-          </a>
-
-          <a
-            href="/booking"
-            className="rounded-xl bg-green-700 px-5 py-3 text-center text-sm font-semibold text-white transition hover:bg-green-600"
-          >
-            Przejdź do rezerwacji osi
+            ← Powrót do strony głównej
           </a>
         </div>
       </section>
     </main>
   );
 }
-
