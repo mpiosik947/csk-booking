@@ -74,15 +74,11 @@ export default function Home() {
           System rezerwacji osi strzeleckich, szkoleń i eventów.
         </p>
 
-        {email ? (
-          <div className="mb-8 rounded-2xl border border-zinc-800 bg-zinc-900 px-6 py-4 text-sm text-zinc-300">
+        {email && (
+          <p className="mb-6 text-sm text-zinc-300">
             Zalogowany jako:{" "}
             <span className="font-semibold text-green-500">{email}</span>
-          </div>
-        ) : (
-          <div className="mb-8 rounded-2xl border border-zinc-800 bg-zinc-900 px-6 py-4 text-sm text-zinc-300">
-            Nie jesteś zalogowany.
-          </div>
+          </p>
         )}
 
         <div className="mb-4 grid w-full max-w-3xl gap-4 md:grid-cols-2">
@@ -109,32 +105,48 @@ export default function Home() {
           </a>
         </div>
 
-        <div className="grid w-full max-w-3xl gap-4 md:grid-cols-2">
-          {email ? (
+        {email ? (
+          <div className="mb-4 flex w-full max-w-3xl flex-col gap-3 sm:flex-row sm:flex-wrap sm:justify-center">
             <a
               href="/dashboard"
-              className="rounded-2xl bg-green-700 px-6 py-5 text-lg font-semibold transition hover:bg-green-600 md:col-span-2"
+              className="w-full rounded-xl border border-zinc-700 bg-zinc-900 px-4 py-3 text-sm font-semibold transition hover:bg-zinc-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-400 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950 sm:w-auto"
             >
-              Przejdź do panelu klienta
+              Panel klienta
             </a>
-          ) : (
-            <>
-              <a
-                href="/login"
-                className="rounded-2xl bg-green-700 px-6 py-5 text-lg font-semibold transition hover:bg-green-600"
-              >
-                Logowanie
-              </a>
 
-              <a
-                href="/register"
-                className="rounded-2xl border border-zinc-700 px-6 py-5 text-lg font-semibold transition hover:bg-zinc-900"
-              >
-                Rejestracja
-              </a>
-            </>
-          )}
+            <a
+              href="/my-reservations"
+              className="w-full rounded-xl border border-zinc-700 px-4 py-3 text-sm font-semibold text-zinc-300 transition hover:bg-zinc-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-400 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950 sm:w-auto"
+            >
+              Moje rezerwacje
+            </a>
 
+            <a
+              href="/my-events"
+              className="w-full rounded-xl border border-zinc-700 px-4 py-3 text-sm font-semibold text-zinc-300 transition hover:bg-zinc-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-400 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950 sm:w-auto"
+            >
+              Moje szkolenia
+            </a>
+          </div>
+        ) : (
+          <div className="mb-4 flex w-full max-w-3xl flex-col gap-3 sm:flex-row sm:justify-center">
+            <a
+              href="/login"
+              className="w-full rounded-xl border border-zinc-700 bg-zinc-900 px-4 py-3 text-sm font-semibold transition hover:bg-zinc-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-400 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950 sm:w-auto"
+            >
+              Zaloguj się
+            </a>
+
+            <a
+              href="/register"
+              className="w-full rounded-xl border border-zinc-700 px-4 py-3 text-sm font-semibold text-zinc-300 transition hover:bg-zinc-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-400 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950 sm:w-auto"
+            >
+              Załóż konto
+            </a>
+          </div>
+        )}
+
+        <div className="grid w-full max-w-3xl gap-4 md:grid-cols-2">
           <a
             href="/terms"
             className="rounded-2xl border border-zinc-700 px-6 py-5 text-lg font-semibold transition hover:bg-zinc-900"
