@@ -837,7 +837,7 @@ export default function BookingForm({ lanes }: BookingFormProps) {
               </div>
             </div>
 
-            <div className="mt-6 grid gap-3 sm:grid-cols-2">
+            <div className="mt-6 grid gap-3">
               <button
                 ref={confirmationButtonRef}
                 type="button"
@@ -849,12 +849,6 @@ export default function BookingForm({ lanes }: BookingFormProps) {
                 Gotowe
               </button>
 
-              <a
-                href="/my-reservations"
-                className="rounded-xl border border-zinc-700 px-5 py-3 text-center font-semibold text-zinc-300 transition hover:bg-zinc-900"
-              >
-                Moje rezerwacje
-              </a>
             </div>
           </div>
         </div>
