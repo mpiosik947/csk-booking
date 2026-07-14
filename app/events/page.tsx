@@ -291,6 +291,12 @@ export default function EventsPage() {
     return "mb-6 rounded-xl border border-red-800 bg-red-950 p-4 text-sm font-semibold text-red-300";
   }
 
+  function toggleSelectedEvent(eventId: string) {
+    setSelectedEventId((currentId) =>
+      currentId === eventId ? "" : eventId
+    );
+  }
+
   const isLoggedIn = Boolean(userId);
   const selectedEvent = events.find((event) => event.id === selectedEventId);
 
@@ -661,9 +667,7 @@ export default function EventsPage() {
                   >
                     <button
                       type="button"
-                      onClick={() =>
-                        setSelectedEventId(isOpen ? "" : event.id)
-                      }
+                      onClick={() => toggleSelectedEvent(event.id)}
                       className="w-full text-left"
                     >
                       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
@@ -773,7 +777,7 @@ export default function EventsPage() {
                         return (
                           <tr
                             key={event.id}
-                            onClick={() => setSelectedEventId(event.id)}
+                            onClick={() => toggleSelectedEvent(event.id)}
                             className={
                               isSelected
                                 ? "cursor-pointer border-b border-green-800 bg-green-950/40"
