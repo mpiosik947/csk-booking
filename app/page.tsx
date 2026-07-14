@@ -50,7 +50,7 @@ export default function Home() {
 
   return (
     <main className="min-h-screen bg-zinc-950 text-white">
-      <section className="mx-auto flex min-h-screen max-w-5xl flex-col items-center justify-center px-6 text-center">
+      <section className="mx-auto flex min-h-screen max-w-5xl flex-col items-center justify-center px-6 py-10 text-center sm:py-12">
         <div className="mb-6 rounded-full border border-yellow-700 bg-yellow-950 px-5 py-2 text-sm font-bold uppercase tracking-[0.35em] text-yellow-300">
           WERSJA TESTOWA
         </div>
@@ -59,8 +59,8 @@ export default function Home() {
           <Image
             src="/login-brand.png"
             alt="CSK - Centrum Szkolenia Krutla"
-            width={520}
-            height={260}
+            width={1536}
+            height={1024}
             priority
             className="h-auto w-full max-w-[360px] rounded-xl"
           />
