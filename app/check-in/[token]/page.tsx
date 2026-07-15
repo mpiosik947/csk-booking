@@ -1,13 +1,8 @@
+import Image from "next/image";
 import Link from "next/link";
 import { createClient } from "@supabase/supabase-js";
-import {
-  getReservationStatusLabel,
-  getReservationStatusBadgeClass,
-} from "../../../lib/reservation-status";
-import {
-  getPaymentStatusLabel,
-  getPaymentStatusBadgeClass,
-} from "../../../lib/payment-status";
+import { getReservationStatusLabel } from "../../../lib/reservation-status";
+import { getPaymentStatusLabel } from "../../../lib/payment-status";
 
 type CheckInPageProps = {
   params: Promise<{
@@ -112,20 +107,31 @@ export default async function CheckInPage({ params }: CheckInPageProps) {
 
   if (!reservation) {
     return (
-      <main className="min-h-screen bg-zinc-950 px-4 py-10 text-zinc-100">
-        <section className="mx-auto max-w-2xl rounded-2xl border border-red-900 bg-red-950/40 p-6">
-          <p className="mb-3 text-xs font-bold uppercase tracking-[0.35em] text-red-300">
-            CSK Booking
-          </p>
-          <h1 className="mb-3 text-2xl font-bold text-white">
+      <main className="flex min-h-screen items-center bg-[#090b09] px-4 py-6 text-[#f2efe4] sm:px-6 sm:py-8">
+        <section className="mx-auto w-full max-w-2xl rounded-[2rem] border border-[#30372c] bg-[#141814] p-6 shadow-2xl shadow-black/20 sm:p-9">
+          <Image
+            src="/login-brand.png"
+            alt="Centrum Szkolenia Krutla"
+            width={1536}
+            height={1024}
+            className="mx-auto h-auto w-full max-w-[260px] sm:max-w-[300px]"
+            priority
+          />
+
+          <h1 className="mt-6 text-center text-3xl font-bold sm:text-4xl">
             Nie znaleziono rezerwacji
           </h1>
-          <p className="text-sm leading-6 text-red-100">
+
+          <div
+            role="alert"
+            className="mt-6 rounded-2xl border border-[#744545] bg-[#2a1b1b] p-5 text-sm leading-6 text-[#e0a0a0]"
+          >
             Link check-in jest nieprawidłowy albo rezerwacja nie istnieje.
-          </p>
+          </div>
+
           <Link
             href="/"
-            className="mt-6 inline-flex rounded-lg bg-zinc-100 px-4 py-2 text-sm font-semibold text-zinc-950 hover:bg-white"
+            className="mt-6 inline-flex min-h-12 w-full items-center justify-center rounded-xl bg-[#536143] px-5 py-3 text-center text-sm font-semibold text-[#f2efe4] transition hover:bg-[#78865f] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d7c895] focus-visible:ring-offset-2 focus-visible:ring-offset-[#141814] sm:w-auto"
           >
             Wróć na stronę główną
           </Link>
@@ -141,73 +147,78 @@ export default async function CheckInPage({ params }: CheckInPageProps) {
   const isCheckedIn = Boolean(reservation.checked_in_at);
 
   return (
-    <main className="min-h-screen bg-zinc-950 px-4 py-10 text-zinc-100">
-      <section className="mx-auto max-w-2xl rounded-2xl border border-zinc-800 bg-zinc-900 p-6 shadow-2xl">
-        <p className="mb-3 text-xs font-bold uppercase tracking-[0.35em] text-green-400">
-          CSK Booking
-        </p>
+    <main className="flex min-h-screen items-center bg-[#090b09] px-4 py-6 text-[#f2efe4] sm:px-6 sm:py-8">
+      <section className="mx-auto w-full max-w-2xl rounded-[2rem] border border-[#30372c] bg-[#141814] p-6 shadow-2xl shadow-black/20 sm:p-9">
+        <Image
+          src="/login-brand.png"
+          alt="Centrum Szkolenia Krutla"
+          width={1536}
+          height={1024}
+          className="mx-auto h-auto w-full max-w-[260px] sm:max-w-[300px]"
+          priority
+        />
 
-        <h1 className="mb-3 text-2xl font-bold text-white">
+        <h1 className="mt-6 text-center text-3xl font-bold sm:text-4xl">
           Check-in rezerwacji
         </h1>
 
-        <p className="mb-6 text-sm leading-6 text-zinc-400">
+        <p className="mx-auto mt-4 max-w-xl text-center text-sm leading-6 text-[#a9ada4] sm:text-base">
           Pokaż ten ekran obsłudze. Pracownik lub instruktor potwierdzi obecność
           w panelu check-in.
         </p>
 
-        <div className="mb-6 rounded-xl border border-zinc-700 bg-zinc-950 p-4">
+        <div className="mt-7 rounded-2xl border border-[#30372c] bg-[#191e19] p-5 sm:p-6">
           <div className="grid gap-4 sm:grid-cols-2">
             <div>
-              <p className="text-xs uppercase tracking-wider text-zinc-500">
+              <p className="text-xs uppercase tracking-wider text-[#858c7f]">
                 Klient
               </p>
-              <p className="mt-1 font-semibold text-white">
+              <p className="mt-1 break-words font-semibold text-[#f2efe4]">
                 {reservation.customer_name ?? "-"}
               </p>
             </div>
 
             <div>
-              <p className="text-xs uppercase tracking-wider text-zinc-500">
+              <p className="text-xs uppercase tracking-wider text-[#858c7f]">
                 Telefon
               </p>
-              <p className="mt-1 font-semibold text-white">
+              <p className="mt-1 break-words font-semibold text-[#f2efe4]">
                 {reservation.customer_phone ?? "-"}
               </p>
             </div>
 
             <div>
-              <p className="text-xs uppercase tracking-wider text-zinc-500">
+              <p className="text-xs uppercase tracking-wider text-[#858c7f]">
                 Email
               </p>
-              <p className="mt-1 break-all font-semibold text-white">
+              <p className="mt-1 break-all font-semibold text-[#f2efe4]">
                 {reservation.customer_email ?? "-"}
               </p>
             </div>
 
             <div>
-              <p className="text-xs uppercase tracking-wider text-zinc-500">
+              <p className="text-xs uppercase tracking-wider text-[#858c7f]">
                 Oś
               </p>
-              <p className="mt-1 font-semibold text-white">
+              <p className="mt-1 break-words font-semibold text-[#f2efe4]">
                 {laneName ?? "-"}
               </p>
             </div>
 
             <div>
-              <p className="text-xs uppercase tracking-wider text-zinc-500">
+              <p className="text-xs uppercase tracking-wider text-[#858c7f]">
                 Data
               </p>
-              <p className="mt-1 font-semibold text-white">
+              <p className="mt-1 font-semibold text-[#f2efe4]">
                 {formatDate(reservation.reservation_date)}
               </p>
             </div>
 
             <div>
-              <p className="text-xs uppercase tracking-wider text-zinc-500">
+              <p className="text-xs uppercase tracking-wider text-[#858c7f]">
                 Godzina
               </p>
-              <p className="mt-1 font-semibold text-white">
+              <p className="mt-1 font-semibold text-[#f2efe4]">
                 {formatTime(reservation.start_time)} -{" "}
                 {formatTime(reservation.end_time)}
               </p>
@@ -215,28 +226,24 @@ export default async function CheckInPage({ params }: CheckInPageProps) {
           </div>
         </div>
 
-        <div className="mb-6 grid gap-3 sm:grid-cols-2">
-          <div className="rounded-xl border border-zinc-700 bg-zinc-950 p-4">
-            <p className="mb-2 text-xs uppercase tracking-wider text-zinc-500">
+        <div className="mt-4 grid gap-3 sm:grid-cols-2">
+          <div className="rounded-2xl border border-[#30372c] bg-[#191e19] p-4">
+            <p className="mb-2 text-xs uppercase tracking-wider text-[#858c7f]">
               Status rezerwacji
             </p>
             <span
-              className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${getReservationStatusBadgeClass(
-                reservation.reservation_status
-              )}`}
+              className="inline-flex rounded-full border border-[#536143] bg-[#20251d] px-3 py-1 text-xs font-semibold text-[#d7c895]"
             >
               {getReservationStatusLabel(reservation.reservation_status)}
             </span>
           </div>
 
-          <div className="rounded-xl border border-zinc-700 bg-zinc-950 p-4">
-            <p className="mb-2 text-xs uppercase tracking-wider text-zinc-500">
+          <div className="rounded-2xl border border-[#30372c] bg-[#191e19] p-4">
+            <p className="mb-2 text-xs uppercase tracking-wider text-[#858c7f]">
               Status płatności
             </p>
             <span
-              className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${getPaymentStatusBadgeClass(
-                reservation.payment_status
-              )}`}
+              className="inline-flex rounded-full border border-[#536143] bg-[#20251d] px-3 py-1 text-xs font-semibold text-[#d7c895]"
             >
               {getPaymentStatusLabel(reservation.payment_status)}
             </span>
@@ -244,11 +251,19 @@ export default async function CheckInPage({ params }: CheckInPageProps) {
         </div>
 
         {isCheckedIn ? (
-          <div className="rounded-xl border border-green-800 bg-green-950/50 p-4 text-sm text-green-100">
+          <div
+            role="status"
+            aria-live="polite"
+            className="mt-4 rounded-2xl border border-[#3f6848] bg-[#1b2a1d] p-4 text-sm leading-6 text-[#a9d4ad]"
+          >
             Obecność została już potwierdzona.
           </div>
         ) : (
-          <div className="rounded-xl border border-yellow-800 bg-yellow-950/50 p-4 text-sm leading-6 text-yellow-100">
+          <div
+            role="status"
+            aria-live="polite"
+            className="mt-4 rounded-2xl border border-[#806a32] bg-[#2b2618] p-4 text-sm leading-6 text-[#e1c477]"
+          >
             Ten ekran nie potwierdza obecności automatycznie. Obsługa musi
             potwierdzić wizytę w panelu administracyjnym.
           </div>
@@ -257,7 +272,7 @@ export default async function CheckInPage({ params }: CheckInPageProps) {
         <div className="mt-6">
           <Link
             href="/"
-            className="inline-flex rounded-lg border border-zinc-700 px-4 py-2 text-sm font-semibold text-zinc-200 hover:bg-zinc-800"
+            className="inline-flex min-h-11 w-full items-center justify-center rounded-xl border border-[#30372c] px-5 py-3 text-center text-sm font-semibold text-[#a9ada4] transition hover:border-[#d7c895] hover:text-[#d7c895] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d7c895] focus-visible:ring-offset-2 focus-visible:ring-offset-[#141814] sm:w-auto"
           >
             Wróć na stronę główną
           </Link>
