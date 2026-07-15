@@ -98,40 +98,56 @@ export default function BookingPage() {
   }, []);
 
   return (
-    <main className="min-h-screen bg-zinc-950 text-white">
-      <section className="mx-auto max-w-4xl px-6 py-12">
-        <p className="mb-4 text-sm uppercase tracking-[0.35em] text-green-500">
-          CSK Booking
-        </p>
+    <main className="min-h-screen bg-[#090b09] px-4 py-6 text-[#f2efe4] sm:px-6 sm:py-8">
+      <section className="mx-auto max-w-5xl rounded-[2rem] border border-[#30372c] bg-[#141814] p-5 shadow-2xl shadow-black/20 sm:p-8">
+        <header>
+          <p className="mb-3 text-xs font-semibold uppercase tracking-[0.22em] text-[#d7c895]">
+            CSK BOOKING
+          </p>
 
-        <h1 className="mb-3 text-3xl font-bold">Zarezerwuj oś</h1>
+          <h1 className="text-3xl font-bold sm:text-4xl">Zarezerwuj oś</h1>
 
-        <p className="mb-8 text-zinc-400">
-          Wybierz datę, oś strzelecką, godzinę oraz czas rezerwacji. Płatność
-          odbywa się na miejscu.
-        </p>
+          <p className="mt-3 max-w-3xl leading-7 text-[#a9ada4]">
+            Wybierz datę, oś strzelecką, godzinę oraz czas rezerwacji. Płatność
+            odbywa się na miejscu.
+          </p>
+        </header>
+
+        <div className="mt-6 rounded-2xl border border-[#30372c] bg-[#191e19] px-4 py-3 text-sm leading-6 text-[#a9ada4] sm:px-5">
+          Wybierz oś → datę → godzinę → potwierdź rezerwację
+        </div>
 
         {loading && (
-          <div className="mb-6 rounded-xl border border-zinc-800 bg-zinc-900 p-4 text-zinc-400">
+          <div
+            role="status"
+            aria-live="polite"
+            className="mt-6 rounded-xl border border-[#30372c] bg-[#191e19] p-4 text-[#a9ada4]"
+          >
             Ładowanie dostępnych osi...
           </div>
         )}
 
         {message && (
-          <div className="mb-6 rounded-xl border border-red-800 bg-red-950 p-4 text-red-300">
+          <div
+            role="alert"
+            className="mt-6 rounded-xl border border-[#744545] bg-[#2a1b1b] p-4 text-[#e0a0a0]"
+          >
             {message}
           </div>
         )}
 
         {!loading && blockingMessage && (
-          <div className="mb-6 rounded-xl border border-yellow-800 bg-yellow-950 p-5 text-yellow-100">
-            <p className="mb-2 font-bold text-yellow-300">
+          <div
+            role="status"
+            className="mt-6 rounded-xl border border-[#806a32] bg-[#2b2618] p-5 text-[#e1c477]"
+          >
+            <p className="mb-2 font-bold text-[#e1c477]">
               Konto oczekuje na weryfikację
             </p>
 
             <p className="text-sm">{blockingMessage}</p>
 
-            <p className="mt-3 text-sm text-yellow-100/80">
+            <p className="mt-3 text-sm text-[#cbb873]">
               Przyjedź na umówioną rezerwację. Pracownik recepcji sprawdzi dane,
               zweryfikuje konto i po tej weryfikacji będziesz mógł wykonywać
               kolejne rezerwacje.
@@ -140,19 +156,31 @@ export default function BookingPage() {
         )}
 
         {!loading && lanes.length === 0 && !message && (
-          <div className="mb-6 rounded-xl border border-yellow-800 bg-yellow-950 p-4 text-yellow-200">
+          <div
+            role="status"
+            className="mt-6 rounded-xl border border-[#806a32] bg-[#2b2618] p-4 text-[#e1c477]"
+          >
             Brak aktywnych osi do rezerwacji.
           </div>
         )}
 
-        {!loading && canBook && <BookingForm lanes={lanes} />}
+        {!loading && canBook && (
+          <section aria-label="Formularz rezerwacji" className="mt-8 w-full">
+            <BookingForm lanes={lanes} />
+          </section>
+        )}
 
-        <a
-          href="/"
-          className="mt-6 inline-block text-sm text-zinc-400 hover:text-white"
+        <nav
+          aria-label="Nawigacja strony rezerwacji"
+          className="mt-8 border-t border-[#30372c] pt-6"
         >
-          ← Wróć na stronę główną
-        </a>
+          <a
+            href="/"
+            className="inline-flex min-h-11 items-center rounded-xl border border-[#30372c] px-5 py-3 text-sm font-semibold text-[#a9ada4] transition hover:border-[#536143] hover:text-[#f2efe4] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d7c895] focus-visible:ring-offset-2 focus-visible:ring-offset-[#141814]"
+          >
+            ← Wróć na stronę główną
+          </a>
+        </nav>
       </section>
     </main>
   );
