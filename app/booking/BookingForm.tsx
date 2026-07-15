@@ -198,10 +198,10 @@ function getSelectedRange(startTime: string, durationMinutes: number) {
 
 function getMessageClass(message: string) {
   if (message.includes("zapisana")) {
-    return "rounded-xl border border-green-800 bg-green-950 p-4 text-sm font-semibold text-green-300";
+    return "rounded-xl border border-[#3f6848] bg-[#1b2a1d] p-4 text-sm font-semibold text-[#a9d4ad]";
   }
 
-  return "rounded-xl border border-red-800 bg-red-950 p-4 text-sm font-semibold text-red-300";
+  return "rounded-xl border border-[#744545] bg-[#2a1b1b] p-4 text-sm font-semibold text-[#e0a0a0]";
 }
 
 function getVerificationBox(status: string) {
@@ -214,8 +214,8 @@ function getVerificationBox(status: string) {
       title: "Konto nie zostało zatwierdzone",
       text: "Twoje konto zostało odrzucone lub wymaga dodatkowego kontaktu z obsługą CSK. Rezerwacja osi jest obecnie zablokowana.",
       className:
-        "rounded-xl border border-red-800 bg-red-950 p-4 text-sm text-red-100",
-      titleClassName: "font-semibold text-red-300",
+        "rounded-xl border border-[#744545] bg-[#2a1b1b] p-4 text-sm text-[#e0a0a0]",
+      titleClassName: "font-semibold text-[#e0a0a0]",
     };
   }
 
@@ -223,8 +223,8 @@ function getVerificationBox(status: string) {
     title: "Konto oczekuje na weryfikację",
     text: "Możesz wykonać jedną rezerwację na pierwszą wizytę. Podczas wizyty pracownik recepcji sprawdzi Twoje dane i zweryfikuje konto. Do czasu weryfikacji nie możesz mieć więcej niż jednej aktywnej rezerwacji.",
     className:
-      "rounded-xl border border-yellow-800 bg-yellow-950 p-4 text-sm text-yellow-100",
-    titleClassName: "font-semibold text-yellow-300",
+      "rounded-xl border border-[#806a32] bg-[#2b2618] p-4 text-sm text-[#e1c477]",
+    titleClassName: "font-semibold text-[#e1c477]",
   };
 }
 
@@ -730,7 +730,7 @@ export default function BookingForm({ lanes }: BookingFormProps) {
       <div
         role="status"
         aria-live="polite"
-        className="rounded-2xl border border-zinc-800 bg-zinc-900 p-6 text-zinc-400"
+        className="rounded-2xl border border-[#30372c] bg-[#191e19] p-6 text-[#a9ada4]"
       >
         Sprawdzanie użytkownika...
       </div>
@@ -741,13 +741,13 @@ export default function BookingForm({ lanes }: BookingFormProps) {
     return (
       <div
         role="alert"
-        className="rounded-2xl border border-red-800 bg-red-950 p-8 text-center"
+        className="rounded-2xl border border-[#744545] bg-[#2a1b1b] p-6 text-center sm:p-8"
       >
-        <h2 className="mb-3 text-2xl font-bold text-red-200">
+        <h2 className="mb-3 text-2xl font-bold text-[#f2efe4]">
           Logowanie wymagane
         </h2>
 
-        <p className="mx-auto mb-6 max-w-xl text-red-100">
+        <p className="mx-auto mb-6 max-w-xl text-[#e0a0a0]">
           Aby zarezerwować oś strzelecką, musisz najpierw zalogować się na
           swoje konto albo utworzyć nowe konto użytkownika.
         </p>
@@ -755,14 +755,14 @@ export default function BookingForm({ lanes }: BookingFormProps) {
         <div className="flex flex-col gap-3 sm:flex-row sm:justify-center">
           <a
             href="/login?redirectTo=%2Fbooking"
-            className="rounded-xl bg-green-700 px-5 py-3 font-semibold text-white transition hover:bg-green-600"
+            className="min-h-12 rounded-xl bg-[#536143] px-5 py-3 font-semibold text-[#f2efe4] transition hover:bg-[#78865f] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#c5a861] focus-visible:ring-offset-2 focus-visible:ring-offset-[#2a1b1b]"
           >
             Zaloguj się
           </a>
 
           <a
             href="/register"
-            className="rounded-xl border border-red-300 px-5 py-3 font-semibold text-red-100 transition hover:bg-red-900"
+            className="min-h-12 rounded-xl border border-[#744545] px-5 py-3 font-semibold text-[#f2efe4] transition hover:bg-[#3a2424] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#c5a861] focus-visible:ring-offset-2 focus-visible:ring-offset-[#2a1b1b]"
           >
             Utwórz konto
           </a>
@@ -774,15 +774,15 @@ export default function BookingForm({ lanes }: BookingFormProps) {
   return (
     <>
       {confirmationData && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 px-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 px-4 py-6">
           <div
             role="dialog"
             aria-modal="true"
             aria-labelledby="booking-confirmation-title"
             aria-describedby="booking-confirmation-description"
-            className="w-full max-w-lg rounded-2xl border border-green-800 bg-zinc-950 p-6 text-white shadow-2xl"
+            className="w-full max-w-lg rounded-[2rem] border border-[#30372c] bg-[#141814] p-6 text-[#f2efe4] shadow-2xl sm:p-8"
           >
-            <div className="mb-4 rounded-full border border-green-800 bg-green-950 px-4 py-2 text-center text-sm font-bold uppercase tracking-[0.25em] text-green-300">
+            <div className="mb-4 rounded-full border border-[#3f6848] bg-[#1b2a1d] px-4 py-2 text-center text-sm font-bold uppercase tracking-[0.2em] text-[#a9d4ad]">
               Rezerwacja przyjęta
             </div>
 
@@ -795,43 +795,43 @@ export default function BookingForm({ lanes }: BookingFormProps) {
 
             <p
               id="booking-confirmation-description"
-              className="mb-6 text-zinc-400"
+              className="mb-6 text-[#a9ada4]"
             >
               Poniżej znajduje się podsumowanie Twojej rezerwacji.
             </p>
 
-            <div className="grid gap-3 rounded-2xl border border-zinc-800 bg-zinc-900 p-5 text-sm">
+            <div className="grid gap-3 rounded-2xl border border-[#30372c] bg-[#191e19] p-5 text-sm">
               <div>
-                <p className="text-zinc-500">Data</p>
-                <p className="text-lg font-semibold text-white">
+                <p className="text-[#858c7f]">Data</p>
+                <p className="text-lg font-semibold text-[#f2efe4]">
                   {formatReservationDate(confirmationData.date)}
                 </p>
               </div>
 
               <div>
-                <p className="text-zinc-500">Godzina</p>
-                <p className="text-lg font-semibold text-white">
+                <p className="text-[#858c7f]">Godzina</p>
+                <p className="text-lg font-semibold text-[#f2efe4]">
                   {confirmationData.startTime} - {confirmationData.endTime}
                 </p>
               </div>
 
               <div>
-                <p className="text-zinc-500">Oś</p>
-                <p className="text-lg font-semibold text-white">
+                <p className="text-[#858c7f]">Oś</p>
+                <p className="text-lg font-semibold text-[#f2efe4]">
                   {confirmationData.laneName}
                 </p>
               </div>
 
               <div>
-                <p className="text-zinc-500">Cena</p>
-                <p className="text-lg font-semibold text-green-500">
+                <p className="text-[#858c7f]">Cena</p>
+                <p className="text-lg font-semibold text-[#d7c895]">
                   {confirmationData.price.toFixed(0)} zł
                 </p>
               </div>
 
               <div>
-                <p className="text-zinc-500">Płatność</p>
-                <p className="text-lg font-semibold text-green-500">
+                <p className="text-[#858c7f]">Płatność</p>
+                <p className="text-lg font-semibold text-[#d7c895]">
                   Na miejscu
                 </p>
               </div>
@@ -844,7 +844,7 @@ export default function BookingForm({ lanes }: BookingFormProps) {
                 onClick={() => {
                   window.location.href = "/my-reservations";
                 }}
-                className="rounded-xl bg-green-700 px-5 py-3 font-semibold transition hover:bg-green-600"
+                className="min-h-12 rounded-xl bg-[#536143] px-5 py-3 font-semibold text-[#f2efe4] transition hover:bg-[#78865f] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#c5a861] focus-visible:ring-offset-2 focus-visible:ring-offset-[#141814]"
               >
                 Gotowe
               </button>
@@ -854,7 +854,7 @@ export default function BookingForm({ lanes }: BookingFormProps) {
         </div>
       )}
 
-      <form className="grid gap-6 rounded-2xl border border-zinc-800 bg-zinc-900 p-6">
+      <form className="grid gap-5 rounded-2xl border border-[#30372c] bg-[#191e19] p-4 text-[#f2efe4] sm:gap-6 sm:p-6">
         {verificationBox && (
           <div
             role={isRejected ? "alert" : "status"}
@@ -869,11 +869,11 @@ export default function BookingForm({ lanes }: BookingFormProps) {
           </div>
         )}
 
-        <div className="grid gap-4 md:grid-cols-3">
+        <div className="grid gap-4 rounded-2xl border border-[#30372c] bg-[#141814] p-4 md:grid-cols-3 sm:p-5">
           <div>
             <label
               htmlFor="booking-full-name"
-              className="mb-2 block text-sm text-zinc-300"
+              className="mb-2 block text-sm font-medium text-[#a9ada4]"
             >
               Imię i nazwisko
             </label>
@@ -883,14 +883,14 @@ export default function BookingForm({ lanes }: BookingFormProps) {
               type="text"
               value={customerName}
               disabled
-              className="w-full rounded-xl border border-zinc-700 bg-zinc-800 px-4 py-3 text-zinc-300"
+              className="min-h-12 w-full rounded-xl border border-[#30372c] bg-[#191e19] px-4 py-3.5 text-[#858c7f] disabled:cursor-not-allowed"
             />
           </div>
 
           <div>
             <label
               htmlFor="booking-email"
-              className="mb-2 block text-sm text-zinc-300"
+              className="mb-2 block text-sm font-medium text-[#a9ada4]"
             >
               E-mail
             </label>
@@ -900,14 +900,14 @@ export default function BookingForm({ lanes }: BookingFormProps) {
               type="email"
               value={customerEmail}
               disabled
-              className="w-full rounded-xl border border-zinc-700 bg-zinc-800 px-4 py-3 text-zinc-300"
+              className="min-h-12 w-full rounded-xl border border-[#30372c] bg-[#191e19] px-4 py-3.5 text-[#858c7f] disabled:cursor-not-allowed"
             />
           </div>
 
           <div>
             <label
               htmlFor="booking-phone"
-              className="mb-2 block text-sm text-zinc-300"
+              className="mb-2 block text-sm font-medium text-[#a9ada4]"
             >
               Telefon
             </label>
@@ -919,106 +919,108 @@ export default function BookingForm({ lanes }: BookingFormProps) {
               onChange={(event) => setCustomerPhone(event.target.value)}
               placeholder="Wpisz numer telefonu"
               disabled={!canUseBookingForm}
-              className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-white outline-none focus:border-green-600 focus-visible:ring-2 focus-visible:ring-green-600 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-900 disabled:cursor-not-allowed disabled:bg-zinc-800 disabled:text-zinc-500"
+              className="min-h-12 w-full rounded-xl border border-[#30372c] bg-[#191e19] px-4 py-3.5 text-[#f2efe4] outline-none placeholder:text-[#858c7f] focus:border-[#78865f] focus-visible:ring-2 focus-visible:ring-[#c5a861] focus-visible:ring-offset-2 focus-visible:ring-offset-[#141814] disabled:cursor-not-allowed disabled:text-[#858c7f]"
             />
           </div>
         </div>
 
-        <div>
-          <label
-            htmlFor="booking-date"
-            className="mb-2 block text-sm text-zinc-300"
-          >
-            Data rezerwacji
-          </label>
+        <div className="grid gap-5 rounded-2xl border border-[#30372c] bg-[#141814] p-4 sm:p-5 md:grid-cols-3">
+          <div>
+            <label
+              htmlFor="booking-date"
+              className="mb-2 block text-sm font-medium text-[#a9ada4]"
+            >
+              Data rezerwacji
+            </label>
 
-          <input
-            id="booking-date"
-            type="date"
-            value={reservationDate}
-            min={getTodayDateString()}
-            disabled={!canUseBookingForm}
-            onChange={(event) => {
-              const newDate = event.target.value;
+            <input
+              id="booking-date"
+              type="date"
+              value={reservationDate}
+              min={getTodayDateString()}
+              disabled={!canUseBookingForm}
+              onChange={(event) => {
+                const newDate = event.target.value;
 
-              setReservationDate(newDate);
-              setSelectedHour("");
+                setReservationDate(newDate);
+                setSelectedHour("");
 
-              if (isPastReservationDate(newDate)) {
-                setMessage("Nie można wybrać daty wstecznej.");
-                return;
-              }
+                if (isPastReservationDate(newDate)) {
+                  setMessage("Nie można wybrać daty wstecznej.");
+                  return;
+                }
 
-              setMessage("");
-            }}
-            className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-white outline-none focus:border-green-600 focus-visible:ring-2 focus-visible:ring-green-600 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-900 disabled:cursor-not-allowed disabled:bg-zinc-800 disabled:text-zinc-500"
-          />
+                setMessage("");
+              }}
+              className="min-h-12 w-full rounded-xl border border-[#30372c] bg-[#191e19] px-4 py-3.5 text-[#f2efe4] outline-none focus:border-[#78865f] focus-visible:ring-2 focus-visible:ring-[#c5a861] focus-visible:ring-offset-2 focus-visible:ring-offset-[#141814] disabled:cursor-not-allowed disabled:text-[#858c7f]"
+            />
+          </div>
+
+          <div>
+            <label
+              htmlFor="booking-lane"
+              className="mb-2 block text-sm font-medium text-[#a9ada4]"
+            >
+              Oś / stanowisko
+            </label>
+
+            <select
+              id="booking-lane"
+              value={laneId}
+              disabled={!canUseBookingForm}
+              onChange={(event) => {
+                setLaneId(event.target.value);
+                setSelectedHour("");
+                setMessage("");
+              }}
+              className="min-h-12 w-full rounded-xl border border-[#30372c] bg-[#191e19] px-4 py-3.5 text-[#f2efe4] outline-none focus:border-[#78865f] focus-visible:ring-2 focus-visible:ring-[#c5a861] focus-visible:ring-offset-2 focus-visible:ring-offset-[#141814] disabled:cursor-not-allowed disabled:text-[#858c7f]"
+            >
+              <option value="">Wybierz oś</option>
+
+              {lanes.map((lane) => (
+                <option key={lane.id} value={lane.id}>
+                  {lane.name} — {lane.price_per_hour} zł / h
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label
+              htmlFor="booking-duration"
+              className="mb-2 block text-sm font-medium text-[#a9ada4]"
+            >
+              Czas rezerwacji
+            </label>
+
+            <select
+              id="booking-duration"
+              value={durationMinutes}
+              disabled={!canUseBookingForm}
+              onChange={(event) => {
+                setDurationMinutes(Number(event.target.value));
+                setSelectedHour("");
+                setMessage("");
+              }}
+              className="min-h-12 w-full rounded-xl border border-[#30372c] bg-[#191e19] px-4 py-3.5 text-[#f2efe4] outline-none focus:border-[#78865f] focus-visible:ring-2 focus-visible:ring-[#c5a861] focus-visible:ring-offset-2 focus-visible:ring-offset-[#141814] disabled:cursor-not-allowed disabled:text-[#858c7f]"
+            >
+              {durations.map((duration) => (
+                <option key={duration.value} value={duration.value}>
+                  {duration.label}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
 
-        <div>
-          <label
-            htmlFor="booking-lane"
-            className="mb-2 block text-sm text-zinc-300"
-          >
-            Oś / stanowisko
-          </label>
-
-          <select
-            id="booking-lane"
-            value={laneId}
-            disabled={!canUseBookingForm}
-            onChange={(event) => {
-              setLaneId(event.target.value);
-              setSelectedHour("");
-              setMessage("");
-            }}
-            className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-white outline-none focus:border-green-600 focus-visible:ring-2 focus-visible:ring-green-600 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-900 disabled:cursor-not-allowed disabled:bg-zinc-800 disabled:text-zinc-500"
-          >
-            <option value="">Wybierz oś</option>
-
-            {lanes.map((lane) => (
-              <option key={lane.id} value={lane.id}>
-                {lane.name} — {lane.price_per_hour} zł / h
-              </option>
-            ))}
-          </select>
-        </div>
-
-        <div>
-          <label
-            htmlFor="booking-duration"
-            className="mb-2 block text-sm text-zinc-300"
-          >
-            Czas rezerwacji
-          </label>
-
-          <select
-            id="booking-duration"
-            value={durationMinutes}
-            disabled={!canUseBookingForm}
-            onChange={(event) => {
-              setDurationMinutes(Number(event.target.value));
-              setSelectedHour("");
-              setMessage("");
-            }}
-            className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-white outline-none focus:border-green-600 focus-visible:ring-2 focus-visible:ring-green-600 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-900 disabled:cursor-not-allowed disabled:bg-zinc-800 disabled:text-zinc-500"
-          >
-            {durations.map((duration) => (
-              <option key={duration.value} value={duration.value}>
-                {duration.label}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        <div>
+        <div className="rounded-2xl border border-[#30372c] bg-[#141814] p-4 sm:p-5">
           <div className="mb-3 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
-            <label className="block text-sm text-zinc-300">
+            <label className="block text-sm font-medium text-[#a9ada4]">
               Wybierz godzinę startu
             </label>
 
             {reservationDate && laneId && (
-              <span className="text-xs text-zinc-500">
+              <span className="text-xs text-[#858c7f]">
                 Każdy kafelek oznacza pełny przedział jednej godziny, np.
                 12:00–13:00.
               </span>
@@ -1028,7 +1030,7 @@ export default function BookingForm({ lanes }: BookingFormProps) {
           {!canUseBookingForm ? (
             <div
               role="alert"
-              className="rounded-xl border border-zinc-800 bg-zinc-950 p-4 text-sm text-zinc-400"
+              className="rounded-xl border border-[#744545] bg-[#2a1b1b] p-4 text-sm text-[#e0a0a0]"
             >
               Godziny rezerwacji są niedostępne dla kont odrzuconych.
             </div>
@@ -1036,7 +1038,7 @@ export default function BookingForm({ lanes }: BookingFormProps) {
             <div
               role="status"
               aria-live="polite"
-              className="rounded-xl border border-zinc-800 bg-zinc-950 p-4 text-sm text-zinc-400"
+              className="rounded-xl border border-[#30372c] bg-[#191e19] p-4 text-sm text-[#a9ada4]"
             >
               Najpierw wybierz datę oraz oś, aby zobaczyć dostępne godziny.
             </div>
@@ -1044,25 +1046,25 @@ export default function BookingForm({ lanes }: BookingFormProps) {
             <div
               role="status"
               aria-live="polite"
-              className="rounded-xl border border-zinc-800 bg-zinc-950 p-4 text-sm text-zinc-400"
+              className="rounded-xl border border-[#30372c] bg-[#191e19] p-4 text-sm text-[#a9ada4]"
             >
               Sprawdzanie dostępnych godzin...
             </div>
           ) : (
             <>
-              <div className="mb-3 rounded-xl border border-zinc-800 bg-zinc-950 p-3 text-xs text-zinc-400">
+              <div className="mb-3 rounded-xl border border-[#30372c] bg-[#191e19] p-3 text-xs text-[#a9ada4]">
                 <p>
-                  <span className="font-semibold text-red-300">Zajęte</span> —
+                  <span className="font-semibold text-[#e0a0a0]">Zajęte</span> —
                   ta godzina jest już zarezerwowana.
                 </p>
                 <p>
-                  <span className="font-semibold text-zinc-300">
+                  <span className="font-semibold text-[#a9ada4]">
                     Start niedostępny
                   </span>{" "}
                   — wybrany czas rezerwacji zachodziłby na zajęty termin.
                 </p>
                 <p>
-                  <span className="font-semibold text-yellow-300">
+                  <span className="font-semibold text-[#d7c895]">
                     Wybrany zakres
                   </span>{" "}
                   — godziny objęte Twoją aktualną rezerwacją.
@@ -1077,19 +1079,19 @@ export default function BookingForm({ lanes }: BookingFormProps) {
                   <div
                     role="status"
                     aria-live="polite"
-                    className="mb-3 rounded-xl border border-zinc-700 bg-zinc-950 p-4 text-sm text-zinc-300"
+                    className="mb-3 rounded-xl border border-[#806a32] bg-[#2b2618] p-4 text-sm text-[#e1c477]"
                   >
-                    <p className="font-semibold text-zinc-100">
+                    <p className="font-semibold text-[#f2efe4]">
                       Brak wolnych godzin dla wybranej daty, osi i czasu
                       rezerwacji.
                     </p>
-                    <p className="mt-1 text-zinc-400">
+                    <p className="mt-1 text-[#a9ada4]">
                       Wybierz inną datę, oś lub czas rezerwacji.
                     </p>
                   </div>
                 )}
 
-              <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
                 {hours.map((hour) => {
                   const hourEnd = addMinutesToTime(hour, 60);
                   const isBooked = bookedHours.includes(hour);
@@ -1111,13 +1113,13 @@ const isStartAvailable =
                       className={
                         isInSelectedRange
                           ? isSelected
-                            ? "cursor-pointer rounded-xl border border-yellow-400 bg-yellow-600 px-4 py-3 font-semibold text-black"
-                            : "cursor-default rounded-xl border border-yellow-500 bg-yellow-950 px-4 py-3 font-semibold text-yellow-300"
+                            ? "min-h-14 cursor-pointer rounded-xl border border-[#9a7c3e] bg-[#536143] px-3 py-3 font-semibold text-[#f2efe4] shadow-sm"
+                            : "min-h-14 cursor-default rounded-xl border border-[#6f5a2e] bg-[#2b2618] px-3 py-3 font-semibold text-[#d7c895]"
                           : !isStartAvailable
                             ? isBooked
-                              ? "cursor-not-allowed rounded-xl border border-red-900 bg-red-950 px-4 py-3 font-semibold text-red-300 opacity-80"
-                              : "cursor-not-allowed rounded-xl border border-zinc-700 bg-zinc-900 px-4 py-3 font-semibold text-zinc-500 opacity-80"
-                            : "rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 font-semibold transition hover:border-green-600 hover:bg-green-700"
+                              ? "min-h-14 cursor-not-allowed rounded-xl border border-[#744545] bg-[#2a1b1b] px-3 py-3 font-semibold text-[#e0a0a0] opacity-80"
+                              : "min-h-14 cursor-not-allowed rounded-xl border border-[#30372c] bg-[#191e19] px-3 py-3 font-semibold text-[#858c7f] opacity-70"
+                            : "min-h-14 rounded-xl border border-[#30372c] bg-[#191e19] px-3 py-3 font-semibold text-[#f2efe4] transition hover:border-[#78865f] hover:bg-[#536143] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#c5a861] focus-visible:ring-offset-2 focus-visible:ring-offset-[#141814]"
                       }
                     >
                       <span className="block text-sm">
@@ -1143,16 +1145,16 @@ const isStartAvailable =
           )}
         </div>
 
-        <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-4 text-sm text-zinc-300">
+        <div className="rounded-2xl border border-[#30372c] bg-[#141814] p-4 text-sm text-[#a9ada4] sm:p-5">
           <p>
             Status konta:{" "}
             <span
               className={
                 isVerified
-                  ? "font-semibold text-green-500"
+                  ? "font-semibold text-[#a9d4ad]"
                   : verificationStatus === "rejected"
-                    ? "font-semibold text-red-400"
-                    : "font-semibold text-yellow-400"
+                    ? "font-semibold text-[#e0a0a0]"
+                    : "font-semibold text-[#e1c477]"
               }
             >
               {isVerified
@@ -1164,7 +1166,7 @@ const isStartAvailable =
           </p>
 
           {!isVerified && verificationStatus !== "rejected" && (
-            <p className="mt-2 text-yellow-200">
+            <p className="mt-2 text-[#e1c477]">
               Możesz wykonać jedną rezerwację na pierwszą wizytę. Kolejne
               rezerwacje będą dostępne po weryfikacji konta przez pracownika.
             </p>
@@ -1172,31 +1174,31 @@ const isStartAvailable =
 
           <p>
             Status rezerwacji:{" "}
-            <span className="font-semibold text-green-500">
+            <span className="font-semibold text-[#a9d4ad]">
               potwierdzona automatycznie
             </span>
           </p>
 
           <p>
             Płatność:{" "}
-            <span className="font-semibold text-green-500">na miejscu</span>
+            <span className="font-semibold text-[#a9d4ad]">na miejscu</span>
           </p>
 
           <p>
             Cena orientacyjna:{" "}
-            <span className="font-semibold text-green-500">
+            <span className="font-semibold text-[#d7c895]">
               {price.toFixed(0)} zł
             </span>
           </p>
         </div>
 
-        <label className="flex gap-3 text-sm text-zinc-300">
+        <label className="flex min-h-12 items-start gap-3 rounded-xl border border-[#30372c] bg-[#141814] p-4 text-sm text-[#a9ada4]">
           <input
             type="checkbox"
             checked={acceptedRules}
             disabled={!canUseBookingForm}
             onChange={(event) => setAcceptedRules(event.target.checked)}
-            className="mt-1 disabled:cursor-not-allowed"
+            className="mt-0.5 size-5 shrink-0 accent-[#536143] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#c5a861] focus-visible:ring-offset-2 focus-visible:ring-offset-[#141814] disabled:cursor-not-allowed"
           />
 
           <span>
@@ -1218,7 +1220,7 @@ const isStartAvailable =
           type="button"
           onClick={handleSubmit}
           disabled={!canSubmit}
-          className="rounded-xl bg-green-700 px-4 py-3 font-semibold transition hover:bg-green-600 disabled:cursor-not-allowed disabled:opacity-60"
+          className="min-h-12 w-full rounded-xl bg-[#536143] px-4 py-3.5 font-semibold text-[#f2efe4] transition hover:bg-[#78865f] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#c5a861] focus-visible:ring-offset-2 focus-visible:ring-offset-[#191e19] disabled:cursor-not-allowed disabled:bg-[#30372c] disabled:text-[#858c7f]"
         >
           {loading
             ? "Zapisywanie..."
