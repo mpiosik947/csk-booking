@@ -1,28 +1,37 @@
+import Image from "next/image";
+
 export default function PrivacyPage() {
   return (
-    <main className="min-h-screen bg-zinc-950 text-white">
-      <section className="mx-auto max-w-4xl px-6 py-12">
-        <p className="mb-4 text-sm uppercase tracking-[0.35em] text-green-500">
-          CSK Booking
-        </p>
+    <main className="min-h-screen bg-[#090b09] px-4 py-6 text-[#f2efe4] sm:px-6 sm:py-8">
+      <article className="mx-auto max-w-4xl rounded-[2rem] border border-[#30372c] bg-[#141814] p-5 shadow-2xl shadow-black/20 sm:p-8 lg:p-10">
+        <header className="mb-8 text-center">
+          <Image
+            src="/login-brand.png"
+            alt="Centrum Szkolenia Krutla"
+            width={1536}
+            height={1024}
+            className="mx-auto h-auto w-full max-w-[220px] sm:max-w-[260px]"
+            priority
+          />
 
-        <h1 className="mb-4 text-4xl font-bold">
-          Polityka prywatności i klauzula RODO
-        </h1>
+          <h1 className="mt-5 text-3xl font-bold sm:text-4xl">
+            Polityka prywatności i klauzula RODO
+          </h1>
 
-        <p className="mb-8 text-zinc-400">
-          Poniższy dokument jest roboczą wersją polityki prywatności dla
-          systemu rezerwacji CSK Booking. Przed wdrożeniem produkcyjnym warto
-          dopasować dane administratora oraz skonsultować treść z prawnikiem.
-        </p>
+          <p className="mt-4 text-left leading-7 text-[#a9ada4] sm:text-center">
+            Poniższy dokument jest roboczą wersją polityki prywatności dla
+            systemu rezerwacji CSK Booking. Przed wdrożeniem produkcyjnym warto
+            dopasować dane administratora oraz skonsultować treść z prawnikiem.
+          </p>
+        </header>
 
-        <div className="space-y-6 rounded-2xl border border-zinc-800 bg-zinc-900 p-6">
-          <section>
-            <h2 className="mb-3 text-2xl font-semibold">
+        <div className="space-y-5">
+          <section className="rounded-2xl border border-[#30372c] bg-[#191e19] p-5 sm:p-6">
+            <h2 className="mb-3 text-xl font-semibold text-[#d7c895] sm:text-2xl">
               1. Administrator danych
             </h2>
 
-            <div className="space-y-2 text-zinc-300">
+            <div className="space-y-3 leading-7 text-[#a9ada4]">
               <p>
                 Administratorem danych osobowych użytkowników systemu
                 rezerwacyjnego jest właściciel lub zarządca obiektu
@@ -34,7 +43,7 @@ export default function PrivacyPage() {
                 uruchomieniem systemu produkcyjnego.
               </p>
 
-              <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-4 text-sm text-zinc-400">
+              <div className="overflow-hidden rounded-xl border border-[#6f5a2e] bg-[#201d15] p-4 text-sm leading-6 text-[#d7c895]">
                 <p>Do uzupełnienia:</p>
                 <p>Nazwa podmiotu: ........................................</p>
                 <p>Adres: ................................................</p>
@@ -44,12 +53,12 @@ export default function PrivacyPage() {
             </div>
           </section>
 
-          <section>
-            <h2 className="mb-3 text-2xl font-semibold">
+          <section className="rounded-2xl border border-[#30372c] bg-[#191e19] p-5 sm:p-6">
+            <h2 className="mb-3 text-xl font-semibold text-[#d7c895] sm:text-2xl">
               2. Zakres przetwarzanych danych
             </h2>
 
-            <div className="space-y-2 text-zinc-300">
+            <div className="space-y-3 leading-7 text-[#a9ada4]">
               <p>
                 W ramach systemu CSK Booking mogą być przetwarzane następujące
                 dane osobowe użytkownika:
@@ -69,12 +78,12 @@ export default function PrivacyPage() {
             </div>
           </section>
 
-          <section>
-            <h2 className="mb-3 text-2xl font-semibold">
+          <section className="rounded-2xl border border-[#30372c] bg-[#191e19] p-5 sm:p-6">
+            <h2 className="mb-3 text-xl font-semibold text-[#d7c895] sm:text-2xl">
               3. Cele przetwarzania danych
             </h2>
 
-            <div className="space-y-2 text-zinc-300">
+            <div className="space-y-3 leading-7 text-[#a9ada4]">
               <p>Dane osobowe są przetwarzane w celu:</p>
 
               <ul className="list-disc space-y-1 pl-6">
@@ -89,12 +98,12 @@ export default function PrivacyPage() {
             </div>
           </section>
 
-          <section>
-            <h2 className="mb-3 text-2xl font-semibold">
+          <section className="rounded-2xl border border-[#30372c] bg-[#191e19] p-5 sm:p-6">
+            <h2 className="mb-3 text-xl font-semibold text-[#d7c895] sm:text-2xl">
               4. Podstawa prawna przetwarzania
             </h2>
 
-            <div className="space-y-2 text-zinc-300">
+            <div className="space-y-3 leading-7 text-[#a9ada4]">
               <p>
                 Dane są przetwarzane na podstawie przepisów RODO, w
                 szczególności:
@@ -122,12 +131,12 @@ export default function PrivacyPage() {
             </div>
           </section>
 
-          <section>
-            <h2 className="mb-3 text-2xl font-semibold">
+          <section className="rounded-2xl border border-[#30372c] bg-[#191e19] p-5 sm:p-6">
+            <h2 className="mb-3 text-xl font-semibold text-[#d7c895] sm:text-2xl">
               5. Okres przechowywania danych
             </h2>
 
-            <div className="space-y-2 text-zinc-300">
+            <div className="space-y-3 leading-7 text-[#a9ada4]">
               <p>
                 Dane użytkownika będą przechowywane przez okres niezbędny do
                 obsługi konta, realizacji rezerwacji oraz zabezpieczenia
@@ -148,12 +157,12 @@ export default function PrivacyPage() {
             </div>
           </section>
 
-          <section>
-            <h2 className="mb-3 text-2xl font-semibold">
+          <section className="rounded-2xl border border-[#30372c] bg-[#191e19] p-5 sm:p-6">
+            <h2 className="mb-3 text-xl font-semibold text-[#d7c895] sm:text-2xl">
               6. Odbiorcy danych
             </h2>
 
-            <div className="space-y-2 text-zinc-300">
+            <div className="space-y-3 leading-7 text-[#a9ada4]">
               <p>
                 Dane mogą być udostępniane wyłącznie podmiotom, które
                 uczestniczą w obsłudze systemu lub obiektu, w szczególności:
@@ -173,12 +182,12 @@ export default function PrivacyPage() {
             </div>
           </section>
 
-          <section>
-            <h2 className="mb-3 text-2xl font-semibold">
+          <section className="rounded-2xl border border-[#30372c] bg-[#191e19] p-5 sm:p-6">
+            <h2 className="mb-3 text-xl font-semibold text-[#d7c895] sm:text-2xl">
               7. Prawa użytkownika
             </h2>
 
-            <div className="space-y-2 text-zinc-300">
+            <div className="space-y-3 leading-7 text-[#a9ada4]">
               <p>Użytkownik ma prawo do:</p>
 
               <ul className="list-disc space-y-1 pl-6">
@@ -194,12 +203,12 @@ export default function PrivacyPage() {
             </div>
           </section>
 
-          <section>
-            <h2 className="mb-3 text-2xl font-semibold">
+          <section className="rounded-2xl border border-[#30372c] bg-[#191e19] p-5 sm:p-6">
+            <h2 className="mb-3 text-xl font-semibold text-[#d7c895] sm:text-2xl">
               8. Dobrowolność podania danych
             </h2>
 
-            <div className="space-y-2 text-zinc-300">
+            <div className="space-y-3 leading-7 text-[#a9ada4]">
               <p>
                 Podanie danych jest dobrowolne, ale niezbędne do utworzenia
                 konta i dokonania rezerwacji w systemie CSK Booking.
@@ -212,12 +221,12 @@ export default function PrivacyPage() {
             </div>
           </section>
 
-          <section>
-            <h2 className="mb-3 text-2xl font-semibold">
+          <section className="rounded-2xl border border-[#30372c] bg-[#191e19] p-5 sm:p-6">
+            <h2 className="mb-3 text-xl font-semibold text-[#d7c895] sm:text-2xl">
               9. Dane techniczne i cookies
             </h2>
 
-            <div className="space-y-2 text-zinc-300">
+            <div className="space-y-3 leading-7 text-[#a9ada4]">
               <p>
                 System może przetwarzać podstawowe dane techniczne związane z
                 korzystaniem z aplikacji, takie jak informacje o sesji
@@ -233,12 +242,12 @@ export default function PrivacyPage() {
             </div>
           </section>
 
-          <section>
-            <h2 className="mb-3 text-2xl font-semibold">
+          <section className="rounded-2xl border border-[#30372c] bg-[#191e19] p-5 sm:p-6">
+            <h2 className="mb-3 text-xl font-semibold text-[#d7c895] sm:text-2xl">
               10. Zmiany polityki prywatności
             </h2>
 
-            <div className="space-y-2 text-zinc-300">
+            <div className="space-y-3 leading-7 text-[#a9ada4]">
               <p>
                 Administrator może aktualizować politykę prywatności w przypadku
                 zmian w systemie, przepisach prawa lub sposobie przetwarzania
@@ -253,29 +262,39 @@ export default function PrivacyPage() {
           </section>
         </div>
 
-        <div className="mt-8 flex flex-col gap-3 sm:flex-row">
+        <nav
+          aria-label="Nawigacja dokumentu"
+          className="mt-8 flex flex-col gap-3 border-t border-[#30372c] pt-6 sm:flex-row sm:flex-wrap"
+        >
+          <a
+            href="/"
+            className="inline-flex min-h-11 items-center justify-center rounded-xl border border-[#30372c] px-5 py-3 text-center text-sm font-semibold text-[#d7c895] transition hover:border-[#d7c895] hover:bg-[#191e19] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d7c895] focus-visible:ring-offset-2 focus-visible:ring-offset-[#141814]"
+          >
+            ← Powrót do strony głównej
+          </a>
+
           <a
             href="/dashboard"
-            className="rounded-xl border border-zinc-700 px-5 py-3 text-center text-sm font-semibold text-zinc-300 transition hover:bg-zinc-900"
+            className="inline-flex min-h-11 items-center justify-center rounded-xl border border-[#30372c] px-5 py-3 text-center text-sm font-semibold text-[#a9ada4] transition hover:border-[#d7c895] hover:text-[#d7c895] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d7c895] focus-visible:ring-offset-2 focus-visible:ring-offset-[#141814]"
           >
             ← Panel klienta
           </a>
 
           <a
             href="/terms"
-            className="rounded-xl border border-zinc-700 px-5 py-3 text-center text-sm font-semibold text-zinc-300 transition hover:bg-zinc-900"
+            className="inline-flex min-h-11 items-center justify-center rounded-xl border border-[#30372c] px-5 py-3 text-center text-sm font-semibold text-[#a9ada4] transition hover:border-[#d7c895] hover:text-[#d7c895] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d7c895] focus-visible:ring-offset-2 focus-visible:ring-offset-[#141814]"
           >
             Regulamin
           </a>
 
           <a
             href="/booking"
-            className="rounded-xl bg-green-700 px-5 py-3 text-center text-sm font-semibold text-white transition hover:bg-green-600"
+            className="inline-flex min-h-11 items-center justify-center rounded-xl bg-[#536143] px-5 py-3 text-center text-sm font-semibold text-[#f2efe4] transition hover:bg-[#78865f] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d7c895] focus-visible:ring-offset-2 focus-visible:ring-offset-[#141814]"
           >
             Przejdź do rezerwacji
           </a>
-        </div>
-      </section>
+        </nav>
+      </article>
     </main>
   );
 }

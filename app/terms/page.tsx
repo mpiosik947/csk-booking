@@ -1,40 +1,51 @@
+import Image from "next/image";
+
 export default function TermsPage() {
   return (
-    <main className="min-h-screen bg-zinc-950 text-white">
-      <section className="mx-auto max-w-4xl px-6 py-12">
-        <p className="mb-4 text-sm uppercase tracking-[0.35em] text-green-500">
-          CSK Booking
-        </p>
+    <main className="min-h-screen bg-[#090b09] px-4 py-6 text-[#f2efe4] sm:px-6 sm:py-8">
+      <article className="mx-auto max-w-4xl rounded-[2rem] border border-[#30372c] bg-[#141814] p-5 shadow-2xl shadow-black/20 sm:p-8 lg:p-10">
+        <header className="mb-8 text-center">
+          <Image
+            src="/login-brand.png"
+            alt="Centrum Szkolenia Krutla"
+            width={1536}
+            height={1024}
+            className="mx-auto h-auto w-full max-w-[220px] sm:max-w-[260px]"
+            priority
+          />
 
-        <h1 className="mb-4 text-4xl font-bold">Regulamin i RODO</h1>
+          <h1 className="mt-5 text-3xl font-bold sm:text-4xl">
+            Regulamin i RODO
+          </h1>
 
-        <p className="mb-8 text-zinc-400">
-          Poniżej znajduje się roboczy regulamin korzystania ze strzelnicy oraz
-          link do polityki prywatności / klauzuli RODO. Przed użyciem
-          produkcyjnym treść warto dopasować do oficjalnego regulaminu obiektu.
-        </p>
+          <p className="mt-4 text-left leading-7 text-[#a9ada4] sm:text-center">
+            Poniżej znajduje się roboczy regulamin korzystania ze strzelnicy oraz
+            link do polityki prywatności / klauzuli RODO. Przed użyciem
+            produkcyjnym treść warto dopasować do oficjalnego regulaminu obiektu.
+          </p>
+        </header>
 
         <div className="mb-8 grid gap-4 md:grid-cols-2">
           <a
             href="#regulamin"
-            className="rounded-2xl border border-green-800 bg-green-950 p-5 transition hover:bg-green-900"
+            className="rounded-2xl border border-[#536143] bg-[#191e19] p-5 transition hover:border-[#d7c895] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d7c895] focus-visible:ring-offset-2 focus-visible:ring-offset-[#141814]"
           >
-            <h2 className="mb-2 text-xl font-bold text-green-300">
+            <h2 className="mb-2 text-xl font-bold text-[#d7c895]">
               Regulamin strzelnicy
             </h2>
-            <p className="text-sm text-green-100">
+            <p className="text-sm leading-6 text-[#a9ada4]">
               Zasady rezerwacji, bezpieczeństwa i korzystania z obiektu.
             </p>
           </a>
 
           <a
             href="/privacy"
-            className="rounded-2xl border border-zinc-700 bg-zinc-900 p-5 transition hover:bg-zinc-800"
+            className="rounded-2xl border border-[#30372c] bg-[#191e19] p-5 transition hover:border-[#d7c895] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d7c895] focus-visible:ring-offset-2 focus-visible:ring-offset-[#141814]"
           >
-            <h2 className="mb-2 text-xl font-bold">
+            <h2 className="mb-2 text-xl font-bold text-[#d7c895]">
               Polityka prywatności / RODO
             </h2>
-            <p className="text-sm text-zinc-400">
+            <p className="text-sm leading-6 text-[#a9ada4]">
               Informacje o przetwarzaniu danych osobowych użytkowników systemu.
             </p>
           </a>
@@ -42,12 +53,12 @@ export default function TermsPage() {
 
         <div
           id="regulamin"
-          className="space-y-6 rounded-2xl border border-zinc-800 bg-zinc-900 p-6"
+          className="space-y-5"
         >
-          <section>
-            <h2 className="mb-3 text-2xl font-semibold">1. Zasady ogólne</h2>
+          <section className="rounded-2xl border border-[#30372c] bg-[#191e19] p-5 sm:p-6">
+            <h2 className="mb-3 text-xl font-semibold text-[#d7c895] sm:text-2xl">1. Zasady ogólne</h2>
 
-            <div className="space-y-2 text-zinc-300">
+            <div className="space-y-3 leading-7 text-[#a9ada4]">
               <p>
                 1. Każda osoba korzystająca ze strzelnicy zobowiązana jest do
                 przestrzegania regulaminu obiektu, poleceń obsługi oraz zasad
@@ -75,10 +86,10 @@ export default function TermsPage() {
             </div>
           </section>
 
-          <section>
-            <h2 className="mb-3 text-2xl font-semibold">2. Rezerwacje</h2>
+          <section className="rounded-2xl border border-[#30372c] bg-[#191e19] p-5 sm:p-6">
+            <h2 className="mb-3 text-xl font-semibold text-[#d7c895] sm:text-2xl">2. Rezerwacje</h2>
 
-            <div className="space-y-2 text-zinc-300">
+            <div className="space-y-3 leading-7 text-[#a9ada4]">
               <p>
                 1. Rezerwacja osi odbywa się przez system rezerwacyjny CSK
                 Booking.
@@ -111,10 +122,10 @@ export default function TermsPage() {
             </div>
           </section>
 
-          <section>
-            <h2 className="mb-3 text-2xl font-semibold">3. Bezpieczeństwo</h2>
+          <section className="rounded-2xl border border-[#30372c] bg-[#191e19] p-5 sm:p-6">
+            <h2 className="mb-3 text-xl font-semibold text-[#d7c895] sm:text-2xl">3. Bezpieczeństwo</h2>
 
-            <div className="space-y-2 text-zinc-300">
+            <div className="space-y-3 leading-7 text-[#a9ada4]">
               <p>
                 1. Broń na terenie strzelnicy należy traktować zawsze jako
                 załadowaną.
@@ -147,12 +158,12 @@ export default function TermsPage() {
             </div>
           </section>
 
-          <section>
-            <h2 className="mb-3 text-2xl font-semibold">
+          <section className="rounded-2xl border border-[#30372c] bg-[#191e19] p-5 sm:p-6">
+            <h2 className="mb-3 text-xl font-semibold text-[#d7c895] sm:text-2xl">
               4. Ochrona słuchu i wzroku
             </h2>
 
-            <div className="space-y-2 text-zinc-300">
+            <div className="space-y-3 leading-7 text-[#a9ada4]">
               <p>
                 1. Na osi strzeleckiej obowiązuje używanie ochrony słuchu.
               </p>
@@ -167,12 +178,12 @@ export default function TermsPage() {
             </div>
           </section>
 
-          <section>
-            <h2 className="mb-3 text-2xl font-semibold">
+          <section className="rounded-2xl border border-[#30372c] bg-[#191e19] p-5 sm:p-6">
+            <h2 className="mb-3 text-xl font-semibold text-[#d7c895] sm:text-2xl">
               5. Stan psychofizyczny
             </h2>
 
-            <div className="space-y-2 text-zinc-300">
+            <div className="space-y-3 leading-7 text-[#a9ada4]">
               <p>
                 1. Zabrania się korzystania ze strzelnicy pod wpływem alkoholu,
                 środków odurzających albo substancji mogących wpływać na
@@ -191,10 +202,10 @@ export default function TermsPage() {
             </div>
           </section>
 
-          <section>
-            <h2 className="mb-3 text-2xl font-semibold">6. Odpowiedzialność</h2>
+          <section className="rounded-2xl border border-[#30372c] bg-[#191e19] p-5 sm:p-6">
+            <h2 className="mb-3 text-xl font-semibold text-[#d7c895] sm:text-2xl">6. Odpowiedzialność</h2>
 
-            <div className="space-y-2 text-zinc-300">
+            <div className="space-y-3 leading-7 text-[#a9ada4]">
               <p>
                 1. Użytkownik ponosi odpowiedzialność za swoje działania na
                 terenie strzelnicy.
@@ -215,12 +226,12 @@ export default function TermsPage() {
             </div>
           </section>
 
-          <section>
-            <h2 className="mb-3 text-2xl font-semibold">
+          <section className="rounded-2xl border border-[#30372c] bg-[#191e19] p-5 sm:p-6">
+            <h2 className="mb-3 text-xl font-semibold text-[#d7c895] sm:text-2xl">
               7. Dane osobowe i RODO
             </h2>
 
-            <div className="space-y-2 text-zinc-300">
+            <div className="space-y-3 leading-7 text-[#a9ada4]">
               <p>
                 1. Dane osobowe podane w systemie rezerwacyjnym są przetwarzane
                 w celu obsługi konta, rezerwacji, kontaktu z klientem oraz
@@ -238,7 +249,7 @@ export default function TermsPage() {
 
               <a
                 href="/privacy"
-                className="mt-4 inline-block rounded-xl bg-green-700 px-5 py-3 text-sm font-semibold text-white transition hover:bg-green-600"
+                className="mt-4 inline-flex min-h-11 items-center rounded-xl bg-[#536143] px-5 py-3 text-sm font-semibold text-[#f2efe4] transition hover:bg-[#78865f] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d7c895] focus-visible:ring-offset-2 focus-visible:ring-offset-[#191e19]"
               >
                 Przejdź do Polityki prywatności / RODO
               </a>
@@ -246,36 +257,46 @@ export default function TermsPage() {
           </section>
         </div>
 
-        <div className="mt-8 flex flex-col gap-3 sm:flex-row">
+        <nav
+          aria-label="Nawigacja dokumentu"
+          className="mt-8 flex flex-col gap-3 border-t border-[#30372c] pt-6 sm:flex-row sm:flex-wrap"
+        >
+          <a
+            href="/"
+            className="inline-flex min-h-11 items-center justify-center rounded-xl border border-[#30372c] px-5 py-3 text-center text-sm font-semibold text-[#d7c895] transition hover:border-[#d7c895] hover:bg-[#191e19] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d7c895] focus-visible:ring-offset-2 focus-visible:ring-offset-[#141814]"
+          >
+            ← Powrót do strony głównej
+          </a>
+
           <a
             href="/register"
-            className="rounded-xl border border-green-800 px-5 py-3 text-center text-sm font-semibold text-green-400 transition hover:bg-green-950"
+            className="inline-flex min-h-11 items-center justify-center rounded-xl border border-[#30372c] px-5 py-3 text-center text-sm font-semibold text-[#a9ada4] transition hover:border-[#d7c895] hover:text-[#d7c895] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d7c895] focus-visible:ring-offset-2 focus-visible:ring-offset-[#141814]"
           >
             ← Wróć do rejestracji
           </a>
 
           <a
             href="/dashboard"
-            className="rounded-xl border border-zinc-700 px-5 py-3 text-center text-sm font-semibold text-zinc-300 transition hover:bg-zinc-900"
+            className="inline-flex min-h-11 items-center justify-center rounded-xl border border-[#30372c] px-5 py-3 text-center text-sm font-semibold text-[#a9ada4] transition hover:border-[#d7c895] hover:text-[#d7c895] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d7c895] focus-visible:ring-offset-2 focus-visible:ring-offset-[#141814]"
           >
             Panel klienta
           </a>
 
           <a
             href="/privacy"
-            className="rounded-xl border border-zinc-700 px-5 py-3 text-center text-sm font-semibold text-zinc-300 transition hover:bg-zinc-900"
+            className="inline-flex min-h-11 items-center justify-center rounded-xl border border-[#30372c] px-5 py-3 text-center text-sm font-semibold text-[#a9ada4] transition hover:border-[#d7c895] hover:text-[#d7c895] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d7c895] focus-visible:ring-offset-2 focus-visible:ring-offset-[#141814]"
           >
             Polityka prywatności / RODO
           </a>
 
           <a
             href="/booking"
-            className="rounded-xl bg-green-700 px-5 py-3 text-center text-sm font-semibold text-white transition hover:bg-green-600"
+            className="inline-flex min-h-11 items-center justify-center rounded-xl bg-[#536143] px-5 py-3 text-center text-sm font-semibold text-[#f2efe4] transition hover:bg-[#78865f] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d7c895] focus-visible:ring-offset-2 focus-visible:ring-offset-[#141814]"
           >
             Przejdź do rezerwacji
           </a>
-        </div>
-      </section>
+        </nav>
+      </article>
     </main>
   );
 }
