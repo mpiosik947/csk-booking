@@ -149,7 +149,7 @@ export default function EventsPage() {
       return {
         label: "Pełne",
         className:
-          "rounded-full bg-red-950 px-3 py-1 text-xs font-semibold text-red-300",
+          "inline-flex rounded-full border border-[#744545] bg-[#2a1b1b] px-3 py-1 text-xs font-semibold text-[#e0a0a0]",
       };
     }
 
@@ -157,14 +157,14 @@ export default function EventsPage() {
       return {
         label: "Ostatnie miejsca",
         className:
-          "rounded-full bg-yellow-950 px-3 py-1 text-xs font-semibold text-yellow-300",
+          "inline-flex rounded-full border border-[#806a32] bg-[#2b2618] px-3 py-1 text-xs font-semibold text-[#e1c477]",
       };
     }
 
     return {
       label: "Wolne miejsca",
       className:
-        "rounded-full bg-green-950 px-3 py-1 text-xs font-semibold text-green-400",
+        "inline-flex rounded-full border border-[#3f6848] bg-[#1b2a1d] px-3 py-1 text-xs font-semibold text-[#a9d4ad]",
     };
   }
 
@@ -318,73 +318,77 @@ export default function EventsPage() {
     const status = isLoggedIn ? getEventStatus(event) : null;
 
     return (
-      <div>
+      <div className="min-w-0">
         {status && <span className={status.className}>{status.label}</span>}
 
-        <h2 className="mt-4 text-2xl font-bold sm:text-3xl">{event.title}</h2>
+        <h2 className="mt-4 break-words text-2xl font-bold text-[#f2efe4] sm:text-3xl">
+          {event.title}
+        </h2>
 
-        <div className="mt-5 grid gap-3 text-sm">
-          <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-4">
-            <p className="text-zinc-500">Termin</p>
-            <p className="font-semibold text-white">
+        <div className="mt-5 grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
+          <div>
+            <p className="text-[#858c7f]">Termin</p>
+            <p className="mt-1 font-semibold text-[#d7c895]">
               {formatDate(event.event_date)} | {event.start_time.slice(0, 5)}–
               {event.end_time.slice(0, 5)}
             </p>
           </div>
 
-          <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-4">
-            <p className="text-zinc-500">Miejsce</p>
-            <p className="font-semibold text-white">{event.location}</p>
+          <div className="min-w-0">
+            <p className="text-[#858c7f]">Miejsce</p>
+            <p className="mt-1 break-words font-semibold text-[#f2efe4]">
+              {event.location}
+            </p>
           </div>
 
-          <div className="grid gap-3 sm:grid-cols-2">
-            <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-4">
-              <p className="text-zinc-500">Koszt</p>
-              <p className="font-semibold text-green-500">
-                {Number(event.price).toFixed(0)} zł
-              </p>
-            </div>
-
-            <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-4">
-              <p className="text-zinc-500">Miejsca</p>
-              <p className="font-semibold text-white">
-                {isLoggedIn
-                  ? `${participantsCount} / ${event.max_participants}`
-                  : `Limit: ${event.max_participants}`}
-              </p>
-            </div>
+          <div>
+            <p className="text-[#858c7f]">Koszt</p>
+            <p className="mt-1 font-semibold text-[#d7c895]">
+              {Number(event.price).toFixed(0)} zł
+            </p>
           </div>
 
+          <div>
+            <p className="text-[#858c7f]">Miejsca</p>
+            <p className="mt-1 font-semibold text-[#f2efe4]">
+              {isLoggedIn
+                ? `${participantsCount} / ${event.max_participants}`
+                : `Limit: ${event.max_participants}`}
+            </p>
+          </div>
+        </div>
+
+        <div className="mt-5">
           {isLoggedIn ? (
-            <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-4">
-              <p className="text-zinc-500">Wolne miejsca</p>
+            <div className="rounded-xl border border-[#30372c] bg-[#141814] p-4">
+              <p className="text-[#858c7f]">Wolne miejsca</p>
               <p
                 className={
                   isFull
-                    ? "font-semibold text-red-400"
-                    : "font-semibold text-green-500"
+                    ? "font-semibold text-[#e0a0a0]"
+                    : "font-semibold text-[#a9d4ad]"
                 }
               >
                 {publicFreePlaces}
               </p>
 
               {reserveCount !== null && reserveCount > 0 && (
-                <p className="mt-2 text-yellow-300">
+                <p className="mt-2 text-[#e1c477]">
                   Lista rezerwowa: {reserveCount}
                 </p>
               )}
             </div>
           ) : (
-            <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-4 text-zinc-300">
+            <div className="rounded-xl border border-[#343a31] bg-[#171a17] p-4 text-[#a9ada4]">
               Zaloguj się, aby sprawdzić aktualną dostępność i zapisać się.
             </div>
           )}
         </div>
 
-        <div className="mt-6 rounded-2xl border border-zinc-800 bg-zinc-950 p-5">
-          <h3 className="mb-3 text-xl font-bold">Opis</h3>
+        <div className="mt-6 border-t border-[#30372c] pt-5">
+          <h3 className="mb-3 text-xl font-bold text-[#f2efe4]">Opis</h3>
 
-          <p className="whitespace-pre-line text-zinc-300">
+          <p className="whitespace-pre-line break-words leading-7 text-[#a9ada4]">
             {event.description}
           </p>
         </div>
@@ -394,14 +398,14 @@ export default function EventsPage() {
             <div className="grid gap-3 sm:grid-cols-2">
               <a
                 href="/login?redirectTo=%2Fevents"
-                className="rounded-xl bg-green-700 px-5 py-3 text-center font-semibold text-white transition hover:bg-green-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-400 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950"
+                className="min-h-12 rounded-xl bg-[#536143] px-5 py-3 text-center font-semibold text-[#f2efe4] transition hover:bg-[#78865f] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#c5a861] focus-visible:ring-offset-2 focus-visible:ring-offset-[#191e19]"
               >
                 Zaloguj się, aby się zapisać
               </a>
 
               <a
                 href="/register"
-                className="rounded-xl border border-zinc-700 px-5 py-3 text-center font-semibold text-zinc-200 transition hover:bg-zinc-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-400 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950"
+                className="min-h-12 rounded-xl border border-[#30372c] bg-[#141814] px-5 py-3 text-center font-semibold text-[#f2efe4] transition hover:border-[#78865f] hover:bg-[#191e19] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#c5a861] focus-visible:ring-offset-2 focus-visible:ring-offset-[#191e19]"
               >
                 Załóż konto
               </a>
@@ -410,7 +414,7 @@ export default function EventsPage() {
             <button
               type="button"
               onClick={() => setRegistrationConfirmation({ eventItem: event, asReserve: true })}
-              className="w-full rounded-xl border border-yellow-700 bg-yellow-950 px-5 py-3 font-semibold text-yellow-300 transition hover:bg-yellow-900"
+              className="min-h-12 w-full rounded-xl border border-[#806a32] bg-[#2b2618] px-5 py-3 font-semibold text-[#e1c477] transition hover:bg-[#3a321f] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#c5a861] focus-visible:ring-offset-2 focus-visible:ring-offset-[#191e19]"
             >
               Dołącz do listy rezerwowej
             </button>
@@ -418,7 +422,7 @@ export default function EventsPage() {
             <button
               type="button"
               onClick={() => setRegistrationConfirmation({ eventItem: event, asReserve: false })}
-              className="w-full rounded-xl bg-green-700 px-5 py-3 font-semibold text-white transition hover:bg-green-600"
+              className="min-h-12 w-full rounded-xl bg-[#536143] px-5 py-3 font-semibold text-[#f2efe4] transition hover:bg-[#78865f] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#c5a861] focus-visible:ring-offset-2 focus-visible:ring-offset-[#191e19]"
             >
               Zapisz się
             </button>
@@ -429,22 +433,22 @@ export default function EventsPage() {
   }
 
   return (
-    <main className="min-h-screen bg-zinc-950 text-white">
-      <section className="mx-auto max-w-7xl px-4 py-10 sm:px-6 sm:py-12">
-        <div className="mb-8 sm:mb-10">
-          <p className="mb-4 text-xs uppercase tracking-[0.3em] text-green-500 sm:text-sm sm:tracking-[0.35em]">
-            CSK Booking
+    <main className="min-h-screen bg-[#090b09] px-4 py-6 text-[#f2efe4] sm:px-6 sm:py-8">
+      <section className="mx-auto max-w-6xl rounded-[2rem] border border-[#30372c] bg-[#141814] p-5 shadow-2xl shadow-black/20 sm:p-8">
+        <header className="mb-8 sm:mb-10">
+          <p className="mb-3 text-xs font-semibold uppercase tracking-[0.24em] text-[#d7c895] sm:text-sm">
+            CSK BOOKING
           </p>
 
-          <h1 className="text-3xl font-bold sm:text-4xl">
+          <h1 className="text-3xl font-bold text-[#f2efe4] sm:text-4xl">
             Eventy i szkolenia
           </h1>
 
-          <p className="mt-3 max-w-3xl text-sm text-zinc-400 sm:text-base">
+          <p className="mt-3 max-w-3xl text-sm leading-6 text-[#a9ada4] sm:text-base">
             Wybierz szkolenie z listy, sprawdź szczegóły i zapisz się na
             wydarzenie albo listę rezerwową.
           </p>
-        </div>
+        </header>
 
         {registrationConfirmation && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 px-4">
@@ -622,7 +626,11 @@ export default function EventsPage() {
         )}
 
         {loading && (
-          <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-6 text-zinc-400">
+          <div
+            role="status"
+            aria-live="polite"
+            className="rounded-2xl border border-[#30372c] bg-[#191e19] p-6 text-[#a9ada4]"
+          >
             Ładowanie szkoleń...
           </div>
         )}
@@ -630,22 +638,36 @@ export default function EventsPage() {
         {!loading && loadError && (
           <div
             role="alert"
-            className="rounded-xl border border-red-800 bg-red-950 p-6 text-red-200"
+            className="rounded-2xl border border-[#744545] bg-[#2a1b1b] p-6 text-[#e0a0a0]"
           >
             Nie udało się pobrać szkoleń. Spróbuj ponownie później.
           </div>
         )}
 
         {!loading && !loadError && events.length === 0 && (
-          <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-6 text-zinc-400">
+          <div className="rounded-2xl border border-[#30372c] bg-[#191e19] p-6 text-[#a9ada4]">
             Brak dostępnych szkoleń.
           </div>
         )}
 
         {!loading && !loadError && events.length > 0 && (
-          <>
-            {/* MOBILE */}
-            <div className="grid gap-4 lg:hidden">
+          <section aria-labelledby="events-list-title">
+            <div className="mb-5 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+              <div>
+                <h2
+                  id="events-list-title"
+                  className="text-2xl font-bold text-[#f2efe4]"
+                >
+                  Lista szkoleń
+                </h2>
+                <p className="mt-1 text-sm text-[#858c7f]">
+                  Kliknij wybrane szkolenie, aby zobaczyć pełny opis i możliwość
+                  zapisu.
+                </p>
+              </div>
+            </div>
+
+            <div className="grid gap-3">
               {events.map((event) => {
                 const participantsCount = isLoggedIn
                   ? getParticipantsCount(event)
@@ -654,208 +676,115 @@ export default function EventsPage() {
                   ? getReserveCount(event)
                   : null;
                 const status = isLoggedIn ? getEventStatus(event) : null;
-                const isOpen = selectedEventId === event.id;
+                const isSelected = selectedEventId === event.id;
+                const detailsId = `event-details-${event.id}`;
+                const summaryId = `event-summary-${event.id}`;
 
                 return (
-                  <div
+                  <button
                     key={event.id}
-                    className={
-                      isOpen
-                        ? "rounded-2xl border border-green-800 bg-green-950/30 p-4"
-                        : "rounded-2xl border border-zinc-800 bg-zinc-900 p-4"
-                    }
+                    id={summaryId}
+                    type="button"
+                    onClick={() => toggleSelectedEvent(event.id)}
+                    aria-expanded={isSelected}
+                    aria-controls={detailsId}
+                    className={`min-h-12 w-full rounded-2xl border p-4 text-left transition sm:p-5 ${
+                      isSelected
+                        ? "border-[#78865f] bg-[#1d231c] shadow-sm shadow-black/20"
+                        : "border-[#30372c] bg-[#191e19] hover:border-[#536143] hover:bg-[#1d221d]"
+                    } focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#c5a861] focus-visible:ring-offset-2 focus-visible:ring-offset-[#141814]`}
                   >
-                    <button
-                      type="button"
-                      onClick={() => toggleSelectedEvent(event.id)}
-                      className="w-full text-left"
-                    >
-                      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-                        {status && (
-                          <span className={status.className}>
-                            {status.label}
-                          </span>
-                        )}
+                    <span className="grid min-w-0 gap-4 md:grid-cols-[minmax(0,1.5fr)_minmax(150px,0.8fr)_minmax(140px,0.8fr)_auto] md:items-center">
+                      <span className="min-w-0">
+                        <span
+                          className={`block break-words text-lg font-bold sm:text-xl ${
+                            isSelected ? "text-[#d7c895]" : "text-[#f2efe4]"
+                          }`}
+                        >
+                          {event.title}
+                        </span>
+                        <span className="mt-2 block break-words text-sm text-[#a9ada4]">
+                          {event.location}
+                        </span>
+                      </span>
 
-                        <span className="ml-auto text-sm font-semibold text-green-500">
+                      <span className="grid gap-1 text-sm">
+                        <span className="text-[#858c7f]">Termin</span>
+                        <span className="font-semibold text-[#f2efe4]">
+                          {formatDate(event.event_date)}
+                        </span>
+                        <span className="text-[#a9ada4]">
+                          {event.start_time.slice(0, 5)}–
+                          {event.end_time.slice(0, 5)}
+                        </span>
+                      </span>
+
+                      <span className="grid gap-1 text-sm">
+                        <span className="text-[#858c7f]">Koszt i miejsca</span>
+                        <span className="font-semibold text-[#d7c895]">
                           {Number(event.price).toFixed(0)} zł
                         </span>
-                      </div>
+                        <span className="text-[#a9ada4]">
+                          {isLoggedIn
+                            ? `${participantsCount} / ${event.max_participants}`
+                            : `Limit: ${event.max_participants}`}
+                        </span>
+                      </span>
 
-                      <h2 className="text-xl font-bold">{event.title}</h2>
-
-                      <div className="mt-4 grid gap-2 text-sm text-zinc-300">
-                        <div className="flex justify-between gap-3 border-b border-zinc-800 pb-2">
-                          <span className="text-zinc-500">Termin</span>
-                          <span className="font-semibold text-white">
-                            {formatDate(event.event_date)}
-                          </span>
-                        </div>
-
-                        <div className="flex justify-between gap-3 border-b border-zinc-800 pb-2">
-                          <span className="text-zinc-500">Godzina</span>
-                          <span className="font-semibold text-white">
-                            {event.start_time.slice(0, 5)}–
-                            {event.end_time.slice(0, 5)}
-                          </span>
-                        </div>
-
-                        <div className="flex justify-between gap-3 border-b border-zinc-800 pb-2">
-                          <span className="text-zinc-500">Miejsca</span>
-                          <span className="font-semibold text-white">
-                            {isLoggedIn
-                              ? `${participantsCount} / ${event.max_participants}`
-                              : `Limit: ${event.max_participants}`}
-                          </span>
-                        </div>
-
-                        {reserveCount !== null && reserveCount > 0 && (
-                          <div className="flex justify-between gap-3 border-b border-zinc-800 pb-2">
-                            <span className="text-zinc-500">
-                              Lista rezerwowa
+                      <span className="flex min-w-0 items-center justify-between gap-3 md:justify-end">
+                        <span className="min-w-0">
+                          {status ? (
+                            <span className={status.className}>
+                              {status.label}
                             </span>
-                            <span className="font-semibold text-yellow-300">
-                              {reserveCount}
+                          ) : (
+                            <span className="inline-flex rounded-full border border-[#343a31] bg-[#171a17] px-3 py-1 text-xs font-semibold text-[#a9ada4]">
+                              Dostępność po zalogowaniu
                             </span>
-                          </div>
-                        )}
+                          )}
 
-                        {!isLoggedIn && (
-                          <p className="text-zinc-400">
-                            Zaloguj się, aby sprawdzić aktualną dostępność i
-                            zapisać się.
-                          </p>
-                        )}
-                      </div>
+                          {reserveCount !== null && reserveCount > 0 && (
+                            <span className="mt-2 block text-xs font-semibold text-[#e1c477]">
+                              Lista rezerwowa: {reserveCount}
+                            </span>
+                          )}
+                        </span>
 
-                      <p className="mt-4 text-sm font-semibold text-green-400">
-                        {isOpen ? "Ukryj szczegóły ↑" : "Pokaż szczegóły ↓"}
-                      </p>
-                    </button>
-
-                    {isOpen && (
-                      <div className="mt-5 border-t border-zinc-800 pt-5">
-                        <EventDetails event={event} />
-                      </div>
-                    )}
-                  </div>
+                        <span
+                          aria-hidden="true"
+                          className={`shrink-0 text-xl text-[#d7c895] transition-transform ${
+                            isSelected ? "rotate-180" : ""
+                          }`}
+                        >
+                          ↓
+                        </span>
+                      </span>
+                    </span>
+                  </button>
                 );
               })}
             </div>
 
-            {/* DESKTOP */}
-            <div className="hidden lg:block">
-              <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-5">
-                <h2 className="mb-5 text-2xl font-bold">Lista szkoleń</h2>
-
-                <div className="overflow-x-auto">
-                  <table className="w-full min-w-[850px] border-collapse text-left text-sm">
-                    <thead>
-                      <tr className="border-b border-zinc-800 text-zinc-400">
-                        <th className="py-3 pr-4">Temat</th>
-                        <th className="py-3 pr-4">Termin</th>
-                        <th className="py-3 pr-4">Godzina</th>
-                        <th className="py-3 pr-4">Koszt</th>
-                        <th className="py-3 pr-4">Miejsca</th>
-                        <th className="py-3 pr-4">Status</th>
-                      </tr>
-                    </thead>
-
-                    <tbody>
-                      {events.map((event) => {
-                        const participantsCount = isLoggedIn
-                          ? getParticipantsCount(event)
-                          : null;
-                        const reserveCount = isLoggedIn
-                          ? getReserveCount(event)
-                          : null;
-                        const status = isLoggedIn
-                          ? getEventStatus(event)
-                          : null;
-                        const isSelected = selectedEventId === event.id;
-
-                        return (
-                          <tr
-                            key={event.id}
-                            onClick={() => toggleSelectedEvent(event.id)}
-                            className={
-                              isSelected
-                                ? "cursor-pointer border-b border-green-800 bg-green-950/40"
-                                : "cursor-pointer border-b border-zinc-800 hover:bg-zinc-800"
-                            }
-                          >
-                            <td className="py-4 pr-4 font-semibold">
-                              {event.title}
-                              {reserveCount !== null && reserveCount > 0 && (
-                                <span className="mt-1 block text-xs text-yellow-300">
-                                  Lista rezerwowa: {reserveCount}
-                                </span>
-                              )}
-                            </td>
-
-                            <td className="py-4 pr-4">
-                              {formatDate(event.event_date)}
-                            </td>
-
-                            <td className="py-4 pr-4">
-                              {event.start_time.slice(0, 5)}–
-                              {event.end_time.slice(0, 5)}
-                            </td>
-
-                            <td className="py-4 pr-4">
-                              <span className="font-semibold text-green-500">
-                                {Number(event.price).toFixed(0)} zł
-                              </span>
-                            </td>
-
-                            <td className="py-4 pr-4">
-                              {isLoggedIn
-                                ? `${participantsCount} / ${event.max_participants}`
-                                : `Limit: ${event.max_participants}`}
-                            </td>
-
-                            <td className="py-4 pr-4">
-                              {status ? (
-                                <span className={status.className}>
-                                  {status.label}
-                                </span>
-                              ) : (
-                                <span className="text-zinc-400">
-                                  Zaloguj się, aby sprawdzić aktualną dostępność
-                                  i zapisać się.
-                                </span>
-                              )}
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-
-                <p className="mt-4 text-sm text-zinc-500">
-                  Kliknij wybrane szkolenie, aby zobaczyć pełny opis i możliwość
-                  zapisu.
-                </p>
-              </div>
-
-              {selectedEvent && (
-                <div className="mt-6 rounded-2xl border border-zinc-800 bg-zinc-900 p-6 xl:p-8">
-                  <EventDetails event={selectedEvent} />
-                </div>
-              )}
-            </div>
-          </>
+            {selectedEvent && (
+              <section
+                id={`event-details-${selectedEvent.id}`}
+                aria-labelledby={`event-summary-${selectedEvent.id}`}
+                className="mt-6 rounded-2xl border border-[#30372c] bg-[#191e19] p-5 sm:p-6"
+              >
+                <EventDetails event={selectedEvent} />
+              </section>
+            )}
+          </section>
         )}
 
-        <div className="mt-8">
+        <nav className="mt-8 border-t border-[#30372c] pt-5" aria-label="Nawigacja strony szkoleń">
           <a
             href="/"
-            className="inline-flex rounded-xl border border-zinc-700 px-5 py-3 text-center text-sm font-semibold text-zinc-300 transition hover:bg-zinc-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-400 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950"
+            className="inline-flex min-h-11 items-center rounded-xl border border-[#30372c] bg-[#191e19] px-5 py-3 text-center text-sm font-semibold text-[#a9ada4] transition hover:border-[#78865f] hover:text-[#f2efe4] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#c5a861] focus-visible:ring-offset-2 focus-visible:ring-offset-[#141814]"
           >
             ← Powrót do strony głównej
           </a>
-        </div>
+        </nav>
       </section>
     </main>
   );
