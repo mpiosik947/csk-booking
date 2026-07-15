@@ -5,7 +5,6 @@ import QRCode from "react-qr-code";
 import { getPaymentStatusLabel } from "../../lib/payment-status";
 import {
   RESERVATION_STATUS,
-  getReservationStatusBadgeClass,
   getReservationStatusLabel,
 } from "../../lib/reservation-status";
 import { supabase } from "../../lib/supabase";
@@ -201,26 +200,43 @@ function translateAttendanceStatus(status?: string | null) {
 }
 function getAttendanceClass(status?: string | null) {
   if (status === "present") {
-    return "rounded-full bg-green-950 px-3 py-1 text-xs font-semibold text-green-300";
+    return "rounded-full border border-[#3f6848] bg-[#1b2a1d] px-3 py-1 text-xs font-semibold text-[#a9d4ad]";
   }
 
   if (status === "completed") {
-    return "rounded-full bg-blue-950 px-3 py-1 text-xs font-semibold text-blue-300";
+    return "rounded-full border border-[#343a31] bg-[#171a17] px-3 py-1 text-xs font-semibold text-[#858c7f]";
   }
 
   if (status === "no_show") {
-    return "rounded-full bg-red-950 px-3 py-1 text-xs font-semibold text-red-300";
+    return "rounded-full border border-[#744545] bg-[#2a1b1b] px-3 py-1 text-xs font-semibold text-[#e0a0a0]";
   }
 
-  return "rounded-full bg-zinc-950 px-3 py-1 text-xs font-semibold text-zinc-300";
+  return "rounded-full border border-[#806a32] bg-[#2b2618] px-3 py-1 text-xs font-semibold text-[#e1c477]";
 }
 
 function getMessageClass(message: string) {
   if (message.includes("anulowana")) {
-    return "mb-6 rounded-xl border border-green-800 bg-green-950 p-4 text-sm font-semibold text-green-300";
+    return "mb-6 rounded-xl border border-[#3f6848] bg-[#1b2a1d] p-4 text-sm font-semibold text-[#a9d4ad]";
   }
 
-  return "mb-6 rounded-xl border border-red-800 bg-red-950 p-4 text-sm font-semibold text-red-300";
+  return "mb-6 rounded-xl border border-[#744545] bg-[#2a1b1b] p-4 text-sm font-semibold text-[#e0a0a0]";
+}
+
+function getHistoryStatusClass(label: string) {
+  if (
+    label === "Nieobecność" ||
+    label === "Anulowana" ||
+    label === "Anulowana przez Ciebie" ||
+    label === "Anulowana przez obsługę"
+  ) {
+    return "border-[#744545] bg-[#2a1b1b] text-[#e0a0a0]";
+  }
+
+  if (label === "Termin minął") {
+    return "border-[#806a32] bg-[#2b2618] text-[#e1c477]";
+  }
+
+  return "border-[#343a31] bg-[#171a17] text-[#858c7f]";
 }
 
 function canCancelReservation(reservationDate: string, startTime: string) {
@@ -414,47 +430,53 @@ export default function MyReservationsPage() {
     });
 
   return (
-    <main className="min-h-screen bg-zinc-950 text-white">
-      <section className="mx-auto max-w-5xl px-6 py-12">
-        <p className="mb-4 text-sm uppercase tracking-[0.35em] text-green-500">
-          CSK Booking
-        </p>
+    <main className="min-h-screen bg-[#090b09] px-4 py-6 text-[#f2efe4] sm:px-6 sm:py-8">
+      <section className="mx-auto max-w-5xl rounded-[2rem] border border-[#30372c] bg-[#141814] p-5 shadow-2xl shadow-black/20 sm:p-8">
+        <header>
+          <p className="mb-3 text-xs font-semibold uppercase tracking-[0.22em] text-[#858c7f]">
+            CSK Booking
+          </p>
 
-        <h1 className="mb-3 text-3xl font-bold">Moje rezerwacje</h1>
+          <h1 className="text-3xl font-bold sm:text-4xl">Moje rezerwacje</h1>
 
-        <p className="mb-8 text-zinc-400">
-          Tutaj widzisz rezerwacje przypisane do Twojego konta. Rezerwację
-          możesz anulować samodzielnie najpóźniej 12 godzin przed terminem.
-        </p>
+          <p className="mt-3 max-w-3xl leading-7 text-[#a9ada4]">
+            Tutaj widzisz rezerwacje przypisane do Twojego konta. Rezerwację
+            możesz anulować samodzielnie najpóźniej 12 godzin przed terminem.
+          </p>
+        </header>
 
         {loading && (
-          <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-6 text-zinc-400">
+          <div
+            role="status"
+            aria-live="polite"
+            className="mt-8 rounded-2xl border border-[#30372c] bg-[#191e19] p-6 text-[#a9ada4]"
+          >
             Ładowanie rezerwacji...
           </div>
         )}
 
         {!loading && !isLoggedIn && (
-          <div className="rounded-2xl border border-red-800 bg-red-950 p-8 text-center">
-            <h2 className="mb-3 text-2xl font-bold text-red-200">
+          <div className="mt-8 rounded-2xl border border-[#744545] bg-[#2a1b1b] p-6 text-center sm:p-8">
+            <h2 className="text-2xl font-bold text-[#e0a0a0]">
               Logowanie wymagane
             </h2>
 
-            <p className="mx-auto mb-6 max-w-xl text-red-100">
+            <p role="alert" className="mx-auto mt-3 max-w-xl text-[#e0a0a0]">
               Aby zobaczyć swoje rezerwacje, musisz najpierw zalogować się na
               konto użytkownika albo utworzyć nowe konto.
             </p>
 
-            <div className="flex flex-col gap-3 sm:flex-row sm:justify-center">
+            <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:justify-center">
               <a
                 href="/login"
-                className="rounded-xl bg-green-700 px-5 py-3 font-semibold text-white transition hover:bg-green-600"
+                className="inline-flex min-h-12 items-center justify-center rounded-xl bg-[#536143] px-5 py-3 font-semibold text-[#f2efe4] transition hover:bg-[#78865f] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d7c895] focus-visible:ring-offset-2 focus-visible:ring-offset-[#2a1b1b]"
               >
                 Zaloguj się
               </a>
 
               <a
                 href="/register"
-                className="rounded-xl border border-red-300 px-5 py-3 font-semibold text-red-100 transition hover:bg-red-900"
+                className="inline-flex min-h-12 items-center justify-center rounded-xl border border-[#744545] px-5 py-3 font-semibold text-[#e0a0a0] transition hover:bg-[#382323] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#e0a0a0] focus-visible:ring-offset-2 focus-visible:ring-offset-[#2a1b1b]"
               >
                 Utwórz konto
               </a>
@@ -463,194 +485,225 @@ export default function MyReservationsPage() {
         )}
 
         {!loading && isLoggedIn && message && (
-          <div className={getMessageClass(message)}>{message}</div>
+          <div
+            role={message.includes("anulowana") ? "status" : "alert"}
+            className={`mt-8 ${getMessageClass(message)}`}
+          >
+            {message}
+          </div>
         )}
 
         {!loading && isLoggedIn && (
-          <div>
-            <h2 className="mb-4 text-2xl font-bold">Aktywne rezerwacje</h2>
+          <div className="mt-8">
+            <h2 className="text-2xl font-bold">Aktywne rezerwacje</h2>
 
             {activeReservations.length === 0 ? (
-              <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-6 text-zinc-400">
+              <div className="mt-4 rounded-2xl border border-[#30372c] bg-[#191e19] p-6 text-[#a9ada4]">
                 Nie masz obecnie aktywnych rezerwacji osi.
               </div>
             ) : (
-              <div className="space-y-4">
+              <div className="mt-4 space-y-4">
                 {activeReservations.map((reservation) => {
-              const allowedToCancel = canCancelReservation(
-                reservation.reservation_date,
-                reservation.start_time
-              );
+                  const allowedToCancel = canCancelReservation(
+                    reservation.reservation_date,
+                    reservation.start_time
+                  );
 
-              const checkInUrl = reservation.check_in_token
-                ? getCheckInUrl(reservation.check_in_token, siteUrl)
-                : "";
+                  const checkInUrl = reservation.check_in_token
+                    ? getCheckInUrl(reservation.check_in_token, siteUrl)
+                    : "";
 
-              return (
-                <div
-                  key={reservation.id}
-                  className="rounded-2xl border border-zinc-800 bg-zinc-900 p-6"
-                >
-                  <div className="grid gap-6 md:grid-cols-[1fr_220px] md:items-start">
-                    <div>
-                      <span className="mb-3 inline-block rounded-full bg-green-950 px-3 py-1 text-xs font-semibold text-green-400">
-                        {reservation.shooting_lanes?.name ?? "Brak osi"}
-                      </span>
+                  return (
+                    <article
+                      key={reservation.id}
+                      className="rounded-2xl border border-[#3b4436] bg-[#191e19] p-5 sm:p-6"
+                    >
+                      <div className="grid gap-6 md:grid-cols-[minmax(0,1fr)_220px] md:items-start">
+                        <div className="min-w-0">
+                          <span className="inline-flex rounded-full border border-[#536143] bg-[#20251d] px-3 py-1 text-xs font-semibold text-[#d7c895]">
+                            {reservation.shooting_lanes?.name ?? "Brak osi"}
+                          </span>
 
-                      <h2 className="text-xl font-semibold">
-                        {reservation.reservation_date} |{" "}
-                        {reservation.start_time.slice(0, 5)}–
-                        {reservation.end_time.slice(0, 5)}
-                      </h2>
+                          <h3 className="mt-3 break-words text-xl font-semibold text-[#f2efe4]">
+                            {reservation.reservation_date} |{" "}
+                            {reservation.start_time.slice(0, 5)}–
+                            {reservation.end_time.slice(0, 5)}
+                          </h3>
 
-                      <p className="mt-2 text-sm text-zinc-400">
-                        Cena:{" "}
-                        <span className="font-semibold text-green-500">
-                          {Number(reservation.price).toFixed(0)} zł
-                        </span>
-                      </p>
+                          <dl className="mt-4 grid gap-3 sm:grid-cols-2">
+                            <div className="rounded-xl border border-[#30372c] bg-[#171a17] p-3">
+                              <dt className="text-xs uppercase tracking-[0.14em] text-[#858c7f]">
+                                Cena
+                              </dt>
+                              <dd className="mt-1 font-semibold text-[#f2efe4]">
+                                {Number(reservation.price).toFixed(0)} zł
+                              </dd>
+                            </div>
 
-                      <p className="mt-1 text-sm text-zinc-400">
-                        Płatność:{" "}
-                        <span className="font-semibold text-green-500">
-                          {getPaymentStatusLabel(reservation.payment_status)}
-                        </span>
-                      </p>
+                            <div className="rounded-xl border border-[#30372c] bg-[#171a17] p-3">
+                              <dt className="text-xs uppercase tracking-[0.14em] text-[#858c7f]">
+                                Płatność
+                              </dt>
+                              <dd className="mt-1 font-semibold text-[#f2efe4]">
+                                {getPaymentStatusLabel(
+                                  reservation.payment_status
+                                )}
+                              </dd>
+                            </div>
+                          </dl>
 
-                      <div className="mt-4 flex flex-wrap gap-2">
-                        <span
-                        className={`rounded-full border px-3 py-1 text-xs font-semibold ${getReservationStatusBadgeClass(
-  reservation.reservation_status
-)}`}
-                        >
-                         {getReservationStatusLabel(
-  reservation.reservation_status
-)}
-                        </span>
+                          <div className="mt-4 flex flex-wrap gap-2">
+                            <span className="rounded-full border border-[#3f6848] bg-[#1b2a1d] px-3 py-1 text-xs font-semibold text-[#a9d4ad]">
+                              {getReservationStatusLabel(
+                                reservation.reservation_status
+                              )}
+                            </span>
 
-                        <span
-                          className={getAttendanceClass(
-                            reservation.attendance_status
-                          )}
-                        >
-                          {translateAttendanceStatus(
-                            reservation.attendance_status
-                          )}
-                        </span>
-                      </div>
-
-                      {reservation.reservation_status === RESERVATION_STATUS.CONFIRMED &&
-                        !allowedToCancel && (
-                          <p className="mt-3 text-sm text-yellow-300">
-                            Samodzielne anulowanie nie jest już możliwe —
-                            zostało mniej niż 12 godzin do terminu.
-                          </p>
-                        )}
-
-                      {reservation.checked_in_at && (
-                        <p className="mt-3 text-xs text-zinc-500">
-                          Check-in:{" "}
-                          {new Date(reservation.checked_in_at).toLocaleString(
-                            "pl-PL"
-                          )}
-                        </p>
-                      )}
-
-                      <div className="mt-5 flex flex-wrap gap-3">
-                        {reservation.reservation_status === RESERVATION_STATUS.CONFIRMED &&
-                          allowedToCancel && (
-                            <button
-                              type="button"
-                              onClick={() => cancelReservation(reservation)}
-                              className="rounded-xl border border-red-800 px-4 py-2 text-sm font-semibold text-red-400 transition hover:bg-red-950"
+                            <span
+                              className={getAttendanceClass(
+                                reservation.attendance_status
+                              )}
                             >
-                              Anuluj rezerwację
-                            </button>
+                              {translateAttendanceStatus(
+                                reservation.attendance_status
+                              )}
+                            </span>
+                          </div>
+
+                          {reservation.reservation_status ===
+                            RESERVATION_STATUS.CONFIRMED &&
+                            !allowedToCancel && (
+                              <p className="mt-4 rounded-xl border border-[#806a32] bg-[#2b2618] p-3 text-sm text-[#e1c477]">
+                                Samodzielne anulowanie nie jest już możliwe —
+                                zostało mniej niż 12 godzin do terminu.
+                              </p>
+                            )}
+
+                          {reservation.checked_in_at && (
+                            <p className="mt-3 text-xs text-[#858c7f]">
+                              Check-in:{" "}
+                              {new Date(
+                                reservation.checked_in_at
+                              ).toLocaleString("pl-PL")}
+                            </p>
                           )}
 
-                      </div>
-                    </div>
-
-                    <div className="rounded-2xl border border-zinc-800 bg-zinc-950 p-4 text-center">
-                      {checkInUrl ? (
-                        <>
-                          <p className="mb-3 text-xs font-semibold uppercase tracking-[0.2em] text-cyan-300">
-                            QR Check-in
-                          </p>
-
-                          <QRCode
-                            value={checkInUrl}
-                            size={180}
-                            aria-label="Kod QR do zameldowania rezerwacji"
-                            className="mx-auto rounded-xl bg-white p-2"
-                          />
-
-                          <p className="mt-3 text-xs text-zinc-500">
-                            Pokaż ten kod pracownikowi strzelnicy przy wejściu.
-                          </p>
-
-                          <a
-                            href={checkInUrl}
-                            className="mt-3 inline-block text-xs text-cyan-300 hover:text-cyan-200"
-                          >
-                            Otwórz link check-in
-                          </a>
-                        </>
-                      ) : (
-                        <div className="text-sm text-zinc-500">
-                          QR dostępny tylko dla aktywnych rezerwacji.
+                          {reservation.reservation_status ===
+                            RESERVATION_STATUS.CONFIRMED &&
+                            allowedToCancel && (
+                              <button
+                                type="button"
+                                onClick={() => cancelReservation(reservation)}
+                                className="mt-5 inline-flex min-h-11 items-center justify-center rounded-xl border border-[#744545] px-4 py-2 text-sm font-semibold text-[#e0a0a0] transition hover:bg-[#2a1b1b] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#e0a0a0] focus-visible:ring-offset-2 focus-visible:ring-offset-[#191e19]"
+                              >
+                                Anuluj rezerwację
+                              </button>
+                            )}
                         </div>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              );
+
+                        <div className="rounded-2xl border border-[#30372c] bg-[#171a17] p-4 text-center">
+                          {checkInUrl ? (
+                            <>
+                              <p className="mb-3 text-xs font-semibold uppercase tracking-[0.18em] text-[#d7c895]">
+                                QR Check-in
+                              </p>
+
+                              <QRCode
+                                value={checkInUrl}
+                                size={180}
+                                aria-label="Kod QR do zameldowania rezerwacji"
+                                className="mx-auto h-auto max-w-full rounded-xl bg-white p-2"
+                              />
+
+                              <p className="mt-3 text-xs leading-5 text-[#858c7f]">
+                                Pokaż ten kod pracownikowi strzelnicy przy
+                                wejściu.
+                              </p>
+
+                              <a
+                                href={checkInUrl}
+                                className="mt-3 inline-flex min-h-11 items-center text-xs font-semibold text-[#d7c895] transition hover:text-[#f2efe4] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d7c895] focus-visible:ring-offset-2 focus-visible:ring-offset-[#171a17]"
+                              >
+                                Otwórz link check-in
+                              </a>
+                            </>
+                          ) : (
+                            <div className="text-sm text-[#858c7f]">
+                              QR dostępny tylko dla aktywnych rezerwacji.
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </article>
+                  );
                 })}
               </div>
             )}
 
             {reservationHistory.length > 0 && (
-              <div className="mt-10">
-                <h2 className="mb-4 text-2xl font-bold">Historia rezerwacji</h2>
+              <section className="mt-10" aria-labelledby="history-heading">
+                <h2 id="history-heading" className="text-2xl font-bold">
+                  Historia rezerwacji
+                </h2>
 
-                <div className="space-y-3">
-                  {reservationHistory.map((reservation) => (
-                    <div
-                      key={reservation.id}
-                      className="flex flex-col gap-3 rounded-xl border border-zinc-800 bg-zinc-900 p-4 sm:flex-row sm:items-center sm:justify-between"
-                    >
-                      <div>
-                        <p className="font-semibold text-zinc-100">
-                          {reservation.reservation_date || "Brak daty"} |{" "}
-                          {reservation.start_time?.slice(0, 5) || "--:--"}–
-                          {reservation.end_time?.slice(0, 5) || "--:--"}
-                        </p>
+                <div className="mt-4 space-y-3">
+                  {reservationHistory.map((reservation) => {
+                    const historyStatusLabel = getHistoryStatusLabel(
+                      reservation,
+                      warsawNowKey
+                    );
 
-                        <p className="mt-1 text-sm text-zinc-400">
-                          {reservation.shooting_lanes?.name ?? "Brak osi"}
-                        </p>
-                      </div>
+                    return (
+                      <article
+                        key={reservation.id}
+                        className="flex flex-col gap-3 rounded-xl border border-[#30372c] bg-[#171a17] p-4 sm:flex-row sm:items-center sm:justify-between"
+                      >
+                        <div className="min-w-0">
+                          <p className="break-words font-semibold text-[#f2efe4]">
+                            {reservation.reservation_date || "Brak daty"} |{" "}
+                            {reservation.start_time?.slice(0, 5) || "--:--"}–
+                            {reservation.end_time?.slice(0, 5) || "--:--"}
+                          </p>
 
-                      <span className="self-start rounded-full border border-zinc-700 bg-zinc-950 px-3 py-1 text-xs font-semibold text-zinc-300 sm:self-auto">
-                        {getHistoryStatusLabel(reservation, warsawNowKey)}
-                      </span>
-                    </div>
-                  ))}
+                          <p className="mt-1 break-words text-sm text-[#858c7f]">
+                            {reservation.shooting_lanes?.name ?? "Brak osi"}
+                          </p>
+                        </div>
+
+                        <span
+                          className={`self-start rounded-full border px-3 py-1 text-xs font-semibold sm:self-auto ${getHistoryStatusClass(
+                            historyStatusLabel
+                          )}`}
+                        >
+                          {historyStatusLabel}
+                        </span>
+                      </article>
+                    );
+                  })}
                 </div>
-              </div>
+              </section>
             )}
           </div>
         )}
 
-        <div className="mt-8 flex gap-4 text-sm text-zinc-400">
-          <a href="/booking" className="hover:text-white">
+        <nav
+          aria-label="Nawigacja rezerwacji"
+          className="mt-8 flex flex-col gap-3 border-t border-[#30372c] pt-6 sm:flex-row"
+        >
+          <a
+            href="/booking"
+            className="inline-flex min-h-12 items-center justify-center rounded-xl bg-[#536143] px-5 py-3 text-sm font-semibold text-[#f2efe4] transition hover:bg-[#78865f] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d7c895] focus-visible:ring-offset-2 focus-visible:ring-offset-[#141814]"
+          >
             Nowa rezerwacja
           </a>
 
-          <a href="/dashboard" className="hover:text-white">
+          <a
+            href="/dashboard"
+            className="inline-flex min-h-12 items-center justify-center rounded-xl border border-[#30372c] px-5 py-3 text-sm font-semibold text-[#a9ada4] transition hover:border-[#536143] hover:text-[#f2efe4] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d7c895] focus-visible:ring-offset-2 focus-visible:ring-offset-[#141814]"
+          >
             ← Panel klienta
           </a>
-        </div>
+        </nav>
       </section>
     </main>
   );
