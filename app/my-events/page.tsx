@@ -164,23 +164,23 @@ function translateStatus(status: string) {
 }
 
 function getStatusClass(status: string) {
-  if (status === "approved" || status === "participant") {
-    return "rounded-full bg-green-950 px-3 py-1 text-xs font-semibold text-green-400";
-  }
-
-  if (status === "registered") {
-    return "rounded-full bg-blue-950 px-3 py-1 text-xs font-semibold text-blue-300";
+  if (
+    status === "registered" ||
+    status === "approved" ||
+    status === "participant"
+  ) {
+    return "rounded-full border border-[#3f6848] bg-[#1b2a1d] px-3 py-1 text-xs font-semibold text-[#a9d4ad]";
   }
 
   if (status === "reserve") {
-    return "rounded-full bg-yellow-950 px-3 py-1 text-xs font-semibold text-yellow-300";
+    return "rounded-full border border-[#806a32] bg-[#2b2618] px-3 py-1 text-xs font-semibold text-[#e1c477]";
   }
 
   if (status === "cancelled") {
-    return "rounded-full bg-red-950 px-3 py-1 text-xs font-semibold text-red-300";
+    return "rounded-full border border-[#744545] bg-[#2a1b1b] px-3 py-1 text-xs font-semibold text-[#e0a0a0]";
   }
 
-  return "rounded-full bg-zinc-950 px-3 py-1 text-xs font-semibold text-zinc-300";
+  return "rounded-full border border-[#343a31] bg-[#171a17] px-3 py-1 text-xs font-semibold text-[#858c7f]";
 }
 
 function canCancelEvent(eventDate: string, startTime: string) {
@@ -199,10 +199,22 @@ function getMessageClass(message: string) {
     message.includes("przeniesiona") ||
     message.includes("przeniesiony")
   ) {
-    return "mb-6 rounded-xl border border-green-800 bg-green-950 p-4 text-sm font-semibold text-green-300";
+    return "rounded-xl border border-[#3f6848] bg-[#1b2a1d] p-4 text-sm font-semibold text-[#a9d4ad]";
   }
 
-  return "mb-6 rounded-xl border border-red-800 bg-red-950 p-4 text-sm font-semibold text-red-300";
+  return "rounded-xl border border-[#744545] bg-[#2a1b1b] p-4 text-sm font-semibold text-[#e0a0a0]";
+}
+
+function getEventHistoryClass(status: string) {
+  if (status === "cancelled") {
+    return "border-[#744545] bg-[#2a1b1b] text-[#e0a0a0]";
+  }
+
+  if (status === "reserve") {
+    return "border-[#806a32] bg-[#2b2618] text-[#e1c477]";
+  }
+
+  return "border-[#343a31] bg-[#171a17] text-[#858c7f]";
 }
 
 export default function MyEventsPage() {
@@ -211,6 +223,13 @@ export default function MyEventsPage() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [message, setMessage] = useState("");
   const [processingId, setProcessingId] = useState("");
+  const [expandedEventId, setExpandedEventId] = useState<string | null>(null);
+
+  function toggleExpandedEvent(eventId: string) {
+    setExpandedEventId((currentId) =>
+      currentId === eventId ? null : eventId
+    );
+  }
 
   useEffect(() => {
     async function loadMyEvents() {
@@ -354,47 +373,53 @@ export default function MyEventsPage() {
     });
 
   return (
-    <main className="min-h-screen bg-zinc-950 text-white">
-      <section className="mx-auto max-w-5xl px-6 py-12">
-        <p className="mb-4 text-sm uppercase tracking-[0.35em] text-green-500">
-          CSK Booking
-        </p>
+    <main className="min-h-screen bg-[#090b09] px-4 py-6 text-[#f2efe4] sm:px-6 sm:py-8">
+      <section className="mx-auto max-w-5xl rounded-[2rem] border border-[#30372c] bg-[#141814] p-5 shadow-2xl shadow-black/20 sm:p-8">
+        <header>
+          <p className="mb-3 text-xs font-semibold uppercase tracking-[0.22em] text-[#858c7f]">
+            CSK Booking
+          </p>
 
-        <h1 className="mb-3 text-3xl font-bold">Moje szkolenia</h1>
+          <h1 className="text-3xl font-bold sm:text-4xl">Moje szkolenia</h1>
 
-        <p className="mb-8 text-zinc-400">
-          Tutaj widzisz szkolenia i eventy, na które jesteś zapisany. Udział
-          możesz anulować samodzielnie najpóźniej 72 godziny przed terminem.
-        </p>
+          <p className="mt-3 max-w-3xl leading-7 text-[#a9ada4]">
+            Tutaj widzisz szkolenia i eventy, na które jesteś zapisany. Udział
+            możesz anulować samodzielnie najpóźniej 72 godziny przed terminem.
+          </p>
+        </header>
 
         {loading && (
-          <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-6 text-zinc-400">
+          <div
+            role="status"
+            aria-live="polite"
+            className="mt-8 rounded-2xl border border-[#30372c] bg-[#191e19] p-6 text-[#a9ada4]"
+          >
             Ładowanie szkoleń...
           </div>
         )}
 
         {!loading && !isLoggedIn && (
-          <div className="rounded-2xl border border-red-800 bg-red-950 p-8 text-center">
-            <h2 className="mb-3 text-2xl font-bold text-red-200">
+          <div className="mt-8 rounded-2xl border border-[#744545] bg-[#2a1b1b] p-6 text-center sm:p-8">
+            <h2 className="text-2xl font-bold text-[#e0a0a0]">
               Logowanie wymagane
             </h2>
 
-            <p className="mx-auto mb-6 max-w-xl text-red-100">
+            <p role="alert" className="mx-auto mt-3 max-w-xl text-[#e0a0a0]">
               Aby zobaczyć swoje szkolenia, musisz najpierw zalogować się na
               konto użytkownika.
             </p>
 
-            <div className="flex flex-col gap-3 sm:flex-row sm:justify-center">
+            <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:justify-center">
               <a
                 href="/login"
-                className="rounded-xl bg-green-700 px-5 py-3 font-semibold text-white transition hover:bg-green-600"
+                className="inline-flex min-h-12 items-center justify-center rounded-xl bg-[#536143] px-5 py-3 font-semibold text-[#f2efe4] transition hover:bg-[#78865f] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d7c895] focus-visible:ring-offset-2 focus-visible:ring-offset-[#2a1b1b]"
               >
                 Zaloguj się
               </a>
 
               <a
                 href="/register"
-                className="rounded-xl border border-red-300 px-5 py-3 font-semibold text-red-100 transition hover:bg-red-900"
+                className="inline-flex min-h-12 items-center justify-center rounded-xl border border-[#744545] px-5 py-3 font-semibold text-[#e0a0a0] transition hover:bg-[#382323] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#e0a0a0] focus-visible:ring-offset-2 focus-visible:ring-offset-[#2a1b1b]"
               >
                 Utwórz konto
               </a>
@@ -403,19 +428,30 @@ export default function MyEventsPage() {
         )}
 
         {!loading && isLoggedIn && message && (
-          <div className={getMessageClass(message)}>{message}</div>
+          <div
+            role={
+              message.includes("anulowany") ||
+              message.includes("przeniesiona") ||
+              message.includes("przeniesiony")
+                ? "status"
+                : "alert"
+            }
+            className={`mt-8 ${getMessageClass(message)}`}
+          >
+            {message}
+          </div>
         )}
 
         {!loading && isLoggedIn && (
-          <div>
-            <h2 className="mb-4 text-2xl font-bold">Aktywne szkolenia</h2>
+          <div className="mt-8">
+            <h2 className="text-2xl font-bold">Aktywne szkolenia</h2>
 
             {activeEvents.length === 0 ? (
-              <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-6 text-zinc-400">
+              <div className="mt-4 rounded-2xl border border-[#30372c] bg-[#191e19] p-6 text-[#a9ada4]">
                 Nie masz obecnie aktywnych szkoleń.
               </div>
             ) : (
-              <div className="space-y-4">
+              <div className="mt-4 space-y-4">
                 {activeEvents.map((item) => {
                   const event = item.events;
 
@@ -431,58 +467,119 @@ export default function MyEventsPage() {
                     event.event_date,
                     event.start_time
                   );
+                  const isExpanded = expandedEventId === item.id;
 
                   return (
-                    <div
+                    <article
                       key={item.id}
-                      className="rounded-2xl border border-zinc-800 bg-zinc-900 p-6"
+                      className="overflow-hidden rounded-2xl border border-[#3b4436] bg-[#191e19]"
                     >
-                      <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-                        <div className="w-full">
-                          <span
-                            className={getStatusClass(
-                              item.registration_status
-                            )}
-                          >
-                            {translateStatus(item.registration_status)}
+                      <button
+                        type="button"
+                        onClick={() => toggleExpandedEvent(item.id)}
+                        aria-expanded={isExpanded}
+                        aria-controls={`event-details-${item.id}`}
+                        className="block w-full p-5 text-left transition hover:bg-[#20251d] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#d7c895] sm:p-6"
+                      >
+                        <span className="flex items-start justify-between gap-4">
+                          <span className="min-w-0">
+                            <span className="block break-words text-lg font-bold text-[#f2efe4] sm:text-xl">
+                              {event.title}
+                            </span>
+                            <span className="mt-2 inline-flex">
+                              <span
+                                className={getStatusClass(
+                                  item.registration_status
+                                )}
+                              >
+                                {translateStatus(item.registration_status)}
+                              </span>
+                            </span>
                           </span>
 
-                          <h3 className="mt-4 text-2xl font-bold">
-                            {event.title}
-                          </h3>
+                          <span
+                            aria-hidden="true"
+                            className={`shrink-0 text-xl text-[#d7c895] transition-transform ${
+                              isExpanded ? "rotate-180" : ""
+                            }`}
+                          >
+                            ↓
+                          </span>
+                        </span>
 
-                          <p className="mt-2 whitespace-pre-line text-zinc-400">
+                        <span className="mt-4 grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
+                          <span className="min-w-0">
+                            <span className="block text-[#858c7f]">Data</span>
+                            <span className="mt-1 block break-words font-semibold text-[#f2efe4]">
+                              {event.event_date}
+                            </span>
+                          </span>
+
+                          <span className="min-w-0">
+                            <span className="block text-[#858c7f]">
+                              Godzina
+                            </span>
+                            <span className="mt-1 block break-words font-semibold text-[#f2efe4]">
+                              {event.start_time.slice(0, 5)} -{" "}
+                              {event.end_time.slice(0, 5)}
+                            </span>
+                          </span>
+
+                          <span className="min-w-0">
+                            <span className="block text-[#858c7f]">
+                              Miejsce
+                            </span>
+                            <span className="mt-1 block break-words font-semibold text-[#f2efe4]">
+                              {event.location}
+                            </span>
+                          </span>
+
+                          <span className="min-w-0">
+                            <span className="block text-[#858c7f]">Cena</span>
+                            <span className="mt-1 block break-words font-semibold text-[#d7c895]">
+                              {Number(event.price).toFixed(0)} zł
+                            </span>
+                          </span>
+                        </span>
+                      </button>
+
+                      {isExpanded && (
+                        <div
+                          id={`event-details-${item.id}`}
+                          className="border-t border-[#30372c] p-5 sm:p-6"
+                        >
+                          <p className="whitespace-pre-line break-words leading-7 text-[#a9ada4]">
                             {event.description}
                           </p>
 
-                          <div className="mt-5 grid gap-3 text-sm text-zinc-400 md:grid-cols-2">
-                            <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-4">
-                              <p className="mb-1 text-zinc-500">Data</p>
-                              <p className="font-semibold text-white">
+                          <div className="mt-5 grid gap-3 text-sm md:grid-cols-2">
+                            <div className="rounded-xl border border-[#30372c] bg-[#171a17] p-4">
+                              <p className="mb-1 text-[#858c7f]">Data</p>
+                              <p className="break-words font-semibold text-[#f2efe4]">
                                 {event.event_date}
                               </p>
                             </div>
 
-                            <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-4">
-                              <p className="mb-1 text-zinc-500">Godzina</p>
-                              <p className="font-semibold text-white">
+                            <div className="rounded-xl border border-[#30372c] bg-[#171a17] p-4">
+                              <p className="mb-1 text-[#858c7f]">Godzina</p>
+                              <p className="break-words font-semibold text-[#f2efe4]">
                                 {event.start_time.slice(0, 5)} -{" "}
                                 {event.end_time.slice(0, 5)}
                               </p>
                             </div>
 
-                            <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-4">
-                              <p className="mb-1 text-zinc-500">Miejsce</p>
-                              <p className="font-semibold text-white">
+                            <div className="rounded-xl border border-[#30372c] bg-[#171a17] p-4">
+                              <p className="mb-1 text-[#858c7f]">Miejsce</p>
+                              <p className="break-words font-semibold text-[#f2efe4]">
                                 {event.location}
                               </p>
                             </div>
 
-                            <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-4">
-                              <p className="mb-1 text-zinc-500">
+                            <div className="rounded-xl border border-[#30372c] bg-[#171a17] p-4">
+                              <p className="mb-1 text-[#858c7f]">
                                 Cena / płatność
                               </p>
-                              <p className="font-semibold text-green-500">
+                              <p className="break-words font-semibold text-[#f2efe4]">
                                 {Number(event.price).toFixed(0)} zł —{" "}
                                 {getPaymentStatusLabel(item.payment_status)}
                               </p>
@@ -495,7 +592,7 @@ export default function MyEventsPage() {
                                 type="button"
                                 disabled={processingId === item.id}
                                 onClick={() => cancelRegistration(item)}
-                                className="rounded-xl border border-red-700 bg-red-950 px-5 py-3 text-sm font-semibold text-red-300 transition hover:bg-red-900 disabled:cursor-not-allowed disabled:opacity-60"
+                                className="inline-flex min-h-12 items-center justify-center rounded-xl border border-[#744545] px-5 py-3 text-sm font-semibold text-[#e0a0a0] transition hover:bg-[#2a1b1b] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#e0a0a0] focus-visible:ring-offset-2 focus-visible:ring-offset-[#191e19] disabled:cursor-not-allowed disabled:opacity-60"
                               >
                                 {processingId === item.id
                                   ? "Anulowanie..."
@@ -505,45 +602,54 @@ export default function MyEventsPage() {
                           )}
 
                           {isTooLateToCancel && (
-                            <div className="mt-6 rounded-xl border border-yellow-700 bg-yellow-950 p-4 text-sm font-semibold text-yellow-300">
+                            <div className="mt-6 rounded-xl border border-[#806a32] bg-[#2b2618] p-4 text-sm font-semibold text-[#e1c477]">
                               Anulacja online niedostępna. Zostało mniej niż 72
                               godziny do wydarzenia — skontaktuj się
                               telefonicznie z organizatorem.
                             </div>
                           )}
                         </div>
-                      </div>
-                    </div>
+                      )}
+                    </article>
                   );
                 })}
               </div>
             )}
 
             {eventHistory.length > 0 && (
-              <section className="mt-10">
-                <h2 className="mb-4 text-2xl font-bold">Historia szkoleń</h2>
+              <section className="mt-10" aria-labelledby="event-history-heading">
+                <h2
+                  id="event-history-heading"
+                  className="text-2xl font-bold"
+                >
+                  Historia szkoleń
+                </h2>
 
-                <div className="space-y-3">
+                <div className="mt-4 space-y-3">
                   {eventHistory.map((item) => (
-                    <div
+                    <article
                       key={item.id}
-                      className="rounded-xl border border-zinc-800 bg-zinc-900 p-4"
+                      className="rounded-xl border border-[#30372c] bg-[#171a17] p-4"
                     >
                       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                        <div>
-                          <p className="text-sm text-zinc-400">
+                        <div className="min-w-0">
+                          <p className="text-sm text-[#858c7f]">
                             {item.events?.event_date ?? "Brak daty"}
                           </p>
-                          <h3 className="font-semibold text-white">
+                          <h3 className="break-words font-semibold text-[#f2efe4]">
                             {item.events?.title ?? "Brak danych szkolenia"}
                           </h3>
                         </div>
 
-                        <span className="text-sm font-semibold text-zinc-300">
+                        <span
+                          className={`self-start rounded-full border px-3 py-1 text-xs font-semibold sm:self-auto ${getEventHistoryClass(
+                            item.registration_status
+                          )}`}
+                        >
                           {getEventHistoryLabel(item, warsawNowKey)}
                         </span>
                       </div>
-                    </div>
+                    </article>
                   ))}
                 </div>
               </section>
@@ -551,21 +657,24 @@ export default function MyEventsPage() {
           </div>
         )}
 
-        <div className="mt-8 flex flex-col gap-3 sm:flex-row">
+        <nav
+          aria-label="Nawigacja szkoleń"
+          className="mt-8 flex flex-col gap-3 border-t border-[#30372c] pt-6 sm:flex-row"
+        >
           <a
             href="/dashboard"
-            className="rounded-xl border border-zinc-700 px-5 py-3 text-center text-sm font-semibold text-zinc-300 transition hover:bg-zinc-900"
+            className="inline-flex min-h-12 items-center justify-center rounded-xl border border-[#30372c] px-5 py-3 text-center text-sm font-semibold text-[#a9ada4] transition hover:border-[#536143] hover:text-[#f2efe4] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d7c895] focus-visible:ring-offset-2 focus-visible:ring-offset-[#141814]"
           >
             ← Panel klienta
           </a>
 
           <a
             href="/events"
-            className="rounded-xl bg-green-700 px-5 py-3 text-center text-sm font-semibold text-white transition hover:bg-green-600"
+            className="inline-flex min-h-12 items-center justify-center rounded-xl bg-[#536143] px-5 py-3 text-center text-sm font-semibold text-[#f2efe4] transition hover:bg-[#78865f] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d7c895] focus-visible:ring-offset-2 focus-visible:ring-offset-[#141814]"
           >
             Zobacz szkolenia
           </a>
-        </div>
+        </nav>
       </section>
     </main>
   );
