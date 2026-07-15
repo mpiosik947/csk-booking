@@ -96,16 +96,15 @@ export default function DashboardPage() {
     loadUser();
   }, []);
 
-  async function handleLogout() {
-    await supabase.auth.signOut();
-    window.location.href = "/";
-  }
-
   if (loading) {
     return (
-      <main className="min-h-screen bg-zinc-950 text-white">
-        <section className="mx-auto max-w-5xl px-6 py-12">
-          <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-6 text-zinc-400">
+      <main className="flex min-h-screen items-center bg-[#090b09] px-4 py-6 text-[#f2efe4] sm:px-6 sm:py-8">
+        <section className="mx-auto w-full max-w-2xl rounded-[2rem] border border-[#30372c] bg-[#141814] p-6 shadow-2xl shadow-black/20 sm:p-8">
+          <div
+            role="status"
+            aria-live="polite"
+            className="rounded-2xl border border-[#30372c] bg-[#191e19] p-5 text-[#a9ada4]"
+          >
             Ładowanie panelu klienta...
           </div>
         </section>
@@ -115,29 +114,32 @@ export default function DashboardPage() {
 
   if (!isLoggedIn) {
     return (
-      <main className="min-h-screen bg-zinc-950 text-white">
-        <section className="mx-auto max-w-4xl px-6 py-12">
-          <div className="rounded-2xl border border-red-800 bg-red-950 p-8 text-center">
-            <h1 className="mb-3 text-2xl font-bold text-red-200">
+      <main className="flex min-h-screen items-center bg-[#090b09] px-4 py-6 text-[#f2efe4] sm:px-6 sm:py-8">
+        <section className="mx-auto w-full max-w-2xl rounded-[2rem] border border-[#30372c] bg-[#141814] p-6 text-center shadow-2xl shadow-black/20 sm:p-9">
+          <div>
+            <h1 className="text-3xl font-bold sm:text-4xl">
               Logowanie wymagane
             </h1>
 
-            <p className="mx-auto mb-6 max-w-xl text-red-100">
+            <p
+              role="alert"
+              className="mx-auto mt-6 max-w-xl rounded-2xl border border-[#744545] bg-[#2a1b1b] p-5 leading-7 text-[#e0a0a0]"
+            >
               Aby przejść do panelu klienta, musisz najpierw zalogować się na
               swoje konto.
             </p>
 
-            <div className="flex flex-col gap-3 sm:flex-row sm:justify-center">
+            <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:justify-center">
               <a
                 href="/login"
-                className="rounded-xl bg-green-700 px-5 py-3 font-semibold text-white transition hover:bg-green-600"
+                className="inline-flex min-h-12 items-center justify-center rounded-xl bg-[#536143] px-6 py-3 font-semibold text-[#f2efe4] transition hover:bg-[#78865f] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d7c895] focus-visible:ring-offset-2 focus-visible:ring-offset-[#141814]"
               >
                 Zaloguj się
               </a>
 
               <a
                 href="/register"
-                className="rounded-xl border border-red-300 px-5 py-3 font-semibold text-red-100 transition hover:bg-red-900"
+                className="inline-flex min-h-12 items-center justify-center rounded-xl border border-[#30372c] px-6 py-3 font-semibold text-[#a9ada4] transition hover:border-[#d7c895] hover:text-[#d7c895] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d7c895] focus-visible:ring-offset-2 focus-visible:ring-offset-[#141814]"
               >
                 Utwórz konto
               </a>
@@ -155,52 +157,55 @@ export default function DashboardPage() {
     verificationStatus === "verified" || permissionsVerified === true;
 
   return (
-    <main className="min-h-screen bg-zinc-950 text-white">
-      <section className="mx-auto max-w-6xl px-6 py-12">
-        <div className="mb-10 flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+    <main className="min-h-screen bg-[#090b09] px-4 py-6 text-[#f2efe4] sm:px-6 sm:py-8">
+      <section className="mx-auto max-w-6xl rounded-[2rem] border border-[#30372c] bg-[#141814] p-5 shadow-2xl shadow-black/20 sm:p-8">
+        <header className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
           <div>
-            <p className="mb-4 text-sm uppercase tracking-[0.35em] text-green-500">
+            <p className="mb-3 text-xs font-semibold uppercase tracking-[0.22em] text-[#858c7f]">
               CSK Booking
             </p>
 
-            <h1 className="text-3xl font-bold md:text-5xl">Panel klienta</h1>
+            <h1 className="text-3xl font-bold sm:text-4xl">Panel klienta</h1>
 
-            <p className="mt-3 text-zinc-400">
+            <p className="mt-3 leading-7 text-[#a9ada4]">
               Witaj,{" "}
-              <span className="font-semibold text-green-500">{fullName}</span>.
+              <span className="font-semibold text-[#d7c895]">{fullName}</span>.
               Zarządzaj swoimi rezerwacjami i szkoleniami.
             </p>
           </div>
 
-          <div className="rounded-2xl border border-zinc-800 bg-zinc-900 px-5 py-4 text-sm text-zinc-300">
+          <div className="w-full rounded-2xl border border-[#30372c] bg-[#191e19] px-5 py-4 text-sm text-[#a9ada4] lg:max-w-sm lg:text-right">
             Zalogowany jako:{" "}
-            <span className="font-semibold text-green-500">{email}</span>
+            <span className="break-all font-semibold text-[#f2efe4]">
+              {email}
+            </span>
           </div>
-        </div>
+        </header>
 
         {emailConfirmed && (
           <div
             role="status"
-            className="mb-6 rounded-2xl border border-green-800 bg-green-950 p-4 text-green-200"
+            aria-live="polite"
+            className="mt-6 rounded-2xl border border-[#3f6848] bg-[#1b2a1d] p-4 text-[#a9d4ad]"
           >
             Adres e-mail został potwierdzony. Konto jest aktywne.
           </div>
         )}
 
         {!profileComplete && (
-          <div className="mb-6 rounded-2xl border border-yellow-800 bg-yellow-950 p-6">
-            <h2 className="mb-2 text-2xl font-bold text-yellow-100">
+          <div className="mt-6 rounded-2xl border border-[#806a32] bg-[#2b2618] p-5 sm:p-6">
+            <h2 className="text-xl font-bold text-[#e1c477]">
               Uzupełnij profil
             </h2>
 
-            <p className="mb-5 max-w-3xl text-yellow-100">
+            <p className="mt-2 max-w-3xl leading-7 text-[#e1c477]">
               Uzupełnij dane przed pierwszą wizytą. Dzięki temu obsługa szybciej
               zweryfikuje konto i rezerwacja przebiegnie sprawniej.
             </p>
 
             <a
               href="/account"
-              className="inline-flex rounded-xl bg-yellow-600 px-5 py-3 text-sm font-semibold text-zinc-950 transition hover:bg-yellow-500"
+              className="mt-5 inline-flex min-h-11 items-center rounded-xl bg-[#6f5a2e] px-5 py-3 text-sm font-semibold text-[#f2efe4] transition hover:bg-[#9a7c3e] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d7c895] focus-visible:ring-offset-2 focus-visible:ring-offset-[#2b2618]"
             >
               Uzupełnij profil
             </a>
@@ -208,122 +213,155 @@ export default function DashboardPage() {
         )}
 
         {profileComplete && !accountVerified && (
-          <div className="mb-6 rounded-2xl border border-zinc-700 bg-zinc-900 p-6">
-            <h2 className="mb-2 text-2xl font-bold text-zinc-100">
+          <div
+            role="status"
+            className="mt-6 rounded-2xl border border-[#806a32] bg-[#2b2618] p-5 sm:p-6"
+          >
+            <h2 className="text-xl font-bold text-[#e1c477]">
               Profil uzupełniony
             </h2>
 
-            <p className="max-w-3xl text-zinc-400">
+            <p className="mt-2 max-w-3xl leading-7 text-[#e1c477]">
               Konto oczekuje na weryfikację podczas pierwszej wizyty. Profil
               uzupełniony nie oznacza jeszcze konta zweryfikowanego.
             </p>
           </div>
         )}
 
-        <div className="grid gap-5 md:grid-cols-2">
-          {canAccessAdmin && (
-            <a
-              href="/admin"
-              className="rounded-2xl border border-green-700 bg-green-950 p-6 transition hover:bg-green-900"
-            >
-              <h2 className="mb-2 text-2xl font-bold text-green-300">
-                Panel administracyjny
-              </h2>
+        <section aria-labelledby="main-actions-heading" className="mt-8">
+          <h2
+            id="main-actions-heading"
+            className="text-xl font-semibold text-[#f2efe4]"
+          >
+            Główne akcje
+          </h2>
 
-              <p className="text-green-100">
-                Zarządzanie rezerwacjami, eventami, check-in oraz obsługą systemu.
+          <div className="mt-4 grid gap-4 md:grid-cols-2">
+            <a
+              href="/booking"
+              className="group min-h-40 rounded-2xl border border-[#536143] bg-[#20251d] p-6 transition hover:border-[#78865f] hover:bg-[#293026] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d7c895] focus-visible:ring-offset-2 focus-visible:ring-offset-[#141814]"
+            >
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <h3 className="text-2xl font-bold text-[#f2efe4]">
+                    Zarezerwuj oś
+                  </h3>
+                  <p className="mt-3 leading-7 text-[#a9ada4]">
+                    Wybierz datę, oś, godzinę oraz czas rezerwacji. Płatność na
+                    miejscu.
+                  </p>
+                </div>
+                <span aria-hidden="true" className="text-2xl text-[#d7c895]">
+                  →
+                </span>
+              </div>
+            </a>
+
+            <a
+              href="/events"
+              className="group min-h-40 rounded-2xl border border-[#6f5a2e] bg-[#221f18] p-6 transition hover:border-[#9a7c3e] hover:bg-[#2b271d] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d7c895] focus-visible:ring-offset-2 focus-visible:ring-offset-[#141814]"
+            >
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <h3 className="text-2xl font-bold text-[#f2efe4]">
+                    Eventy / Szkolenia
+                  </h3>
+                  <p className="mt-3 leading-7 text-[#a9ada4]">
+                    Zobacz planowane szkolenia, wydarzenia i zapisz się na wybrany
+                    termin.
+                  </p>
+                </div>
+                <span aria-hidden="true" className="text-2xl text-[#d7c895]">
+                  →
+                </span>
+              </div>
+            </a>
+          </div>
+        </section>
+
+        <section aria-labelledby="account-actions-heading" className="mt-8">
+          <h2
+            id="account-actions-heading"
+            className="text-xl font-semibold text-[#f2efe4]"
+          >
+            Twoje konto
+          </h2>
+
+          <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <a
+              href="/my-reservations"
+              className="min-h-24 rounded-2xl border border-[#30372c] bg-[#191e19] p-5 transition hover:border-[#536143] hover:bg-[#20251d] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d7c895] focus-visible:ring-offset-2 focus-visible:ring-offset-[#141814]"
+            >
+              <h3 className="font-semibold text-[#f2efe4]">Moje rezerwacje</h3>
+              <p className="mt-2 text-sm leading-6 text-[#858c7f]">
+                Sprawdź swoje terminy, statusy rezerwacji oraz płatności.
               </p>
             </a>
-          )}
 
-          <a
-            href="/booking"
-            className="rounded-2xl bg-green-700 p-6 transition hover:bg-green-600"
+            <a
+              href="/my-events"
+              className="min-h-24 rounded-2xl border border-[#30372c] bg-[#191e19] p-5 transition hover:border-[#536143] hover:bg-[#20251d] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d7c895] focus-visible:ring-offset-2 focus-visible:ring-offset-[#141814]"
+            >
+              <h3 className="font-semibold text-[#f2efe4]">Moje szkolenia</h3>
+              <p className="mt-2 text-sm leading-6 text-[#858c7f]">
+                Sprawdź szkolenia, na które jesteś zapisany oraz status
+                uczestnictwa.
+              </p>
+            </a>
+
+            <a
+              href="/account"
+              className="min-h-24 rounded-2xl border border-[#30372c] bg-[#191e19] p-5 transition hover:border-[#536143] hover:bg-[#20251d] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d7c895] focus-visible:ring-offset-2 focus-visible:ring-offset-[#141814]"
+            >
+              <h3 className="font-semibold text-[#f2efe4]">Moje konto</h3>
+              <p className="mt-2 text-sm leading-6 text-[#858c7f]">
+                Edytuj swoje dane użytkownika, imię, nazwisko oraz numer telefonu.
+              </p>
+            </a>
+
+            <a
+              href="/terms"
+              className="min-h-24 rounded-2xl border border-[#30372c] bg-[#191e19] p-5 transition hover:border-[#536143] hover:bg-[#20251d] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d7c895] focus-visible:ring-offset-2 focus-visible:ring-offset-[#141814]"
+            >
+              <h3 className="font-semibold text-[#f2efe4]">Regulamin i RODO</h3>
+              <p className="mt-2 text-sm leading-6 text-[#858c7f]">
+                Regulamin strzelnicy, zasady bezpieczeństwa oraz polityka
+                prywatności.
+              </p>
+            </a>
+          </div>
+        </section>
+
+        {canAccessAdmin && (
+          <section
+            aria-labelledby="admin-action-heading"
+            className="mt-6 rounded-2xl border border-[#30372c] bg-[#191e19] p-5"
           >
-            <h2 className="mb-2 text-2xl font-bold">Zarezerwuj oś</h2>
-
-            <p className="text-green-100">
-              Wybierz datę, oś, godzinę oraz czas rezerwacji. Płatność na
-              miejscu.
-            </p>
-          </a>
-
-          <a
-            href="/my-reservations"
-            className="rounded-2xl border border-zinc-800 bg-zinc-900 p-6 transition hover:bg-zinc-800"
-          >
-            <h2 className="mb-2 text-2xl font-bold">Moje rezerwacje</h2>
-
-            <p className="text-zinc-400">
-              Sprawdź swoje terminy, statusy rezerwacji oraz płatności.
-            </p>
-          </a>
-
-          <a
-            href="/events"
-            className="rounded-2xl border border-green-800 bg-green-950 p-6 transition hover:bg-green-900"
-          >
-            <h2 className="mb-2 text-2xl font-bold text-green-300">
-              Eventy / Szkolenia
+            <h2
+              id="admin-action-heading"
+              className="text-lg font-semibold text-[#d7c895]"
+            >
+              Panel administracyjny
             </h2>
-
-            <p className="text-green-100">
-              Zobacz planowane szkolenia, wydarzenia i zapisz się na wybrany
-              termin.
+            <p className="mt-2 text-sm leading-6 text-[#a9ada4]">
+              Zarządzanie rezerwacjami, eventami, check-in oraz obsługą systemu.
             </p>
-          </a>
+            <a
+              href="/admin"
+              className="mt-4 inline-flex min-h-11 items-center rounded-xl border border-[#536143] px-5 py-3 text-sm font-semibold text-[#d7c895] transition hover:bg-[#20251d] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d7c895] focus-visible:ring-offset-2 focus-visible:ring-offset-[#191e19]"
+            >
+              Panel administracyjny
+            </a>
+          </section>
+        )}
 
-          <a
-            href="/my-events"
-            className="rounded-2xl border border-zinc-800 bg-zinc-900 p-6 transition hover:bg-zinc-800"
-          >
-            <h2 className="mb-2 text-2xl font-bold">Moje szkolenia</h2>
-
-            <p className="text-zinc-400">
-              Sprawdź szkolenia, na które jesteś zapisany oraz status
-              uczestnictwa.
-            </p>
-          </a>
-
-          <a
-            href="/terms"
-            className="rounded-2xl border border-zinc-800 bg-zinc-900 p-6 transition hover:bg-zinc-800"
-          >
-            <h2 className="mb-2 text-2xl font-bold">Regulamin i RODO</h2>
-
-            <p className="text-zinc-400">
-              Regulamin strzelnicy, zasady bezpieczeństwa oraz polityka
-              prywatności.
-            </p>
-          </a>
-
-          <a
-            href="/account"
-            className="rounded-2xl border border-zinc-800 bg-zinc-900 p-6 transition hover:bg-zinc-800"
-          >
-            <h2 className="mb-2 text-2xl font-bold">Moje konto</h2>
-
-            <p className="text-zinc-400">
-              Edytuj swoje dane użytkownika, imię, nazwisko oraz numer telefonu.
-            </p>
-          </a>
-        </div>
-
-        <div className="mt-8 flex flex-col gap-3 sm:flex-row">
+        <div className="mt-8 flex justify-end border-t border-[#30372c] pt-6">
           <a
             href="/"
-            className="rounded-xl border border-zinc-700 px-5 py-3 text-center text-sm font-semibold text-zinc-300 transition hover:bg-zinc-900"
+            className="inline-flex min-h-11 items-center justify-center rounded-xl border border-[#30372c] bg-[#191e19] px-5 py-3 text-sm font-semibold text-[#a9ada4] transition hover:border-[#536143] hover:bg-[#20251d] hover:text-[#f2efe4] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d7c895] focus-visible:ring-offset-2 focus-visible:ring-offset-[#141814]"
           >
             ← Strona główna
           </a>
-
-          <button
-            type="button"
-            onClick={handleLogout}
-            className="rounded-xl border border-red-800 px-5 py-3 text-sm font-semibold text-red-400 transition hover:bg-red-950"
-          >
-            Wyloguj
-          </button>
         </div>
       </section>
     </main>
