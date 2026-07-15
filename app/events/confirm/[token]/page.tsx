@@ -1,3 +1,4 @@
+import Image from "next/image";
 import Link from "next/link";
 import { createClient } from "@supabase/supabase-js";
 import { Resend } from "resend";
@@ -200,14 +201,6 @@ CSK Booking
   });
 }
 
-function getCardClass(success: boolean) {
-  if (success) {
-    return "mx-auto max-w-2xl rounded-2xl border border-green-800 bg-green-950/40 p-6";
-  }
-
-  return "mx-auto max-w-2xl rounded-2xl border border-red-900 bg-red-950/40 p-6";
-}
-
 function getTitle(result: ConfirmReserveResult | null, hasError: boolean) {
   if (hasError) {
     return "Nie udało się potwierdzić miejsca";
@@ -226,6 +219,22 @@ function getTitle(result: ConfirmReserveResult | null, hasError: boolean) {
   }
 
   return "Nie udało się potwierdzić miejsca";
+}
+
+function getStatusPanelClass(
+  success: boolean,
+  result: ConfirmReserveResult | null,
+  hasError: boolean
+) {
+  if (success) {
+    return "border-[#3f6848] bg-[#1b2a1d] text-[#a9d4ad]";
+  }
+
+  if (!hasError && (result?.code === "full" || result?.code === "expired")) {
+    return "border-[#806a32] bg-[#2b2618] text-[#e1c477]";
+  }
+
+  return "border-[#744545] bg-[#2a1b1b] text-[#e0a0a0]";
 }
 
 export default async function ConfirmEventReservePage({
@@ -284,46 +293,65 @@ export default async function ConfirmEventReservePage({
   }
 
   const success = Boolean(result?.ok) && !hasError;
+  const isWarning =
+    !success &&
+    !hasError &&
+    (result?.code === "full" || result?.code === "expired");
   const message =
     result?.message ??
     "Link jest nieprawidłowy, wygasł albo miejsce nie jest już dostępne.";
 
   return (
-    <main className="min-h-screen bg-zinc-950 px-4 py-10 text-zinc-100">
-      <section className={getCardClass(success)}>
-        <p className="mb-3 text-xs font-bold uppercase tracking-[0.35em] text-green-400">
-          CSK Booking
-        </p>
+    <main className="flex min-h-screen items-center bg-[#090b09] px-4 py-6 text-[#f2efe4] sm:px-6 sm:py-8">
+      <section className="mx-auto w-full max-w-2xl rounded-[2rem] border border-[#30372c] bg-[#141814] p-6 shadow-2xl shadow-black/20 sm:p-9">
+        <Image
+          src="/login-brand.png"
+          alt="Centrum Szkolenia Krutla"
+          width={1536}
+          height={1024}
+          className="mx-auto h-auto w-full max-w-[260px] sm:max-w-[300px]"
+          priority
+        />
 
-        <h1 className="mb-4 text-2xl font-bold text-white">
+        <h1 className="mt-6 text-center text-3xl font-bold sm:text-4xl">
           {getTitle(result, hasError)}
         </h1>
 
-        <p className="mb-6 text-sm leading-6 text-zinc-200">{message}</p>
+        <div
+          role={success || isWarning ? "status" : "alert"}
+          aria-live={success || isWarning ? "polite" : undefined}
+          className={`mt-6 rounded-2xl border p-5 text-sm leading-6 ${getStatusPanelClass(
+            success,
+            result,
+            hasError
+          )}`}
+        >
+          {message}
+        </div>
 
         {success ? (
-          <div className="mb-6 rounded-xl border border-green-800 bg-green-950/60 p-4 text-sm leading-6 text-green-100">
+          <div className="mt-4 rounded-2xl border border-[#30372c] bg-[#191e19] p-5 text-sm leading-6 text-[#a9ada4]">
             Twój status został zmieniony z listy rezerwowej na uczestnika
             szkolenia. Szczegóły znajdziesz w panelu klienta.
           </div>
         ) : (
-          <div className="mb-6 rounded-xl border border-yellow-800 bg-yellow-950/50 p-4 text-sm leading-6 text-yellow-100">
+          <div className="mt-4 rounded-2xl border border-[#30372c] bg-[#191e19] p-5 text-sm leading-6 text-[#a9ada4]">
             Jeśli nadal chcesz wziąć udział w szkoleniu, sprawdź swój panel lub
             skontaktuj się z organizatorem.
           </div>
         )}
 
-        <div className="flex flex-col gap-3 sm:flex-row">
+        <div className="mt-6 flex flex-col gap-3 sm:flex-row">
           <Link
             href="/my-events"
-            className="rounded-xl bg-green-700 px-5 py-3 text-center text-sm font-semibold text-white transition hover:bg-green-600"
+            className="inline-flex min-h-12 w-full items-center justify-center rounded-xl bg-[#536143] px-5 py-3 text-center text-sm font-semibold text-[#f2efe4] transition hover:bg-[#78865f] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d7c895] focus-visible:ring-offset-2 focus-visible:ring-offset-[#141814] sm:w-auto"
           >
             Moje szkolenia
           </Link>
 
           <Link
             href="/events"
-            className="rounded-xl border border-zinc-700 px-5 py-3 text-center text-sm font-semibold text-zinc-300 transition hover:bg-zinc-900"
+            className="inline-flex min-h-12 w-full items-center justify-center rounded-xl border border-[#30372c] px-5 py-3 text-center text-sm font-semibold text-[#a9ada4] transition hover:border-[#d7c895] hover:text-[#d7c895] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d7c895] focus-visible:ring-offset-2 focus-visible:ring-offset-[#141814] sm:w-auto"
           >
             Lista szkoleń
           </Link>
