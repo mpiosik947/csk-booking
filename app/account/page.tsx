@@ -4,6 +4,8 @@ import { useEffect, useState } from "react";
 import { supabase } from "../../lib/supabase";
 
 type ProfileData = {
+  first_name: string | null;
+  last_name: string | null;
   full_name: string | null;
   phone: string | null;
   postal_code: string | null;
@@ -29,6 +31,45 @@ type ProfileData = {
   permissions_verified_at: string | null;
   permissions_verification_note: string | null;
 };
+
+type PermissionValues = {
+  permissionSport: boolean;
+  permissionCollector: boolean;
+  permissionHunting: boolean;
+  permissionTraining: boolean;
+  permissionPersonalProtection: boolean;
+  permissionOther: boolean;
+  qualificationInstructor: boolean;
+  qualificationRangeOfficer: boolean;
+  qualificationPzssLicense: boolean;
+  qualificationHunter: boolean;
+};
+
+function havePermissionValuesChanged(
+  initialValues: PermissionValues | null,
+  currentValues: PermissionValues
+) {
+  if (!initialValues) {
+    return false;
+  }
+
+  return (
+    initialValues.permissionSport !== currentValues.permissionSport ||
+    initialValues.permissionCollector !== currentValues.permissionCollector ||
+    initialValues.permissionHunting !== currentValues.permissionHunting ||
+    initialValues.permissionTraining !== currentValues.permissionTraining ||
+    initialValues.permissionPersonalProtection !==
+      currentValues.permissionPersonalProtection ||
+    initialValues.permissionOther !== currentValues.permissionOther ||
+    initialValues.qualificationInstructor !==
+      currentValues.qualificationInstructor ||
+    initialValues.qualificationRangeOfficer !==
+      currentValues.qualificationRangeOfficer ||
+    initialValues.qualificationPzssLicense !==
+      currentValues.qualificationPzssLicense ||
+    initialValues.qualificationHunter !== currentValues.qualificationHunter
+  );
+}
 
 function getVerificationLabel(status: string) {
   switch (status) {
@@ -117,6 +158,8 @@ export default function AccountPage() {
   const [savingPassword, setSavingPassword] = useState(false);
 
   const [email, setEmail] = useState("");
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
   const [fullName, setFullName] = useState("");
   const [phone, setPhone] = useState("");
 
@@ -141,6 +184,8 @@ export default function AccountPage() {
   const [qualificationPzssLicense, setQualificationPzssLicense] =
     useState(false);
   const [qualificationHunter, setQualificationHunter] = useState(false);
+  const [initialPermissionValues, setInitialPermissionValues] =
+    useState<PermissionValues | null>(null);
 
   const [verificationStatus, setVerificationStatus] =
     useState("niezweryfikowane");
@@ -186,6 +231,8 @@ export default function AccountPage() {
 
     const metadata = user.user_metadata ?? {};
 
+    setFirstName(metadata.first_name ?? "");
+    setLastName(metadata.last_name ?? "");
     setFullName(metadata.full_name ?? metadata.name ?? "");
     setPhone(
       metadata.phone ??
@@ -199,6 +246,8 @@ export default function AccountPage() {
       .from("profiles")
       .select(
         `
+        first_name,
+        last_name,
         full_name,
         phone,
         postal_code,
@@ -237,6 +286,8 @@ export default function AccountPage() {
     if (profile) {
       const profileData = profile as ProfileData;
 
+      setFirstName(profileData.first_name ?? metadata.first_name ?? "");
+      setLastName(profileData.last_name ?? metadata.last_name ?? "");
       setFullName(profileData.full_name ?? metadata.full_name ?? "");
       setPhone(profileData.phone ?? metadata.phone ?? "");
 
@@ -253,39 +304,70 @@ export default function AccountPage() {
         profileData.verification_status ?? "niezweryfikowane"
       );
 
-      setPermissionSport(Boolean(profileData.permission_sport));
-      setPermissionCollector(Boolean(profileData.permission_collector));
-      setPermissionHunting(Boolean(profileData.permission_hunting));
-      setPermissionTraining(Boolean(profileData.permission_training));
-      setPermissionPersonalProtection(
-        Boolean(profileData.permission_personal_protection)
-      );
-      setPermissionOther(Boolean(profileData.permission_other));
+      const loadedPermissionValues: PermissionValues = {
+        permissionSport: Boolean(profileData.permission_sport),
+        permissionCollector: Boolean(profileData.permission_collector),
+        permissionHunting: Boolean(profileData.permission_hunting),
+        permissionTraining: Boolean(profileData.permission_training),
+        permissionPersonalProtection: Boolean(
+          profileData.permission_personal_protection
+        ),
+        permissionOther: Boolean(profileData.permission_other),
+        qualificationInstructor: Boolean(profileData.qualification_instructor),
+        qualificationRangeOfficer: Boolean(
+          profileData.qualification_range_officer
+        ),
+        qualificationPzssLicense: Boolean(
+          profileData.qualification_pzss_license
+        ),
+        qualificationHunter: Boolean(profileData.qualification_hunter),
+      };
 
-      setQualificationInstructor(Boolean(profileData.qualification_instructor));
+      setPermissionSport(loadedPermissionValues.permissionSport);
+      setPermissionCollector(loadedPermissionValues.permissionCollector);
+      setPermissionHunting(loadedPermissionValues.permissionHunting);
+      setPermissionTraining(loadedPermissionValues.permissionTraining);
+      setPermissionPersonalProtection(
+        loadedPermissionValues.permissionPersonalProtection
+      );
+      setPermissionOther(loadedPermissionValues.permissionOther);
+
+      setQualificationInstructor(
+        loadedPermissionValues.qualificationInstructor
+      );
       setQualificationRangeOfficer(
-        Boolean(profileData.qualification_range_officer)
+        loadedPermissionValues.qualificationRangeOfficer
       );
       setQualificationPzssLicense(
-        Boolean(profileData.qualification_pzss_license)
+        loadedPermissionValues.qualificationPzssLicense
       );
-      setQualificationHunter(Boolean(profileData.qualification_hunter));
+      setQualificationHunter(loadedPermissionValues.qualificationHunter);
+      setInitialPermissionValues(loadedPermissionValues);
 
       setPermissionsVerified(Boolean(profileData.permissions_verified));
       setPermissionsVerifiedAt(profileData.permissions_verified_at ?? "");
       setPermissionsVerificationNote(
         profileData.permissions_verification_note ?? ""
       );
+    } else {
+      setInitialPermissionValues({
+        permissionSport: false,
+        permissionCollector: false,
+        permissionHunting: false,
+        permissionTraining: false,
+        permissionPersonalProtection: false,
+        permissionOther: false,
+        qualificationInstructor: false,
+        qualificationRangeOfficer: false,
+        qualificationPzssLicense: false,
+        qualificationHunter: false,
+      });
     }
 
     setLoading(false);
   }
 
   function validateProfile() {
-    if (!fullName.trim()) {
-      return "Uzupełnij imię i nazwisko.";
-    }
-
     if (!phone.trim()) {
       return "Uzupełnij numer telefonu.";
     }
@@ -333,10 +415,25 @@ export default function AccountPage() {
     }
 
     const postalCode = `${postalCodePartOne}-${postalCodePartTwo}`;
+    const currentPermissionValues: PermissionValues = {
+      permissionSport,
+      permissionCollector,
+      permissionHunting,
+      permissionTraining,
+      permissionPersonalProtection,
+      permissionOther,
+      qualificationInstructor,
+      qualificationRangeOfficer,
+      qualificationPzssLicense,
+      qualificationHunter,
+    };
+    const permissionsChanged = havePermissionValuesChanged(
+      initialPermissionValues,
+      currentPermissionValues
+    );
 
     const { error: authError } = await supabase.auth.updateUser({
       data: {
-        full_name: fullName.trim(),
         phone: phone.trim(),
 
         permission_sport: permissionSport,
@@ -362,7 +459,6 @@ export default function AccountPage() {
     const { error: profileError } = await supabase
       .from("profiles")
       .update({
-        full_name: fullName.trim(),
         phone: phone.trim(),
         postal_code: postalCode,
         city: city.trim(),
@@ -391,6 +487,18 @@ export default function AccountPage() {
     if (profileError) {
       setMessage(
         `Dane konta zapisane, ale nie udało się zaktualizować profilu: ${profileError.message}`
+      );
+      return;
+    }
+
+    if (permissionsChanged) {
+      setVerificationStatus("pending");
+      setPermissionsVerified(false);
+      setPermissionsVerifiedAt("");
+      setPermissionsVerificationNote("");
+      setInitialPermissionValues(currentPermissionValues);
+      setMessage(
+        "Dane zostały zapisane. Zmiana deklarowanych uprawnień wymaga ponownej weryfikacji przez pracownika."
       );
       return;
     }
@@ -434,6 +542,12 @@ export default function AccountPage() {
     setMessage("Hasło zostało zmienione.");
   }
 
+  const displayName =
+    [firstName.trim(), lastName.trim()].filter(Boolean).join(" ") ||
+    fullName.trim();
+  const hasMissingStructuredName =
+    !firstName.trim() || !lastName.trim();
+
   return (
     <main className="min-h-screen bg-zinc-950 text-white">
       <section className="mx-auto max-w-4xl px-6 py-12">
@@ -442,6 +556,12 @@ export default function AccountPage() {
         </p>
 
         <h1 className="mb-3 text-4xl font-bold">Moje konto</h1>
+
+        {displayName && (
+          <p className="mb-3 text-lg font-semibold text-zinc-200">
+            {displayName}
+          </p>
+        )}
 
         <p className="mb-8 text-zinc-400">
           Zarządzaj swoimi danymi użytkownika, adresem, deklarowanymi
@@ -501,30 +621,66 @@ export default function AccountPage() {
 
                 <div className="grid gap-5 md:grid-cols-2">
                   <div>
-                    <label className="mb-2 block text-sm text-zinc-300">
-                      Imię i nazwisko *
+                    <label
+                      htmlFor="account-first-name"
+                      className="mb-2 block text-sm text-zinc-300"
+                    >
+                      Imię
                     </label>
 
                     <input
+                      id="account-first-name"
                       type="text"
-                      value={fullName}
-                      onChange={(event) => setFullName(event.target.value)}
-                      className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-white outline-none focus:border-green-600"
+                      autoComplete="given-name"
+                      value={firstName}
+                      readOnly
+                      aria-readonly="true"
+                      className="w-full cursor-default rounded-xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-zinc-500 outline-none"
                     />
                   </div>
 
                   <div>
-                    <label className="mb-2 block text-sm text-zinc-300">
-                      Numer telefonu *
+                    <label
+                      htmlFor="account-last-name"
+                      className="mb-2 block text-sm text-zinc-300"
+                    >
+                      Nazwisko
                     </label>
 
                     <input
-                      type="tel"
-                      value={phone}
-                      onChange={(event) => setPhone(event.target.value)}
-                      className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-white outline-none focus:border-green-600"
+                      id="account-last-name"
+                      type="text"
+                      autoComplete="family-name"
+                      value={lastName}
+                      readOnly
+                      aria-readonly="true"
+                      className="w-full cursor-default rounded-xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-zinc-500 outline-none"
                     />
                   </div>
+                </div>
+
+                <p className="text-sm leading-6 text-zinc-400">
+                  Imię i nazwisko są przypisane do konta i mogą zostać
+                  zmienione wyłącznie przez obsługę.
+                </p>
+
+                {hasMissingStructuredName && (
+                  <div className="rounded-xl border border-zinc-700 bg-zinc-950 p-4 text-sm text-zinc-300">
+                    Dane imienia i nazwiska wymagają uzupełnienia przez obsługę.
+                  </div>
+                )}
+
+                <div>
+                  <label className="mb-2 block text-sm text-zinc-300">
+                    Numer telefonu *
+                  </label>
+
+                  <input
+                    type="tel"
+                    value={phone}
+                    onChange={(event) => setPhone(event.target.value)}
+                    className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-white outline-none focus:border-green-600"
+                  />
                 </div>
 
                 <div className="mt-2 border-t border-zinc-800 pt-5">
@@ -582,6 +738,11 @@ export default function AccountPage() {
                     dokumentów. Dokumenty okazujesz wyłącznie do wglądu
                     pracownikowi podczas wizyty.
                   </p>
+
+                  <div className="mb-5 rounded-xl border border-[#806a32] bg-[#2b2618] p-4 text-sm text-[#e1c477]">
+                    Zmiana deklarowanych uprawnień lub kwalifikacji spowoduje
+                    ponowną weryfikację konta przez pracownika.
+                  </div>
 
                   <div className="mb-5 rounded-xl border border-green-900 bg-green-950/40 p-4 text-sm text-green-200">
                     <p className="font-semibold">
