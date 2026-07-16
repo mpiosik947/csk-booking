@@ -153,8 +153,8 @@ export default function LoginPage() {
                 role="alert"
                 className="rounded-xl border border-[#744545] bg-[#2a1b1b] p-4 text-sm font-semibold text-[#e0a0a0]"
               >
-                Nie udało się potwierdzić adresu e-mail. Link mógł wygasnąć
-                lub zostać już wykorzystany.
+                Link aktywacyjny jest nieważny lub został już wykorzystany.
+                Jeżeli konto zostało aktywowane, spróbuj się zalogować.
               </div>
             )}
 
