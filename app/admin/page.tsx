@@ -226,30 +226,41 @@ function StatCard({
   description,
   href,
   tone = "default",
+  variant = "default",
 }: {
   title: string;
   value: string | number;
   description?: string;
   href?: string;
   tone?: "default" | "green" | "yellow" | "red" | "blue";
+  variant?: "default" | "alert";
 }) {
   const valueClass =
     tone === "green"
-      ? "text-green-400"
+      ? "text-[#a9d4ad]"
       : tone === "yellow"
-      ? "text-yellow-300"
+      ? "text-[#e1c477]"
       : tone === "red"
-      ? "text-red-300"
+      ? "text-[#e0a0a0]"
       : tone === "blue"
-      ? "text-blue-300"
-      : "text-white";
+      ? "text-[#d7c895]"
+      : "text-[#f2efe4]";
+
+  const cardClass =
+    variant === "alert" && tone === "red"
+      ? "border-[#744545] bg-[#2a1b1b]"
+      : variant === "alert" && tone === "yellow"
+      ? "border-[#806a32] bg-[#2b2618]"
+      : "border-[#30372c] bg-[#191e19]";
 
   const content = (
-    <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-5 transition hover:border-green-700">
-      <p className="text-sm text-zinc-400">{title}</p>
+    <div
+      className={`h-full min-h-12 rounded-2xl border p-5 transition hover:border-[#536143] ${cardClass}`}
+    >
+      <p className="text-sm text-[#a9ada4]">{title}</p>
       <p className={`mt-2 text-3xl font-bold ${valueClass}`}>{value}</p>
       {description && (
-        <p className="mt-2 text-xs leading-5 text-zinc-500">{description}</p>
+        <p className="mt-2 text-xs leading-5 text-[#858c7f]">{description}</p>
       )}
     </div>
   );
@@ -258,7 +269,7 @@ function StatCard({
     return (
       <Link
         href={href}
-        className="block rounded-2xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d7c895] focus-visible:ring-offset-2 focus-visible:ring-offset-[#141814]"
+        className="block min-h-12 rounded-2xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d7c895] focus-visible:ring-offset-2 focus-visible:ring-offset-[#141814]"
       >
         {content}
       </Link>
@@ -277,18 +288,18 @@ function AdminModuleTile({
 }) {
   if (!allowed) {
     return (
-      <div className="rounded-2xl border border-red-900 bg-red-950/40 p-6 opacity-90">
-        <div className="mb-5 flex h-12 w-12 items-center justify-center rounded-xl bg-red-900/70 text-xl font-bold text-red-300">
+      <div className="rounded-2xl border border-[#343a31] bg-[#171a17] p-6 text-[#858c7f]">
+        <div className="mb-5 flex h-12 w-12 items-center justify-center rounded-xl border border-[#343a31] bg-[#141814] text-xl font-bold text-[#858c7f]">
           !
         </div>
 
-        <div className="mb-3 inline-flex rounded-full border border-red-800 bg-red-950 px-3 py-1 text-xs font-bold uppercase tracking-[0.2em] text-red-300">
+        <div className="mb-3 inline-flex rounded-full border border-[#343a31] bg-[#141814] px-3 py-1 text-xs font-bold uppercase tracking-[0.2em] text-[#858c7f]">
           Brak dostępu
         </div>
 
-        <h2 className="mb-2 text-xl font-bold text-red-100">{tile.title}</h2>
+        <h3 className="mb-2 text-xl font-bold text-[#a9ada4]">{tile.title}</h3>
 
-        <p className="text-sm leading-6 text-red-200/80">{tile.description}</p>
+        <p className="text-sm leading-6 text-[#858c7f]">{tile.description}</p>
       </div>
     );
   }
@@ -296,19 +307,19 @@ function AdminModuleTile({
   return (
     <Link
       href={tile.href}
-      className="group rounded-2xl border border-zinc-800 bg-zinc-900 p-6 transition hover:border-green-700 hover:bg-zinc-900/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d7c895] focus-visible:ring-offset-2 focus-visible:ring-offset-[#141814]"
+      className="group rounded-2xl border border-[#30372c] bg-[#191e19] p-6 transition hover:border-[#536143] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d7c895] focus-visible:ring-offset-2 focus-visible:ring-offset-[#141814]"
     >
-      <div className="mb-5 flex h-12 w-12 items-center justify-center rounded-xl bg-green-900/40 text-xl font-bold text-green-400 transition group-hover:bg-green-800/60">
+      <div className="mb-5 flex h-12 w-12 items-center justify-center rounded-xl border border-[#536143] bg-[#141814] text-xl font-bold text-[#d7c895] transition group-hover:border-[#78865f]">
         {tile.title.charAt(0)}
       </div>
 
-      <div className="mb-3 inline-flex rounded-full border border-green-800 bg-green-950 px-3 py-1 text-xs font-bold uppercase tracking-[0.2em] text-green-300">
+      <div className="mb-3 inline-flex rounded-full border border-[#536143] bg-[#141814] px-3 py-1 text-xs font-bold uppercase tracking-[0.2em] text-[#d7c895]">
         Dostęp
       </div>
 
-      <h2 className="mb-2 text-xl font-bold">{tile.title}</h2>
+      <h3 className="mb-2 text-xl font-bold text-[#f2efe4]">{tile.title}</h3>
 
-      <p className="text-sm leading-6 text-zinc-400">{tile.description}</p>
+      <p className="text-sm leading-6 text-[#a9ada4]">{tile.description}</p>
     </Link>
   );
 }
@@ -605,33 +616,86 @@ export default function AdminPage() {
       }
     >
       {message && (
-        <div className="mb-6 rounded-xl border border-red-800 bg-red-950 p-4 text-red-300">
+        <div className="mb-6 rounded-xl border border-[#744545] bg-[#2a1b1b] p-4 text-[#e0a0a0]">
           {message}
         </div>
       )}
 
         {loading ? (
-          <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-8 text-zinc-400">
+          <div className="rounded-2xl border border-[#30372c] bg-[#191e19] p-8 text-[#a9ada4]">
             Ładowanie dashboardu...
           </div>
         ) : availableTilesCount === 0 ? (
-          <div className="rounded-2xl border border-red-900 bg-red-950/40 p-8 text-red-200">
+          <div className="rounded-2xl border border-[#806a32] bg-[#2b2618] p-8 text-[#e1c477]">
             Brak dostępnych modułów dla tej roli.
           </div>
         ) : (
           <>
-            <div className="mb-10">
-              <div className="mb-4 flex items-center justify-between gap-4">
+            <section>
+              <h2 className="text-xl font-bold text-[#f2efe4] sm:text-2xl">
+                Wymaga uwagi
+              </h2>
+              <p className="mt-1 text-sm text-[#a9ada4]">
+                Najważniejsze sprawy operacyjne wymagające sprawdzenia.
+              </p>
+
+              <div className="mt-4 grid gap-4 md:grid-cols-2">
+                <StatCard
+                  title="Niezweryfikowani dziś"
+                  value={unverifiedTodayReservations.length}
+                  description="Klienci z dzisiejszą rezerwacją i niepełną weryfikacją."
+                  href={hasAccess(role, ["admin"]) ? "/admin/users" : "/admin/check-in"}
+                  tone={unverifiedTodayReservations.length > 0 ? "yellow" : "green"}
+                  variant="alert"
+                />
+
+                <StatCard
+                  title="Nieopłacone dziś"
+                  value={unpaidToday.length}
+                  description="Rezerwacje ze statusem nieopłacona."
+                  href="/admin/check-in"
+                  tone={unpaidToday.length > 0 ? "red" : "green"}
+                  variant="alert"
+                />
+
+                <StatCard
+                  title="Lista rezerwowa szkoleń"
+                  value={upcomingEventsReserveCount}
+                  description={
+                    upcomingEventsWithReserve.length > 0
+                      ? `${upcomingEventsWithReserve.length} najbliższe szkolenia z rezerwą.`
+                      : "Brak rezerwy w najbliższych szkoleniach."
+                  }
+                  href="/admin/events"
+                  tone={upcomingEventsReserveCount > 0 ? "yellow" : "green"}
+                  variant="alert"
+                />
+
+                <StatCard
+                  title="No-show dzisiaj"
+                  value={noShowToday.length}
+                  description="Klienci oznaczeni jako nieobecni."
+                  href="/admin/check-in"
+                  tone={noShowToday.length > 0 ? "red" : "green"}
+                  variant="alert"
+                />
+              </div>
+            </section>
+
+            <section className="mt-8">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
                 <div>
-                  <h2 className="text-2xl font-bold">Dzisiaj — najważniejsze</h2>
-                  <p className="mt-1 text-sm text-zinc-500">
+                  <h2 className="text-xl font-bold text-[#f2efe4] sm:text-2xl">
+                    Dzisiaj — najważniejsze
+                  </h2>
+                  <p className="mt-1 text-sm text-[#a9ada4]">
                     Operacyjny skrót dnia dla obsługi strzelnicy.
                   </p>
                 </div>
-                <p className="text-sm text-zinc-500">{today}</p>
+                <p className="text-sm text-[#858c7f]">{today}</p>
               </div>
 
-              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+              <div className="mt-4 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
                 <StatCard
                   title="Rezerwacje dziś"
                   value={activeTodayReservations.length}
@@ -672,79 +736,36 @@ export default function AdminPage() {
                   tone={payOnSiteToday.length > 0 ? "yellow" : "green"}
                 />
               </div>
-            </div>
+            </section>
 
-            <div className="mb-10">
-              <h2 className="mb-4 text-2xl font-bold">Alerty wymagające reakcji</h2>
-
-              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-                <StatCard
-                  title="Niezweryfikowani dziś"
-                  value={unverifiedTodayReservations.length}
-                  description="Klienci z dzisiejszą rezerwacją i niepełną weryfikacją."
-                  href={hasAccess(role, ["admin"]) ? "/admin/users" : "/admin/check-in"}
-                  tone={unverifiedTodayReservations.length > 0 ? "yellow" : "green"}
-                />
-
-                <StatCard
-                  title="Nieopłacone dziś"
-                  value={unpaidToday.length}
-                  description="Rezerwacje ze statusem nieopłacona."
-                  href="/admin/check-in"
-                  tone={unpaidToday.length > 0 ? "red" : "green"}
-                />
-
-                <StatCard
-                  title="Lista rezerwowa szkoleń"
-                  value={upcomingEventsReserveCount}
-                  description={
-                    upcomingEventsWithReserve.length > 0
-                      ? `${upcomingEventsWithReserve.length} najbliższe szkolenia z rezerwą.`
-                      : "Brak rezerwy w najbliższych szkoleniach."
-                  }
-                  href="/admin/events"
-                  tone={upcomingEventsReserveCount > 0 ? "yellow" : "green"}
-                />
-
-                <StatCard
-                  title="No-show dzisiaj"
-                  value={noShowToday.length}
-                  description="Klienci oznaczeni jako nieobecni."
-                  href="/admin/check-in"
-                  tone={noShowToday.length > 0 ? "red" : "green"}
-                />
-              </div>
-            </div>
-
-            <div className="mb-10 grid gap-6 xl:grid-cols-[1.45fr_0.55fr]">
-              <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-6">
-                <div className="mb-5 flex items-center justify-between gap-4">
+            <section className="mt-8 rounded-2xl border border-[#30372c] bg-[#191e19] p-5 sm:p-6">
+                <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                   <div>
-                    <h2 className="text-2xl font-bold">
+                    <h2 className="text-xl font-bold text-[#f2efe4] sm:text-2xl">
                       Najbliższe rezerwacje
                     </h2>
-                    <p className="mt-1 text-sm text-zinc-500">
+                    <p className="mt-1 text-sm text-[#a9ada4]">
                       Najważniejsza lista dla bieżącej obsługi recepcji.
                     </p>
                   </div>
 
                   <Link
                     href="/admin/check-in"
-                    className="inline-flex min-h-11 items-center rounded-lg px-2 text-sm font-semibold text-green-400 hover:text-green-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d7c895] focus-visible:ring-offset-2 focus-visible:ring-offset-[#141814]"
+                    className="inline-flex min-h-11 items-center rounded-lg px-2 text-sm font-semibold text-[#d7c895] hover:text-[#f2efe4] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d7c895] focus-visible:ring-offset-2 focus-visible:ring-offset-[#191e19]"
                   >
                     Check-in →
                   </Link>
                 </div>
 
                 {upcomingReservations.length === 0 ? (
-                  <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-5 text-zinc-400">
+                  <div className="rounded-xl border border-[#30372c] bg-[#141814] p-5 text-[#a9ada4]">
                     Brak kolejnych rezerwacji na dziś.
                   </div>
                 ) : (
-                  <div className="overflow-x-auto">
+                  <div className="max-w-full overflow-x-auto rounded-xl border border-[#30372c] bg-[#141814] px-4">
                     <table className="w-full min-w-[760px] text-left text-sm">
                       <thead>
-                        <tr className="border-b border-zinc-800 text-zinc-400">
+                        <tr className="border-b border-[#30372c] text-[#a9ada4]">
                           <th className="py-3 pr-4">Godzina</th>
                           <th className="py-3 pr-4">Klient</th>
                           <th className="py-3 pr-4">Oś</th>
@@ -757,7 +778,7 @@ export default function AdminPage() {
                         {upcomingReservations.map((reservation) => (
                           <tr
                             key={reservation.id}
-                            className="border-b border-zinc-800"
+                            className="border-b border-[#30372c] text-[#f2efe4] last:border-b-0"
                           >
                             <td className="py-4 pr-4 font-bold">
                               {normalizeTime(reservation.start_time)}–
@@ -768,7 +789,7 @@ export default function AdminPage() {
                               <p className="font-semibold">
                                 {reservation.customer_name || "Brak danych"}
                               </p>
-                              <p className="text-xs text-zinc-500">
+                              <p className="text-xs text-[#858c7f]">
                                 {reservation.customer_phone || "brak telefonu"}
                               </p>
                             </td>
@@ -778,7 +799,7 @@ export default function AdminPage() {
                             </td>
 
                             <td className="py-4 pr-4">
-                              <span className="rounded-full border border-zinc-700 bg-zinc-950 px-3 py-1 text-xs font-semibold text-zinc-300">
+                              <span className="rounded-full border border-[#30372c] bg-[#191e19] px-3 py-1 text-xs font-semibold text-[#a9ada4]">
                                 {getPaymentStatusLabel(reservation.payment_status)}
                               </span>
                             </td>
@@ -786,7 +807,7 @@ export default function AdminPage() {
                             <td className="py-4 pr-4">
                               <Link
                                 href="/admin/check-in"
-                                className="inline-flex min-h-11 items-center rounded-lg border border-green-800 px-3 py-2 text-xs font-bold text-green-300 transition hover:bg-green-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d7c895] focus-visible:ring-offset-2 focus-visible:ring-offset-[#141814]"
+                                className="inline-flex min-h-11 items-center rounded-lg border border-[#536143] bg-[#191e19] px-3 py-2 text-xs font-bold text-[#d7c895] transition hover:border-[#78865f] hover:text-[#f2efe4] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d7c895] focus-visible:ring-offset-2 focus-visible:ring-offset-[#141814]"
                               >
                                 Check-in
                               </Link>
@@ -797,85 +818,34 @@ export default function AdminPage() {
                     </table>
                   </div>
                 )}
-              </div>
-
-              <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-6">
-                <h2 className="mb-2 text-2xl font-bold">Szybkie akcje</h2>
-                <p className="mb-5 text-sm text-zinc-500">
-                  Najczęściej używane skróty w pracy obsługi.
-                </p>
-
-                <div className="grid gap-3">
-                  <Link
-                    href="/booking"
-                    className="rounded-xl border border-zinc-700 px-4 py-3 text-sm font-bold text-zinc-200 transition hover:border-green-700 hover:bg-green-950/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d7c895] focus-visible:ring-offset-2 focus-visible:ring-offset-[#141814]"
-                  >
-                    + Nowa rezerwacja
-                  </Link>
-
-                  {hasAccess(role, ["admin", "pracownik", "instruktor"]) && (
-                    <Link
-                      href="/admin/check-in"
-                      className="rounded-xl border border-zinc-700 px-4 py-3 text-sm font-bold text-zinc-200 transition hover:border-green-700 hover:bg-green-950/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d7c895] focus-visible:ring-offset-2 focus-visible:ring-offset-[#141814]"
-                    >
-                      Check-in klientów
-                    </Link>
-                  )}
-
-                  {hasAccess(role, ["admin", "pracownik", "instruktor"]) && (
-                    <Link
-                      href="/admin/calendar"
-                      className="rounded-xl border border-zinc-700 px-4 py-3 text-sm font-bold text-zinc-200 transition hover:border-green-700 hover:bg-green-950/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d7c895] focus-visible:ring-offset-2 focus-visible:ring-offset-[#141814]"
-                    >
-                      Kalendarz
-                    </Link>
-                  )}
-
-                  {hasAccess(role, ["admin", "pracownik"]) && (
-                    <Link
-                      href="/admin/lane-blocks"
-                      className="rounded-xl border border-zinc-700 px-4 py-3 text-sm font-bold text-zinc-200 transition hover:border-green-700 hover:bg-green-950/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d7c895] focus-visible:ring-offset-2 focus-visible:ring-offset-[#141814]"
-                    >
-                      Blokady osi
-                    </Link>
-                  )}
-
-                  {hasAccess(role, ["admin", "pracownik", "instruktor"]) && (
-                    <Link
-                      href="/admin/events"
-                      className="rounded-xl border border-zinc-700 px-4 py-3 text-sm font-bold text-zinc-200 transition hover:border-green-700 hover:bg-green-950/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d7c895] focus-visible:ring-offset-2 focus-visible:ring-offset-[#141814]"
-                    >
-                      Szkolenia
-                    </Link>
-                  )}
-                </div>
-              </div>
-            </div>
+            </section>
 
             {hasAccess(role, ["admin", "pracownik", "instruktor"]) && (
-              <div className="mb-10 rounded-2xl border border-zinc-800 bg-zinc-900 p-6">
+              <section className="mt-8 rounded-2xl border border-[#30372c] bg-[#191e19] p-5 sm:p-6">
                 <div className="mb-5 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                   <div>
-                    <h2 className="text-2xl font-bold">Najbliższe szkolenia</h2>
-                    <p className="mt-1 text-sm text-zinc-500">
+                    <h2 className="text-xl font-bold text-[#f2efe4] sm:text-2xl">
+                      Najbliższe szkolenia
+                    </h2>
+                    <p className="mt-1 text-sm text-[#a9ada4]">
                       Podgląd najbliższych wydarzeń, miejsc i listy rezerwowej.
                     </p>
                   </div>
 
                   <Link
                     href="/admin/events"
-                    className="inline-flex min-h-11 items-center rounded-lg px-2 text-sm font-semibold text-green-400 hover:text-green-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d7c895] focus-visible:ring-offset-2 focus-visible:ring-offset-[#141814]"
+                    className="inline-flex min-h-11 items-center rounded-lg px-2 text-sm font-semibold text-[#d7c895] hover:text-[#f2efe4] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d7c895] focus-visible:ring-offset-2 focus-visible:ring-offset-[#191e19]"
                   >
                     Zarządzaj szkoleniami →
                   </Link>
                 </div>
 
                 {upcomingEvents.length === 0 ? (
-                  <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-5 text-zinc-400">
+                  <div className="rounded-xl border border-[#30372c] bg-[#141814] p-5 text-[#a9ada4]">
                     Brak zaplanowanych aktywnych szkoleń.
                   </div>
                 ) : (
-                  <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+                  <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
                     {upcomingEvents.map((eventItem) => {
                       const participantsCount =
                         getEventParticipantsCount(eventItem);
@@ -891,45 +861,45 @@ export default function AdminPage() {
                         <Link
                           key={eventItem.id}
                           href="/admin/events"
-                          className="rounded-xl border border-zinc-800 bg-zinc-950 p-5 transition hover:border-green-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d7c895] focus-visible:ring-offset-2 focus-visible:ring-offset-[#141814]"
+                          className="rounded-xl border border-[#30372c] bg-[#141814] p-5 transition hover:border-[#536143] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d7c895] focus-visible:ring-offset-2 focus-visible:ring-offset-[#191e19]"
                         >
                           <div className="mb-3 flex items-start justify-between gap-3">
-                            <h3 className="font-bold text-white">
+                            <h3 className="min-w-0 break-words font-bold text-[#f2efe4]">
                               {eventItem.title}
                             </h3>
 
                             <span
                               className={
                                 isFull
-                                  ? "rounded-full bg-yellow-950 px-3 py-1 text-xs font-semibold text-yellow-300"
-                                  : "rounded-full bg-green-950 px-3 py-1 text-xs font-semibold text-green-300"
+                                  ? "shrink-0 rounded-full border border-[#806a32] bg-[#2b2618] px-3 py-1 text-xs font-semibold text-[#e1c477]"
+                                  : "shrink-0 rounded-full border border-[#3f6848] bg-[#1b2a1d] px-3 py-1 text-xs font-semibold text-[#a9d4ad]"
                               }
                             >
                               {isFull ? "Pełne" : "Aktywne"}
                             </span>
                           </div>
 
-                          <p className="text-sm text-zinc-400">
+                          <p className="text-sm text-[#a9ada4]">
                             {formatDisplayDate(eventItem.event_date)} ·{" "}
                             {normalizeTime(eventItem.start_time)}–
                             {normalizeTime(eventItem.end_time)}
                           </p>
 
                           <div className="mt-4 grid gap-2 text-sm">
-                            <div className="flex items-center justify-between rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2">
-                              <span className="text-zinc-500">Uczestnicy</span>
-                              <span className="font-bold text-white">
+                            <div className="flex items-center justify-between rounded-lg border border-[#30372c] bg-[#191e19] px-3 py-2">
+                              <span className="text-[#858c7f]">Uczestnicy</span>
+                              <span className="font-bold text-[#f2efe4]">
                                 {participantsCount} / {maxParticipants}
                               </span>
                             </div>
 
-                            <div className="flex items-center justify-between rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2">
-                              <span className="text-zinc-500">Rezerwa</span>
+                            <div className="flex items-center justify-between rounded-lg border border-[#30372c] bg-[#191e19] px-3 py-2">
+                              <span className="text-[#858c7f]">Rezerwa</span>
                               <span
                                 className={
                                   reserveCount > 0
-                                    ? "font-bold text-yellow-300"
-                                    : "font-bold text-zinc-400"
+                                    ? "font-bold text-[#e1c477]"
+                                    : "font-bold text-[#a9ada4]"
                                 }
                               >
                                 {reserveCount}
@@ -941,14 +911,16 @@ export default function AdminPage() {
                     })}
                   </div>
                 )}
-              </div>
+              </section>
             )}
 
             {hasAccess(role, ["admin"]) && (
-              <div className="mb-10">
-                <h2 className="mb-4 text-2xl font-bold">Biznes</h2>
+              <section className="mt-8">
+                <h2 className="text-xl font-bold text-[#f2efe4] sm:text-2xl">
+                  Biznes
+                </h2>
 
-                <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+                <div className="mt-4 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
                   <StatCard
                     title="Dzisiejszy przychód"
                     value={`${todayRevenue.toFixed(0)} zł`}
@@ -982,22 +954,23 @@ export default function AdminPage() {
                     tone="blue"
                   />
                 </div>
-              </div>
+              </section>
             )}
 
-            <div>
+            <section className="mt-8">
               <div className="mb-4 flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
                 <div>
-                  <h2 className="text-2xl font-bold">Moduły systemu</h2>
-                  <p className="mt-2 text-sm text-zinc-500">
-                    Zielone kafelki są dostępne dla Twojej roli. Czerwone
-                    oznaczają brak dostępu.
+                  <h2 className="text-xl font-bold text-[#f2efe4] sm:text-2xl">
+                    Moduły administracyjne
+                  </h2>
+                  <p className="mt-2 text-sm text-[#a9ada4]">
+                    Kafelki są dostępne zgodnie z uprawnieniami Twojej roli.
                   </p>
                 </div>
 
-                <p className="text-sm text-zinc-500">
+                <p className="text-sm text-[#858c7f]">
                   Dostępne moduły:{" "}
-                  <span className="font-bold text-white">
+                  <span className="font-bold text-[#f2efe4]">
                     {availableTilesCount}
                   </span>
                   /{adminTiles.length}
@@ -1013,7 +986,7 @@ export default function AdminPage() {
                   />
                 ))}
               </div>
-            </div>
+            </section>
           </>
         )}
     </AdminShell>
