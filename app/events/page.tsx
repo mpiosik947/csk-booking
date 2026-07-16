@@ -451,46 +451,70 @@ export default function EventsPage() {
         </header>
 
         {registrationConfirmation && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 px-4">
-            <div className="w-full max-w-xl rounded-2xl border border-yellow-800 bg-zinc-950 p-6 text-white shadow-2xl">
-              <div className="mb-4 rounded-full border border-yellow-800 bg-yellow-950 px-4 py-2 text-center text-sm font-bold uppercase tracking-[0.25em] text-yellow-300">
+          <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/85 px-4 py-6">
+            <div
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="event-registration-confirmation-title"
+              aria-describedby="event-registration-confirmation-description"
+              className="max-h-[calc(100vh-3rem)] w-full max-w-xl overflow-y-auto rounded-[2rem] border border-[#30372c] bg-[#141814] p-5 text-[#f2efe4] shadow-2xl shadow-black/40 sm:p-7"
+            >
+              <div
+                className={`mb-4 rounded-full border px-4 py-2 text-center text-sm font-bold uppercase tracking-[0.2em] ${
+                  registrationConfirmation.asReserve
+                    ? "border-[#806a32] bg-[#2b2618] text-[#e1c477]"
+                    : "border-[#3f6848] bg-[#1b2a1d] text-[#a9d4ad]"
+                }`}
+              >
                 Potwierdzenie zapisu
               </div>
 
-              <h2 className="mb-3 text-3xl font-bold">
+              <h2
+                id="event-registration-confirmation-title"
+                className="mb-3 text-2xl font-bold text-[#f2efe4] sm:text-3xl"
+              >
                 Czy na pewno chcesz się zapisać?
               </h2>
 
-              <p className="mb-6 text-zinc-400">
+              <p
+                id="event-registration-confirmation-description"
+                className="mb-6 leading-6 text-[#a9ada4]"
+              >
                 Potwierdź zapis na wybrane szkolenie. Po zapisaniu otrzymasz potwierdzenie na adres e-mail.
               </p>
 
-              <div className="grid gap-3 rounded-2xl border border-zinc-800 bg-zinc-900 p-5 text-sm">
-                <div>
-                  <p className="text-zinc-500">Szkolenie</p>
-                  <p className="text-lg font-semibold text-white">
+              <div className="grid gap-4 rounded-2xl border border-[#30372c] bg-[#191e19] p-5 text-sm sm:grid-cols-2">
+                <div className="min-w-0 sm:col-span-2">
+                  <p className="text-[#858c7f]">Szkolenie</p>
+                  <p className="mt-1 break-words text-lg font-semibold text-[#f2efe4]">
                     {registrationConfirmation.eventItem.title}
                   </p>
                 </div>
 
                 <div>
-                  <p className="text-zinc-500">Data</p>
-                  <p className="text-lg font-semibold text-white">
+                  <p className="text-[#858c7f]">Data</p>
+                  <p className="mt-1 text-lg font-semibold text-[#d7c895]">
                     {formatDate(registrationConfirmation.eventItem.event_date)}
                   </p>
                 </div>
 
                 <div>
-                  <p className="text-zinc-500">Godzina</p>
-                  <p className="text-lg font-semibold text-white">
+                  <p className="text-[#858c7f]">Godzina</p>
+                  <p className="mt-1 text-lg font-semibold text-[#f2efe4]">
                     {registrationConfirmation.eventItem.start_time.slice(0, 5)} -{" "}
                     {registrationConfirmation.eventItem.end_time.slice(0, 5)}
                   </p>
                 </div>
 
-                <div>
-                  <p className="text-zinc-500">Tryb zapisu</p>
-                  <p className="text-lg font-semibold text-yellow-400">
+                <div className="sm:col-span-2">
+                  <p className="text-[#858c7f]">Tryb zapisu</p>
+                  <p
+                    className={`mt-1 text-lg font-semibold ${
+                      registrationConfirmation.asReserve
+                        ? "text-[#e1c477]"
+                        : "text-[#a9d4ad]"
+                    }`}
+                  >
                     {registrationConfirmation.asReserve
                       ? "Lista rezerwowa"
                       : "Uczestnik szkolenia"}
@@ -502,7 +526,7 @@ export default function EventsPage() {
                 <button
                   type="button"
                   onClick={() => setRegistrationConfirmation(null)}
-                  className="rounded-xl border border-zinc-700 px-5 py-3 font-semibold text-zinc-300 transition hover:bg-zinc-900"
+                  className="min-h-12 w-full rounded-xl border border-[#30372c] bg-[#191e19] px-5 py-3 font-semibold text-[#a9ada4] transition hover:border-[#78865f] hover:text-[#f2efe4] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#c5a861] focus-visible:ring-offset-2 focus-visible:ring-offset-[#141814]"
                 >
                   Wróć do szkoleń
                 </button>
@@ -516,7 +540,11 @@ export default function EventsPage() {
                     );
                     setRegistrationConfirmation(null);
                   }}
-                  className="rounded-xl bg-green-700 px-5 py-3 font-semibold text-white transition hover:bg-green-600"
+                  className={`min-h-12 w-full rounded-xl px-5 py-3 font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#c5a861] focus-visible:ring-offset-2 focus-visible:ring-offset-[#141814] ${
+                    registrationConfirmation.asReserve
+                      ? "border border-[#806a32] bg-[#6f5a2e] text-[#f2efe4] hover:bg-[#9a7c3e]"
+                      : "bg-[#536143] text-[#f2efe4] hover:bg-[#78865f]"
+                  }`}
                 >
                   Zapisz się
                 </button>
@@ -525,60 +553,72 @@ export default function EventsPage() {
           </div>
         )}
         {registrationSuccess && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 px-4">
-            <div className="w-full max-w-xl rounded-2xl border border-green-800 bg-zinc-950 p-6 text-white shadow-2xl">
-              <div className="mb-4 rounded-full border border-green-800 bg-green-950 px-4 py-2 text-center text-sm font-bold uppercase tracking-[0.25em] text-green-300">
+          <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/85 px-4 py-6">
+            <div
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="event-registration-success-title"
+              aria-describedby="event-registration-success-description"
+              className="max-h-[calc(100vh-3rem)] w-full max-w-xl overflow-y-auto rounded-[2rem] border border-[#30372c] bg-[#141814] p-5 text-[#f2efe4] shadow-2xl shadow-black/40 sm:p-7"
+            >
+              <div className="mb-4 rounded-full border border-[#3f6848] bg-[#1b2a1d] px-4 py-2 text-center text-sm font-bold uppercase tracking-[0.2em] text-[#a9d4ad]">
                 Zapis potwierdzony
               </div>
 
-              <h2 className="mb-3 text-3xl font-bold">
+              <h2
+                id="event-registration-success-title"
+                className="mb-3 text-2xl font-bold text-[#f2efe4] sm:text-3xl"
+              >
                 Udało się zapisać na szkolenie
               </h2>
 
-              <p className="mb-6 text-zinc-400">
+              <p
+                id="event-registration-success-description"
+                className="mb-6 text-[#a9ada4]"
+              >
                 Poniżej znajduje się podsumowanie zapisu.
               </p>
 
-              <div className="grid gap-3 rounded-2xl border border-zinc-800 bg-zinc-900 p-5 text-sm">
-                <div>
-                  <p className="text-zinc-500">Szkolenie</p>
-                  <p className="text-lg font-semibold text-white">
+              <div className="grid gap-4 rounded-2xl border border-[#30372c] bg-[#191e19] p-5 text-sm sm:grid-cols-2">
+                <div className="min-w-0 sm:col-span-2">
+                  <p className="text-[#858c7f]">Szkolenie</p>
+                  <p className="mt-1 break-words text-lg font-semibold text-[#f2efe4]">
                     {registrationSuccess.title}
                   </p>
                 </div>
 
                 <div>
-                  <p className="text-zinc-500">Data</p>
-                  <p className="text-lg font-semibold text-white">
+                  <p className="text-[#858c7f]">Data</p>
+                  <p className="mt-1 text-lg font-semibold text-[#d7c895]">
                     {formatDate(registrationSuccess.date)}
                   </p>
                 </div>
 
                 <div>
-                  <p className="text-zinc-500">Godzina</p>
-                  <p className="text-lg font-semibold text-white">
+                  <p className="text-[#858c7f]">Godzina</p>
+                  <p className="mt-1 text-lg font-semibold text-[#f2efe4]">
                     {registrationSuccess.startTime.slice(0, 5)} -{" "}
                     {registrationSuccess.endTime.slice(0, 5)}
                   </p>
                 </div>
 
-                <div>
-                  <p className="text-zinc-500">Miejsce</p>
-                  <p className="text-lg font-semibold text-white">
+                <div className="min-w-0 sm:col-span-2">
+                  <p className="text-[#858c7f]">Miejsce</p>
+                  <p className="mt-1 break-words text-lg font-semibold text-[#f2efe4]">
                     {registrationSuccess.location}
                   </p>
                 </div>
 
                 <div>
-                  <p className="text-zinc-500">Status</p>
-                  <p className="text-lg font-semibold text-green-500">
+                  <p className="text-[#858c7f]">Status</p>
+                  <p className="mt-1 text-lg font-semibold text-[#a9d4ad]">
                     {registrationSuccess.status}
                   </p>
                 </div>
 
                 <div>
-                  <p className="text-zinc-500">Płatność</p>
-                  <p className="text-lg font-semibold text-green-500">
+                  <p className="text-[#858c7f]">Płatność</p>
+                  <p className="mt-1 text-lg font-semibold text-[#a9d4ad]">
                     Na miejscu
                   </p>
                 </div>
@@ -590,7 +630,7 @@ export default function EventsPage() {
                   onClick={() => {
                     window.location.href = "/my-events";
                   }}
-                  className="rounded-xl bg-green-700 px-5 py-3 font-semibold transition hover:bg-green-600"
+                  className="min-h-12 w-full rounded-xl bg-[#536143] px-5 py-3 font-semibold text-[#f2efe4] transition hover:bg-[#78865f] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#c5a861] focus-visible:ring-offset-2 focus-visible:ring-offset-[#141814]"
                 >
                   Gotowe
                 </button>
@@ -600,23 +640,38 @@ export default function EventsPage() {
         )}
 
         {message && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 px-4">
-            <div className="w-full max-w-lg rounded-2xl border border-red-800 bg-zinc-950 p-6 text-white shadow-2xl">
-              <div className="mb-4 rounded-full border border-red-800 bg-red-950 px-4 py-2 text-center text-sm font-bold uppercase tracking-[0.25em] text-red-300">
+          <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/85 px-4 py-6">
+            <div
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="event-registration-error-title"
+              aria-describedby="event-registration-error-description"
+              className="max-h-[calc(100vh-3rem)] w-full max-w-lg overflow-y-auto rounded-[2rem] border border-[#30372c] bg-[#141814] p-5 text-[#f2efe4] shadow-2xl shadow-black/40 sm:p-7"
+            >
+              <div className="mb-4 rounded-full border border-[#744545] bg-[#2a1b1b] px-4 py-2 text-center text-sm font-bold uppercase tracking-[0.2em] text-[#e0a0a0]">
                 Komunikat
               </div>
 
-              <h2 className="mb-3 text-2xl font-bold">
+              <h2
+                id="event-registration-error-title"
+                className="mb-3 text-2xl font-bold text-[#f2efe4]"
+              >
                 Nie można wykonać zapisu
               </h2>
 
-              <p className="text-zinc-300">{message}</p>
+              <p
+                id="event-registration-error-description"
+                role="alert"
+                className="break-words rounded-2xl border border-[#744545] bg-[#2a1b1b] p-4 leading-6 text-[#e0a0a0]"
+              >
+                {message}
+              </p>
 
               <div className="mt-6 flex justify-end">
                 <button
                   type="button"
                   onClick={() => setMessage("")}
-                  className="rounded-xl border border-zinc-700 px-5 py-3 font-semibold text-zinc-300 transition hover:bg-zinc-900"
+                  className="min-h-12 w-full rounded-xl border border-[#30372c] bg-[#191e19] px-5 py-3 font-semibold text-[#a9ada4] transition hover:border-[#78865f] hover:text-[#f2efe4] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#c5a861] focus-visible:ring-offset-2 focus-visible:ring-offset-[#141814] sm:w-auto"
                 >
                   Zamknij
                 </button>
