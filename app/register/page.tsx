@@ -10,7 +10,8 @@ type ConfirmationData = {
 };
 
 export default function RegisterPage() {
-  const [fullName, setFullName] = useState("");
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -26,7 +27,10 @@ export default function RegisterPage() {
   async function handleRegister() {
     setMessage("");
 
-    if (!fullName || !phone || !email || !password) {
+    const trimmedFirstName = firstName.trim();
+    const trimmedLastName = lastName.trim();
+
+    if (!trimmedFirstName || !trimmedLastName || !phone || !email || !password) {
       setMessage("Uzupełnij wszystkie pola.");
       return;
     }
@@ -56,7 +60,11 @@ export default function RegisterPage() {
       options: {
         emailRedirectTo: `${window.location.origin}/auth/callback`,
         data: {
-          full_name: fullName,
+          first_name: trimmedFirstName,
+          last_name: trimmedLastName,
+          full_name: [trimmedFirstName, trimmedLastName]
+            .filter(Boolean)
+            .join(" "),
           phone,
           accepted_terms: true,
           accepted_privacy: true,
@@ -74,11 +82,12 @@ export default function RegisterPage() {
     }
 
     setConfirmationData({
-      fullName,
+      fullName: [trimmedFirstName, trimmedLastName].filter(Boolean).join(" "),
       email,
     });
 
-    setFullName("");
+    setFirstName("");
+    setLastName("");
     setPhone("");
     setEmail("");
     setPassword("");
@@ -182,22 +191,46 @@ export default function RegisterPage() {
             </p>
 
             <div className="grid gap-6">
-              <div>
-                <label
-                  htmlFor="register-full-name"
-                  className="mb-2 block text-sm text-[#a9ada4] sm:text-base"
-                >
-                  Imię i nazwisko
-                </label>
+              <div className="grid gap-6 sm:grid-cols-2">
+                <div>
+                  <label
+                    htmlFor="register-first-name"
+                    className="mb-2 block text-sm text-[#a9ada4] sm:text-base"
+                  >
+                    Imię
+                  </label>
 
-                <input
-                  id="register-full-name"
-                  type="text"
-                  value={fullName}
-                  onChange={(event) => setFullName(event.target.value)}
-                  placeholder="Jan Kowalski"
-                  className="min-h-12 w-full rounded-xl border border-[#30372c] bg-[#191e19] px-4 py-3.5 text-base text-[#f2efe4] placeholder:text-[#858c7f] focus-visible:border-[#536143] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#c5a861] focus-visible:ring-offset-2 focus-visible:ring-offset-[#141814]"
-                />
+                  <input
+                    id="register-first-name"
+                    type="text"
+                    autoComplete="given-name"
+                    required
+                    value={firstName}
+                    onChange={(event) => setFirstName(event.target.value)}
+                    placeholder="Jan"
+                    className="min-h-12 w-full rounded-xl border border-[#30372c] bg-[#191e19] px-4 py-3.5 text-base text-[#f2efe4] placeholder:text-[#858c7f] focus-visible:border-[#536143] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#c5a861] focus-visible:ring-offset-2 focus-visible:ring-offset-[#141814]"
+                  />
+                </div>
+
+                <div>
+                  <label
+                    htmlFor="register-last-name"
+                    className="mb-2 block text-sm text-[#a9ada4] sm:text-base"
+                  >
+                    Nazwisko
+                  </label>
+
+                  <input
+                    id="register-last-name"
+                    type="text"
+                    autoComplete="family-name"
+                    required
+                    value={lastName}
+                    onChange={(event) => setLastName(event.target.value)}
+                    placeholder="Kowalski"
+                    className="min-h-12 w-full rounded-xl border border-[#30372c] bg-[#191e19] px-4 py-3.5 text-base text-[#f2efe4] placeholder:text-[#858c7f] focus-visible:border-[#536143] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#c5a861] focus-visible:ring-offset-2 focus-visible:ring-offset-[#141814]"
+                  />
+                </div>
               </div>
 
               <div>
