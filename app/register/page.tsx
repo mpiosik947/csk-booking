@@ -54,7 +54,7 @@ export default function RegisterPage() {
 
     setLoading(true);
 
-    const { error } = await supabase.auth.signUp({
+    const { data, error } = await supabase.auth.signUp({
       email,
       password,
       options: {
@@ -77,9 +77,23 @@ export default function RegisterPage() {
     setLoading(false);
 
     if (error) {
+      const isExistingAccountError =
+        error.code === "user_already_exists" ||
+        error.code === "email_exists" ||
+        error.message.toLowerCase().includes("user already registered");
+
+      if (isExistingAccountError) {
+        setMessage(
+          "Konto z tym adresem e-mail już istnieje. Zaloguj się lub skorzystaj z odzyskiwania hasła."
+        );
+        return;
+      }
+
       setMessage(`Błąd rejestracji: ${error.message}`);
       return;
     }
+
+    void data;
 
     setConfirmationData({
       fullName: [trimmedFirstName, trimmedLastName].filter(Boolean).join(" "),
@@ -117,12 +131,13 @@ export default function RegisterPage() {
               id="register-success-title"
               className="mb-3 text-3xl font-bold text-[#f2efe4]"
             >
-              Konto zostało utworzone
+              Sprawdź skrzynkę e-mail
             </h2>
 
             <p className="mb-6 text-[#a9ada4]">
-              Aby je aktywować, kliknij link potwierdzający wysłany na Twój
-              adres e-mail.
+              Jeżeli rejestracja była możliwa, wysłaliśmy wiadomość z dalszymi
+              instrukcjami. Jeśli masz już konto, zaloguj się lub skorzystaj z
+              odzyskiwania hasła.
             </p>
 
             <div className="grid gap-3 rounded-2xl border border-[#30372c] bg-[#191e19] p-5 text-sm">
@@ -143,7 +158,7 @@ export default function RegisterPage() {
               <div>
                 <p className="text-[#858c7f]">Status</p>
                 <p className="text-lg font-semibold text-[#d7c895]">
-                  Oczekuje na potwierdzenie e-mail
+                  Sprawdź skrzynkę e-mail
                 </p>
               </div>
             </div>
