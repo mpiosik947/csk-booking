@@ -88,22 +88,26 @@ function getVerificationLabel(status: string) {
 
 function getVerificationClass(status: string, permissionsVerified: boolean) {
   if (status === "verified" && permissionsVerified) {
-    return "rounded-xl border border-green-800 bg-green-950 p-4 text-sm text-green-100";
+    return "rounded-xl border border-[#3f6848] bg-[#1b2a1d] p-4 text-sm text-[#a9d4ad]";
   }
 
   if (status === "rejected") {
-    return "rounded-xl border border-red-800 bg-red-950 p-4 text-sm text-red-100";
+    return "rounded-xl border border-[#744545] bg-[#2a1b1b] p-4 text-sm text-[#e0a0a0]";
   }
 
-  return "rounded-xl border border-yellow-800 bg-yellow-950 p-4 text-sm text-yellow-100";
+  if (status === "pending") {
+    return "rounded-xl border border-[#806a32] bg-[#2b2618] p-4 text-sm text-[#e1c477]";
+  }
+
+  return "rounded-xl border border-[#343a31] bg-[#171a17] p-4 text-sm text-[#a9ada4]";
 }
 
 function getMessageClass(message: string) {
   if (message.includes("zapisane") || message.includes("zmienione")) {
-    return "rounded-xl border border-green-800 bg-green-950 p-4 text-sm font-semibold text-green-300";
+    return "rounded-xl border border-[#3f6848] bg-[#1b2a1d] p-4 text-sm font-semibold text-[#a9d4ad]";
   }
 
-  return "rounded-xl border border-red-800 bg-red-950 p-4 text-sm font-semibold text-red-300";
+  return "rounded-xl border border-[#744545] bg-[#2a1b1b] p-4 text-sm font-semibold text-[#e0a0a0]";
 }
 
 function onlyDigits(value: string, maxLength: number) {
@@ -131,19 +135,19 @@ function CheckboxField({
   description?: string;
 }) {
   return (
-    <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-zinc-800 bg-zinc-950 p-4 text-sm text-zinc-300 transition hover:border-green-800">
+    <label className="flex min-h-12 cursor-pointer items-start gap-3 rounded-xl border border-[#30372c] bg-[#141814] p-4 text-sm text-[#a9ada4] transition hover:border-[#536143]">
       <input
         type="checkbox"
         checked={checked}
         onChange={(event) => onChange(event.target.checked)}
-        className="mt-1"
+        className="mt-1 accent-[#536143] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#c5a861] focus-visible:ring-offset-2 focus-visible:ring-offset-[#141814]"
       />
 
       <span>
-        <span className="block font-semibold text-zinc-100">{title}</span>
+        <span className="block font-semibold text-[#f2efe4]">{title}</span>
 
         {description && (
-          <span className="mt-1 block text-xs leading-5 text-zinc-500">
+          <span className="mt-1 block text-xs leading-5 text-[#858c7f]">
             {description}
           </span>
         )}
@@ -549,52 +553,65 @@ export default function AccountPage() {
     !firstName.trim() || !lastName.trim();
 
   return (
-    <main className="min-h-screen bg-zinc-950 text-white">
-      <section className="mx-auto max-w-4xl px-6 py-12">
-        <p className="mb-4 text-sm uppercase tracking-[0.35em] text-green-500">
-          CSK Booking
-        </p>
+    <main className="min-h-screen bg-[#090b09] px-4 py-6 text-[#f2efe4] sm:px-6 sm:py-8">
+      <section className="mx-auto w-full max-w-6xl rounded-[2rem] border border-[#30372c] bg-[#141814] p-5 shadow-2xl shadow-black/30 sm:p-8">
+        <header className="mb-8 flex flex-col gap-5 border-b border-[#30372c] pb-6 sm:flex-row sm:items-start sm:justify-between">
+          <div className="min-w-0">
+            <p className="mb-3 text-xs font-bold uppercase tracking-[0.25em] text-[#d7c895]">
+              CSK BOOKING
+            </p>
 
-        <h1 className="mb-3 text-4xl font-bold">Moje konto</h1>
+            <h1 className="text-3xl font-bold text-[#f2efe4] sm:text-4xl">
+              Moje konto
+            </h1>
 
-        {displayName && (
-          <p className="mb-3 text-lg font-semibold text-zinc-200">
-            {displayName}
-          </p>
-        )}
+            {displayName && (
+              <p className="mt-3 break-words text-lg font-semibold text-[#f2efe4]">
+                {displayName}
+              </p>
+            )}
 
-        <p className="mb-8 text-zinc-400">
-          Zarządzaj swoimi danymi użytkownika, adresem, deklarowanymi
-          uprawnieniami i bezpieczeństwem konta.
-        </p>
+            <p className="mt-3 max-w-3xl text-[#a9ada4]">
+              Zarządzaj swoimi danymi użytkownika, adresem, deklarowanymi
+              uprawnieniami i bezpieczeństwem konta.
+            </p>
+          </div>
+
+          <a
+            href="/dashboard"
+            className="inline-flex min-h-11 shrink-0 items-center justify-center rounded-xl border border-[#30372c] bg-[#191e19] px-5 py-3 text-center text-sm font-semibold text-[#a9ada4] transition hover:border-[#536143] hover:text-[#d7c895] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#c5a861] focus-visible:ring-offset-2 focus-visible:ring-offset-[#141814]"
+          >
+            ← Panel klienta
+          </a>
+        </header>
 
         {loading && (
-          <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-6 text-zinc-400">
+          <div role="status" className="rounded-2xl border border-[#30372c] bg-[#191e19] p-6 text-[#a9ada4]">
             Ładowanie konta...
           </div>
         )}
 
         {!loading && !isLoggedIn && (
-          <div className="rounded-2xl border border-red-800 bg-red-950 p-8 text-center">
-            <h2 className="mb-3 text-2xl font-bold text-red-200">
+          <div className="rounded-2xl border border-[#744545] bg-[#2a1b1b] p-8 text-center">
+            <h2 className="mb-3 text-2xl font-bold text-[#e0a0a0]">
               Logowanie wymagane
             </h2>
 
-            <p className="mx-auto mb-6 max-w-xl text-red-100">
+            <p className="mx-auto mb-6 max-w-xl text-[#e0a0a0]">
               Aby przejść do swojego konta, musisz się zalogować.
             </p>
 
             <div className="flex flex-col gap-3 sm:flex-row sm:justify-center">
               <a
                 href="/login"
-                className="rounded-xl bg-green-700 px-5 py-3 font-semibold text-white transition hover:bg-green-600"
+                className="min-h-12 rounded-xl bg-[#536143] px-5 py-3 font-semibold text-[#f2efe4] transition hover:bg-[#78865f] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#c5a861] focus-visible:ring-offset-2 focus-visible:ring-offset-[#2a1b1b]"
               >
                 Zaloguj się
               </a>
 
               <a
                 href="/register"
-                className="rounded-xl border border-red-300 px-5 py-3 font-semibold text-red-100 transition hover:bg-red-900"
+                className="min-h-12 rounded-xl border border-[#744545] px-5 py-3 font-semibold text-[#e0a0a0] transition hover:bg-[#3a2222] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#c5a861] focus-visible:ring-offset-2 focus-visible:ring-offset-[#2a1b1b]"
               >
                 Utwórz konto
               </a>
@@ -604,18 +621,26 @@ export default function AccountPage() {
 
         {!loading && isLoggedIn && (
           <div className="grid gap-6">
-            <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-6">
+            <section className="rounded-2xl border border-[#30372c] bg-[#191e19] p-4 sm:p-6">
+              <h2 className="mb-5 text-xl font-semibold text-[#f2efe4]">
+                Dane konta
+              </h2>
+
               <div className="grid gap-5">
                 <div>
-                  <label className="mb-2 block text-sm text-zinc-300">
+                  <label
+                    htmlFor="account-email"
+                    className="mb-2 block text-sm text-[#a9ada4]"
+                  >
                     Adres e-mail
                   </label>
 
                   <input
+                    id="account-email"
                     type="email"
                     value={email}
                     disabled
-                    className="w-full cursor-not-allowed rounded-xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-zinc-500 outline-none"
+                    className="min-h-12 w-full cursor-default rounded-xl border border-[#30372c] bg-[#141814] px-4 py-3 text-[#858c7f] outline-none disabled:opacity-100"
                   />
                 </div>
 
@@ -623,7 +648,7 @@ export default function AccountPage() {
                   <div>
                     <label
                       htmlFor="account-first-name"
-                      className="mb-2 block text-sm text-zinc-300"
+                      className="mb-2 block text-sm text-[#a9ada4]"
                     >
                       Imię
                     </label>
@@ -635,14 +660,14 @@ export default function AccountPage() {
                       value={firstName}
                       readOnly
                       aria-readonly="true"
-                      className="w-full cursor-default rounded-xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-zinc-500 outline-none"
+                      className="min-h-12 w-full cursor-default rounded-xl border border-[#30372c] bg-[#141814] px-4 py-3 text-[#858c7f] outline-none"
                     />
                   </div>
 
                   <div>
                     <label
                       htmlFor="account-last-name"
-                      className="mb-2 block text-sm text-zinc-300"
+                      className="mb-2 block text-sm text-[#a9ada4]"
                     >
                       Nazwisko
                     </label>
@@ -654,86 +679,57 @@ export default function AccountPage() {
                       value={lastName}
                       readOnly
                       aria-readonly="true"
-                      className="w-full cursor-default rounded-xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-zinc-500 outline-none"
+                      className="min-h-12 w-full cursor-default rounded-xl border border-[#30372c] bg-[#141814] px-4 py-3 text-[#858c7f] outline-none"
                     />
                   </div>
                 </div>
 
-                <p className="text-sm leading-6 text-zinc-400">
+                <p className="rounded-xl border border-[#30372c] bg-[#141814] p-4 text-sm leading-6 text-[#a9ada4]">
                   Imię i nazwisko są przypisane do konta i mogą zostać
                   zmienione wyłącznie przez obsługę.
                 </p>
 
                 {hasMissingStructuredName && (
-                  <div className="rounded-xl border border-zinc-700 bg-zinc-950 p-4 text-sm text-zinc-300">
+                  <div className="rounded-xl border border-[#806a32] bg-[#2b2618] p-4 text-sm text-[#e1c477]">
                     Dane imienia i nazwiska wymagają uzupełnienia przez obsługę.
                   </div>
                 )}
 
+              </div>
+            </section>
+
+            <section className="rounded-2xl border border-[#30372c] bg-[#191e19] p-4 sm:p-6">
+              <h2 className="mb-5 text-xl font-semibold text-[#f2efe4]">
+                Dane kontaktowe
+              </h2>
+
+              <div className="grid gap-5">
                 <div>
-                  <label className="mb-2 block text-sm text-zinc-300">
+                  <label
+                    htmlFor="account-phone"
+                    className="mb-2 block text-sm text-[#a9ada4]"
+                  >
                     Numer telefonu *
                   </label>
 
                   <input
+                    id="account-phone"
                     type="tel"
                     value={phone}
                     onChange={(event) => setPhone(event.target.value)}
-                    className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-white outline-none focus:border-green-600"
+                    className="min-h-12 w-full rounded-xl border border-[#30372c] bg-[#141814] px-4 py-3 text-[#f2efe4] outline-none placeholder:text-[#858c7f] focus-visible:border-[#536143] focus-visible:ring-2 focus-visible:ring-[#c5a861] focus-visible:ring-offset-2 focus-visible:ring-offset-[#191e19]"
                   />
                 </div>
 
-                <div className="mt-2 border-t border-zinc-800 pt-5">
-                  <h2 className="mb-4 text-xl font-semibold">
-                    Status weryfikacji
-                  </h2>
+              </div>
+            </section>
 
-                  <div
-                    className={getVerificationClass(
-                      verificationStatus,
-                      permissionsVerified
-                    )}
-                  >
-                    <p className="font-semibold">
-                      Konto: {getVerificationLabel(verificationStatus)}
-                    </p>
-
-                    <p className="mt-1">
-                      Uprawnienia:{" "}
-                      {permissionsVerified
-                        ? "sprawdzone przez obsługę"
-                        : "do sprawdzenia podczas wizyty"}
-                    </p>
-
-                    {permissionsVerifiedAt && (
-                      <p className="mt-1 text-xs opacity-80">
-                        Data weryfikacji:{" "}
-                        {new Date(permissionsVerifiedAt).toLocaleString(
-                          "pl-PL"
-                        )}
-                      </p>
-                    )}
-
-                    {permissionsVerificationNote && (
-                      <p className="mt-3 rounded-lg border border-zinc-700 bg-zinc-950/60 p-3 text-xs leading-5">
-                        {permissionsVerificationNote}
-                      </p>
-                    )}
-
-                    <p className="mt-3 text-xs opacity-80">
-                      Pełna możliwość korzystania z systemu może wymagać
-                      sprawdzenia uprawnień przez pracownika CSK podczas wizyty
-                      na strzelnicy.
-                    </p>
-                  </div>
-                </div>
-
-                <div className="mt-2 border-t border-zinc-800 pt-5">
-                  <h2 className="mb-4 text-xl font-semibold">
+            <section className="rounded-2xl border border-[#30372c] bg-[#191e19] p-4 sm:p-6">
+                  <h2 className="mb-4 text-xl font-semibold text-[#f2efe4]">
                     Deklarowane uprawnienia
                   </h2>
 
-                  <p className="mb-5 text-sm leading-6 text-zinc-400">
+                  <p className="mb-5 text-sm leading-6 text-[#a9ada4]">
                     Zaznacz, jakie uprawnienia posiadasz. Nie wpisuj numerów
                     dokumentów. Dokumenty okazujesz wyłącznie do wglądu
                     pracownikowi podczas wizyty.
@@ -744,12 +740,12 @@ export default function AccountPage() {
                     ponowną weryfikację konta przez pracownika.
                   </div>
 
-                  <div className="mb-5 rounded-xl border border-green-900 bg-green-950/40 p-4 text-sm text-green-200">
+                  <div className="mb-5 rounded-xl border border-[#30372c] bg-[#141814] p-4 text-sm text-[#a9ada4]">
                     <p className="font-semibold">
                       Minimalizacja danych osobowych
                     </p>
 
-                    <p className="mt-1 text-green-300">
+                    <p className="mt-1 text-[#858c7f]">
                       System zapisuje tylko deklarowany typ uprawnień i fakt
                       późniejszej weryfikacji. Numery dokumentów nie są tutaj
                       wymagane.
@@ -800,9 +796,12 @@ export default function AccountPage() {
                     />
                   </div>
 
-                  <h3 className="mt-8 mb-4 text-lg font-semibold">
-                    Dodatkowe kwalifikacje
-                  </h3>
+            </section>
+
+            <section className="rounded-2xl border border-[#30372c] bg-[#191e19] p-4 sm:p-6">
+                  <h2 className="mb-4 text-xl font-semibold text-[#f2efe4]">
+                    Kwalifikacje dodatkowe
+                  </h2>
 
                   <div className="grid gap-4 md:grid-cols-2">
                     <CheckboxField
@@ -833,21 +832,66 @@ export default function AccountPage() {
                       description="Zaznacz, jeżeli jesteś myśliwym i posiadasz odpowiednie uprawnienia."
                     />
                   </div>
-                </div>
+            </section>
 
-                <div className="mt-2 border-t border-zinc-800 pt-5">
-                  <h2 className="mb-4 text-xl font-semibold">Adres</h2>
+            <section className="rounded-2xl border border-[#30372c] bg-[#191e19] p-4 sm:p-6">
+              <h2 className="mb-4 text-xl font-semibold text-[#f2efe4]">
+                Status weryfikacji
+              </h2>
 
-                  <p className="mb-5 text-sm leading-6 text-zinc-400">
+              <div
+                className={getVerificationClass(
+                  verificationStatus,
+                  permissionsVerified
+                )}
+              >
+                <p className="font-semibold">
+                  Konto: {getVerificationLabel(verificationStatus)}
+                </p>
+
+                <p className="mt-1">
+                  Uprawnienia:{" "}
+                  {permissionsVerified
+                    ? "sprawdzone przez obsługę"
+                    : "do sprawdzenia podczas wizyty"}
+                </p>
+
+                {permissionsVerifiedAt && (
+                  <p className="mt-1 text-xs opacity-80">
+                    Data weryfikacji:{" "}
+                    {new Date(permissionsVerifiedAt).toLocaleString("pl-PL")}
+                  </p>
+                )}
+
+                {permissionsVerificationNote && (
+                  <p className="mt-3 break-words rounded-lg border border-[#30372c] bg-[#141814]/60 p-3 text-xs leading-5">
+                    {permissionsVerificationNote}
+                  </p>
+                )}
+
+                <p className="mt-3 text-xs opacity-80">
+                  Pełna możliwość korzystania z systemu może wymagać
+                  sprawdzenia uprawnień przez pracownika CSK podczas wizyty na
+                  strzelnicy.
+                </p>
+              </div>
+            </section>
+
+            <section className="rounded-2xl border border-[#30372c] bg-[#191e19] p-4 sm:p-6">
+                  <h2 className="mb-4 text-xl font-semibold text-[#f2efe4]">
+                    Adres
+                  </h2>
+
+                  <p className="mb-5 text-sm leading-6 text-[#a9ada4]">
                     Podaj dane adresowe bez wpisywania przykładowych wartości.
                     Kod pocztowy wpisz w dwóch polach, zgodnie z formatem
                     XX-XXX.
                   </p>
 
                   <div>
-                    <label className="mb-2 block text-sm text-zinc-300">
+                    <p className="mb-2 block text-sm text-[#a9ada4]">
                       Kod pocztowy *
-                    </label>
+                    </p>
 
                     <div className="flex max-w-xs items-center gap-3">
                       <input
@@ -859,10 +903,10 @@ export default function AccountPage() {
                         }
                         maxLength={2}
                         aria-label="Pierwsze dwie cyfry kodu pocztowego"
-                        className="w-20 rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-center text-white outline-none focus:border-green-600"
+                        className="min-h-12 w-20 rounded-xl border border-[#30372c] bg-[#141814] px-4 py-3 text-center text-[#f2efe4] outline-none focus-visible:border-[#536143] focus-visible:ring-2 focus-visible:ring-[#c5a861] focus-visible:ring-offset-2 focus-visible:ring-offset-[#191e19]"
                       />
 
-                      <span className="text-zinc-400">-</span>
+                      <span className="text-[#858c7f]">-</span>
 
                       <input
                         type="text"
@@ -873,37 +917,45 @@ export default function AccountPage() {
                         }
                         maxLength={3}
                         aria-label="Ostatnie trzy cyfry kodu pocztowego"
-                        className="w-24 rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-center text-white outline-none focus:border-green-600"
+                        className="min-h-12 w-24 rounded-xl border border-[#30372c] bg-[#141814] px-4 py-3 text-center text-[#f2efe4] outline-none focus-visible:border-[#536143] focus-visible:ring-2 focus-visible:ring-[#c5a861] focus-visible:ring-offset-2 focus-visible:ring-offset-[#191e19]"
                       />
                     </div>
                   </div>
 
                   <div className="mt-5">
-                    <label className="mb-2 block text-sm text-zinc-300">
+                    <label
+                      htmlFor="account-city"
+                      className="mb-2 block text-sm text-[#a9ada4]"
+                    >
                       Miasto / miejscowość *
                     </label>
 
                     <input
+                      id="account-city"
                       type="text"
                       value={city}
                       onChange={(event) => setCity(event.target.value)}
-                      className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-white outline-none focus:border-green-600"
+                      className="min-h-12 w-full rounded-xl border border-[#30372c] bg-[#141814] px-4 py-3 text-[#f2efe4] outline-none placeholder:text-[#858c7f] focus-visible:border-[#536143] focus-visible:ring-2 focus-visible:ring-[#c5a861] focus-visible:ring-offset-2 focus-visible:ring-offset-[#191e19]"
                     />
                   </div>
 
                   <div className="mt-5">
-                    <label className="mb-2 block text-sm text-zinc-300">
+                    <label
+                      htmlFor="account-street"
+                      className="mb-2 block text-sm text-[#a9ada4]"
+                    >
                       Ulica *
                     </label>
 
                     <input
+                      id="account-street"
                       type="text"
                       value={street}
                       onChange={(event) => setStreet(event.target.value)}
-                      className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-white outline-none focus:border-green-600"
+                      className="min-h-12 w-full rounded-xl border border-[#30372c] bg-[#141814] px-4 py-3 text-[#f2efe4] outline-none placeholder:text-[#858c7f] focus-visible:border-[#536143] focus-visible:ring-2 focus-visible:ring-[#c5a861] focus-visible:ring-offset-2 focus-visible:ring-offset-[#191e19]"
                     />
 
-                    <p className="mt-2 text-xs text-zinc-500">
+                    <p className="mt-2 text-xs text-[#858c7f]">
                       Podaj ulicę, numer domu i opcjonalnie numer mieszkania w
                       osobnych polach poniżej.
                     </p>
@@ -911,75 +963,91 @@ export default function AccountPage() {
 
                   <div className="mt-5 grid gap-5 md:grid-cols-2">
                     <div>
-                      <label className="mb-2 block text-sm text-zinc-300">
+                      <label
+                        htmlFor="account-house-number"
+                        className="mb-2 block text-sm text-[#a9ada4]"
+                      >
                         Numer domu *
                       </label>
 
                       <input
+                        id="account-house-number"
                         type="text"
                         value={houseNumber}
                         onChange={(event) => setHouseNumber(event.target.value)}
-                        className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-white outline-none focus:border-green-600"
+                        className="min-h-12 w-full rounded-xl border border-[#30372c] bg-[#141814] px-4 py-3 text-[#f2efe4] outline-none placeholder:text-[#858c7f] focus-visible:border-[#536143] focus-visible:ring-2 focus-visible:ring-[#c5a861] focus-visible:ring-offset-2 focus-visible:ring-offset-[#191e19]"
                       />
                     </div>
 
                     <div>
-                      <label className="mb-2 block text-sm text-zinc-300">
+                      <label
+                        htmlFor="account-apartment-number"
+                        className="mb-2 block text-sm text-[#a9ada4]"
+                      >
                         Numer mieszkania
                       </label>
 
                       <input
+                        id="account-apartment-number"
                         type="text"
                         value={apartmentNumber}
                         onChange={(event) =>
                           setApartmentNumber(event.target.value)
                         }
-                        className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-white outline-none focus:border-green-600"
+                        className="min-h-12 w-full rounded-xl border border-[#30372c] bg-[#141814] px-4 py-3 text-[#f2efe4] outline-none placeholder:text-[#858c7f] focus-visible:border-[#536143] focus-visible:ring-2 focus-visible:ring-[#c5a861] focus-visible:ring-offset-2 focus-visible:ring-offset-[#191e19]"
                       />
                     </div>
                   </div>
-                </div>
+            </section>
 
-                <div className="mt-2 border-t border-zinc-800 pt-5">
-                  <h2 className="mb-4 text-xl font-semibold">
+            <section className="rounded-2xl border border-[#30372c] bg-[#191e19] p-4 sm:p-6">
+                  <h2 className="mb-4 text-xl font-semibold text-[#f2efe4]">
                     Bezpieczeństwo konta
                   </h2>
 
-                  <p className="mb-5 text-sm text-zinc-400">
+                  <p className="mb-5 text-sm text-[#a9ada4]">
                     Zmień hasło do swojego konta. Nowe hasło musi mieć minimum
                     8 znaków.
                   </p>
 
                   <div className="grid gap-5 md:grid-cols-2">
                     <div>
-                      <label className="mb-2 block text-sm text-zinc-300">
+                      <label
+                        htmlFor="account-new-password"
+                        className="mb-2 block text-sm text-[#a9ada4]"
+                      >
                         Nowe hasło
                       </label>
 
                       <input
+                        id="account-new-password"
                         type="password"
                         value={newPassword}
                         onChange={(event) =>
                           setNewPassword(event.target.value)
                         }
                         placeholder="Minimum 8 znaków"
-                        className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-white outline-none focus:border-yellow-600"
+                        className="min-h-12 w-full rounded-xl border border-[#30372c] bg-[#141814] px-4 py-3 text-[#f2efe4] outline-none placeholder:text-[#858c7f] focus-visible:border-[#536143] focus-visible:ring-2 focus-visible:ring-[#c5a861] focus-visible:ring-offset-2 focus-visible:ring-offset-[#191e19]"
                       />
                     </div>
 
                     <div>
-                      <label className="mb-2 block text-sm text-zinc-300">
+                      <label
+                        htmlFor="account-repeat-password"
+                        className="mb-2 block text-sm text-[#a9ada4]"
+                      >
                         Powtórz hasło
                       </label>
 
                       <input
+                        id="account-repeat-password"
                         type="password"
                         value={repeatPassword}
                         onChange={(event) =>
                           setRepeatPassword(event.target.value)
                         }
                         placeholder="Powtórz nowe hasło"
-                        className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-white outline-none focus:border-yellow-600"
+                        className="min-h-12 w-full rounded-xl border border-[#30372c] bg-[#141814] px-4 py-3 text-[#f2efe4] outline-none placeholder:text-[#858c7f] focus-visible:border-[#536143] focus-visible:ring-2 focus-visible:ring-[#c5a861] focus-visible:ring-offset-2 focus-visible:ring-offset-[#191e19]"
                       />
                     </div>
                   </div>
@@ -988,51 +1056,55 @@ export default function AccountPage() {
                     type="button"
                     onClick={changePassword}
                     disabled={savingPassword}
-                    className="mt-5 rounded-xl border border-yellow-700 bg-yellow-950 px-5 py-3 font-semibold text-yellow-300 transition hover:bg-yellow-900 disabled:cursor-not-allowed disabled:opacity-60"
+                    className="mt-5 min-h-12 w-full rounded-xl border border-[#30372c] bg-[#141814] px-5 py-3 font-semibold text-[#d7c895] transition hover:border-[#536143] hover:text-[#f2efe4] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#c5a861] focus-visible:ring-offset-2 focus-visible:ring-offset-[#191e19] disabled:cursor-not-allowed disabled:text-[#858c7f] sm:w-auto"
                   >
                     {savingPassword ? "Zmiana hasła..." : "Zmień hasło"}
                   </button>
-                </div>
+            </section>
 
                 {message && (
-                  <div className={getMessageClass(message)}>{message}</div>
+                  <div
+                    role={
+                      message.includes("zapisane") ||
+                      message.includes("zmienione")
+                        ? "status"
+                        : "alert"
+                    }
+                    className={getMessageClass(message)}
+                  >
+                    {message}
+                  </div>
                 )}
 
                 <button
                   type="button"
                   onClick={saveProfile}
                   disabled={savingProfile}
-                  className="rounded-xl bg-green-700 px-4 py-3 font-semibold transition hover:bg-green-600 disabled:cursor-not-allowed disabled:opacity-60"
+                  className="min-h-12 w-full rounded-xl border border-[#536143] bg-[#536143] px-4 py-3 font-semibold text-[#f2efe4] transition hover:border-[#78865f] hover:bg-[#78865f] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#c5a861] focus-visible:ring-offset-2 focus-visible:ring-offset-[#141814] disabled:cursor-not-allowed disabled:border-[#30372c] disabled:bg-[#30372c] disabled:text-[#858c7f]"
                 >
                   {savingProfile ? "Zapisywanie..." : "Zapisz dane"}
                 </button>
-              </div>
-            </div>
           </div>
         )}
 
-        <div className="mt-8 flex flex-col gap-3 sm:flex-row">
-          <a
-            href="/dashboard"
-            className="rounded-xl border border-zinc-700 px-5 py-3 text-center text-sm font-semibold text-zinc-300 transition hover:bg-zinc-900"
-          >
-            ← Panel klienta
-          </a>
-
+        <nav
+          aria-label="Pozostałe strony konta"
+          className="mt-8 flex flex-col gap-3 border-t border-[#30372c] pt-6 sm:flex-row"
+        >
           <a
             href="/my-reservations"
-            className="rounded-xl border border-zinc-700 px-5 py-3 text-center text-sm font-semibold text-zinc-300 transition hover:bg-zinc-900"
+            className="inline-flex min-h-11 items-center justify-center rounded-xl border border-[#30372c] bg-[#191e19] px-5 py-3 text-center text-sm font-semibold text-[#a9ada4] transition hover:border-[#536143] hover:text-[#d7c895] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#c5a861] focus-visible:ring-offset-2 focus-visible:ring-offset-[#141814]"
           >
             Moje rezerwacje
           </a>
 
           <a
             href="/my-events"
-            className="rounded-xl bg-green-700 px-5 py-3 text-center text-sm font-semibold text-white transition hover:bg-green-600"
+            className="inline-flex min-h-11 items-center justify-center rounded-xl border border-[#30372c] bg-[#191e19] px-5 py-3 text-center text-sm font-semibold text-[#a9ada4] transition hover:border-[#536143] hover:text-[#d7c895] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#c5a861] focus-visible:ring-offset-2 focus-visible:ring-offset-[#141814]"
           >
             Moje szkolenia
           </a>
-        </div>
+        </nav>
       </section>
     </main>
   );
