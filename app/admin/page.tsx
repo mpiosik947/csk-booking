@@ -11,6 +11,7 @@ import {
   PAYMENT_STATUS,
   isPaidPaymentStatus,
 } from "../../lib/payment-status";
+import AdminShell from "./_components/AdminShell";
 
 type Role = "admin" | "pracownik" | "instruktor" | "user";
 
@@ -165,13 +166,13 @@ function getRoleLabel(role: string | null) {
 function getRoleBadgeClass(role: string | null) {
   switch (role) {
     case "admin":
-      return "border-green-700 bg-green-950 text-green-300";
+      return "border-[#3f6848] bg-[#1b2a1d] text-[#a9d4ad]";
     case "pracownik":
-      return "border-blue-700 bg-blue-950 text-blue-300";
+      return "border-[#806a32] bg-[#2b2618] text-[#e1c477]";
     case "instruktor":
-      return "border-purple-700 bg-purple-950 text-purple-300";
+      return "border-[#343a31] bg-[#171a17] text-[#d7c895]";
     default:
-      return "border-zinc-700 bg-zinc-900 text-zinc-300";
+      return "border-[#343a31] bg-[#171a17] text-[#a9ada4]";
   }
 }
 
@@ -254,7 +255,14 @@ function StatCard({
   );
 
   if (href) {
-    return <Link href={href}>{content}</Link>;
+    return (
+      <Link
+        href={href}
+        className="block rounded-2xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d7c895] focus-visible:ring-offset-2 focus-visible:ring-offset-[#141814]"
+      >
+        {content}
+      </Link>
+    );
   }
 
   return content;
@@ -288,7 +296,7 @@ function AdminModuleTile({
   return (
     <Link
       href={tile.href}
-      className="group rounded-2xl border border-zinc-800 bg-zinc-900 p-6 transition hover:border-green-700 hover:bg-zinc-900/80"
+      className="group rounded-2xl border border-zinc-800 bg-zinc-900 p-6 transition hover:border-green-700 hover:bg-zinc-900/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d7c895] focus-visible:ring-offset-2 focus-visible:ring-offset-[#141814]"
     >
       <div className="mb-5 flex h-12 w-12 items-center justify-center rounded-xl bg-green-900/40 text-xl font-bold text-green-400 transition group-hover:bg-green-800/60">
         {tile.title.charAt(0)}
@@ -561,58 +569,46 @@ export default function AdminPage() {
   );
 
   return (
-    <main className="min-h-screen bg-zinc-950 px-6 py-10 text-white">
-      <section className="mx-auto max-w-7xl">
-        <div className="mb-10 flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
-          <div>
-            <p className="mb-3 text-sm uppercase tracking-[0.35em] text-green-500">
-              CSK Booking
-            </p>
+    <AdminShell
+      eyebrow="CSK Booking"
+      title="Dashboard operacyjny"
+      description="Szybki podgląd dzisiejszych wizyt, alertów, płatności i najważniejszych danych operacyjnych strzelnicy."
+      badge={
+        !loading && role ? (
+          <span
+            className={`rounded-full border px-4 py-2 text-sm font-bold ${getRoleBadgeClass(
+              role
+            )}`}
+          >
+            {getRoleLabel(role)}
+          </span>
+        ) : undefined
+      }
+      actions={
+        <>
+          <button
+            type="button"
+            onClick={loadDashboard}
+            disabled={loading}
+            className="min-h-11 rounded-xl border border-[#536143] bg-[#536143] px-4 py-3 text-sm font-semibold text-[#f2efe4] transition hover:border-[#78865f] hover:bg-[#78865f] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d7c895] focus-visible:ring-offset-2 focus-visible:ring-offset-[#141814] disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {loading ? "Odświeżanie..." : "Odśwież"}
+          </button>
 
-            <div className="mb-4 flex flex-wrap items-center gap-3">
-              <h1 className="text-4xl font-bold">Dashboard operacyjny</h1>
-
-              {!loading && role && (
-                <span
-                  className={`rounded-full border px-4 py-2 text-sm font-bold ${getRoleBadgeClass(
-                    role
-                  )}`}
-                >
-                  {getRoleLabel(role)}
-                </span>
-              )}
-            </div>
-
-            <p className="max-w-3xl text-zinc-400">
-              Szybki podgląd dzisiejszych wizyt, alertów, płatności i
-              najważniejszych danych operacyjnych strzelnicy.
-            </p>
-          </div>
-
-          <div className="flex flex-wrap gap-3">
-            <button
-              type="button"
-              onClick={loadDashboard}
-              disabled={loading}
-              className="rounded-xl border border-zinc-700 px-4 py-3 text-sm font-semibold text-zinc-300 transition hover:border-green-600 hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              {loading ? "Odświeżanie..." : "Odśwież"}
-            </button>
-
-            <Link
-              href="/dashboard"
-              className="rounded-xl border border-zinc-700 px-4 py-3 text-sm font-semibold text-zinc-300 transition hover:border-green-600 hover:text-white"
-            >
-              Wróć do konta
-            </Link>
-          </div>
+          <Link
+            href="/dashboard"
+            className="inline-flex min-h-11 items-center justify-center rounded-xl border border-[#30372c] px-4 py-3 text-sm font-semibold text-[#a9ada4] transition hover:border-[#536143] hover:text-[#f2efe4] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d7c895] focus-visible:ring-offset-2 focus-visible:ring-offset-[#141814]"
+          >
+            Wróć do konta
+          </Link>
+        </>
+      }
+    >
+      {message && (
+        <div className="mb-6 rounded-xl border border-red-800 bg-red-950 p-4 text-red-300">
+          {message}
         </div>
-
-        {message && (
-          <div className="mb-6 rounded-xl border border-red-800 bg-red-950 p-4 text-red-300">
-            {message}
-          </div>
-        )}
+      )}
 
         {loading ? (
           <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-8 text-zinc-400">
@@ -734,7 +730,7 @@ export default function AdminPage() {
 
                   <Link
                     href="/admin/check-in"
-                    className="text-sm font-semibold text-green-400 hover:text-green-300"
+                    className="inline-flex min-h-11 items-center rounded-lg px-2 text-sm font-semibold text-green-400 hover:text-green-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d7c895] focus-visible:ring-offset-2 focus-visible:ring-offset-[#141814]"
                   >
                     Check-in →
                   </Link>
@@ -790,7 +786,7 @@ export default function AdminPage() {
                             <td className="py-4 pr-4">
                               <Link
                                 href="/admin/check-in"
-                                className="rounded-lg border border-green-800 px-3 py-2 text-xs font-bold text-green-300 transition hover:bg-green-950"
+                                className="inline-flex min-h-11 items-center rounded-lg border border-green-800 px-3 py-2 text-xs font-bold text-green-300 transition hover:bg-green-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d7c895] focus-visible:ring-offset-2 focus-visible:ring-offset-[#141814]"
                               >
                                 Check-in
                               </Link>
@@ -812,7 +808,7 @@ export default function AdminPage() {
                 <div className="grid gap-3">
                   <Link
                     href="/booking"
-                    className="rounded-xl border border-zinc-700 px-4 py-3 text-sm font-bold text-zinc-200 transition hover:border-green-700 hover:bg-green-950/30"
+                    className="rounded-xl border border-zinc-700 px-4 py-3 text-sm font-bold text-zinc-200 transition hover:border-green-700 hover:bg-green-950/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d7c895] focus-visible:ring-offset-2 focus-visible:ring-offset-[#141814]"
                   >
                     + Nowa rezerwacja
                   </Link>
@@ -820,7 +816,7 @@ export default function AdminPage() {
                   {hasAccess(role, ["admin", "pracownik", "instruktor"]) && (
                     <Link
                       href="/admin/check-in"
-                      className="rounded-xl border border-zinc-700 px-4 py-3 text-sm font-bold text-zinc-200 transition hover:border-green-700 hover:bg-green-950/30"
+                      className="rounded-xl border border-zinc-700 px-4 py-3 text-sm font-bold text-zinc-200 transition hover:border-green-700 hover:bg-green-950/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d7c895] focus-visible:ring-offset-2 focus-visible:ring-offset-[#141814]"
                     >
                       Check-in klientów
                     </Link>
@@ -829,7 +825,7 @@ export default function AdminPage() {
                   {hasAccess(role, ["admin", "pracownik", "instruktor"]) && (
                     <Link
                       href="/admin/calendar"
-                      className="rounded-xl border border-zinc-700 px-4 py-3 text-sm font-bold text-zinc-200 transition hover:border-green-700 hover:bg-green-950/30"
+                      className="rounded-xl border border-zinc-700 px-4 py-3 text-sm font-bold text-zinc-200 transition hover:border-green-700 hover:bg-green-950/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d7c895] focus-visible:ring-offset-2 focus-visible:ring-offset-[#141814]"
                     >
                       Kalendarz
                     </Link>
@@ -838,7 +834,7 @@ export default function AdminPage() {
                   {hasAccess(role, ["admin", "pracownik"]) && (
                     <Link
                       href="/admin/lane-blocks"
-                      className="rounded-xl border border-zinc-700 px-4 py-3 text-sm font-bold text-zinc-200 transition hover:border-green-700 hover:bg-green-950/30"
+                      className="rounded-xl border border-zinc-700 px-4 py-3 text-sm font-bold text-zinc-200 transition hover:border-green-700 hover:bg-green-950/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d7c895] focus-visible:ring-offset-2 focus-visible:ring-offset-[#141814]"
                     >
                       Blokady osi
                     </Link>
@@ -847,7 +843,7 @@ export default function AdminPage() {
                   {hasAccess(role, ["admin", "pracownik", "instruktor"]) && (
                     <Link
                       href="/admin/events"
-                      className="rounded-xl border border-zinc-700 px-4 py-3 text-sm font-bold text-zinc-200 transition hover:border-green-700 hover:bg-green-950/30"
+                      className="rounded-xl border border-zinc-700 px-4 py-3 text-sm font-bold text-zinc-200 transition hover:border-green-700 hover:bg-green-950/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d7c895] focus-visible:ring-offset-2 focus-visible:ring-offset-[#141814]"
                     >
                       Szkolenia
                     </Link>
@@ -868,7 +864,7 @@ export default function AdminPage() {
 
                   <Link
                     href="/admin/events"
-                    className="text-sm font-semibold text-green-400 hover:text-green-300"
+                    className="inline-flex min-h-11 items-center rounded-lg px-2 text-sm font-semibold text-green-400 hover:text-green-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d7c895] focus-visible:ring-offset-2 focus-visible:ring-offset-[#141814]"
                   >
                     Zarządzaj szkoleniami →
                   </Link>
@@ -895,7 +891,7 @@ export default function AdminPage() {
                         <Link
                           key={eventItem.id}
                           href="/admin/events"
-                          className="rounded-xl border border-zinc-800 bg-zinc-950 p-5 transition hover:border-green-700"
+                          className="rounded-xl border border-zinc-800 bg-zinc-950 p-5 transition hover:border-green-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d7c895] focus-visible:ring-offset-2 focus-visible:ring-offset-[#141814]"
                         >
                           <div className="mb-3 flex items-start justify-between gap-3">
                             <h3 className="font-bold text-white">
@@ -1020,7 +1016,6 @@ export default function AdminPage() {
             </div>
           </>
         )}
-      </section>
-    </main>
+    </AdminShell>
   );
 }
