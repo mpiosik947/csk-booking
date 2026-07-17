@@ -13,6 +13,8 @@ type VerificationStatus =
   | "niezweryfikowane"
   | "unverified";
 
+type VerificationAction = "verify" | "mark_pending" | "reject";
+
 type Profile = {
   id: string;
   user_id: string;
@@ -48,6 +50,22 @@ type Profile = {
   permissions_verified_by: string | null;
   permissions_verification_note: string | null;
 };
+
+type VerificationRpcResult = {
+  user_id: string;
+  verification_status: string | null;
+  permissions_verified: boolean | null;
+  permissions_verified_at: string | null;
+  permissions_verified_by: string | null;
+  permissions_verification_note: string | null;
+  verified_at: string | null;
+  verified_by: string | null;
+  unverified_at: string | null;
+  unverified_by: string | null;
+  updated_at: string | null;
+};
+
+type AdminProfileChanges = Partial<Pick<Profile, "role" | "admin_note">>;
 
 const roleOptions: UserRole[] = ["admin", "pracownik", "instruktor", "user"];
 
@@ -96,6 +114,19 @@ function isPendingStatus(profile: Profile) {
 
 function isRejectedStatus(profile: Profile) {
   return profile.verification_status === "rejected";
+}
+
+function getVerificationAction(status: string): VerificationAction | null {
+  switch (status) {
+    case "verified":
+      return "verify";
+    case "pending":
+      return "mark_pending";
+    case "rejected":
+      return "reject";
+    default:
+      return null;
+  }
 }
 
 function valueOrMissing(value: string | null | undefined) {
@@ -229,6 +260,33 @@ function getPermissionsBadgeClass(verified: boolean | null) {
   return "border-yellow-700 bg-yellow-950 text-yellow-300";
 }
 
+function isNullableString(value: unknown): value is string | null {
+  return typeof value === "string" || value === null;
+}
+
+function isVerificationRpcResult(value: unknown): value is VerificationRpcResult {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return false;
+  }
+
+  const result = value as Record<string, unknown>;
+
+  return (
+    typeof result.user_id === "string" &&
+    isNullableString(result.verification_status) &&
+    (typeof result.permissions_verified === "boolean" ||
+      result.permissions_verified === null) &&
+    isNullableString(result.permissions_verified_at) &&
+    isNullableString(result.permissions_verified_by) &&
+    isNullableString(result.permissions_verification_note) &&
+    isNullableString(result.verified_at) &&
+    isNullableString(result.verified_by) &&
+    isNullableString(result.unverified_at) &&
+    isNullableString(result.unverified_by) &&
+    isNullableString(result.updated_at)
+  );
+}
+
 function InfoLine({
   label,
   value,
@@ -263,7 +321,6 @@ function BooleanLine({ label, value }: { label: string; value: boolean | null })
 
 export default function AdminUsersPage() {
   const [currentUserId, setCurrentUserId] = useState("");
-  const [currentProfileId, setCurrentProfileId] = useState("");
   const [currentUserRole, setCurrentUserRole] = useState<UserRole>("user");
   const [currentUserName, setCurrentUserName] = useState("");
 
@@ -272,12 +329,17 @@ export default function AdminUsersPage() {
   const [loading, setLoading] = useState(true);
   const [savingUserId, setSavingUserId] = useState<string | null>(null);
   const [message, setMessage] = useState("");
+  const [verificationNoteDrafts, setVerificationNoteDrafts] = useState<
+    Record<string, string>
+  >({});
 
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [roleFilter, setRoleFilter] = useState("all");
 
   const isAdmin = currentUserRole === "admin";
+  const isEmployee = currentUserRole === "pracownik";
+  const canManageUsers = isAdmin || isEmployee;
 
  async function loadCurrentUser() {
   const {
@@ -292,16 +354,12 @@ export default function AdminUsersPage() {
 
   const { data: profile, error } = await supabase
     .from("profiles")
-    .select("id, role, full_name, email")
+    .select("role, full_name, email")
     .eq("user_id", user.id)
     .single();
 
   if (error || !profile) {
     return null;
-  }
-
-  if (profile.id) {
-    setCurrentProfileId(profile.id);
   }
 
   const loadedRole = (profile.role as UserRole) || "user";
@@ -320,9 +378,9 @@ export default function AdminUsersPage() {
 
   const loadedRole = await loadCurrentUser();
 
-  if (loadedRole !== "admin") {
+  if (loadedRole !== "admin" && loadedRole !== "pracownik") {
     setProfiles([]);
-    setMessage("Brak dostępu. Ten moduł jest dostępny tylko dla administratora.");
+    setMessage("Brak dostępu. Ten moduł jest dostępny tylko dla administratora i pracownika.");
     setLoading(false);
     return;
   }
@@ -459,19 +517,8 @@ export default function AdminUsersPage() {
     }
   }
 
-  function getAuditAction(changes: Partial<Profile>) {
+  function getAuditAction(changes: AdminProfileChanges) {
     if (changes.role) return "PROFILE_ROLE_CHANGED";
-    if (changes.verification_status) return "PROFILE_VERIFICATION_CHANGED";
-
-    if (
-      Object.prototype.hasOwnProperty.call(changes, "permissions_verified") ||
-      Object.prototype.hasOwnProperty.call(
-        changes,
-        "permissions_verification_note"
-      )
-    ) {
-      return "PROFILE_PERMISSIONS_VERIFICATION_UPDATED";
-    }
 
     if (Object.prototype.hasOwnProperty.call(changes, "admin_note")) {
       return "PROFILE_ADMIN_NOTE_UPDATED";
@@ -480,7 +527,10 @@ export default function AdminUsersPage() {
     return "PROFILE_UPDATED";
   }
 
-  async function createAuditLog(profile: Profile, changes: Partial<Profile>) {
+  async function createAuditLog(
+    profile: Profile,
+    changes: AdminProfileChanges
+  ) {
     if (!currentUserId) return null;
 
     const { error } = await supabase.from("audit_logs").insert({
@@ -504,18 +554,13 @@ export default function AdminUsersPage() {
         },
         after: {
           role: changes.role ?? profile.role,
-          verification_status:
-            changes.verification_status ?? profile.verification_status,
-          permissions_verified:
-            changes.permissions_verified ?? profile.permissions_verified,
+          verification_status: profile.verification_status,
+          permissions_verified: profile.permissions_verified,
           admin_note_changed: Object.prototype.hasOwnProperty.call(
             changes,
             "admin_note"
           ),
-          permissions_note_changed: Object.prototype.hasOwnProperty.call(
-            changes,
-            "permissions_verification_note"
-          ),
+          permissions_note_changed: false,
         },
       },
     });
@@ -523,28 +568,22 @@ export default function AdminUsersPage() {
     return error?.message ?? null;
   }
 
-  async function updateProfile(profile: Profile, changes: Partial<Profile>) {
+  async function updateAdminProfile(
+    profile: Profile,
+    changes: AdminProfileChanges
+  ) {
     const isOwnAccount = profile.user_id === currentUserId;
 
-    if (changes.role && !isAdmin) {
-      setMessage("Zablokowano zmianę: tylko administrator może zmieniać role.");
+    if (!isAdmin) {
+      setMessage(
+        "Zablokowano zmianę: tylko administrator może zmieniać role i notatki administracyjne."
+      );
       return;
     }
 
     if (isOwnAccount && changes.role && changes.role !== "admin") {
       setMessage(
         "Zablokowano zmianę: nie możesz odebrać sam sobie roli administratora."
-      );
-      return;
-    }
-
-    if (
-      isOwnAccount &&
-      changes.verification_status &&
-      changes.verification_status !== "verified"
-    ) {
-      setMessage(
-        "Zablokowano zmianę: nie możesz odrzucić ani cofnąć weryfikacji własnego konta."
       );
       return;
     }
@@ -593,6 +632,88 @@ export default function AdminUsersPage() {
     setMessage("Zapisano zmiany i dodano wpis audit log.");
   }
 
+  async function runVerificationAction(
+    profile: Profile,
+    action: VerificationAction,
+    note: string
+  ) {
+    if (!canManageUsers) {
+      setMessage("Brak uprawnień do weryfikacji profili.");
+      return;
+    }
+
+    if (
+      isEmployee &&
+      (profile.user_id === currentUserId || profile.role === "admin")
+    ) {
+      setMessage("Ta operacja weryfikacyjna nie jest dostępna dla pracownika.");
+      return;
+    }
+
+    setSavingUserId(profile.user_id);
+    setMessage("");
+
+    try {
+      const trimmedNote = note.trim();
+      const { data, error } = await supabase.rpc(
+        "update_profile_verification",
+        {
+          p_target_user_id: profile.user_id,
+          p_action: action,
+          p_note: trimmedNote || null,
+        }
+      );
+
+      if (error) {
+        console.error("Profile verification RPC failed:", error);
+        setMessage(
+          "Nie udało się zaktualizować weryfikacji profilu. Spróbuj ponownie."
+        );
+        return;
+      }
+
+      if (!isVerificationRpcResult(data) || data.user_id !== profile.user_id) {
+        console.error("Profile verification RPC returned invalid data:", data);
+        setMessage(
+          "Nie udało się zaktualizować weryfikacji profilu. Spróbuj ponownie."
+        );
+        return;
+      }
+
+      setProfiles((currentProfiles) =>
+        currentProfiles.map((item) =>
+          item.user_id === data.user_id
+            ? {
+                ...item,
+                verification_status: data.verification_status,
+                permissions_verified: data.permissions_verified,
+                permissions_verified_at: data.permissions_verified_at,
+                permissions_verified_by: data.permissions_verified_by,
+                permissions_verification_note:
+                  data.permissions_verification_note,
+                updated_at: data.updated_at,
+              }
+            : item
+        )
+      );
+
+      setVerificationNoteDrafts((currentDrafts) => {
+        const nextDrafts = { ...currentDrafts };
+        delete nextDrafts[profile.user_id];
+        return nextDrafts;
+      });
+
+      setMessage("Weryfikacja profilu została zaktualizowana.");
+    } catch (error) {
+      console.error("Profile verification RPC failed:", error);
+      setMessage(
+        "Nie udało się zaktualizować weryfikacji profilu. Spróbuj ponownie."
+      );
+    } finally {
+      setSavingUserId(null);
+    }
+  }
+
   function verifyProfileAndPermissions(profile: Profile) {
     const missingFields = getMissingFields(profile);
 
@@ -606,24 +727,19 @@ export default function AdminUsersPage() {
       if (!confirmed) return;
     }
 
-    updateProfile(profile, {
-      verification_status: "verified",
-      permissions_verified: true,
-      permissions_verified_at: new Date().toISOString(),
-      permissions_verified_by: currentProfileId || null,
-      permissions_verification_note:
-        profile.permissions_verification_note || VERIFIED_NOTE,
-    });
+    runVerificationAction(
+      profile,
+      "verify",
+      verificationNoteDrafts[profile.user_id] ?? ""
+    );
   }
 
   function markVerificationIncomplete(profile: Profile) {
-    updateProfile(profile, {
-      verification_status: "pending",
-      permissions_verified: false,
-      permissions_verified_at: null,
-      permissions_verified_by: null,
-      permissions_verification_note: INCOMPLETE_NOTE,
-    });
+    runVerificationAction(
+      profile,
+      "mark_pending",
+      verificationNoteDrafts[profile.user_id] ?? ""
+    );
   }
 
   function resetFilters() {
@@ -778,6 +894,13 @@ export default function AdminUsersPage() {
               {filteredProfiles.map((profile) => {
                 const isSaving = savingUserId === profile.user_id;
                 const isOwnAccount = profile.user_id === currentUserId;
+                const isVerificationRestricted =
+                  isEmployee && (isOwnAccount || profile.role === "admin");
+                const verificationRestrictionReason = isVerificationRestricted
+                  ? isOwnAccount
+                    ? "Pracownik nie może weryfikować własnego konta."
+                    : "Pracownik nie może zmieniać weryfikacji administratora."
+                  : undefined;
                 const isExpanded = expandedUserId === profile.user_id;
                 const missingFields = getMissingFields(profile);
                 const completion = getCompletionPercent(profile);
@@ -900,7 +1023,7 @@ export default function AdminUsersPage() {
                           value={profile.role || "user"}
                           disabled={isSaving || !isAdmin}
                           onChange={(event) =>
-                            updateProfile(profile, {
+                            updateAdminProfile(profile, {
                               role: event.target.value as UserRole,
                             })
                           }
@@ -937,21 +1060,30 @@ export default function AdminUsersPage() {
 
                         <select
                           value={profile.verification_status || "pending"}
-                          disabled={isSaving}
-                          onChange={(event) =>
-                            updateProfile(profile, {
-                              verification_status:
-                                event.target.value as VerificationStatus,
-                            })
-                          }
+                          disabled={isSaving || isVerificationRestricted}
+                          title={verificationRestrictionReason}
+                          onChange={(event) => {
+                            const action = getVerificationAction(
+                              event.target.value
+                            );
+
+                            if (!action) return;
+
+                            if (action === "verify") {
+                              verifyProfileAndPermissions(profile);
+                              return;
+                            }
+
+                            runVerificationAction(
+                              profile,
+                              action,
+                              verificationNoteDrafts[profile.user_id] ?? ""
+                            );
+                          }}
                           className="w-full rounded-xl border border-zinc-700 bg-zinc-900 px-4 py-3 text-sm text-white outline-none transition focus:border-green-600 disabled:opacity-60"
                         >
                           {verificationOptions.map((status) => (
-                            <option
-                              key={status}
-                              value={status}
-                              disabled={isOwnAccount && status !== "verified"}
-                            >
+                            <option key={status} value={status}>
                               {getStatusLabel(status)}
                             </option>
                           ))}
@@ -960,7 +1092,8 @@ export default function AdminUsersPage() {
                         <div className="mt-3 grid gap-2">
                           <button
                             type="button"
-                            disabled={isSaving}
+                            disabled={isSaving || isVerificationRestricted}
+                            title={verificationRestrictionReason}
                             onClick={() => verifyProfileAndPermissions(profile)}
                             className="rounded-xl border border-green-700 px-3 py-2 text-xs font-bold text-green-300 transition hover:bg-green-950 disabled:cursor-not-allowed disabled:opacity-60"
                           >
@@ -969,7 +1102,8 @@ export default function AdminUsersPage() {
 
                           <button
                             type="button"
-                            disabled={isSaving || isOwnAccount}
+                            disabled={isSaving || isVerificationRestricted}
+                            title={verificationRestrictionReason}
                             onClick={() => markVerificationIncomplete(profile)}
                             className="rounded-xl border border-yellow-700 px-3 py-2 text-xs font-bold text-yellow-300 transition hover:bg-yellow-950 disabled:cursor-not-allowed disabled:opacity-60"
                           >
@@ -978,18 +1112,26 @@ export default function AdminUsersPage() {
 
                           <button
                             type="button"
-                            disabled={isSaving || isOwnAccount}
+                            disabled={isSaving || isVerificationRestricted}
+                            title={verificationRestrictionReason}
                             onClick={() =>
-                              updateProfile(profile, {
-                                verification_status: "rejected",
-                                permissions_verified: false,
-                              })
+                              runVerificationAction(
+                                profile,
+                                "reject",
+                                verificationNoteDrafts[profile.user_id] ?? ""
+                              )
                             }
                             className="rounded-xl border border-red-700 px-3 py-2 text-xs font-bold text-red-300 transition hover:bg-red-950 disabled:cursor-not-allowed disabled:opacity-60"
                           >
                             Odrzuć konto
                           </button>
                         </div>
+
+                        {verificationRestrictionReason && (
+                          <p className="mt-3 text-xs text-zinc-500">
+                            {verificationRestrictionReason}
+                          </p>
+                        )}
                       </div>
 
                       <div>
@@ -997,44 +1139,43 @@ export default function AdminUsersPage() {
                           Notatka weryfikacyjna
                         </label>
 
+                        <div className="mb-3 rounded-xl border border-zinc-800 bg-zinc-950 p-3 text-xs text-zinc-400">
+                          <p className="font-semibold text-zinc-300">
+                            Aktualna zapisana notatka
+                          </p>
+                          <p className="mt-1 whitespace-pre-wrap">
+                            {profile.permissions_verification_note ||
+                              "Brak zapisanej notatki."}
+                          </p>
+                        </div>
+
                         <textarea
-                          value={profile.permissions_verification_note || ""}
-                          disabled={isSaving}
+                          value={verificationNoteDrafts[profile.user_id] ?? ""}
+                          disabled={isSaving || isVerificationRestricted}
+                          title={verificationRestrictionReason}
                           onChange={(event) => {
                             const value = event.target.value;
 
-                            setProfiles((currentProfiles) =>
-                              currentProfiles.map((item) =>
-                                item.user_id === profile.user_id
-                                  ? {
-                                      ...item,
-                                      permissions_verification_note: value,
-                                    }
-                                  : item
-                              )
-                            );
+                            setVerificationNoteDrafts((currentDrafts) => ({
+                              ...currentDrafts,
+                              [profile.user_id]: value,
+                            }));
                           }}
                           rows={4}
-                          placeholder="Krótka notatka. Nie wpisuj numerów dokumentów."
+                          placeholder="Opcjonalna notatka do kolejnej decyzji. Nie wpisuj numerów dokumentów."
                           className="w-full rounded-xl border border-zinc-700 bg-zinc-900 px-4 py-3 text-sm text-white outline-none transition focus:border-green-600 disabled:opacity-60"
                         />
 
                         <div className="mt-3 grid gap-2 sm:grid-cols-2">
                           <button
                             type="button"
-                            disabled={isSaving}
+                            disabled={isSaving || isVerificationRestricted}
+                            title={verificationRestrictionReason}
                             onClick={() =>
-                              setProfiles((currentProfiles) =>
-                                currentProfiles.map((item) =>
-                                  item.user_id === profile.user_id
-                                    ? {
-                                        ...item,
-                                        permissions_verification_note:
-                                          VERIFIED_NOTE,
-                                      }
-                                    : item
-                                )
-                              )
+                              setVerificationNoteDrafts((currentDrafts) => ({
+                                ...currentDrafts,
+                                [profile.user_id]: VERIFIED_NOTE,
+                              }))
                             }
                             className="rounded-xl border border-green-700 px-3 py-2 text-xs font-bold text-green-300 transition hover:bg-green-950 disabled:cursor-not-allowed disabled:opacity-60"
                           >
@@ -1043,39 +1184,19 @@ export default function AdminUsersPage() {
 
                           <button
                             type="button"
-                            disabled={isSaving}
+                            disabled={isSaving || isVerificationRestricted}
+                            title={verificationRestrictionReason}
                             onClick={() =>
-                              setProfiles((currentProfiles) =>
-                                currentProfiles.map((item) =>
-                                  item.user_id === profile.user_id
-                                    ? {
-                                        ...item,
-                                        permissions_verification_note:
-                                          INCOMPLETE_NOTE,
-                                      }
-                                    : item
-                                )
-                              )
+                              setVerificationNoteDrafts((currentDrafts) => ({
+                                ...currentDrafts,
+                                [profile.user_id]: INCOMPLETE_NOTE,
+                              }))
                             }
                             className="rounded-xl border border-yellow-700 px-3 py-2 text-xs font-bold text-yellow-300 transition hover:bg-yellow-950 disabled:cursor-not-allowed disabled:opacity-60"
                           >
                             Wstaw: braki
                           </button>
                         </div>
-
-                        <button
-                          type="button"
-                          disabled={isSaving}
-                          onClick={() =>
-                            updateProfile(profile, {
-                              permissions_verification_note:
-                                profile.permissions_verification_note || "",
-                            })
-                          }
-                          className="mt-3 w-full rounded-xl border border-zinc-700 px-4 py-2 text-sm font-semibold text-zinc-300 transition hover:border-green-600 hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
-                        >
-                          Zapisz notatkę
-                        </button>
                       </div>
 
                       <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-4 text-sm">
@@ -1349,46 +1470,48 @@ export default function AdminUsersPage() {
                           </div>
                         </div>
 
-                        <div className="mt-5 rounded-xl border border-zinc-800 bg-zinc-950 p-4">
-                          <p className="mb-2 text-xs uppercase tracking-[0.25em] text-zinc-500">
-                            Notatka admina / pracownika
-                          </p>
+                        {isAdmin && (
+                          <div className="mt-5 rounded-xl border border-zinc-800 bg-zinc-950 p-4">
+                            <p className="mb-2 text-xs uppercase tracking-[0.25em] text-zinc-500">
+                              Notatka admina / pracownika
+                            </p>
 
-                          <textarea
-                            value={profile.admin_note || ""}
-                            disabled={isSaving}
-                            onChange={(event) => {
-                              const value = event.target.value;
+                            <textarea
+                              value={profile.admin_note || ""}
+                              disabled={isSaving}
+                              onChange={(event) => {
+                                const value = event.target.value;
 
-                              setProfiles((currentProfiles) =>
-                                currentProfiles.map((item) =>
-                                  item.user_id === profile.user_id
-                                    ? {
-                                        ...item,
-                                        admin_note: value,
-                                      }
-                                    : item
-                                )
-                              );
-                            }}
-                            rows={3}
-                            placeholder="Uwagi organizacyjne, kontakt, informacje wewnętrzne. Bez numerów dokumentów."
-                            className="w-full rounded-xl border border-zinc-700 bg-zinc-900 px-4 py-3 text-sm text-white outline-none transition focus:border-green-600 disabled:opacity-60"
-                          />
+                                setProfiles((currentProfiles) =>
+                                  currentProfiles.map((item) =>
+                                    item.user_id === profile.user_id
+                                      ? {
+                                          ...item,
+                                          admin_note: value,
+                                        }
+                                      : item
+                                  )
+                                );
+                              }}
+                              rows={3}
+                              placeholder="Uwagi organizacyjne, kontakt, informacje wewnętrzne. Bez numerów dokumentów."
+                              className="w-full rounded-xl border border-zinc-700 bg-zinc-900 px-4 py-3 text-sm text-white outline-none transition focus:border-green-600 disabled:opacity-60"
+                            />
 
-                          <button
-                            type="button"
-                            disabled={isSaving}
-                            onClick={() =>
-                              updateProfile(profile, {
-                                admin_note: profile.admin_note || "",
-                              })
-                            }
-                            className="mt-3 rounded-xl border border-zinc-700 px-4 py-2 text-sm font-semibold text-zinc-300 transition hover:border-green-600 hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
-                          >
-                            Zapisz notatkę admina
-                          </button>
-                        </div>
+                            <button
+                              type="button"
+                              disabled={isSaving}
+                              onClick={() =>
+                                updateAdminProfile(profile, {
+                                  admin_note: profile.admin_note || "",
+                                })
+                              }
+                              className="mt-3 rounded-xl border border-zinc-700 px-4 py-2 text-sm font-semibold text-zinc-300 transition hover:border-green-600 hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
+                            >
+                              Zapisz notatkę admina
+                            </button>
+                          </div>
+                        )}
                       </div>
                     )}
                   </article>
