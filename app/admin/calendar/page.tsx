@@ -22,6 +22,8 @@ import {
 
 type UserRole = "admin" | "pracownik" | "instruktor" | "user";
 
+type VerificationAction = "verify" | "mark_pending" | "reject";
+
 type Reservation = {
   id: string;
   check_in_token: string | null;
@@ -76,6 +78,20 @@ type Profile = {
   permissions_verified_at: string | null;
   permissions_verified_by: string | null;
   permissions_verification_note: string | null;
+};
+
+type VerificationRpcResult = {
+  user_id: string;
+  verification_status: string | null;
+  permissions_verified: boolean | null;
+  permissions_verified_at: string | null;
+  permissions_verified_by: string | null;
+  permissions_verification_note: string | null;
+  verified_at: string | null;
+  verified_by: string | null;
+  unverified_at: string | null;
+  unverified_by: string | null;
+  updated_at: string | null;
 };
 
 const VERIFIED_NOTE =
@@ -212,6 +228,33 @@ function getPermissionsClass(profile: Profile | null | undefined) {
   return "border-yellow-700 bg-yellow-950 text-yellow-300";
 }
 
+function isNullableString(value: unknown): value is string | null {
+  return typeof value === "string" || value === null;
+}
+
+function isVerificationRpcResult(value: unknown): value is VerificationRpcResult {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return false;
+  }
+
+  const result = value as Record<string, unknown>;
+
+  return (
+    typeof result.user_id === "string" &&
+    isNullableString(result.verification_status) &&
+    (typeof result.permissions_verified === "boolean" ||
+      result.permissions_verified === null) &&
+    isNullableString(result.permissions_verified_at) &&
+    isNullableString(result.permissions_verified_by) &&
+    isNullableString(result.permissions_verification_note) &&
+    isNullableString(result.verified_at) &&
+    isNullableString(result.verified_by) &&
+    isNullableString(result.unverified_at) &&
+    isNullableString(result.unverified_by) &&
+    isNullableString(result.updated_at)
+  );
+}
+
 function BooleanLine({
   label,
   value,
@@ -247,7 +290,6 @@ function CheckInContent() {
   >({});
 
   const [currentUserId, setCurrentUserId] = useState("");
-  const [currentProfileId, setCurrentProfileId] = useState("");
   const [currentUserName, setCurrentUserName] = useState("");
   const [currentUserRole, setCurrentUserRole] = useState<UserRole | "">("");
 
@@ -257,6 +299,10 @@ function CheckInContent() {
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
   const [savingId, setSavingId] = useState<string | null>(null);
+
+  const isAdmin = currentUserRole === "admin";
+  const isEmployee = currentUserRole === "pracownik";
+  const canVerifyProfiles = isAdmin || isEmployee;
 
   async function loadCurrentUser() {
     const {
@@ -269,13 +315,9 @@ function CheckInContent() {
 
     const { data: profile } = await supabase
       .from("profiles")
-      .select("id,role,full_name,email")
+      .select("role,full_name,email")
       .eq("user_id", user.id)
       .maybeSingle();
-
-    if (profile?.id) {
-      setCurrentProfileId(profile.id);
-    }
 
     if (profile?.role) {
       setCurrentUserRole(String(profile.role) as UserRole);
@@ -663,6 +705,80 @@ function CheckInContent() {
     setMessage("Wizyta zakończona.");
   }
 
+  async function runVerificationAction(
+    reservation: Reservation,
+    profile: Profile,
+    action: VerificationAction,
+    note: string | null
+  ): Promise<VerificationRpcResult | null> {
+    if (!canVerifyProfiles) {
+      setMessage("Brak uprawnień do weryfikacji profili.");
+      return null;
+    }
+
+    if (
+      isEmployee &&
+      (profile.user_id === currentUserId || profile.role === "admin")
+    ) {
+      setMessage("Ta operacja weryfikacyjna nie jest dostępna dla pracownika.");
+      return null;
+    }
+
+    setSavingId(reservation.id);
+    setMessage("");
+
+    try {
+      const trimmedNote = note?.trim() ?? "";
+      const { data, error } = await supabase.rpc(
+        "update_profile_verification",
+        {
+          p_target_user_id: profile.user_id,
+          p_action: action,
+          p_note: trimmedNote || null,
+        }
+      );
+
+      if (error) {
+        console.error("Profile verification RPC failed:", error);
+        setMessage(
+          "Nie udało się zaktualizować weryfikacji profilu. Spróbuj ponownie."
+        );
+        return null;
+      }
+
+      if (!isVerificationRpcResult(data) || data.user_id !== profile.user_id) {
+        console.error("Profile verification RPC returned invalid data:", data);
+        setMessage(
+          "Nie udało się zaktualizować weryfikacji profilu. Spróbuj ponownie."
+        );
+        return null;
+      }
+
+      setProfilesByUserId((current) => ({
+        ...current,
+        [data.user_id]: {
+          ...profile,
+          verification_status: data.verification_status,
+          permissions_verified: data.permissions_verified,
+          permissions_verified_at: data.permissions_verified_at,
+          permissions_verified_by: data.permissions_verified_by,
+          permissions_verification_note: data.permissions_verification_note,
+          updated_at: data.updated_at,
+        },
+      }));
+
+      return data;
+    } catch (error) {
+      console.error("Profile verification RPC failed:", error);
+      setMessage(
+        "Nie udało się zaktualizować weryfikacji profilu. Spróbuj ponownie."
+      );
+      return null;
+    } finally {
+      setSavingId(null);
+    }
+  }
+
   async function verifyAccountAndStartVisit(reservation: Reservation) {
     if (!reservation.user_id) {
       setMessage("Ta rezerwacja nie jest powiązana z kontem użytkownika.");
@@ -673,6 +789,19 @@ function CheckInContent() {
 
     if (!profile) {
       setMessage("Nie znaleziono profilu użytkownika do weryfikacji.");
+      return;
+    }
+
+    if (!canVerifyProfiles) {
+      setMessage("Brak uprawnień do weryfikacji profili.");
+      return;
+    }
+
+    if (
+      isEmployee &&
+      (profile.user_id === currentUserId || profile.role === "admin")
+    ) {
+      setMessage("Ta operacja weryfikacyjna nie jest dostępna dla pracownika.");
       return;
     }
 
@@ -688,117 +817,92 @@ function CheckInContent() {
       if (!confirmed) return;
     }
 
+    const verificationResult = await runVerificationAction(
+      reservation,
+      profile,
+      "verify",
+      null
+    );
+
+    if (!verificationResult) return;
+
     setSavingId(reservation.id);
     setMessage("");
 
-    const now = new Date().toISOString();
+    try {
+      const reservationResult = await completeReservationAction(supabase, {
+        reservationId: reservation.id,
+      });
 
-    const { error: profileError } = await supabase
-      .from("profiles")
-      .update({
-        verification_status: "verified",
-        permissions_verified: true,
-        permissions_verified_at: now,
-        permissions_verified_by: currentProfileId || null,
-        permissions_verification_note:
-          profile.permissions_verification_note || VERIFIED_NOTE,
-        updated_at: now,
-      })
-      .eq("user_id", reservation.user_id);
+      if (reservationResult.error) {
+        console.error(
+          "Completing reservation after profile verification failed:",
+          reservationResult.error
+        );
+        setMessage(
+          "Konto zostało zweryfikowane, ale nie udało się zakończyć wizyty. Spróbuj ponownie wykonać check-in."
+        );
+        return;
+      }
 
-    if (profileError) {
-      setSavingId(null);
-      setMessage(`Błąd weryfikacji konta: ${profileError.message}`);
-      return;
-    }
+      const now = new Date().toISOString();
+      const updatedReservation: Reservation = {
+        ...reservation,
+        attendance_status:
+          reservationResult.data?.attendance_status ?? "present",
+        reservation_status:
+          reservationResult.data?.reservation_status ??
+          RESERVATION_STATUS.COMPLETED,
+        checked_in_at: reservationResult.data?.checked_in_at ?? now,
+      };
 
-    const reservationResult = await completeReservationAction(supabase, {
-      reservationId: reservation.id,
-    });
-
-    if (reservationResult.error) {
-      setSavingId(null);
-      setMessage(
-        `Konto zweryfikowane, ale błąd check-in: ${reservationResult.error}`
+      setReservations((current) =>
+        current.map((item) =>
+          item.id === reservation.id ? updatedReservation : item
+        )
       );
-      return;
-    }
 
-    const updatedProfile: Profile = {
-      ...profile,
-      verification_status: "verified",
-      permissions_verified: true,
-      permissions_verified_at: now,
-      permissions_verified_by: currentProfileId || null,
-      permissions_verification_note:
-        profile.permissions_verification_note || VERIFIED_NOTE,
-      updated_at: now,
-    };
+      if (selectedReservation?.id === reservation.id) {
+        setSelectedReservation(updatedReservation);
+      }
 
-    const updatedReservation: Reservation = {
-      ...reservation,
-      attendance_status: reservationResult.data?.attendance_status ?? "present",
-      reservation_status:
-        reservationResult.data?.reservation_status ?? "completed",
-      checked_in_at: reservationResult.data?.checked_in_at ?? now,
-    };
-
-    setProfilesByUserId((current) => ({
-      ...current,
-      [reservation.user_id as string]: updatedProfile,
-    }));
-
-    setReservations((current) =>
-      current.map((item) =>
-        item.id === reservation.id ? updatedReservation : item
-      )
-    );
-
-    if (selectedReservation?.id === reservation.id) {
-      setSelectedReservation(updatedReservation);
-    }
-
-    const auditError = await createAuditLog({
-      action: "FIRST_VISIT_PROFILE_PERMISSIONS_VERIFIED_AND_CHECKED_IN",
-      reservation,
-      profile,
-      details: {
-        profile_before: {
-          verification_status: profile.verification_status,
-          permissions_verified: profile.permissions_verified,
-          completion_percent: getCompletionPercent(profile),
-          missing_fields: missingFields,
-          declared_permissions: getDeclaredPermissions(profile),
-          declared_qualifications: getDeclaredQualifications(profile),
+      const auditError = await createAuditLog({
+        action: "CHECK_IN_COMPLETED",
+        reservation,
+        profile,
+        details: {
+          before: {
+            reservation_status: reservation.reservation_status,
+            attendance_status: reservation.attendance_status,
+            checked_in_at: reservation.checked_in_at,
+          },
+          after: {
+            reservation_status: updatedReservation.reservation_status,
+            attendance_status: updatedReservation.attendance_status,
+            checked_in_at: updatedReservation.checked_in_at,
+          },
         },
-        profile_after: {
-          verification_status: "verified",
-          permissions_verified: true,
-          permissions_verification_note_used: true,
-        },
-        reservation_before: {
-          reservation_status: reservation.reservation_status,
-          attendance_status: reservation.attendance_status,
-          checked_in_at: reservation.checked_in_at,
-        },
-        reservation_after: {
-          reservation_status: "completed",
-          attendance_status: "present",
-          checked_in_at: now,
-        },
-      },
-    });
+      });
 
-    setSavingId(null);
+      if (auditError) {
+        setMessage(
+          `Konto i uprawnienia zweryfikowane, wizyta rozpoczęta, ale nie udało się dodać wpisu audit log: ${auditError}`
+        );
+        return;
+      }
 
-    if (auditError) {
-      setMessage(
-        `Konto i uprawnienia zweryfikowane, wizyta rozpoczęta, ale nie udało się dodać wpisu audit log: ${auditError}`
+      setMessage("Konto i uprawnienia zweryfikowane. Wizyta rozpoczęta.");
+    } catch (error) {
+      console.error(
+        "Completing reservation after profile verification failed:",
+        error
       );
-      return;
+      setMessage(
+        "Konto zostało zweryfikowane, ale nie udało się zakończyć wizyty. Spróbuj ponownie wykonać check-in."
+      );
+    } finally {
+      setSavingId(null);
     }
-
-    setMessage("Konto i uprawnienia zweryfikowane. Wizyta rozpoczęta.");
   }
 
   async function markVerificationIncomplete(reservation: Reservation) {
@@ -814,70 +918,16 @@ function CheckInContent() {
       return;
     }
 
-    setSavingId(reservation.id);
-    setMessage("");
-
-    const now = new Date().toISOString();
-
-    const { error } = await supabase
-      .from("profiles")
-      .update({
-        verification_status: "pending",
-        permissions_verified: false,
-        permissions_verified_at: null,
-        permissions_verified_by: null,
-        permissions_verification_note: INCOMPLETE_NOTE,
-        updated_at: now,
-      })
-      .eq("user_id", reservation.user_id);
-
-    setSavingId(null);
-
-    if (error) {
-      setMessage(`Błąd zapisu weryfikacji: ${error.message}`);
-      return;
-    }
-
-    const updatedProfile: Profile = {
-      ...profile,
-      verification_status: "pending",
-      permissions_verified: false,
-      permissions_verified_at: null,
-      permissions_verified_by: null,
-      permissions_verification_note: INCOMPLETE_NOTE,
-      updated_at: now,
-    };
-
-    setProfilesByUserId((current) => ({
-      ...current,
-      [reservation.user_id as string]: updatedProfile,
-    }));
-
-    const auditError = await createAuditLog({
-      action: "FIRST_VISIT_PERMISSIONS_VERIFICATION_INCOMPLETE",
+    const verificationResult = await runVerificationAction(
       reservation,
       profile,
-      details: {
-        profile_before: {
-          verification_status: profile.verification_status,
-          permissions_verified: profile.permissions_verified,
-        },
-        profile_after: {
-          verification_status: "pending",
-          permissions_verified: false,
-          note: INCOMPLETE_NOTE,
-        },
-      },
-    });
+      "mark_pending",
+      null
+    );
 
-    if (auditError) {
-      setMessage(
-        `Zapisano weryfikację niepełną, ale nie udało się dodać wpisu audit log: ${auditError}`
-      );
-      return;
-    }
+    if (!verificationResult) return;
 
-    setMessage("Zapisano: weryfikacja niepełna.");
+    setMessage("Weryfikacja profilu została zaktualizowana.");
   }
 
   async function markNoShow(reservation: Reservation) {
@@ -1156,6 +1206,22 @@ function CheckInContent() {
               Boolean(reservation.user_id) &&
               (!isProfileVerified || !permissionsVerified);
 
+            const isVerificationRestricted =
+              !profile ||
+              !canVerifyProfiles ||
+              (isEmployee &&
+                (profile.user_id === currentUserId ||
+                  profile.role === "admin"));
+            const verificationRestrictionReason = !profile
+              ? "Brak profilu użytkownika do weryfikacji."
+              : !canVerifyProfiles
+                ? "Weryfikacja profilu jest dostępna tylko dla administratora i pracownika."
+                : isEmployee && profile.user_id === currentUserId
+                  ? "Pracownik nie może weryfikować własnego konta."
+                  : isEmployee && profile.role === "admin"
+                    ? "Pracownik nie może zmieniać weryfikacji administratora."
+                    : undefined;
+
             const missingFields = getMissingFields(profile);
             const completion = getCompletionPercent(profile);
             const declaredPermissions = getDeclaredPermissions(profile);
@@ -1354,7 +1420,8 @@ function CheckInContent() {
                       <>
                         <button
                           type="button"
-                          disabled={isSaving}
+                          disabled={isSaving || isVerificationRestricted}
+                          title={verificationRestrictionReason}
                           onClick={() =>
                             verifyAccountAndStartVisit(reservation)
                           }
@@ -1365,7 +1432,8 @@ function CheckInContent() {
 
                         <button
                           type="button"
-                          disabled={isSaving}
+                          disabled={isSaving || isVerificationRestricted}
+                          title={verificationRestrictionReason}
                           onClick={() =>
                             markVerificationIncomplete(reservation)
                           }
@@ -1373,6 +1441,12 @@ function CheckInContent() {
                         >
                           Weryfikacja niepełna
                         </button>
+
+                        {verificationRestrictionReason && (
+                          <p className="text-xs text-zinc-400">
+                            {verificationRestrictionReason}
+                          </p>
+                        )}
                       </>
                     ) : (
                       <button
