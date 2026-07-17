@@ -65,6 +65,27 @@ type VerificationRpcResult = {
   updated_at: string | null;
 };
 
+type ContactDraft = {
+  phone: string;
+  postal_code: string;
+  city: string;
+  street: string;
+  house_number: string;
+  apartment_number: string;
+};
+
+type ContactRpcResult = {
+  user_id: string;
+  phone: string | null;
+  postal_code: string | null;
+  city: string | null;
+  street: string | null;
+  house_number: string | null;
+  apartment_number: string | null;
+  updated_at: string | null;
+  changed_fields: string[];
+};
+
 type AdminProfileChanges = Partial<Pick<Profile, "role" | "admin_note">>;
 
 const roleOptions: UserRole[] = ["admin", "pracownik", "instruktor", "user"];
@@ -96,6 +117,19 @@ const VERIFIED_NOTE =
 
 const INCOMPLETE_NOTE =
   "Nie zakończono pełnej weryfikacji uprawnień. Klient poinformowany o konieczności okazania wymaganych dokumentów przy kolejnej wizycie. Konto pozostaje niezweryfikowane.";
+
+const contactFieldLimits: Array<{
+  field: keyof ContactDraft;
+  label: string;
+  maxLength: number;
+}> = [
+  { field: "phone", label: "Numer telefonu", maxLength: 32 },
+  { field: "postal_code", label: "Kod pocztowy", maxLength: 20 },
+  { field: "city", label: "Miasto", maxLength: 120 },
+  { field: "street", label: "Ulica", maxLength: 160 },
+  { field: "house_number", label: "Numer domu", maxLength: 30 },
+  { field: "apartment_number", label: "Numer mieszkania", maxLength: 30 },
+];
 
 function isFullyVerified(profile: Profile) {
   return (
@@ -287,6 +321,38 @@ function isVerificationRpcResult(value: unknown): value is VerificationRpcResult
   );
 }
 
+function isContactRpcResult(value: unknown): value is ContactRpcResult {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return false;
+  }
+
+  const result = value as Record<string, unknown>;
+
+  return (
+    typeof result.user_id === "string" &&
+    isNullableString(result.phone) &&
+    isNullableString(result.postal_code) &&
+    isNullableString(result.city) &&
+    isNullableString(result.street) &&
+    isNullableString(result.house_number) &&
+    isNullableString(result.apartment_number) &&
+    isNullableString(result.updated_at) &&
+    Array.isArray(result.changed_fields) &&
+    result.changed_fields.every((field) => typeof field === "string")
+  );
+}
+
+function getContactDraft(profile: Profile): ContactDraft {
+  return {
+    phone: profile.phone ?? "",
+    postal_code: profile.postal_code ?? "",
+    city: profile.city ?? "",
+    street: profile.street ?? "",
+    house_number: profile.house_number ?? "",
+    apartment_number: profile.apartment_number ?? "",
+  };
+}
+
 function InfoLine({
   label,
   value,
@@ -332,6 +398,12 @@ export default function AdminUsersPage() {
   const [verificationNoteDrafts, setVerificationNoteDrafts] = useState<
     Record<string, string>
   >({});
+  const [contactDrafts, setContactDrafts] = useState<
+    Record<string, ContactDraft>
+  >({});
+  const [editingContactUserId, setEditingContactUserId] = useState<
+    string | null
+  >(null);
 
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
@@ -632,6 +704,168 @@ export default function AdminUsersPage() {
     setMessage("Zapisano zmiany i dodano wpis audit log.");
   }
 
+  function getContactRestrictionReason(profile: Profile) {
+    if (!canManageUsers) {
+      return "Brak uprawnień do edycji danych kontaktowych.";
+    }
+
+    if (!isEmployee) {
+      return undefined;
+    }
+
+    if (profile.user_id === currentUserId) {
+      return "Pracownik nie może edytować danych własnego profilu.";
+    }
+
+    if (profile.role === "admin") {
+      return "Pracownik nie może edytować danych administratora.";
+    }
+
+    if (profile.role !== "user") {
+      return "Pracownik może edytować dane kontaktowe wyłącznie klienta.";
+    }
+
+    return undefined;
+  }
+
+  function startContactEditing(profile: Profile) {
+    const restrictionReason = getContactRestrictionReason(profile);
+
+    if (restrictionReason) {
+      setMessage(restrictionReason);
+      return;
+    }
+
+    setContactDrafts((currentDrafts) => ({
+      ...currentDrafts,
+      [profile.user_id]: getContactDraft(profile),
+    }));
+    setEditingContactUserId(profile.user_id);
+    setMessage("");
+  }
+
+  function updateContactDraft(
+    profile: Profile,
+    field: keyof ContactDraft,
+    value: string
+  ) {
+    setContactDrafts((currentDrafts) => ({
+      ...currentDrafts,
+      [profile.user_id]: {
+        ...(currentDrafts[profile.user_id] ?? getContactDraft(profile)),
+        [field]: value,
+      },
+    }));
+  }
+
+  function cancelContactEditing(profile: Profile) {
+    setContactDrafts((currentDrafts) => ({
+      ...currentDrafts,
+      [profile.user_id]: getContactDraft(profile),
+    }));
+    setEditingContactUserId((currentUserId) =>
+      currentUserId === profile.user_id ? null : currentUserId
+    );
+    setMessage("");
+  }
+
+  async function saveContactDetails(profile: Profile) {
+    const restrictionReason = getContactRestrictionReason(profile);
+
+    if (restrictionReason) {
+      setMessage(restrictionReason);
+      return;
+    }
+
+    const draft = contactDrafts[profile.user_id] ?? getContactDraft(profile);
+    const invalidField = contactFieldLimits.find(
+      ({ field, maxLength }) => draft[field].trim().length > maxLength
+    );
+
+    if (invalidField) {
+      setMessage(
+        `${invalidField.label} przekracza limit ${invalidField.maxLength} znaków.`
+      );
+      return;
+    }
+
+    setSavingUserId(profile.user_id);
+    setMessage("");
+
+    try {
+      const { data, error } = await supabase.rpc(
+        "update_profile_contact_details",
+        {
+          p_target_user_id: profile.user_id,
+          p_phone: draft.phone,
+          p_postal_code: draft.postal_code,
+          p_city: draft.city,
+          p_street: draft.street,
+          p_house_number: draft.house_number,
+          p_apartment_number: draft.apartment_number,
+        }
+      );
+
+      if (error) {
+        console.error("Profile contact details RPC failed:", error);
+        setMessage(
+          "Nie udało się zaktualizować danych kontaktowych. Spróbuj ponownie."
+        );
+        return;
+      }
+
+      if (!isContactRpcResult(data) || data.user_id !== profile.user_id) {
+        console.error("Profile contact details RPC returned invalid data:", data);
+        setMessage(
+          "Nie udało się zaktualizować danych kontaktowych. Spróbuj ponownie."
+        );
+        return;
+      }
+
+      setProfiles((currentProfiles) =>
+        currentProfiles.map((item) =>
+          item.user_id === data.user_id
+            ? {
+                ...item,
+                phone: data.phone,
+                postal_code: data.postal_code,
+                city: data.city,
+                street: data.street,
+                house_number: data.house_number,
+                apartment_number: data.apartment_number,
+                updated_at: data.updated_at,
+              }
+            : item
+        )
+      );
+
+      setContactDrafts((currentDrafts) => ({
+        ...currentDrafts,
+        [data.user_id]: {
+          phone: data.phone ?? "",
+          postal_code: data.postal_code ?? "",
+          city: data.city ?? "",
+          street: data.street ?? "",
+          house_number: data.house_number ?? "",
+          apartment_number: data.apartment_number ?? "",
+        },
+      }));
+      setEditingContactUserId(null);
+      setMessage(
+        data.changed_fields.length === 0
+          ? "Dane kontaktowe są aktualne."
+          : "Dane kontaktowe zostały zaktualizowane."
+      );
+    } catch (error) {
+      console.error("Profile contact details RPC failed:", error);
+      setMessage(
+        "Nie udało się zaktualizować danych kontaktowych. Spróbuj ponownie."
+      );
+    } finally {
+      setSavingUserId(null);
+    }
+  }
+
   async function runVerificationAction(
     profile: Profile,
     action: VerificationAction,
@@ -901,6 +1135,12 @@ export default function AdminUsersPage() {
                     ? "Pracownik nie może weryfikować własnego konta."
                     : "Pracownik nie może zmieniać weryfikacji administratora."
                   : undefined;
+                const contactRestrictionReason =
+                  getContactRestrictionReason(profile);
+                const isEditingContact =
+                  editingContactUserId === profile.user_id;
+                const contactDraft =
+                  contactDrafts[profile.user_id] ?? getContactDraft(profile);
                 const isExpanded = expandedUserId === profile.user_id;
                 const missingFields = getMissingFields(profile);
                 const completion = getCompletionPercent(profile);
@@ -1288,6 +1528,208 @@ export default function AdminUsersPage() {
                             <p className="mt-1">{missingFields.join(", ")}</p>
                           </div>
                         )}
+
+                        <div className="mb-5 rounded-xl border border-zinc-800 bg-zinc-950 p-4">
+                          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                            <div>
+                              <h4 className="font-bold text-zinc-100">
+                                Dane kontaktowe
+                              </h4>
+                              <p className="mt-1 text-sm text-zinc-400">
+                                Telefon i adres klienta.
+                              </p>
+                            </div>
+
+                            {!isEditingContact && !contactRestrictionReason && (
+                              <button
+                                type="button"
+                                disabled={isSaving}
+                                onClick={() => startContactEditing(profile)}
+                                className="min-h-11 rounded-xl border border-zinc-700 px-4 py-2 text-sm font-semibold text-zinc-300 transition hover:border-green-600 hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
+                              >
+                                Edytuj dane kontaktowe
+                              </button>
+                            )}
+                          </div>
+
+                          {contactRestrictionReason && (
+                            <p className="mt-3 text-xs text-yellow-400">
+                              {contactRestrictionReason}
+                            </p>
+                          )}
+
+                          {isEditingContact && !contactRestrictionReason && (
+                            <div className="mt-4">
+                              <div className="grid gap-4 sm:grid-cols-2">
+                                <div>
+                                  <label
+                                    htmlFor={`contact-phone-${profile.user_id}`}
+                                    className="mb-2 block text-xs uppercase tracking-[0.2em] text-zinc-500"
+                                  >
+                                    Telefon
+                                  </label>
+                                  <input
+                                    id={`contact-phone-${profile.user_id}`}
+                                    type="tel"
+                                    maxLength={32}
+                                    value={contactDraft.phone}
+                                    disabled={isSaving}
+                                    onChange={(event) =>
+                                      updateContactDraft(
+                                        profile,
+                                        "phone",
+                                        event.target.value
+                                      )
+                                    }
+                                    className="min-h-11 w-full rounded-xl border border-zinc-700 bg-zinc-900 px-4 py-3 text-sm text-white outline-none transition focus:border-green-600 disabled:opacity-60"
+                                  />
+                                </div>
+
+                                <div>
+                                  <label
+                                    htmlFor={`contact-postal-code-${profile.user_id}`}
+                                    className="mb-2 block text-xs uppercase tracking-[0.2em] text-zinc-500"
+                                  >
+                                    Kod pocztowy
+                                  </label>
+                                  <input
+                                    id={`contact-postal-code-${profile.user_id}`}
+                                    type="text"
+                                    maxLength={20}
+                                    value={contactDraft.postal_code}
+                                    disabled={isSaving}
+                                    onChange={(event) =>
+                                      updateContactDraft(
+                                        profile,
+                                        "postal_code",
+                                        event.target.value
+                                      )
+                                    }
+                                    className="min-h-11 w-full rounded-xl border border-zinc-700 bg-zinc-900 px-4 py-3 text-sm text-white outline-none transition focus:border-green-600 disabled:opacity-60"
+                                  />
+                                </div>
+
+                                <div>
+                                  <label
+                                    htmlFor={`contact-city-${profile.user_id}`}
+                                    className="mb-2 block text-xs uppercase tracking-[0.2em] text-zinc-500"
+                                  >
+                                    Miasto
+                                  </label>
+                                  <input
+                                    id={`contact-city-${profile.user_id}`}
+                                    type="text"
+                                    maxLength={120}
+                                    value={contactDraft.city}
+                                    disabled={isSaving}
+                                    onChange={(event) =>
+                                      updateContactDraft(
+                                        profile,
+                                        "city",
+                                        event.target.value
+                                      )
+                                    }
+                                    className="min-h-11 w-full rounded-xl border border-zinc-700 bg-zinc-900 px-4 py-3 text-sm text-white outline-none transition focus:border-green-600 disabled:opacity-60"
+                                  />
+                                </div>
+
+                                <div>
+                                  <label
+                                    htmlFor={`contact-street-${profile.user_id}`}
+                                    className="mb-2 block text-xs uppercase tracking-[0.2em] text-zinc-500"
+                                  >
+                                    Ulica
+                                  </label>
+                                  <input
+                                    id={`contact-street-${profile.user_id}`}
+                                    type="text"
+                                    maxLength={160}
+                                    value={contactDraft.street}
+                                    disabled={isSaving}
+                                    onChange={(event) =>
+                                      updateContactDraft(
+                                        profile,
+                                        "street",
+                                        event.target.value
+                                      )
+                                    }
+                                    className="min-h-11 w-full rounded-xl border border-zinc-700 bg-zinc-900 px-4 py-3 text-sm text-white outline-none transition focus:border-green-600 disabled:opacity-60"
+                                  />
+                                </div>
+
+                                <div>
+                                  <label
+                                    htmlFor={`contact-house-number-${profile.user_id}`}
+                                    className="mb-2 block text-xs uppercase tracking-[0.2em] text-zinc-500"
+                                  >
+                                    Numer domu
+                                  </label>
+                                  <input
+                                    id={`contact-house-number-${profile.user_id}`}
+                                    type="text"
+                                    maxLength={30}
+                                    value={contactDraft.house_number}
+                                    disabled={isSaving}
+                                    onChange={(event) =>
+                                      updateContactDraft(
+                                        profile,
+                                        "house_number",
+                                        event.target.value
+                                      )
+                                    }
+                                    className="min-h-11 w-full rounded-xl border border-zinc-700 bg-zinc-900 px-4 py-3 text-sm text-white outline-none transition focus:border-green-600 disabled:opacity-60"
+                                  />
+                                </div>
+
+                                <div>
+                                  <label
+                                    htmlFor={`contact-apartment-number-${profile.user_id}`}
+                                    className="mb-2 block text-xs uppercase tracking-[0.2em] text-zinc-500"
+                                  >
+                                    Numer mieszkania
+                                  </label>
+                                  <input
+                                    id={`contact-apartment-number-${profile.user_id}`}
+                                    type="text"
+                                    maxLength={30}
+                                    value={contactDraft.apartment_number}
+                                    disabled={isSaving}
+                                    onChange={(event) =>
+                                      updateContactDraft(
+                                        profile,
+                                        "apartment_number",
+                                        event.target.value
+                                      )
+                                    }
+                                    className="min-h-11 w-full rounded-xl border border-zinc-700 bg-zinc-900 px-4 py-3 text-sm text-white outline-none transition focus:border-green-600 disabled:opacity-60"
+                                  />
+                                </div>
+                              </div>
+
+                              <div className="mt-4 flex flex-col gap-2 sm:flex-row">
+                                <button
+                                  type="button"
+                                  disabled={isSaving}
+                                  onClick={() => saveContactDetails(profile)}
+                                  className="min-h-11 rounded-xl border border-green-700 bg-green-950 px-4 py-2 text-sm font-bold text-green-300 transition hover:bg-green-900 disabled:cursor-not-allowed disabled:opacity-60"
+                                >
+                                  {isSaving
+                                    ? "Zapisywanie..."
+                                    : "Zapisz dane kontaktowe"}
+                                </button>
+
+                                <button
+                                  type="button"
+                                  disabled={isSaving}
+                                  onClick={() => cancelContactEditing(profile)}
+                                  className="min-h-11 rounded-xl border border-zinc-700 px-4 py-2 text-sm font-semibold text-zinc-300 transition hover:border-zinc-500 hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
+                                >
+                                  Anuluj
+                                </button>
+                              </div>
+                            </div>
+                          )}
+                        </div>
 
                         <div className="mb-5 rounded-xl border border-green-900 bg-green-950/40 p-4 text-sm text-green-200">
                           <p className="font-semibold">
