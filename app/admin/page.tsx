@@ -103,7 +103,7 @@ const adminTiles: AdminTile[] = [
     title: "Użytkownicy",
     description: "Weryfikacja kont, role i notatki administratora.",
     href: "/admin/users",
-    roles: ["admin"],
+    roles: ["admin", "pracownik"],
   },
 ];
 
@@ -644,7 +644,7 @@ export default function AdminPage() {
                   title="Niezweryfikowani dziś"
                   value={unverifiedTodayReservations.length}
                   description="Klienci z dzisiejszą rezerwacją i niepełną weryfikacją."
-                  href={hasAccess(role, ["admin"]) ? "/admin/users" : "/admin/check-in"}
+                  href={hasAccess(role, ["admin", "pracownik"]) ? "/admin/users" : "/admin/check-in"}
                   tone={unverifiedTodayReservations.length > 0 ? "yellow" : "green"}
                   variant="alert"
                 />
