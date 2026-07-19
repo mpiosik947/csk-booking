@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { supabase } from "../../lib/supabase";
 import { PAYMENT_STATUS } from "../../lib/payment-status";
+import { getProfileDisplayName } from "../../lib/profile-display-name";
 import {
   RESERVATION_STATUS,
   isCancelledReservationStatus,
@@ -36,6 +37,8 @@ type LaneBlock = {
 type Profile = {
   user_id: string;
   email: string | null;
+  first_name: string | null;
+  last_name: string | null;
   full_name: string | null;
   phone: string | null;
   role: string | null;
@@ -296,15 +299,15 @@ export default function BookingForm({ lanes }: BookingFormProps) {
 
       const { data: profile, error: profileError } = await supabase
         .from("profiles")
-        .select("user_id,email,full_name,phone,role,verification_status")
+        .select(
+          "user_id,email,first_name,last_name,full_name,phone,role,verification_status"
+        )
         .eq("user_id", user.id)
         .single();
 
       if (profileError || !profile) {
         setVerificationStatus("pending");
-        setCustomerName(
-          String(user.user_metadata?.full_name ?? user.email ?? "")
-        );
+        setCustomerName(getProfileDisplayName({ email: user.email }, ""));
         setCustomerPhone(String(user.user_metadata?.phone ?? ""));
         setMessage(
           "Nie udało się pobrać profilu użytkownika. Skontaktuj się z obsługą CSK."
@@ -317,8 +320,15 @@ export default function BookingForm({ lanes }: BookingFormProps) {
 
       setVerificationStatus(typedProfile.verification_status ?? "pending");
       setCustomerName(
-        typedProfile.full_name ||
-          String(user.user_metadata?.full_name ?? user.email ?? "")
+        getProfileDisplayName(
+          {
+            first_name: typedProfile.first_name,
+            last_name: typedProfile.last_name,
+            full_name: typedProfile.full_name,
+            email: typedProfile.email || user.email,
+          },
+          ""
+        )
       );
       setCustomerEmail(typedProfile.email || user.email || "");
       setCustomerPhone(
