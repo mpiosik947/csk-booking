@@ -19,6 +19,8 @@ type Profile = {
   id: string;
   user_id: string;
   email: string | null;
+  first_name: string | null;
+  last_name: string | null;
   full_name: string | null;
   phone: string | null;
   role: UserRole | string | null;
@@ -82,6 +84,20 @@ type ContactRpcResult = {
   street: string | null;
   house_number: string | null;
   apartment_number: string | null;
+  updated_at: string | null;
+  changed_fields: string[];
+};
+
+type IdentityDraft = {
+  first_name: string;
+  last_name: string;
+};
+
+type IdentityRpcResult = {
+  user_id: string;
+  first_name: string;
+  last_name: string;
+  full_name: string;
   updated_at: string | null;
   changed_fields: string[];
 };
@@ -167,6 +183,29 @@ function valueOrMissing(value: string | null | undefined) {
   return value && value.trim() ? value : "Brak danych";
 }
 
+function hasStructuredIdentity(profile: Profile) {
+  return Boolean(profile.first_name?.trim() && profile.last_name?.trim());
+}
+
+function getProfileDisplayName(profile: {
+  first_name: string | null;
+  last_name: string | null;
+  full_name: string | null;
+  email: string | null;
+}) {
+  const structuredName = [profile.first_name, profile.last_name]
+    .map((value) => value?.trim() ?? "")
+    .filter(Boolean)
+    .join(" ");
+
+  return (
+    structuredName ||
+    profile.full_name?.trim() ||
+    profile.email?.trim() ||
+    "Nieznany użytkownik"
+  );
+}
+
 function yesNo(value: boolean | null) {
   return value ? "Tak" : "Nie";
 }
@@ -174,7 +213,7 @@ function yesNo(value: boolean | null) {
 function getMissingFields(profile: Profile) {
   const missing: string[] = [];
 
-  if (!profile.full_name) missing.push("imię i nazwisko");
+  if (!hasStructuredIdentity(profile)) missing.push("imię i nazwisko");
   if (!profile.phone) missing.push("telefon");
   if (!profile.postal_code) missing.push("kod pocztowy");
   if (!profile.city) missing.push("miasto");
@@ -186,7 +225,7 @@ function getMissingFields(profile: Profile) {
 
 function getCompletionPercent(profile: Profile) {
   const fields = [
-    profile.full_name,
+    hasStructuredIdentity(profile) ? "identity" : "",
     profile.phone,
     profile.postal_code,
     profile.city,
@@ -342,6 +381,24 @@ function isContactRpcResult(value: unknown): value is ContactRpcResult {
   );
 }
 
+function isIdentityRpcResult(value: unknown): value is IdentityRpcResult {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return false;
+  }
+
+  const result = value as Record<string, unknown>;
+
+  return (
+    typeof result.user_id === "string" &&
+    typeof result.first_name === "string" &&
+    typeof result.last_name === "string" &&
+    typeof result.full_name === "string" &&
+    isNullableString(result.updated_at) &&
+    Array.isArray(result.changed_fields) &&
+    result.changed_fields.every((field) => typeof field === "string")
+  );
+}
+
 function getContactDraft(profile: Profile): ContactDraft {
   return {
     phone: profile.phone ?? "",
@@ -350,6 +407,13 @@ function getContactDraft(profile: Profile): ContactDraft {
     street: profile.street ?? "",
     house_number: profile.house_number ?? "",
     apartment_number: profile.apartment_number ?? "",
+  };
+}
+
+function getIdentityDraft(profile: Profile): IdentityDraft {
+  return {
+    first_name: profile.first_name ?? "",
+    last_name: profile.last_name ?? "",
   };
 }
 
@@ -404,6 +468,12 @@ export default function AdminUsersPage() {
   const [editingContactUserId, setEditingContactUserId] = useState<
     string | null
   >(null);
+  const [identityDrafts, setIdentityDrafts] = useState<
+    Record<string, IdentityDraft>
+  >({});
+  const [editingIdentityUserId, setEditingIdentityUserId] = useState<
+    string | null
+  >(null);
 
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
@@ -426,7 +496,7 @@ export default function AdminUsersPage() {
 
   const { data: profile, error } = await supabase
     .from("profiles")
-    .select("role, full_name, email")
+    .select("role, first_name, last_name, full_name, email")
     .eq("user_id", user.id)
     .single();
 
@@ -437,9 +507,7 @@ export default function AdminUsersPage() {
   const loadedRole = (profile.role as UserRole) || "user";
 
   setCurrentUserRole(loadedRole);
-  setCurrentUserName(
-    profile.full_name || profile.email || "Nieznany użytkownik"
-  );
+  setCurrentUserName(getProfileDisplayName(profile));
 
   return loadedRole;
 }
@@ -464,6 +532,8 @@ export default function AdminUsersPage() {
         id,
         user_id,
         email,
+        first_name,
+        last_name,
         full_name,
         phone,
         role,
@@ -517,7 +587,9 @@ export default function AdminUsersPage() {
 
     return profiles.filter((profile) => {
       const email = profile.email?.toLowerCase() ?? "";
-      const name = profile.full_name?.toLowerCase() ?? "";
+      const firstName = profile.first_name?.toLowerCase() ?? "";
+      const lastName = profile.last_name?.toLowerCase() ?? "";
+      const fullName = profile.full_name?.toLowerCase() ?? "";
       const phone = profile.phone?.toLowerCase() ?? "";
       const role = profile.role?.toLowerCase() ?? "";
       const status = profile.verification_status?.toLowerCase() ?? "";
@@ -529,7 +601,9 @@ export default function AdminUsersPage() {
       const matchesSearch =
         !phrase ||
         email.includes(phrase) ||
-        name.includes(phrase) ||
+        firstName.includes(phrase) ||
+        lastName.includes(phrase) ||
+        fullName.includes(phrase) ||
         phone.includes(phrase) ||
         role.includes(phrase) ||
         status.includes(phrase) ||
@@ -612,8 +686,7 @@ export default function AdminUsersPage() {
       action: getAuditAction(changes),
       target_type: "profile",
       target_id: profile.user_id,
-      target_name:
-        profile.full_name || profile.email || profile.phone || "Nieznany profil",
+      target_name: getProfileDisplayName(profile),
       details: {
         before: {
           role: profile.role,
@@ -702,6 +775,145 @@ export default function AdminUsersPage() {
     }
 
     setMessage("Zapisano zmiany i dodano wpis audit log.");
+  }
+
+  function startIdentityEditing(profile: Profile) {
+    if (!isAdmin) {
+      setMessage("Brak uprawnień do edycji imienia i nazwiska.");
+      return;
+    }
+
+    setIdentityDrafts((currentDrafts) => ({
+      ...currentDrafts,
+      [profile.user_id]: getIdentityDraft(profile),
+    }));
+    setEditingIdentityUserId(profile.user_id);
+    setMessage("");
+  }
+
+  function updateIdentityDraft(
+    profile: Profile,
+    field: keyof IdentityDraft,
+    value: string
+  ) {
+    if (!isAdmin) {
+      return;
+    }
+
+    setIdentityDrafts((currentDrafts) => ({
+      ...currentDrafts,
+      [profile.user_id]: {
+        ...(currentDrafts[profile.user_id] ?? getIdentityDraft(profile)),
+        [field]: value,
+      },
+    }));
+  }
+
+  function cancelIdentityEditing(profile: Profile) {
+    if (!isAdmin) {
+      return;
+    }
+
+    setIdentityDrafts((currentDrafts) => ({
+      ...currentDrafts,
+      [profile.user_id]: getIdentityDraft(profile),
+    }));
+    setEditingIdentityUserId((currentUserId) =>
+      currentUserId === profile.user_id ? null : currentUserId
+    );
+    setMessage("");
+  }
+
+  async function saveIdentity(profile: Profile) {
+    if (!isAdmin) {
+      setMessage("Brak uprawnień do edycji imienia i nazwiska.");
+      return;
+    }
+
+    const draft = identityDrafts[profile.user_id] ?? getIdentityDraft(profile);
+    const firstName = draft.first_name.trim();
+    const lastName = draft.last_name.trim();
+
+    if (!firstName) {
+      setMessage("Imię jest wymagane.");
+      return;
+    }
+
+    if (!lastName) {
+      setMessage("Nazwisko jest wymagane.");
+      return;
+    }
+
+    if (firstName.length > 120) {
+      setMessage("Imię może mieć maksymalnie 120 znaków.");
+      return;
+    }
+
+    if (lastName.length > 160) {
+      setMessage("Nazwisko może mieć maksymalnie 160 znaków.");
+      return;
+    }
+
+    setSavingUserId(profile.user_id);
+    setMessage("");
+
+    try {
+      const { data, error } = await supabase.rpc("update_profile_identity", {
+        p_target_user_id: profile.user_id,
+        p_first_name: firstName,
+        p_last_name: lastName,
+      });
+
+      if (error) {
+        console.error("Profile identity RPC failed:", error);
+        setMessage(
+          "Nie udało się zaktualizować imienia i nazwiska. Spróbuj ponownie."
+        );
+        return;
+      }
+
+      if (!isIdentityRpcResult(data) || data.user_id !== profile.user_id) {
+        console.error("Profile identity RPC returned invalid data:", data);
+        setMessage(
+          "Nie udało się zaktualizować imienia i nazwiska. Spróbuj ponownie."
+        );
+        return;
+      }
+
+      setProfiles((currentProfiles) =>
+        currentProfiles.map((item) =>
+          item.user_id === data.user_id
+            ? {
+                ...item,
+                first_name: data.first_name,
+                last_name: data.last_name,
+                full_name: data.full_name,
+                updated_at: data.updated_at,
+              }
+            : item
+        )
+      );
+      setIdentityDrafts((currentDrafts) => ({
+        ...currentDrafts,
+        [data.user_id]: {
+          first_name: data.first_name,
+          last_name: data.last_name,
+        },
+      }));
+      setEditingIdentityUserId(null);
+      setMessage(
+        data.changed_fields.length === 0
+          ? "Imię i nazwisko są aktualne."
+          : "Imię i nazwisko zostały zaktualizowane."
+      );
+    } catch (error) {
+      console.error("Profile identity RPC failed:", error);
+      setMessage(
+        "Nie udało się zaktualizować imienia i nazwiska. Spróbuj ponownie."
+      );
+    } finally {
+      setSavingUserId(null);
+    }
   }
 
   function getContactRestrictionReason(profile: Profile) {
@@ -1141,6 +1353,10 @@ export default function AdminUsersPage() {
                   editingContactUserId === profile.user_id;
                 const contactDraft =
                   contactDrafts[profile.user_id] ?? getContactDraft(profile);
+                const isEditingIdentity =
+                  editingIdentityUserId === profile.user_id;
+                const identityDraft =
+                  identityDrafts[profile.user_id] ?? getIdentityDraft(profile);
                 const isExpanded = expandedUserId === profile.user_id;
                 const missingFields = getMissingFields(profile);
                 const completion = getCompletionPercent(profile);
@@ -1219,7 +1435,7 @@ export default function AdminUsersPage() {
                         </p>
 
                         <h2 className="mt-2 text-lg font-bold">
-                          {profile.full_name || "Brak imienia i nazwiska"}
+                          {getProfileDisplayName(profile)}
                         </h2>
 
                         <p className="mt-1 text-sm text-zinc-400">
@@ -1533,6 +1749,109 @@ export default function AdminUsersPage() {
                           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                             <div>
                               <h4 className="font-bold text-zinc-100">
+                                Dane tożsamości
+                              </h4>
+                              <p className="mt-1 text-sm text-zinc-400">
+                                Imię: {valueOrMissing(profile.first_name)} · Nazwisko:{" "}
+                                {valueOrMissing(profile.last_name)}
+                              </p>
+                            </div>
+
+                            {isAdmin && !isEditingIdentity && (
+                              <button
+                                type="button"
+                                disabled={isSaving}
+                                onClick={() => startIdentityEditing(profile)}
+                                className="min-h-11 rounded-xl border border-zinc-700 px-4 py-2 text-sm font-semibold text-zinc-300 transition hover:border-green-600 hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
+                              >
+                                Edytuj imię i nazwisko
+                              </button>
+                            )}
+                          </div>
+
+                          {isEditingIdentity && isAdmin && (
+                            <div className="mt-4">
+                              <div className="grid gap-4 sm:grid-cols-2">
+                                <div>
+                                  <label
+                                    htmlFor={`identity-first-name-${profile.user_id}`}
+                                    className="mb-2 block text-xs uppercase tracking-[0.2em] text-zinc-500"
+                                  >
+                                    Imię
+                                  </label>
+                                  <input
+                                    id={`identity-first-name-${profile.user_id}`}
+                                    type="text"
+                                    autoComplete="off"
+                                    maxLength={120}
+                                    value={identityDraft.first_name}
+                                    disabled={isSaving}
+                                    onChange={(event) =>
+                                      updateIdentityDraft(
+                                        profile,
+                                        "first_name",
+                                        event.target.value
+                                      )
+                                    }
+                                    className="min-h-11 w-full rounded-xl border border-zinc-700 bg-zinc-900 px-4 py-3 text-sm text-white outline-none transition focus:border-green-600 disabled:opacity-60"
+                                  />
+                                </div>
+
+                                <div>
+                                  <label
+                                    htmlFor={`identity-last-name-${profile.user_id}`}
+                                    className="mb-2 block text-xs uppercase tracking-[0.2em] text-zinc-500"
+                                  >
+                                    Nazwisko
+                                  </label>
+                                  <input
+                                    id={`identity-last-name-${profile.user_id}`}
+                                    type="text"
+                                    autoComplete="off"
+                                    maxLength={160}
+                                    value={identityDraft.last_name}
+                                    disabled={isSaving}
+                                    onChange={(event) =>
+                                      updateIdentityDraft(
+                                        profile,
+                                        "last_name",
+                                        event.target.value
+                                      )
+                                    }
+                                    className="min-h-11 w-full rounded-xl border border-zinc-700 bg-zinc-900 px-4 py-3 text-sm text-white outline-none transition focus:border-green-600 disabled:opacity-60"
+                                  />
+                                </div>
+                              </div>
+
+                              <div className="mt-4 flex flex-col gap-2 sm:flex-row">
+                                <button
+                                  type="button"
+                                  disabled={isSaving}
+                                  onClick={() => saveIdentity(profile)}
+                                  className="min-h-11 rounded-xl border border-green-700 bg-green-950 px-4 py-2 text-sm font-bold text-green-300 transition hover:bg-green-900 disabled:cursor-not-allowed disabled:opacity-60"
+                                >
+                                  {isSaving
+                                    ? "Zapisywanie..."
+                                    : "Zapisz imię i nazwisko"}
+                                </button>
+
+                                <button
+                                  type="button"
+                                  disabled={isSaving}
+                                  onClick={() => cancelIdentityEditing(profile)}
+                                  className="min-h-11 rounded-xl border border-zinc-700 px-4 py-2 text-sm font-semibold text-zinc-300 transition hover:border-zinc-500 hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
+                                >
+                                  Anuluj
+                                </button>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="mb-5 rounded-xl border border-zinc-800 bg-zinc-950 p-4">
+                          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                            <div>
+                              <h4 className="font-bold text-zinc-100">
                                 Dane kontaktowe
                               </h4>
                               <p className="mt-1 text-sm text-zinc-400">
@@ -1751,8 +2070,15 @@ export default function AdminUsersPage() {
                             </p>
 
                             <InfoLine
-                              label="Imię i nazwisko"
-                              value={profile.full_name}
+                              label="Imię"
+                              value={profile.first_name}
+                            />
+
+                            <InfoLine label="Nazwisko" value={profile.last_name} />
+
+                            <InfoLine
+                              label="Nazwa wyświetlana"
+                              value={getProfileDisplayName(profile)}
                             />
 
                             <InfoLine label="E-mail" value={profile.email} />
