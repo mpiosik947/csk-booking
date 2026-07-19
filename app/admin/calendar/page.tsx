@@ -1,10 +1,9 @@
 "use client";
 
-import { Suspense, useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { supabase } from "../../../lib/supabase";
 import {
-  cancelReservation as cancelReservationAction,
   completeReservation as completeReservationAction,
   markNoShow as markNoShowAction,
   markPaid as markPaidAction,
@@ -13,6 +12,7 @@ import {
   RESERVATION_STATUS,
   getReservationStatusBadgeClass,
   getReservationStatusLabel,
+  isCancelledReservationStatus,
 } from "../../../lib/reservation-status";
 import {
   PAYMENT_STATUSES,
@@ -92,6 +92,11 @@ type VerificationRpcResult = {
   unverified_at: string | null;
   unverified_by: string | null;
   updated_at: string | null;
+};
+
+type CancelReservationRpcResult = {
+  changed: boolean;
+  new_status?: string | null;
 };
 
 const VERIFIED_NOTE =
@@ -255,6 +260,49 @@ function isVerificationRpcResult(value: unknown): value is VerificationRpcResult
   );
 }
 
+function parseCancelReservationRpcResult(
+  data: unknown
+): CancelReservationRpcResult | null {
+  if (!data || typeof data !== "object" || Array.isArray(data)) {
+    return null;
+  }
+
+  const result = data as Record<string, unknown>;
+
+  if (typeof result.changed !== "boolean") {
+    return null;
+  }
+
+  return {
+    changed: result.changed,
+    new_status:
+      typeof result.new_status === "string" || result.new_status === null
+        ? result.new_status
+        : undefined,
+  };
+}
+
+function getCancellationErrorMessage(error: {
+  code?: string | null;
+  message?: string | null;
+}) {
+  const code = error.code?.trim().toUpperCase() ?? "";
+
+  if (code === "42501") {
+    return "Nie masz uprawnień do anulowania tej rezerwacji.";
+  }
+
+  if (code === "P0002") {
+    return "Nie znaleziono rezerwacji.";
+  }
+
+  if (code === "55000") {
+    return "Rezerwacji w tym statusie nie można anulować.";
+  }
+
+  return "Nie udało się anulować rezerwacji. Spróbuj ponownie.";
+}
+
 function BooleanLine({
   label,
   value,
@@ -299,10 +347,15 @@ function CheckInContent() {
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
   const [savingId, setSavingId] = useState<string | null>(null);
+  const cancellationInProgressIdsRef = useRef<Set<string>>(new Set());
+  const [cancellingReservationIds, setCancellingReservationIds] = useState<
+    Set<string>
+  >(() => new Set());
 
   const isAdmin = currentUserRole === "admin";
   const isEmployee = currentUserRole === "pracownik";
   const canVerifyProfiles = isAdmin || isEmployee;
+  const canCancelReservations = isAdmin || isEmployee;
 
   async function loadCurrentUser() {
     const {
@@ -992,64 +1045,119 @@ function CheckInContent() {
     setMessage("Oznaczono no-show.");
   }
 
-  async function cancelByAdmin(reservation: Reservation) {
+  async function handleCancelReservation(reservation: Reservation) {
+    if (!canCancelReservations) {
+      setMessage("Nie masz uprawnień do anulowania tej rezerwacji.");
+      return;
+    }
+
+    if (cancellationInProgressIdsRef.current.has(reservation.id)) {
+      return;
+    }
+
+    const confirmed = window.confirm(
+      "Czy na pewno chcesz anulować tę rezerwację?"
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    cancellationInProgressIdsRef.current.add(reservation.id);
+    setCancellingReservationIds((current) => {
+      const next = new Set(current);
+      next.add(reservation.id);
+      return next;
+    });
     setSavingId(reservation.id);
     setMessage("");
 
-    const result = await cancelReservationAction(supabase, {
-      reservationId: reservation.id,
-    });
+    try {
+      const { data, error } = await supabase.rpc("cancel_reservation", {
+        p_reservation_id: reservation.id,
+      });
 
-    if (result.error) {
-      setSavingId(null);
-      setMessage(`Błąd zapisu: ${result.error}`);
-      return;
-    }
+      if (error) {
+        console.error("Calendar reservation cancellation RPC failed", error);
+        setMessage(getCancellationErrorMessage(error));
+        return;
+      }
 
-    const updatedReservation: Reservation = {
-      ...reservation,
-      reservation_status:
-        result.data?.reservation_status ?? "cancelled_by_admin",
-    };
+      const result = parseCancelReservationRpcResult(data);
 
-    setReservations((current) =>
-      current.map((item) =>
-        item.id === reservation.id ? updatedReservation : item
-      )
-    );
+      if (!result) {
+        console.error("Invalid cancel_reservation RPC response", data);
+        setMessage("Nie udało się anulować rezerwacji. Spróbuj ponownie.");
+        return;
+      }
 
-    if (selectedReservation?.id === reservation.id) {
-      setSelectedReservation(updatedReservation);
-    }
+      if (token) {
+        await loadReservationByToken(token);
+      } else {
+        await loadReservations();
+      }
 
-    const profile = reservation.user_id
-      ? profilesByUserId[reservation.user_id]
-      : null;
+      if (!result.changed) {
+        setMessage("Rezerwacja była już anulowana.");
+        return;
+      }
 
-    const auditError = await createAuditLog({
-      action: "RESERVATION_CANCELLED_BY_ADMIN",
-      reservation,
-      profile,
-      details: {
-        before: {
-          reservation_status: reservation.reservation_status,
-        },
-        after: {
-          reservation_status: updatedReservation.reservation_status,
-        },
-      },
-    });
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
 
-    setSavingId(null);
+      if (!session?.access_token) {
+        setMessage(
+          "Rezerwacja została anulowana, ale nie udało się wysłać wiadomości e-mail."
+        );
+        return;
+      }
 
-    if (auditError) {
+      try {
+        const emailResponse = await fetch(
+          "/api/send-reservation-cancellation",
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${session.access_token}`,
+            },
+            body: JSON.stringify({ reservationId: reservation.id }),
+          }
+        );
+
+        if (!emailResponse.ok) {
+          setMessage(
+            "Rezerwacja została anulowana, ale nie udało się wysłać wiadomości e-mail."
+          );
+          return;
+        }
+      } catch (emailError) {
+        console.error("Reservation cancellation email failed", emailError);
+        setMessage(
+          "Rezerwacja została anulowana, ale nie udało się wysłać wiadomości e-mail."
+        );
+        return;
+      }
+
       setMessage(
-        `Anulowano rezerwację, ale nie udało się dodać wpisu audit log: ${auditError}`
+        "Rezerwacja została anulowana. Email anulowania został wysłany."
       );
-      return;
+    } catch (unexpectedError) {
+      console.error(
+        "Unexpected calendar reservation cancellation error",
+        unexpectedError
+      );
+      setMessage("Nie udało się anulować rezerwacji. Spróbuj ponownie.");
+    } finally {
+      cancellationInProgressIdsRef.current.delete(reservation.id);
+      setCancellingReservationIds((current) => {
+        const next = new Set(current);
+        next.delete(reservation.id);
+        return next;
+      });
+      setSavingId(null);
     }
-
-    setMessage("Rezerwacja anulowana.");
   }
 
   async function markPaymentAsPaid(reservation: Reservation) {
@@ -1195,6 +1303,7 @@ function CheckInContent() {
         <div className="grid gap-4">
           {mainList.map((reservation) => {
             const isSaving = savingId === reservation.id;
+            const isCancelling = cancellingReservationIds.has(reservation.id);
             const profile = reservation.user_id
               ? profilesByUserId[reservation.user_id]
               : null;
@@ -1389,23 +1498,32 @@ function CheckInContent() {
 
                       <select
                         value={reservation.reservation_status || "confirmed"}
-                        disabled={isSaving}
-                        onChange={(event) =>
+                        disabled={isSaving || isCancelling}
+                        onChange={(event) => {
+                          const nextStatus = event.target.value;
+
+                          if (isCancelledReservationStatus(nextStatus)) {
+                            handleCancelReservation(reservation);
+                            return;
+                          }
+
                           updateReservation(
                             reservation,
                             {
-                              reservation_status: event.target.value,
+                              reservation_status: nextStatus,
                             },
                             "RESERVATION_STATUS_CHANGED"
-                          )
-                        }
+                          );
+                        }}
                         className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-sm text-white outline-none focus:border-green-600 disabled:opacity-60"
                       >
                         {[
                           RESERVATION_STATUS.CONFIRMED,
                           RESERVATION_STATUS.COMPLETED,
                           RESERVATION_STATUS.NO_SHOW,
-                          RESERVATION_STATUS.CANCELLED_BY_ADMIN,
+                          ...(canCancelReservations
+                            ? [RESERVATION_STATUS.CANCELLED_BY_ADMIN]
+                            : []),
                         ].map((status) => (
                           <option key={status} value={status}>
                             {getReservationStatusLabel(status)}
@@ -1468,14 +1586,16 @@ function CheckInContent() {
                       No-show
                     </button>
 
-                    <button
-                      type="button"
-                      disabled={isSaving}
-                      onClick={() => cancelByAdmin(reservation)}
-                      className="rounded-xl border border-red-700 px-4 py-3 text-sm font-bold text-red-300 transition hover:bg-red-950 disabled:cursor-not-allowed disabled:opacity-60"
-                    >
-                      Anuluj
-                    </button>
+                    {canCancelReservations && (
+                      <button
+                        type="button"
+                        disabled={isSaving || isCancelling}
+                        onClick={() => handleCancelReservation(reservation)}
+                        className="rounded-xl border border-red-700 px-4 py-3 text-sm font-bold text-red-300 transition hover:bg-red-950 disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        {isCancelling ? "Anulowanie…" : "Anuluj"}
+                      </button>
+                    )}
 
                     {isSaving && (
                       <p className="text-xs font-semibold text-yellow-400">
