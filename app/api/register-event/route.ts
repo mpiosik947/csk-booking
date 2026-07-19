@@ -1,12 +1,19 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { getProfileDisplayName } from "../../../lib/profile-display-name";
 
 type RegisterEventPayload = {
   eventId?: string;
   asReserve?: boolean;
-  customerName?: string;
   customerEmail?: string;
   customerPhone?: string;
+};
+
+type ProfileRecord = {
+  first_name: string | null;
+  last_name: string | null;
+  full_name: string | null;
+  email: string | null;
 };
 
 type EventRecord = {
@@ -62,7 +69,6 @@ export async function POST(request: Request) {
     const {
       eventId,
       asReserve = false,
-      customerName,
       customerEmail,
       customerPhone,
     } = body;
@@ -77,6 +83,48 @@ export async function POST(request: Request) {
     if (!customerPhone) {
       return NextResponse.json(
         { error: "Brakuje numeru telefonu w Twoim koncie." },
+        { status: 400 }
+      );
+    }
+
+    const { data: profileData, error: profileError } = await supabase
+      .from("profiles")
+      .select("first_name, last_name, full_name, email")
+      .eq("user_id", user.id)
+      .maybeSingle();
+
+    if (profileError) {
+      console.error("Event registration profile query failed:", profileError);
+      return NextResponse.json(
+        { error: "Nie udało się pobrać profilu użytkownika." },
+        { status: 500 }
+      );
+    }
+
+    if (!profileData) {
+      return NextResponse.json(
+        { error: "Nie udało się pobrać profilu użytkownika." },
+        { status: 400 }
+      );
+    }
+
+    const profile = profileData as ProfileRecord;
+    const customerName = getProfileDisplayName(
+      {
+        first_name: profile.first_name,
+        last_name: profile.last_name,
+        full_name: profile.full_name,
+        email: profile.email || user.email,
+      },
+      ""
+    );
+
+    if (!customerName) {
+      return NextResponse.json(
+        {
+          error:
+            "Uzupełnij dane profilu przed zapisaniem się na szkolenie.",
+        },
         { status: 400 }
       );
     }
@@ -184,6 +232,7 @@ export async function POST(request: Request) {
       ok: true,
       registrationId: insertedRegistration.id,
       registrationStatus,
+      customerName,
     });
   } catch {
     return NextResponse.json(

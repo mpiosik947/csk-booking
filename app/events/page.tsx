@@ -45,7 +45,6 @@ export default function EventsPage() {
   } | null>(null);
 
   const [userId, setUserId] = useState("");
-  const [customerName, setCustomerName] = useState("");
   const [customerEmail, setCustomerEmail] = useState("");
   const [customerPhone, setCustomerPhone] = useState("");
 
@@ -75,7 +74,6 @@ export default function EventsPage() {
         const metadata = user.user_metadata ?? {};
 
         setUserId(user.id);
-        setCustomerName(metadata.full_name ?? metadata.name ?? "");
         setCustomerEmail(user.email ?? "");
         setCustomerPhone(
           metadata.phone ??
@@ -209,7 +207,6 @@ export default function EventsPage() {
       body: JSON.stringify({
         eventId: eventItem.id,
         asReserve,
-        customerName,
         customerEmail,
         customerPhone,
       }),
@@ -227,6 +224,7 @@ export default function EventsPage() {
     }
 
     const registrationStatus = registrationResult.registrationStatus as string;
+    const registeredCustomerName = registrationResult.customerName as string;
 
         fetch("/api/send-event-registration-confirmation", {
       method: "POST",
@@ -235,7 +233,7 @@ export default function EventsPage() {
       },
       body: JSON.stringify({
         customerEmail,
-        customerName,
+        customerName: registeredCustomerName,
         eventTitle: eventItem.title,
         eventDate: eventItem.event_date,
         startTime: eventItem.start_time,
