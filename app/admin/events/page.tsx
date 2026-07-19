@@ -2,7 +2,12 @@
 
 import { useEffect, useState } from "react";
 import { supabase } from "../../../lib/supabase";
-import { handleFreedEventPlace } from "../../../lib/event-registration-actions";
+
+type HandleFreedEventPlaceResult = {
+  reserveFound: boolean;
+  emailsSent: number;
+  error: string;
+};
 
 type Event = {
   id: string;
@@ -350,6 +355,72 @@ export default function AdminEventsPage() {
     }
 
     loadEvents();
+  }
+
+  async function handleFreedEventPlace(
+    eventId: string
+  ): Promise<HandleFreedEventPlaceResult> {
+    if (!canManageEvents) {
+      const error = "Brak uprawnień do zarządzania listą rezerwową.";
+      setMessage(error);
+      return {
+        reserveFound: false,
+        emailsSent: 0,
+        error,
+      };
+    }
+
+    const {
+      data: { session },
+      error: sessionError,
+    } = await supabase.auth.getSession();
+
+    if (sessionError || !session?.access_token) {
+      const error = "Brak aktywnej sesji. Zaloguj się ponownie.";
+      setMessage(error);
+      return {
+        reserveFound: false,
+        emailsSent: 0,
+        error,
+      };
+    }
+
+    try {
+      const response = await fetch("/api/send-event-reserve-promotion", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({
+          eventId,
+        }),
+      });
+
+      const data = await response.json().catch(() => null);
+
+      if (!response.ok) {
+        return {
+          reserveFound: false,
+          emailsSent: 0,
+          error:
+            data?.error ??
+            "Nie udało się wysłać powiadomień do listy rezerwowej.",
+        };
+      }
+
+      return {
+        reserveFound: Boolean(data?.reserveFound),
+        emailsSent: Number(data?.emailsSent ?? 0),
+        error: "",
+      };
+    } catch {
+      return {
+        reserveFound: false,
+        emailsSent: 0,
+        error: "Wystąpił błąd podczas obsługi listy rezerwowej.",
+      };
+    }
   }
 
   async function updateRegistrationStatus(
