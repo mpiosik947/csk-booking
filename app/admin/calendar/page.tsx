@@ -3,11 +3,7 @@
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { supabase } from "../../../lib/supabase";
-import {
-  completeReservation as completeReservationAction,
-  markNoShow as markNoShowAction,
-  markPaid as markPaidAction,
-} from "../../../lib/reservation-actions";
+import { markPaid as markPaidAction } from "../../../lib/reservation-actions";
 import {
   RESERVATION_STATUS,
   getReservationStatusBadgeClass,
@@ -97,6 +93,14 @@ type VerificationRpcResult = {
 type CancelReservationRpcResult = {
   changed: boolean;
   new_status?: string | null;
+};
+
+type AttendanceAction = "complete" | "no_show";
+
+type AttendanceRpcResult = {
+  reservation_id: string;
+  changed: boolean;
+  action: AttendanceAction;
 };
 
 const VERIFIED_NOTE =
@@ -303,6 +307,53 @@ function getCancellationErrorMessage(error: {
   return "Nie udało się anulować rezerwacji. Spróbuj ponownie.";
 }
 
+function parseAttendanceRpcResult(data: unknown): AttendanceRpcResult | null {
+  if (!data || typeof data !== "object" || Array.isArray(data)) {
+    return null;
+  }
+
+  const result = data as Record<string, unknown>;
+
+  if (
+    typeof result.reservation_id !== "string" ||
+    typeof result.changed !== "boolean" ||
+    (result.action !== "complete" && result.action !== "no_show")
+  ) {
+    return null;
+  }
+
+  return {
+    reservation_id: result.reservation_id,
+    changed: result.changed,
+    action: result.action,
+  };
+}
+
+function getAttendanceErrorMessage(error: {
+  code?: string | null;
+  message?: string | null;
+}) {
+  const code = error.code?.trim().toUpperCase() ?? "";
+
+  if (code === "42501") {
+    return "Nie masz uprawnień do wykonania tej operacji.";
+  }
+
+  if (code === "22023") {
+    return "Nieprawidłowa operacja rezerwacji.";
+  }
+
+  if (code === "P0002") {
+    return "Nie znaleziono rezerwacji.";
+  }
+
+  if (code === "55000") {
+    return "Rezerwacji w tym statusie nie można zmienić.";
+  }
+
+  return "Nie udało się zaktualizować rezerwacji. Spróbuj ponownie.";
+}
+
 function BooleanLine({
   label,
   value,
@@ -347,6 +398,7 @@ function CheckInContent() {
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
   const [savingId, setSavingId] = useState<string | null>(null);
+  const attendanceInProgressIdsRef = useRef<Set<string>>(new Set());
   const cancellationInProgressIdsRef = useRef<Set<string>>(new Set());
   const [cancellingReservationIds, setCancellingReservationIds] = useState<
     Set<string>
@@ -622,6 +674,117 @@ function CheckInContent() {
     });
   }, [reservations, search, profilesByUserId]);
 
+  async function refreshReservationAfterAttendance(reservationId: string) {
+    const { data, error } = await supabase
+      .from("reservations")
+      .select(
+        `
+        id,
+        check_in_token,
+        user_id,
+        customer_name,
+        customer_email,
+        customer_phone,
+        reservation_date,
+        start_time,
+        end_time,
+        reservation_status,
+        attendance_status,
+        payment_status,
+        checked_in_at,
+        price,
+        shooting_lanes (
+          name
+        )
+      `
+      )
+      .eq("id", reservationId)
+      .single();
+
+    if (error) {
+      console.error("Refreshing reservation after attendance RPC failed:", error);
+      return false;
+    }
+
+    const refreshedReservation = data as unknown as Reservation;
+
+    setReservations((current) =>
+      current.map((item) =>
+        item.id === reservationId ? refreshedReservation : item
+      )
+    );
+    setSelectedReservation((current) =>
+      current?.id === reservationId ? refreshedReservation : current
+    );
+
+    return true;
+  }
+
+  async function runAttendanceAction(
+    reservationId: string,
+    action: AttendanceAction,
+    successMessage: string
+  ) {
+    if (attendanceInProgressIdsRef.current.has(reservationId)) {
+      return false;
+    }
+
+    attendanceInProgressIdsRef.current.add(reservationId);
+    setSavingId(reservationId);
+    setMessage("");
+
+    try {
+      const { data, error } = await supabase.rpc(
+        "update_reservation_attendance",
+        {
+          p_reservation_id: reservationId,
+          p_action: action,
+        }
+      );
+
+      if (error) {
+        console.error("Reservation attendance RPC failed:", error);
+        setMessage(getAttendanceErrorMessage(error));
+        return false;
+      }
+
+      const result = parseAttendanceRpcResult(data);
+
+      if (
+        !result ||
+        result.reservation_id !== reservationId ||
+        result.action !== action
+      ) {
+        console.error("Reservation attendance RPC returned invalid data:", data);
+        setMessage(
+          "Nie udało się zaktualizować rezerwacji. Spróbuj ponownie."
+        );
+        return false;
+      }
+
+      const refreshed = await refreshReservationAfterAttendance(reservationId);
+
+      if (!refreshed) {
+        setMessage(
+          "Zapisano zmianę, ale nie udało się odświeżyć danych. Odśwież widok."
+        );
+        return false;
+      }
+
+      setMessage(successMessage);
+      return true;
+    } catch (error) {
+      console.error("Reservation attendance RPC failed:", error);
+      setMessage(
+        "Nie udało się zaktualizować rezerwacji. Spróbuj ponownie."
+      );
+      return false;
+    } finally {
+      attendanceInProgressIdsRef.current.delete(reservationId);
+      setSavingId((current) => (current === reservationId ? null : current));
+    }
+  }
+
   async function updateReservation(
     reservation: Reservation,
     changes: Partial<
@@ -694,68 +857,11 @@ function CheckInContent() {
   }
 
   async function markCompleted(reservation: Reservation) {
-    setSavingId(reservation.id);
-    setMessage("");
-
-    const result = await completeReservationAction(supabase, {
-      reservationId: reservation.id,
-    });
-
-    if (result.error) {
-      setSavingId(null);
-      setMessage(`Błąd zapisu: ${result.error}`);
-      return;
-    }
-
-    const updatedReservation: Reservation = {
-      ...reservation,
-      attendance_status: result.data?.attendance_status ?? "present",
-      reservation_status: result.data?.reservation_status ?? "completed",
-      checked_in_at: result.data?.checked_in_at ?? new Date().toISOString(),
-    };
-
-    setReservations((current) =>
-      current.map((item) =>
-        item.id === reservation.id ? updatedReservation : item
-      )
+    await runAttendanceAction(
+      reservation.id,
+      "complete",
+      "Wizyta zakończona."
     );
-
-    if (selectedReservation?.id === reservation.id) {
-      setSelectedReservation(updatedReservation);
-    }
-
-    const profile = reservation.user_id
-      ? profilesByUserId[reservation.user_id]
-      : null;
-
-    const auditError = await createAuditLog({
-      action: "CHECK_IN_COMPLETED",
-      reservation,
-      profile,
-      details: {
-        before: {
-          reservation_status: reservation.reservation_status,
-          attendance_status: reservation.attendance_status,
-          checked_in_at: reservation.checked_in_at,
-        },
-        after: {
-          reservation_status: updatedReservation.reservation_status,
-          attendance_status: updatedReservation.attendance_status,
-          checked_in_at: updatedReservation.checked_in_at,
-        },
-      },
-    });
-
-    setSavingId(null);
-
-    if (auditError) {
-      setMessage(
-        `Wizyta zakończona, ale nie udało się dodać wpisu audit log: ${auditError}`
-      );
-      return;
-    }
-
-    setMessage("Wizyta zakończona.");
   }
 
   async function runVerificationAction(
@@ -879,83 +985,11 @@ function CheckInContent() {
 
     if (!verificationResult) return;
 
-    setSavingId(reservation.id);
-    setMessage("");
-
-    try {
-      const reservationResult = await completeReservationAction(supabase, {
-        reservationId: reservation.id,
-      });
-
-      if (reservationResult.error) {
-        console.error(
-          "Completing reservation after profile verification failed:",
-          reservationResult.error
-        );
-        setMessage(
-          "Konto zostało zweryfikowane, ale nie udało się zakończyć wizyty. Spróbuj ponownie wykonać check-in."
-        );
-        return;
-      }
-
-      const now = new Date().toISOString();
-      const updatedReservation: Reservation = {
-        ...reservation,
-        attendance_status:
-          reservationResult.data?.attendance_status ?? "present",
-        reservation_status:
-          reservationResult.data?.reservation_status ??
-          RESERVATION_STATUS.COMPLETED,
-        checked_in_at: reservationResult.data?.checked_in_at ?? now,
-      };
-
-      setReservations((current) =>
-        current.map((item) =>
-          item.id === reservation.id ? updatedReservation : item
-        )
-      );
-
-      if (selectedReservation?.id === reservation.id) {
-        setSelectedReservation(updatedReservation);
-      }
-
-      const auditError = await createAuditLog({
-        action: "CHECK_IN_COMPLETED",
-        reservation,
-        profile,
-        details: {
-          before: {
-            reservation_status: reservation.reservation_status,
-            attendance_status: reservation.attendance_status,
-            checked_in_at: reservation.checked_in_at,
-          },
-          after: {
-            reservation_status: updatedReservation.reservation_status,
-            attendance_status: updatedReservation.attendance_status,
-            checked_in_at: updatedReservation.checked_in_at,
-          },
-        },
-      });
-
-      if (auditError) {
-        setMessage(
-          `Konto i uprawnienia zweryfikowane, wizyta rozpoczęta, ale nie udało się dodać wpisu audit log: ${auditError}`
-        );
-        return;
-      }
-
-      setMessage("Konto i uprawnienia zweryfikowane. Wizyta rozpoczęta.");
-    } catch (error) {
-      console.error(
-        "Completing reservation after profile verification failed:",
-        error
-      );
-      setMessage(
-        "Konto zostało zweryfikowane, ale nie udało się zakończyć wizyty. Spróbuj ponownie wykonać check-in."
-      );
-    } finally {
-      setSavingId(null);
-    }
+    await runAttendanceAction(
+      reservation.id,
+      "complete",
+      "Konto i uprawnienia zweryfikowane. Wizyta rozpoczęta."
+    );
   }
 
   async function markVerificationIncomplete(reservation: Reservation) {
@@ -984,65 +1018,11 @@ function CheckInContent() {
   }
 
   async function markNoShow(reservation: Reservation) {
-    setSavingId(reservation.id);
-    setMessage("");
-
-    const result = await markNoShowAction(supabase, {
-      reservationId: reservation.id,
-    });
-
-    if (result.error) {
-      setSavingId(null);
-      setMessage(`Błąd zapisu: ${result.error}`);
-      return;
-    }
-
-    const updatedReservation: Reservation = {
-      ...reservation,
-      attendance_status: result.data?.attendance_status ?? "no_show",
-      reservation_status: result.data?.reservation_status ?? "no_show",
-    };
-
-    setReservations((current) =>
-      current.map((item) =>
-        item.id === reservation.id ? updatedReservation : item
-      )
+    await runAttendanceAction(
+      reservation.id,
+      "no_show",
+      "Oznaczono no-show."
     );
-
-    if (selectedReservation?.id === reservation.id) {
-      setSelectedReservation(updatedReservation);
-    }
-
-    const profile = reservation.user_id
-      ? profilesByUserId[reservation.user_id]
-      : null;
-
-    const auditError = await createAuditLog({
-      action: "RESERVATION_NO_SHOW",
-      reservation,
-      profile,
-      details: {
-        before: {
-          reservation_status: reservation.reservation_status,
-          attendance_status: reservation.attendance_status,
-        },
-        after: {
-          reservation_status: updatedReservation.reservation_status,
-          attendance_status: updatedReservation.attendance_status,
-        },
-      },
-    });
-
-    setSavingId(null);
-
-    if (auditError) {
-      setMessage(
-        `Oznaczono no-show, ale nie udało się dodać wpisu audit log: ${auditError}`
-      );
-      return;
-    }
-
-    setMessage("Oznaczono no-show.");
   }
 
   async function handleCancelReservation(reservation: Reservation) {
@@ -1504,6 +1484,16 @@ function CheckInContent() {
 
                           if (isCancelledReservationStatus(nextStatus)) {
                             handleCancelReservation(reservation);
+                            return;
+                          }
+
+                          if (nextStatus === RESERVATION_STATUS.COMPLETED) {
+                            markCompleted(reservation);
+                            return;
+                          }
+
+                          if (nextStatus === RESERVATION_STATUS.NO_SHOW) {
+                            markNoShow(reservation);
                             return;
                           }
 
