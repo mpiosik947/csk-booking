@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { supabase } from "../../../lib/supabase";
 import {
@@ -15,7 +15,6 @@ import {
   getPaymentStatusBadgeClass,
 } from "../../../lib/payment-status";
 import {
-  cancelReservation,
   completeReservation,
   markNoShow,
   markPaid,
@@ -46,6 +45,11 @@ type Reservation = {
         name: string | null;
       }[]
     | null;
+};
+
+type CancelReservationRpcResult = {
+  changed: boolean;
+  new_status?: string | null;
 };
 
 const DEFAULT_SORT: ReservationSort = "newest";
@@ -97,6 +101,49 @@ function sanitizeSearchPhrase(value: string) {
     .replace(/[,%]/g, " ")
     .replace(/\s+/g, " ")
     .slice(0, 80);
+}
+
+function parseCancelReservationRpcResult(
+  data: unknown
+): CancelReservationRpcResult | null {
+  if (!data || typeof data !== "object" || Array.isArray(data)) {
+    return null;
+  }
+
+  const result = data as Record<string, unknown>;
+
+  if (typeof result.changed !== "boolean") {
+    return null;
+  }
+
+  return {
+    changed: result.changed,
+    new_status:
+      typeof result.new_status === "string" || result.new_status === null
+        ? result.new_status
+        : undefined,
+  };
+}
+
+function getCancellationErrorMessage(error: {
+  code?: string | null;
+  message?: string | null;
+}) {
+  const code = error.code?.trim().toUpperCase() ?? "";
+
+  if (code === "42501") {
+    return "Nie masz uprawnień do anulowania tej rezerwacji.";
+  }
+
+  if (code === "P0002") {
+    return "Nie znaleziono rezerwacji.";
+  }
+
+  if (code === "55000") {
+    return "Rezerwacji w tym statusie nie można anulować.";
+  }
+
+  return "Nie udało się anulować rezerwacji. Spróbuj ponownie.";
 }
 
 function buildUrlParams(params: {
@@ -186,6 +233,7 @@ export default function AdminReservationsPage() {
   const [savingReservationId, setSavingReservationId] = useState<string | null>(
     null
   );
+  const cancellationInProgressRef = useRef<string | null>(null);
   const [message, setMessage] = useState("");
 
   const [search, setSearch] = useState("");
@@ -385,10 +433,108 @@ export default function AdminReservationsPage() {
     };
   }, [loadReservations, urlParamsLoaded]);
 
+  async function cancelReservationWithRpc(reservation: Reservation) {
+    if (cancellationInProgressRef.current) {
+      return;
+    }
+
+    cancellationInProgressRef.current = reservation.id;
+    setSavingReservationId(reservation.id);
+    setMessage("");
+
+    try {
+      const { data, error } = await supabase.rpc("cancel_reservation", {
+        p_reservation_id: reservation.id,
+      });
+
+      if (error) {
+        console.error("Admin reservation cancellation RPC failed", error);
+        setMessage(getCancellationErrorMessage(error));
+        return;
+      }
+
+      const result = parseCancelReservationRpcResult(data);
+
+      if (!result) {
+        console.error("Invalid cancel_reservation RPC response", data);
+        setMessage("Nie udało się anulować rezerwacji. Spróbuj ponownie.");
+        return;
+      }
+
+      await loadReservations();
+
+      if (!result.changed) {
+        setMessage("Rezerwacja była już anulowana.");
+        return;
+      }
+
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
+      if (!session?.access_token) {
+        setMessage(
+          "Rezerwacja została anulowana, ale nie udało się wysłać wiadomości e-mail."
+        );
+        return;
+      }
+
+      try {
+        const emailResponse = await fetch(
+          "/api/send-reservation-cancellation",
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${session.access_token}`,
+            },
+            body: JSON.stringify({
+              reservationId: reservation.id,
+            }),
+          }
+        );
+
+        if (!emailResponse.ok) {
+          setMessage(
+            "Rezerwacja została anulowana, ale nie udało się wysłać wiadomości e-mail."
+          );
+          return;
+        }
+      } catch (emailError) {
+        console.error("Reservation cancellation email failed", emailError);
+        setMessage(
+          "Rezerwacja została anulowana, ale nie udało się wysłać wiadomości e-mail."
+        );
+        return;
+      }
+
+      setMessage(
+        "Rezerwacja została anulowana. Email anulowania został wysłany."
+      );
+    } catch (unexpectedError) {
+      console.error(
+        "Unexpected admin reservation cancellation error",
+        unexpectedError
+      );
+      setMessage("Nie udało się anulować rezerwacji. Spróbuj ponownie.");
+    } finally {
+      cancellationInProgressRef.current = null;
+      setSavingReservationId(null);
+    }
+  }
+
   async function updateReservation(
     reservation: Reservation,
     changes: Partial<Pick<Reservation, "reservation_status" | "payment_status">>
   ) {
+    if (
+      changes.reservation_status ===
+      RESERVATION_STATUS.CANCELLED_BY_ADMIN
+    ) {
+      await cancelReservationWithRpc(reservation);
+      return;
+    }
+
     setSavingReservationId(reservation.id);
     setMessage("");
 
@@ -408,10 +554,6 @@ export default function AdminReservationsPage() {
       });
     } else if (changes.reservation_status === RESERVATION_STATUS.NO_SHOW) {
       result = await markNoShow(supabase, {
-        reservationId: reservation.id,
-      });
-    } else if (changes.reservation_status === RESERVATION_STATUS.CANCELLED_BY_ADMIN) {
-      result = await cancelReservation(supabase, {
         reservationId: reservation.id,
       });
     } else if (changes.payment_status === PAYMENT_STATUS.PAID) {
@@ -456,50 +598,6 @@ export default function AdminReservationsPage() {
         item.id === reservation.id ? { ...item, ...nextChanges } : item
       )
     );
-
-    if (changes.reservation_status === RESERVATION_STATUS.CANCELLED_BY_ADMIN) {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-
-      if (!session?.access_token) {
-        setMessage(
-          "Rezerwacja anulowana, ale nie udało się wysłać wiadomości e-mail."
-        );
-        return;
-      }
-
-      try {
-        const emailResponse = await fetch(
-          "/api/send-reservation-cancellation",
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: `Bearer ${session.access_token}`,
-            },
-            body: JSON.stringify({
-              reservationId: reservation.id,
-            }),
-          }
-        );
-
-        if (!emailResponse.ok) {
-          setMessage(
-            "Rezerwacja anulowana, ale nie udało się wysłać wiadomości e-mail."
-          );
-          return;
-        }
-      } catch {
-        setMessage(
-          "Rezerwacja anulowana, ale nie udało się wysłać wiadomości e-mail."
-        );
-        return;
-      }
-
-      setMessage("Rezerwacja została anulowana. Email anulowania został wysłany.");
-      return;
-    }
 
     setMessage("Zapisano zmiany w rezerwacji.");
   }
