@@ -369,25 +369,39 @@ export default function MyReservationsPage() {
     );
 
     const {
-      data: { user },
-    } = await supabase.auth.getUser();
+      data: { session },
+    } = await supabase.auth.getSession();
 
-    if (user?.email) {
-      await fetch("/api/send-reservation-cancellation", {
+    if (!session?.access_token) {
+      setMessage(
+        "Rezerwacja została anulowana, ale nie udało się wysłać wiadomości e-mail."
+      );
+      return;
+    }
+
+    try {
+      const emailResponse = await fetch("/api/send-reservation-cancellation", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
+          Authorization: `Bearer ${session.access_token}`,
         },
         body: JSON.stringify({
-          customerEmail: user.email,
-          customerName: String(user.user_metadata?.full_name ?? user.email),
-          reservationDate: reservation.reservation_date,
-          startTime: reservation.start_time,
-          endTime: reservation.end_time,
-          laneName: reservation.shooting_lanes?.name ?? "Brak osi",
-          cancelledBy: "user",
+          reservationId: reservation.id,
         }),
-      }).catch(() => null);
+      });
+
+      if (!emailResponse.ok) {
+        setMessage(
+          "Rezerwacja została anulowana, ale nie udało się wysłać wiadomości e-mail."
+        );
+        return;
+      }
+    } catch {
+      setMessage(
+        "Rezerwacja została anulowana, ale nie udało się wysłać wiadomości e-mail."
+      );
+      return;
     }
 
     setMessage("Rezerwacja została anulowana.");
