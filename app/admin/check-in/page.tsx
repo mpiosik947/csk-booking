@@ -406,6 +406,7 @@ function CheckInContent() {
 
   const isAdmin = currentUserRole === "admin";
   const isEmployee = currentUserRole === "pracownik";
+  const isInstructor = currentUserRole === "instruktor";
   const canVerifyProfiles = isAdmin || isEmployee;
   const canCancelReservations = isAdmin || isEmployee;
 
@@ -1334,33 +1335,39 @@ function CheckInContent() {
                         )}
                       </span>
 
-                      <span
-                        className={`rounded-full border px-3 py-1 text-xs font-bold ${getPaymentStatusBadgeClass(
-                          reservation.payment_status
-                        )}`}
-                      >
-                        {getPaymentStatusLabel(reservation.payment_status)}
-                      </span>
+                      {!isInstructor && (
+                        <>
+                          <span
+                            className={`rounded-full border px-3 py-1 text-xs font-bold ${getPaymentStatusBadgeClass(
+                              reservation.payment_status
+                            )}`}
+                          >
+                            {getPaymentStatusLabel(reservation.payment_status)}
+                          </span>
 
-                      <span
-                        className={`rounded-full border px-3 py-1 text-xs font-bold ${getVerificationClass(
-                          profile
-                        )}`}
-                      >
-                        Konto:{" "}
-                        {getVerificationStatusLabel(
-                          profile?.verification_status ?? null
-                        )}
-                      </span>
+                          <span
+                            className={`rounded-full border px-3 py-1 text-xs font-bold ${getVerificationClass(
+                              profile
+                            )}`}
+                          >
+                            Konto:{" "}
+                            {getVerificationStatusLabel(
+                              profile?.verification_status ?? null
+                            )}
+                          </span>
 
-                      <span
-                        className={`rounded-full border px-3 py-1 text-xs font-bold ${getPermissionsClass(
-                          profile
-                        )}`}
-                      >
-                        Uprawnienia:{" "}
-                        {permissionsVerified ? "sprawdzone" : "do sprawdzenia"}
-                      </span>
+                          <span
+                            className={`rounded-full border px-3 py-1 text-xs font-bold ${getPermissionsClass(
+                              profile
+                            )}`}
+                          >
+                            Uprawnienia:{" "}
+                            {permissionsVerified
+                              ? "sprawdzone"
+                              : "do sprawdzenia"}
+                          </span>
+                        </>
+                      )}
                     </div>
 
                     <p className="text-xs uppercase tracking-[0.25em] text-zinc-500">
@@ -1384,17 +1391,19 @@ function CheckInContent() {
                       {reservation.customer_phone || profile?.phone || "brak"}
                     </p>
 
-                    <div className="mt-4 rounded-xl border border-zinc-800 bg-zinc-950 p-3 text-xs text-zinc-400">
-                      <p className="font-semibold text-zinc-300">
-                        Deklarowane uprawnienia:
-                      </p>
+                    {!isInstructor && (
+                      <div className="mt-4 rounded-xl border border-zinc-800 bg-zinc-950 p-3 text-xs text-zinc-400">
+                        <p className="font-semibold text-zinc-300">
+                          Deklarowane uprawnienia:
+                        </p>
 
-                      <p className="mt-1">
-                        {declaredPermissions.length > 0
-                          ? declaredPermissions.join(", ")
-                          : "Brak zaznaczonych uprawnień"}
-                      </p>
-                    </div>
+                        <p className="mt-1">
+                          {declaredPermissions.length > 0
+                            ? declaredPermissions.join(", ")
+                            : "Brak zaznaczonych uprawnień"}
+                        </p>
+                      </div>
+                    )}
                   </div>
 
                   <div>
@@ -1438,7 +1447,8 @@ function CheckInContent() {
                     </p>
                   </div>
 
-                  <div className="grid gap-3">
+                  {!isInstructor && (
+                    <div className="grid gap-3">
                     <div>
                       <label className="mb-2 block text-xs uppercase tracking-[0.25em] text-zinc-500">
                         Płatność
@@ -1517,10 +1527,11 @@ function CheckInContent() {
                         )}
                       </select>
                     </div>
-                  </div>
+                    </div>
+                  )}
 
                   <div className="grid gap-2">
-                    {shouldVerifyAtReception ? (
+                    {shouldVerifyAtReception && canVerifyProfiles ? (
                       <>
                         <button
                           type="button"
@@ -1591,7 +1602,7 @@ function CheckInContent() {
                   </div>
                 </div>
 
-                {shouldVerifyAtReception && (
+                {shouldVerifyAtReception && canVerifyProfiles && (
                   <div className="mt-5 rounded-2xl border border-orange-800 bg-orange-950/40 p-5">
                     <div className="mb-4 flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
                       <div>
