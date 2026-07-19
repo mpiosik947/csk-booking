@@ -356,6 +356,11 @@ export default function AdminEventsPage() {
     registrationId: string,
     status: string
   ) {
+    if (!canManageEvents) {
+      setMessage("Brak uprawnień do zarządzania zapisami uczestników.");
+      return;
+    }
+
     const currentRegistration = registrations.find(
       (registration) => registration.id === registrationId
     );
@@ -412,6 +417,11 @@ export default function AdminEventsPage() {
   }
 
   async function markRegistrationPaid(registrationId: string) {
+    if (!canManageEvents) {
+      setMessage("Brak uprawnień do zarządzania zapisami uczestników.");
+      return;
+    }
+
     const { error } = await supabase
       .from("event_registrations")
       .update({ payment_status: "paid_on_site" })
@@ -1019,7 +1029,9 @@ export default function AdminEventsPage() {
                                         <th className="px-4 py-3">Telefon</th>
                                         <th className="px-4 py-3">Status</th>
                                         <th className="px-4 py-3">Płatność</th>
-                                        <th className="px-4 py-3">Akcje</th>
+                                        {canManageEvents && (
+                                          <th className="px-4 py-3">Akcje</th>
+                                        )}
                                       </tr>
                                     </thead>
 
@@ -1045,8 +1057,9 @@ export default function AdminEventsPage() {
                                               ? "Opłacone"
                                               : "Płatność na miejscu"}
                                           </td>
-                                          <td className="px-4 py-4">
-                                            <div className="flex flex-wrap gap-2">
+                                          {canManageEvents && (
+                                            <td className="px-4 py-4">
+                                              <div className="flex flex-wrap gap-2">
                                               <button
                                                 type="button"
                                                 onClick={() => updateRegistrationStatus(registration.id, "approved")}
@@ -1078,8 +1091,9 @@ export default function AdminEventsPage() {
                                               >
                                                 Anuluj
                                               </button>
-                                            </div>
-                                          </td>
+                                              </div>
+                                            </td>
+                                          )}
                                         </tr>
                                       ))}
                                     </tbody>
@@ -1115,7 +1129,9 @@ export default function AdminEventsPage() {
                                         <th className="px-4 py-3">Telefon</th>
                                         <th className="px-4 py-3">Status</th>
                                         <th className="px-4 py-3">Płatność</th>
-                                        <th className="px-4 py-3">Akcje</th>
+                                        {canManageEvents && (
+                                          <th className="px-4 py-3">Akcje</th>
+                                        )}
                                       </tr>
                                     </thead>
 
@@ -1144,8 +1160,9 @@ export default function AdminEventsPage() {
                                               ? "Opłacone"
                                               : "Płatność na miejscu"}
                                           </td>
-                                          <td className="px-4 py-4">
-                                            <div className="flex flex-wrap gap-2">
+                                          {canManageEvents && (
+                                            <td className="px-4 py-4">
+                                              <div className="flex flex-wrap gap-2">
                                               <button
                                                 type="button"
                                                 onClick={() => markRegistrationPaid(registration.id)}
@@ -1161,8 +1178,9 @@ export default function AdminEventsPage() {
                                               >
                                                 Anuluj
                                               </button>
-                                            </div>
-                                          </td>
+                                              </div>
+                                            </td>
+                                          )}
                                         </tr>
                                       ))}
                                     </tbody>
