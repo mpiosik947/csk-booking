@@ -2,12 +2,19 @@
 
 import { useEffect, useState } from "react";
 import { supabase } from "../../lib/supabase";
+import {
+  getProfileDisplayName,
+  hasStructuredProfileName,
+} from "../../lib/profile-display-name";
 
 type Role = "admin" | "pracownik" | "instruktor" | "user";
 
 type ProfileData = {
   role: Role | null;
+  first_name: string | null;
+  last_name: string | null;
   full_name: string | null;
+  email: string | null;
   phone: string | null;
   postal_code: string | null;
   city: string | null;
@@ -53,12 +60,19 @@ export default function DashboardPage() {
 
       setIsLoggedIn(true);
       setEmail(user.email ?? "");
-      setFullName(metadata.full_name ?? metadata.name ?? "Użytkownik");
+      setFullName(
+        getProfileDisplayName({
+          first_name: metadata.first_name,
+          last_name: metadata.last_name,
+          full_name: metadata.full_name ?? metadata.name,
+          email: user.email,
+        })
+      );
 
       const { data: profile } = await supabase
         .from("profiles")
         .select(
-          "role, full_name, phone, postal_code, city, street, house_number, verification_status, permissions_verified"
+          "role, first_name, last_name, full_name, email, phone, postal_code, city, street, house_number, verification_status, permissions_verified"
         )
         .eq("user_id", user.id)
         .single();
@@ -70,18 +84,19 @@ export default function DashboardPage() {
           setRole(profileData.role);
         }
 
-        const displayedName =
-          profileData.full_name ??
-          metadata.full_name ??
-          metadata.name ??
-          "Użytkownik";
+        const displayedName = getProfileDisplayName({
+          first_name: profileData.first_name,
+          last_name: profileData.last_name,
+          full_name: profileData.full_name,
+          email: profileData.email ?? user.email,
+        });
 
         setFullName(displayedName);
         setVerificationStatus(profileData.verification_status ?? "");
         setPermissionsVerified(Boolean(profileData.permissions_verified));
 
         setProfileComplete(
-          hasValue(profileData.full_name) &&
+          hasStructuredProfileName(profileData) &&
             hasValue(profileData.phone) &&
             hasValue(profileData.postal_code) &&
             hasValue(profileData.city) &&
