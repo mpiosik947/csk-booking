@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react";
 import { getPaymentStatusLabel } from "../../lib/payment-status";
-import { handleFreedEventPlace } from "../../lib/event-registration-actions";
 import { supabase } from "../../lib/supabase";
 
 type EventRegistration = {
@@ -22,8 +21,21 @@ type EventRegistration = {
   } | null;
 };
 
-type ReserveRegistration = {
-  id: string;
+type CancellationResponse = {
+  ok?: boolean;
+  error?: string;
+  warning?: string;
+  cancellation?: {
+    changed: boolean;
+    previousStatus: string;
+    newStatus: string;
+    freedParticipantPlace: boolean;
+  };
+  reservePromotion?: {
+    attempted: boolean;
+    success: boolean;
+    notifiedCount: number;
+  };
 };
 
 const WARSAW_TIME_ZONE = "Europe/Warsaw";
@@ -304,54 +316,72 @@ export default function MyEventsPage() {
       return;
     }
 
-    setProcessingId(item.id);
+    const {
+      data: { session },
+      error: sessionError,
+    } = await supabase.auth.getSession();
 
-    const { error } = await supabase
-      .from("event_registrations")
-      .update({
-        registration_status: "cancelled",
-      })
-      .eq("id", item.id);
-
-    if (error) {
-      setProcessingId("");
-      setMessage(`Błąd anulacji: ${error.message}`);
+    if (sessionError || !session?.access_token) {
+      setMessage("Brak aktywnej sesji. Zaloguj się ponownie.");
       return;
     }
 
-    const shouldNotifyReserveList =
-      item.registration_status === "registered" ||
-      item.registration_status === "approved";
+    setProcessingId(item.id);
 
-    const reserveResult = shouldNotifyReserveList
-      ? await handleFreedEventPlace(item.events.id)
-      : {
-          reserveFound: false,
-          emailsSent: 0,
-          error: "",
-        };
+    try {
+      const response = await fetch("/api/cancel-event-registration", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({ registrationId: item.id }),
+      });
+      const data = (await response.json().catch(() => null)) as
+        | CancellationResponse
+        | null;
 
-    setProcessingId("");
+      if (!response.ok || !data?.ok || !data.cancellation) {
+        setMessage(
+          data?.error ??
+            (response.status === 409
+              ? "Zapis można anulować najpóźniej 72 godziny przed rozpoczęciem szkolenia."
+              : "Nie udało się anulować udziału w szkoleniu.")
+        );
+        return;
+      }
 
-    if (reserveResult.error) {
-      setMessage(
-        `Udział został anulowany, ale nie udało się sprawdzić listy rezerwowej: ${reserveResult.error}`
+      setItems((currentItems) =>
+        currentItems.map((currentItem) =>
+          currentItem.id === item.id
+            ? {
+                ...currentItem,
+                registration_status: data.cancellation?.newStatus ?? "cancelled",
+              }
+            : currentItem
+        )
       );
-    } else if (reserveResult.reserveFound) {
-      setMessage(
-        "Udział w szkoleniu został anulowany. System wysłał powiadomienie o wolnym miejscu do osób z listy rezerwowej."
-      );
-    } else {
-      setMessage("Udział w szkoleniu został anulowany.");
+
+      if (data.warning) {
+        setMessage(
+          "Udział w szkoleniu został anulowany. Automatyczne powiadomienie listy rezerwowej mogło się nie udać."
+        );
+      } else if (
+        data.reservePromotion?.attempted &&
+        data.reservePromotion.success &&
+        data.reservePromotion.notifiedCount > 0
+      ) {
+        setMessage(
+          "Udział w szkoleniu został anulowany. System wysłał powiadomienie o wolnym miejscu do osób z listy rezerwowej."
+        );
+      } else {
+        setMessage("Udział w szkoleniu został anulowany.");
+      }
+    } catch {
+      setMessage("Nie udało się anulować udziału w szkoleniu. Spróbuj ponownie.");
+    } finally {
+      setProcessingId("");
     }
-
-    setItems((currentItems) =>
-      currentItems.map((currentItem) =>
-        currentItem.id === item.id
-          ? { ...currentItem, registration_status: "cancelled" }
-          : currentItem
-      )
-    );
   }
 
   const warsawNowKey = getWarsawDateTimeKey(new Date());
