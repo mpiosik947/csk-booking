@@ -157,6 +157,8 @@ function formatPrice(price?: number | null) {
   return `${price.toFixed(2)} zł`;
 }
 
+// Obecna promocja może ponownie wygenerować tokeny przy ponownym wywołaniu.
+// Idempotencja zostanie wzmocniona w osobnym etapie.
 export async function promoteEventReserve(
   eventId: string
 ): Promise<EventReservePromotionResult> {
@@ -349,6 +351,7 @@ export async function promoteEventReserve(
         .update({
           promotion_token: token,
           promotion_token_expires_at: expiresAt,
+          promotion_confirmed_at: null,
         })
         .eq("id", registration.id)
         .eq("registration_status", "reserve")
