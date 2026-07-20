@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { getPaymentStatusLabel } from "../../lib/payment-status";
 import { supabase } from "../../lib/supabase";
 
@@ -22,19 +22,21 @@ type EventRegistration = {
 };
 
 type CancellationResponse = {
-  ok?: boolean;
+  success?: boolean;
   error?: string;
-  warning?: string;
+  message?: string;
   cancellation?: {
+    registrationId: string;
+    eventId: string;
     changed: boolean;
     previousStatus: string;
     newStatus: string;
     freedParticipantPlace: boolean;
   };
-  reservePromotion?: {
+  promotion?: {
     attempted: boolean;
-    success: boolean;
-    notifiedCount: number;
+    succeeded: boolean;
+    warning: boolean;
   };
 };
 
@@ -235,6 +237,7 @@ export default function MyEventsPage() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [message, setMessage] = useState("");
   const [processingId, setProcessingId] = useState("");
+  const cancellingRegistrationIds = useRef(new Set<string>());
   const [expandedEventId, setExpandedEventId] = useState<string | null>(null);
 
   function toggleExpandedEvent(eventId: string) {
@@ -294,6 +297,10 @@ export default function MyEventsPage() {
   }, []);
 
   async function cancelRegistration(item: EventRegistration) {
+    if (cancellingRegistrationIds.current.has(item.id)) {
+      return;
+    }
+
     setMessage("");
 
     if (!item.events) {
@@ -316,19 +323,20 @@ export default function MyEventsPage() {
       return;
     }
 
-    const {
-      data: { session },
-      error: sessionError,
-    } = await supabase.auth.getSession();
-
-    if (sessionError || !session?.access_token) {
-      setMessage("Brak aktywnej sesji. Zaloguj się ponownie.");
-      return;
-    }
-
+    cancellingRegistrationIds.current.add(item.id);
     setProcessingId(item.id);
 
     try {
+      const {
+        data: { session },
+        error: sessionError,
+      } = await supabase.auth.getSession();
+
+      if (sessionError || !session?.access_token) {
+        setMessage("Brak aktywnej sesji. Zaloguj się ponownie.");
+        return;
+      }
+
       const response = await fetch("/api/cancel-event-registration", {
         method: "POST",
         headers: {
@@ -341,7 +349,7 @@ export default function MyEventsPage() {
         | CancellationResponse
         | null;
 
-      if (!response.ok || !data?.ok || !data.cancellation) {
+      if (!response.ok || !data?.success || !data.cancellation) {
         setMessage(
           data?.error ??
             (response.status === 409
@@ -362,24 +370,11 @@ export default function MyEventsPage() {
         )
       );
 
-      if (data.warning) {
-        setMessage(
-          "Udział w szkoleniu został anulowany. Automatyczne powiadomienie listy rezerwowej mogło się nie udać."
-        );
-      } else if (
-        data.reservePromotion?.attempted &&
-        data.reservePromotion.success &&
-        data.reservePromotion.notifiedCount > 0
-      ) {
-        setMessage(
-          "Udział w szkoleniu został anulowany. System wysłał powiadomienie o wolnym miejscu do osób z listy rezerwowej."
-        );
-      } else {
-        setMessage("Udział w szkoleniu został anulowany.");
-      }
+      setMessage(data.message ?? "Udział jest anulowany.");
     } catch {
       setMessage("Nie udało się anulować udziału w szkoleniu. Spróbuj ponownie.");
     } finally {
+      cancellingRegistrationIds.current.delete(item.id);
       setProcessingId("");
     }
   }

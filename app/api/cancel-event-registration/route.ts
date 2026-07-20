@@ -181,57 +181,86 @@ export async function POST(request: Request) {
     }
 
     const cancellation = {
+      registrationId: rpcData.registration_id,
+      eventId: rpcData.event_id,
       changed: rpcData.changed,
       previousStatus: rpcData.previous_status,
       newStatus: rpcData.new_status,
       freedParticipantPlace: rpcData.freed_participant_place,
     };
 
-    if (!rpcData.changed || !rpcData.freed_participant_place) {
+    const shouldPromoteReserve =
+      rpcData.changed === true &&
+      rpcData.freed_participant_place === true;
+
+    if (!shouldPromoteReserve) {
       return NextResponse.json({
-        ok: true,
-        cancellation,
-        reservePromotion: {
-          attempted: false,
-          success: true,
-          notifiedCount: 0,
-        },
-      });
-    }
-
-    const promotionResult = await promoteEventReserve(rpcData.event_id);
-
-    if (!promotionResult.success) {
-      console.error("Reserve promotion failed after successful cancellation", {
-        eventId: rpcData.event_id,
-      });
-
-      return NextResponse.json({
-        ok: true,
-        cancellation,
-        reservePromotion: {
-          attempted: true,
-          success: false,
-          notifiedCount: promotionResult.notifiedCount,
-        },
-        warning:
-          "Zapis został anulowany, ale nie udało się automatycznie powiadomić listy rezerwowej.",
-      });
-    }
-
-    return NextResponse.json({
-      ok: true,
-      cancellation,
-      reservePromotion: {
-        attempted: true,
         success: true,
-        notifiedCount: promotionResult.notifiedCount,
-      },
-    });
-  } catch (error) {
-    console.error("Event registration cancellation endpoint failed", {
-      error: error instanceof Error ? error.message : "Unknown error",
-    });
+        cancellation,
+        promotion: {
+          attempted: false,
+          succeeded: true,
+          warning: false,
+        },
+        message: rpcData.changed
+          ? "Udział został anulowany."
+          : "Udział jest anulowany.",
+      });
+    }
+
+    try {
+      const promotionResult = await promoteEventReserve(rpcData.event_id);
+
+      if (!promotionResult.success) {
+        console.error(
+          "Reserve promotion failed after successful event registration cancellation"
+        );
+
+        return NextResponse.json({
+          success: true,
+          cancellation,
+          promotion: {
+            attempted: true,
+            succeeded: false,
+            warning: true,
+          },
+          message:
+            "Udział został anulowany, ale nie udało się wysłać powiadomień do listy rezerwowej.",
+        });
+      }
+
+      return NextResponse.json({
+        success: true,
+        cancellation,
+        promotion: {
+          attempted: true,
+          succeeded: true,
+          warning: false,
+        },
+        message:
+          promotionResult.notifiedCount > 0
+            ? "Udział został anulowany. System wysłał powiadomienie o wolnym miejscu do osób z listy rezerwowej."
+            : "Udział został anulowany.",
+      });
+    } catch {
+      console.error(
+        "Reserve promotion failed after successful event registration cancellation"
+      );
+
+      return NextResponse.json({
+        success: true,
+        cancellation,
+        promotion: {
+          attempted: true,
+          succeeded: false,
+          warning: true,
+        },
+        message:
+          "Udział został anulowany, ale nie udało się wysłać powiadomień do listy rezerwowej.",
+      });
+    }
+  } catch {
+    console.error("Event registration cancellation endpoint failed");
 
     return NextResponse.json(
       { error: "Nie udało się anulować zapisu na szkolenie." },
