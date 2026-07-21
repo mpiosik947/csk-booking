@@ -1,6 +1,5 @@
 import "server-only";
 
-import { randomUUID } from "crypto";
 import { headers } from "next/headers";
 import { Resend } from "resend";
 import { createClient } from "@supabase/supabase-js";
@@ -22,6 +21,22 @@ type ReserveRegistration = {
   customer_name: string | null;
 };
 
+type PreparedPromotion = {
+  registration_id: string;
+  claim_id: string;
+  promotion_token: string;
+  promotion_token_expires_at: string;
+  token_reused: boolean;
+};
+
+type CompletedPromotion = {
+  registration_id: string;
+  changed: boolean;
+  success: boolean;
+  claim_cleared: boolean;
+  email_sent_recorded: boolean;
+};
+
 export type EventReservePromotionResult = {
   attempted: true;
   success: boolean;
@@ -36,9 +51,16 @@ export type EventReservePromotionResult = {
 };
 
 type PromotionFailureStage =
-  | "token_update"
+  | "prepare_rpc"
+  | "recipient_query"
   | "resend_send"
-  | "sent_at_update";
+  | "complete_rpc";
+
+type PromotionErrorCode =
+  | "email_send_failed"
+  | "email_provider_error"
+  | "invalid_recipient"
+  | "unexpected_error";
 
 function getSafeErrorDetails(error: unknown) {
   if (!error || typeof error !== "object") {
@@ -71,17 +93,84 @@ function logPromotionFailure(
   stage: PromotionFailureStage,
   error: unknown
 ) {
-  const message =
-    stage === "sent_at_update"
-      ? "Event reserve promotion email may have been sent but timestamp update failed"
-      : "Event reserve promotion recipient failed";
-
-  console.error(message, {
+  console.error("Event reserve promotion recipient failed", {
     eventId,
     registrationId,
     stage,
     ...getSafeErrorDetails(error),
   });
+}
+
+function isPreparedPromotion(value: unknown): value is PreparedPromotion {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return false;
+  }
+
+  const promotion = value as Partial<PreparedPromotion>;
+
+  return (
+    typeof promotion.registration_id === "string" &&
+    typeof promotion.claim_id === "string" &&
+    typeof promotion.promotion_token === "string" &&
+    typeof promotion.promotion_token_expires_at === "string" &&
+    typeof promotion.token_reused === "boolean"
+  );
+}
+
+function isCompletedPromotion(value: unknown): value is CompletedPromotion {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return false;
+  }
+
+  const promotion = value as Partial<CompletedPromotion>;
+
+  return (
+    typeof promotion.registration_id === "string" &&
+    typeof promotion.changed === "boolean" &&
+    typeof promotion.success === "boolean" &&
+    typeof promotion.claim_cleared === "boolean" &&
+    typeof promotion.email_sent_recorded === "boolean"
+  );
+}
+
+function normalizePromotionError(error: unknown): PromotionErrorCode {
+  if (!error || typeof error !== "object") {
+    return "unexpected_error";
+  }
+
+  const errorRecord = error as Record<string, unknown>;
+  const code =
+    typeof errorRecord.code === "string"
+      ? errorRecord.code.toLowerCase()
+      : typeof errorRecord.name === "string"
+        ? errorRecord.name.toLowerCase()
+        : "";
+  const status =
+    typeof errorRecord.statusCode === "number"
+      ? errorRecord.statusCode
+      : typeof errorRecord.status === "number"
+        ? errorRecord.status
+        : undefined;
+
+  if (
+    status === 400 ||
+    status === 422 ||
+    code.includes("invalid_recipient") ||
+    code.includes("validation")
+  ) {
+    return "invalid_recipient";
+  }
+
+  if (
+    status === 429 ||
+    (typeof status === "number" && status >= 500) ||
+    code.includes("rate_limit") ||
+    code.includes("provider")
+  ) {
+    return "email_provider_error";
+  }
+
+  return "email_send_failed";
 }
 
 function getAdminSupabaseClient() {
@@ -163,10 +252,15 @@ export async function promoteEventReserve(
   eventId: string
 ): Promise<EventReservePromotionResult> {
   try {
-    const resendApiKey = process.env.RESEND_API_KEY;
-    const from = process.env.RESERVATION_EMAIL_FROM;
+    const supabase = getAdminSupabaseClient();
+    const { data: prepareData, error: prepareError } = await supabase.rpc(
+      "prepare_event_reserve_promotions",
+      { p_event_id: eventId }
+    );
 
-    if (!resendApiKey || !from) {
+    if (prepareError) {
+      logPromotionFailure(eventId, eventId, "prepare_rpc", prepareError);
+
       return {
         attempted: true,
         success: false,
@@ -174,16 +268,151 @@ export async function promoteEventReserve(
         notifiedCount: 0,
         failedCount: 0,
         warning: true,
+        reason: "promotion_prepare_failed",
+        statusCode: prepareError.code === "P0002" ? 404 : 500,
+        error:
+          prepareError.code === "P0002"
+            ? "Nie znaleziono szkolenia."
+            : "Nie udało się przygotować promocji listy rezerwowej.",
+      };
+    }
+
+    if (!Array.isArray(prepareData)) {
+      logPromotionFailure(eventId, eventId, "prepare_rpc", {
+        code: "invalid_prepare_result",
+      });
+
+      return {
+        attempted: true,
+        success: false,
+        reserveFound: false,
+        notifiedCount: 0,
+        failedCount: 0,
+        warning: true,
+        reason: "promotion_prepare_failed",
+        statusCode: 500,
+        error: "Nie udało się potwierdzić wyniku przygotowania promocji.",
+      };
+    }
+
+    const preparedPromotions = prepareData.filter(isPreparedPromotion);
+    const invalidPreparedCount =
+      prepareData.length - preparedPromotions.length;
+
+    const completePromotion = async (
+      promotion: PreparedPromotion,
+      success: boolean,
+      errorCode: PromotionErrorCode | null
+    ) => {
+      const { data, error } = await supabase.rpc(
+        "complete_event_reserve_promotion",
+        {
+          p_registration_id: promotion.registration_id,
+          p_claim_id: promotion.claim_id,
+          p_success: success,
+          p_error_code: errorCode,
+        }
+      );
+
+      if (
+        error ||
+        !isCompletedPromotion(data) ||
+        data.registration_id !== promotion.registration_id ||
+        data.success !== success ||
+        !data.claim_cleared
+      ) {
+        logPromotionFailure(
+          eventId,
+          promotion.registration_id,
+          "complete_rpc",
+          error ?? { code: "invalid_complete_result" }
+        );
+        return false;
+      }
+
+      return true;
+    };
+
+    const failPreparedPromotions = async (errorCode: PromotionErrorCode) => {
+      await Promise.all(
+        preparedPromotions.map((promotion) =>
+          completePromotion(promotion, false, errorCode)
+        )
+      );
+    };
+
+    if (invalidPreparedCount > 0) {
+      await failPreparedPromotions("unexpected_error");
+
+      return {
+        attempted: true,
+        success: false,
+        reserveFound: preparedPromotions.length > 0,
+        notifiedCount: 0,
+        failedCount: prepareData.length,
+        warning: true,
+        reason: "invalid_prepare_result",
+        statusCode: 500,
+        error: "Nie udało się potwierdzić danych przygotowanej promocji.",
+      };
+    }
+
+    if (preparedPromotions.length === 0) {
+      return {
+        attempted: true,
+        success: true,
+        reserveFound: false,
+        notifiedCount: 0,
+        failedCount: 0,
+        warning: false,
+        reason: null,
+      };
+    }
+
+    try {
+      const resendApiKey = process.env.RESEND_API_KEY;
+    const from = process.env.RESERVATION_EMAIL_FROM;
+
+    if (!resendApiKey || !from) {
+      await failPreparedPromotions("email_provider_error");
+
+      return {
+        attempted: true,
+        success: false,
+        reserveFound: true,
+        notifiedCount: 0,
+        failedCount: preparedPromotions.length,
+        warning: true,
         reason: "email_configuration_missing",
         statusCode: 500,
         error: "Brak konfiguracji wysyłki email.",
       };
     }
 
-    const siteUrl = await getSiteUrl();
-    const supabase = getAdminSupabaseClient();
-    const resend = new Resend(resendApiKey);
+    let siteUrl: string;
 
+    try {
+      siteUrl = await getSiteUrl();
+    } catch (error) {
+      await failPreparedPromotions("unexpected_error");
+      console.error("Event reserve promotion URL configuration failed", {
+        ...getSafeErrorDetails(error),
+      });
+
+      return {
+        attempted: true,
+        success: false,
+        reserveFound: true,
+        notifiedCount: 0,
+        failedCount: preparedPromotions.length,
+        warning: true,
+        reason: "site_url_missing",
+        statusCode: 500,
+        error: "Brak konfiguracji adresu aplikacji.",
+      };
+    }
+
+    const resend = new Resend(resendApiKey);
     const { data: eventData, error: eventError } = await supabase
       .from("events")
       .select(
@@ -202,173 +431,83 @@ export async function promoteEventReserve(
       .maybeSingle();
 
     if (eventError || !eventData) {
-      return {
-        attempted: true,
-        success: false,
-        reserveFound: false,
-        notifiedCount: 0,
-        failedCount: 0,
-        warning: true,
-        reason: "event_not_found",
-        statusCode: 404,
-        error: "Nie znaleziono szkolenia.",
-      };
-    }
-
-    const eventItem = eventData as EventRecord;
-    const { count: participantsCount, error: participantsCountError } =
-      await supabase
-        .from("event_registrations")
-        .select("id", { count: "exact", head: true })
-        .eq("event_id", eventId)
-        .in("registration_status", ["registered", "approved"]);
-
-    if (participantsCountError) {
-      return {
-        attempted: true,
-        success: false,
-        reserveFound: false,
-        notifiedCount: 0,
-        failedCount: 0,
-        warning: true,
-        reason: "participant_count_failed",
-        statusCode: 500,
-        error: "Nie udało się sprawdzić liczby uczestników.",
-      };
-    }
-
-    const maxParticipants = Number(eventItem.max_participants ?? 0);
-
-    if ((participantsCount ?? 0) >= maxParticipants) {
-      return {
-        attempted: true,
-        success: true,
-        reserveFound: false,
-        notifiedCount: 0,
-        failedCount: 0,
-        warning: false,
-        reason: null,
-        noFreePlace: true,
-      };
-    }
-
-    const { data: reserveData, error: reserveError } = await supabase
-      .from("event_registrations")
-      .select("id, customer_email, customer_name")
-      .eq("event_id", eventId)
-      .eq("registration_status", "reserve")
-      .order("created_at", { ascending: true });
-
-    if (reserveError) {
-      return {
-        attempted: true,
-        success: false,
-        reserveFound: false,
-        notifiedCount: 0,
-        failedCount: 0,
-        warning: true,
-        reason: "reserve_query_failed",
-        statusCode: 500,
-        error: "Nie udało się pobrać listy rezerwowej.",
-      };
-    }
-
-    const reserveRegistrations =
-      (reserveData as ReserveRegistration[] | null) ?? [];
-    const reserveList = reserveRegistrations.filter((registration) =>
-      Boolean(registration.customer_email)
-    );
-    const missingEmailCount = reserveRegistrations.length - reserveList.length;
-
-    if (reserveRegistrations.length === 0) {
-      return {
-        attempted: true,
-        success: true,
-        reserveFound: false,
-        notifiedCount: 0,
-        failedCount: 0,
-        warning: false,
-        reason: null,
-      };
-    }
-
-    if (reserveList.length === 0) {
-      for (const registration of reserveRegistrations) {
-        logPromotionFailure(
-          eventId,
-          registration.id,
-          "resend_send",
-          { code: "missing_customer_email" }
-        );
-      }
+      await failPreparedPromotions("unexpected_error");
 
       return {
         attempted: true,
         success: false,
         reserveFound: true,
         notifiedCount: 0,
-        failedCount: missingEmailCount,
+        failedCount: preparedPromotions.length,
         warning: true,
-        reason: "missing_customer_email",
-        statusCode: 500,
-        error: "Brak adresu email dla osób z listy rezerwowej.",
+        reason: "event_query_failed",
+        statusCode: eventError?.code === "PGRST116" ? 404 : 500,
+        error: "Nie udało się pobrać danych szkolenia.",
       };
     }
 
+    const eventItem = eventData as EventRecord;
+    const registrationIds = preparedPromotions.map(
+      (promotion) => promotion.registration_id
+    );
+    const { data: registrationData, error: registrationError } = await supabase
+      .from("event_registrations")
+      .select("id, customer_email, customer_name")
+      .in("id", registrationIds);
+
+    if (registrationError) {
+      await failPreparedPromotions("unexpected_error");
+      logPromotionFailure(
+        eventId,
+        eventId,
+        "recipient_query",
+        registrationError
+      );
+
+      return {
+        attempted: true,
+        success: false,
+        reserveFound: true,
+        notifiedCount: 0,
+        failedCount: preparedPromotions.length,
+        warning: true,
+        reason: "recipient_query_failed",
+        statusCode: 500,
+        error: "Nie udało się pobrać danych odbiorców promocji.",
+      };
+    }
+
+    const registrationsById = new Map(
+      ((registrationData as ReserveRegistration[] | null) ?? []).map(
+        (registration) => [registration.id, registration]
+      )
+    );
     const formattedDate = formatDate(eventItem.event_date);
     const formattedStartTime = formatTime(eventItem.start_time);
     const formattedEndTime = formatTime(eventItem.end_time);
     const formattedPrice = formatPrice(eventItem.price);
     let emailsSent = 0;
-    let failedCount = missingEmailCount;
+    let failedCount = 0;
     const failureReasons = new Set<string>();
 
-    if (missingEmailCount > 0) {
-      failureReasons.add("missing_customer_email");
+    for (const promotion of preparedPromotions) {
+      const registration = registrationsById.get(promotion.registration_id);
 
-      for (const registration of reserveRegistrations) {
-        if (!registration.customer_email) {
-          logPromotionFailure(
-            eventId,
-            registration.id,
-            "resend_send",
-            { code: "missing_customer_email" }
-          );
-        }
-      }
-    }
-
-    for (const registration of reserveList) {
-      const token = randomUUID();
-      const expiresAt = new Date(
-        Date.now() + 24 * 60 * 60 * 1000
-      ).toISOString();
-      const confirmUrl = `${siteUrl}/events/confirm/${token}`;
-      const displayName = registration.customer_name?.trim() || "Uczestniku";
-
-      const { data: tokenUpdateData, error: tokenUpdateError } = await supabase
-        .from("event_registrations")
-        .update({
-          promotion_token: token,
-          promotion_token_expires_at: expiresAt,
-          promotion_confirmed_at: null,
-        })
-        .eq("id", registration.id)
-        .eq("registration_status", "reserve")
-        .select("id")
-        .maybeSingle();
-
-      if (tokenUpdateError || !tokenUpdateData) {
+      if (!registration?.customer_email?.trim()) {
         failedCount += 1;
-        failureReasons.add("token_update_failed");
+        failureReasons.add("invalid_recipient");
         logPromotionFailure(
           eventId,
-          registration.id,
-          "token_update",
-          tokenUpdateError ?? { code: "registration_not_updated" }
+          promotion.registration_id,
+          "resend_send",
+          { code: "invalid_recipient" }
         );
+        await completePromotion(promotion, false, "invalid_recipient");
         continue;
       }
+
+      const confirmUrl = `${siteUrl}/events/confirm/${promotion.promotion_token}`;
+      const displayName = registration.customer_name?.trim() || "Uczestniku";
 
       const subject = "Zwolniło się miejsce na szkoleniu — CSK Booking";
       const html = `
@@ -426,60 +565,41 @@ Centrum Szkolenia Krutla
 CSK Booking
       `;
 
+      let sendError: unknown = null;
+
       try {
         const { error: emailError } = await resend.emails.send({
           from,
-          to: registration.customer_email as string,
+          to: registration.customer_email,
           subject,
           html,
           text,
         });
-
-        if (emailError) {
-          failedCount += 1;
-          failureReasons.add("email_send_failed");
-          logPromotionFailure(
-            eventId,
-            registration.id,
-            "resend_send",
-            emailError
-          );
-          continue;
-        }
+        sendError = emailError;
       } catch (error) {
-        failedCount += 1;
-        failureReasons.add("email_send_failed");
-        logPromotionFailure(
-          eventId,
-          registration.id,
-          "resend_send",
-          error
-        );
-        continue;
+        sendError = error;
       }
 
-      const { data: sentAtUpdateData, error: sentAtUpdateError } =
-        await supabase
-          .from("event_registrations")
-          .update({ promotion_email_sent_at: new Date().toISOString() })
-          .eq("id", registration.id)
-          .eq("registration_status", "reserve")
-          .select("id")
-          .maybeSingle();
-
-      if (sentAtUpdateError || !sentAtUpdateData) {
+      if (sendError) {
+        const errorCode = normalizePromotionError(sendError);
         failedCount += 1;
-        failureReasons.add("sent_at_update_failed");
+        failureReasons.add(errorCode);
         logPromotionFailure(
           eventId,
-          registration.id,
-          "sent_at_update",
-          sentAtUpdateError ?? { code: "registration_not_updated" }
+          promotion.registration_id,
+          "resend_send",
+          sendError
         );
+        await completePromotion(promotion, false, errorCode);
         continue;
       }
 
       emailsSent += 1;
+
+      if (!(await completePromotion(promotion, true, null))) {
+        failedCount += 1;
+        failureReasons.add("complete_failed");
+      }
     }
 
     if (failedCount > 0) {
@@ -504,15 +624,33 @@ CSK Booking
       };
     }
 
-    return {
-      attempted: true,
-      success: true,
-      reserveFound: true,
-      notifiedCount: emailsSent,
-      failedCount: 0,
-      warning: false,
-      reason: null,
-    };
+      return {
+        attempted: true,
+        success: true,
+        reserveFound: true,
+        notifiedCount: emailsSent,
+        failedCount: 0,
+        warning: false,
+        reason: null,
+      };
+    } catch (error) {
+      await failPreparedPromotions("unexpected_error");
+      console.error("Event reserve promotion processing failed", {
+        ...getSafeErrorDetails(error),
+      });
+
+      return {
+        attempted: true,
+        success: false,
+        reserveFound: true,
+        notifiedCount: 0,
+        failedCount: preparedPromotions.length,
+        warning: true,
+        reason: "unexpected_error",
+        statusCode: 500,
+        error: "Wystąpił błąd podczas obsługi listy rezerwowej.",
+      };
+    }
   } catch (error) {
     console.error("Event reserve promotion failed", {
       ...getSafeErrorDetails(error),
