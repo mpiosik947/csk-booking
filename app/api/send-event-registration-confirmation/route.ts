@@ -1,20 +1,68 @@
-﻿import { NextResponse } from "next/server";
+import { NextResponse } from "next/server";
+import { createClient } from "@supabase/supabase-js";
 import { Resend } from "resend";
 
 type EventRegistrationConfirmationPayload = {
-  customerEmail?: string;
-  customerName?: string;
-  eventTitle?: string;
-  eventDate?: string;
-  startTime?: string;
-  endTime?: string;
-  location?: string;
-  price?: number;
-  registrationStatus?: string;
+  registrationId?: unknown;
 };
 
-function formatPrice(price?: number) {
-  if (typeof price !== "number") {
+type EventRegistrationRow = {
+  event_id: string;
+  customer_name: string | null;
+  registration_status: string;
+};
+
+type EventRow = {
+  title: string | null;
+  event_date: string | null;
+  start_time: string | null;
+  end_time: string | null;
+  location: string | null;
+  price: number | null;
+};
+
+const UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+const ALLOWED_REGISTRATION_STATUSES = new Set(["registered", "reserve"]);
+
+function getAuthenticatedSupabaseClient(accessToken: string) {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+  if (!supabaseUrl || !anonKey) {
+    throw new Error("Brak konfiguracji Supabase Auth.");
+  }
+
+  return createClient(supabaseUrl, anonKey, {
+    auth: {
+      persistSession: false,
+      autoRefreshToken: false,
+    },
+    global: {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+    },
+  });
+}
+
+function escapeHtml(value: string) {
+  return value.replace(/[&<>"']/g, (character) => {
+    const entities: Record<string, string> = {
+      "&": "&amp;",
+      "<": "&lt;",
+      ">": "&gt;",
+      '"': "&quot;",
+      "'": "&#39;",
+    };
+
+    return entities[character];
+  });
+}
+
+function formatPrice(price: number | null) {
+  if (typeof price !== "number" || !Number.isFinite(price)) {
     return "Do ustalenia";
   }
 
@@ -25,7 +73,7 @@ function formatPrice(price?: number) {
   return `${price.toFixed(2)} zł`;
 }
 
-function formatDate(date?: string) {
+function formatDate(date: string | null) {
   if (!date) {
     return "Brak daty";
   }
@@ -41,65 +89,166 @@ function formatDate(date?: string) {
   }
 }
 
-function formatRegistrationStatus(status?: string) {
-  if (status === "reserve") {
-    return "Lista rezerwowa";
-  }
+function formatRegistrationStatus(status: string) {
+  return status === "reserve" ? "Lista rezerwowa" : "Zapisany";
+}
 
-  return "Zapisany";
+function jsonError(
+  code:
+    | "invalid_request"
+    | "unauthorized"
+    | "not_found"
+    | "invalid_status"
+    | "delivery_failed"
+    | "internal_error",
+  status: number
+) {
+  return NextResponse.json({ ok: false, code }, { status });
 }
 
 export async function POST(request: Request) {
   try {
+    const authorizationHeader = request.headers.get("authorization");
+    const authorizationMatch = authorizationHeader?.match(/^Bearer\s+(.+)$/i);
+    const accessToken = authorizationMatch?.[1]?.trim();
+
+    if (!accessToken) {
+      return jsonError("unauthorized", 401);
+    }
+
+    const supabase = getAuthenticatedSupabaseClient(accessToken);
+    const {
+      data: { user },
+      error: userError,
+    } = await supabase.auth.getUser(accessToken);
+
+    if (userError || !user) {
+      return jsonError("unauthorized", 401);
+    }
+
+    let parsedBody: unknown;
+
+    try {
+      parsedBody = await request.json();
+    } catch {
+      console.error("Event registration confirmation invalid request body");
+      return jsonError("invalid_request", 400);
+    }
+
+    if (
+      !parsedBody ||
+      typeof parsedBody !== "object" ||
+      Array.isArray(parsedBody)
+    ) {
+      console.error("Event registration confirmation invalid request contract");
+      return jsonError("invalid_request", 400);
+    }
+
+    const bodyKeys = Object.keys(parsedBody);
+
+    if (bodyKeys.length !== 1 || bodyKeys[0] !== "registrationId") {
+      console.error("Event registration confirmation invalid request contract");
+      return jsonError("invalid_request", 400);
+    }
+
+    const body = parsedBody as EventRegistrationConfirmationPayload;
+    const registrationId =
+      typeof body.registrationId === "string"
+        ? body.registrationId.trim()
+        : "";
+
+    if (!registrationId || !UUID_PATTERN.test(registrationId)) {
+      console.error("Event registration confirmation invalid registration id");
+      return jsonError("invalid_request", 400);
+    }
+
+    const { data: registrationData, error: registrationError } = await supabase
+      .from("event_registrations")
+      .select("event_id,customer_name,registration_status")
+      .eq("id", registrationId)
+      .eq("user_id", user.id)
+      .maybeSingle();
+
+    if (registrationError) {
+      console.error("Event registration confirmation registration read failed", {
+        code: registrationError.code,
+      });
+      return jsonError("internal_error", 500);
+    }
+
+    if (!registrationData) {
+      return jsonError("not_found", 404);
+    }
+
+    const registration = registrationData as EventRegistrationRow;
+    const registrationStatus = registration.registration_status
+      .trim()
+      .toLowerCase();
+
+    if (!ALLOWED_REGISTRATION_STATUSES.has(registrationStatus)) {
+      return jsonError("invalid_status", 409);
+    }
+
+    const { data: eventData, error: eventError } = await supabase
+      .from("events")
+      .select("title,event_date,start_time,end_time,location,price")
+      .eq("id", registration.event_id)
+      .maybeSingle();
+
+    if (eventError) {
+      console.error("Event registration confirmation event read failed", {
+        code: eventError.code,
+      });
+      return jsonError("internal_error", 500);
+    }
+
+    if (!eventData) {
+      return jsonError("not_found", 404);
+    }
+
+    const recipientEmail = user.email?.trim();
+
+    if (!recipientEmail) {
+      console.error("Event registration confirmation recipient unavailable");
+      return jsonError("delivery_failed", 502);
+    }
+
     const resendApiKey = process.env.RESEND_API_KEY;
     const from = process.env.RESERVATION_EMAIL_FROM;
 
     if (!resendApiKey || !from) {
-      return NextResponse.json(
-        { error: "Brak konfiguracji wysyłki email." },
-        { status: 500 }
-      );
+      console.error("Event registration confirmation email configuration missing");
+      return jsonError("internal_error", 500);
     }
 
-    const body = (await request.json()) as EventRegistrationConfirmationPayload;
-
-    const {
-      customerEmail,
-      customerName,
-      eventTitle,
-      eventDate,
-      startTime,
-      endTime,
-      location,
-      price,
-      registrationStatus,
-    } = body;
-
-    if (!customerEmail) {
-      return NextResponse.json(
-        { error: "Brak adresu email uczestnika." },
-        { status: 400 }
-      );
-    }
-
-    const resend = new Resend(resendApiKey);
-
-    const displayName = customerName?.trim() || "Uczestniku";
-    const formattedDate = formatDate(eventDate);
-    const formattedPrice = formatPrice(price);
+    const event = eventData as EventRow;
+    const displayName = registration.customer_name?.trim() || "Uczestniku";
+    const formattedDate = formatDate(event.event_date);
+    const formattedPrice = formatPrice(event.price);
     const formattedStatus = formatRegistrationStatus(registrationStatus);
+    const eventTitle = event.title?.trim() || "-";
+    const startTime = event.start_time?.trim() || "-";
+    const endTime = event.end_time?.trim() || "-";
+    const location = event.location?.trim() || "-";
 
     const rawSiteUrl =
       process.env.NEXT_PUBLIC_SITE_URL ?? new URL(request.url).origin;
-
     const siteUrl = rawSiteUrl
       .replace(/^NEXT_PUBLIC_SITE_URL=/, "")
       .replace(/\/$/, "");
-
     const myEventsUrl = `${siteUrl}/my-events`;
 
-    const subject = "Potwierdzenie zapisu na szkolenie — CSK Booking";
+    const safeDisplayName = escapeHtml(displayName);
+    const safeEventTitle = escapeHtml(eventTitle);
+    const safeFormattedDate = escapeHtml(formattedDate);
+    const safeStartTime = escapeHtml(startTime);
+    const safeEndTime = escapeHtml(endTime);
+    const safeLocation = escapeHtml(location);
+    const safeFormattedStatus = escapeHtml(formattedStatus);
+    const safeFormattedPrice = escapeHtml(formattedPrice);
+    const safeMyEventsUrl = escapeHtml(myEventsUrl);
 
+    const subject = "Potwierdzenie zapisu na szkolenie — CSK Booking";
     const html = `
       <div style="margin:0;padding:0;background:#09090b;font-family:Arial,Helvetica,sans-serif;color:#ffffff;">
         <div style="max-width:620px;margin:0 auto;padding:32px 20px;">
@@ -113,27 +262,27 @@ export async function POST(request: Request) {
             </h1>
 
             <p style="margin:0 0 18px 0;font-size:16px;line-height:1.6;color:#d4d4d8;">
-              Cześć ${displayName}, Twój zapis na szkolenie został przyjęty.
+              Cześć ${safeDisplayName}, Twój zapis na szkolenie został przyjęty.
             </p>
 
             <div style="margin:24px 0;padding:18px;border:1px solid #3f3f46;border-radius:14px;background:#09090b;">
               <p style="margin:0 0 10px 0;font-size:15px;color:#d4d4d8;">
-                <strong style="color:#ffffff;">Szkolenie:</strong> ${eventTitle ?? "-"}
+                <strong style="color:#ffffff;">Szkolenie:</strong> ${safeEventTitle}
               </p>
               <p style="margin:0 0 10px 0;font-size:15px;color:#d4d4d8;">
-                <strong style="color:#ffffff;">Data:</strong> ${formattedDate}
+                <strong style="color:#ffffff;">Data:</strong> ${safeFormattedDate}
               </p>
               <p style="margin:0 0 10px 0;font-size:15px;color:#d4d4d8;">
-                <strong style="color:#ffffff;">Godzina:</strong> ${startTime ?? "-"} - ${endTime ?? "-"}
+                <strong style="color:#ffffff;">Godzina:</strong> ${safeStartTime} - ${safeEndTime}
               </p>
               <p style="margin:0 0 10px 0;font-size:15px;color:#d4d4d8;">
-                <strong style="color:#ffffff;">Miejsce:</strong> ${location ?? "-"}
+                <strong style="color:#ffffff;">Miejsce:</strong> ${safeLocation}
               </p>
               <p style="margin:0 0 10px 0;font-size:15px;color:#d4d4d8;">
-                <strong style="color:#ffffff;">Status:</strong> ${formattedStatus}
+                <strong style="color:#ffffff;">Status:</strong> ${safeFormattedStatus}
               </p>
               <p style="margin:0;font-size:15px;color:#d4d4d8;">
-                <strong style="color:#ffffff;">Płatność:</strong> ${formattedPrice}, płatność na miejscu
+                <strong style="color:#ffffff;">Płatność:</strong> ${safeFormattedPrice}, płatność na miejscu
               </p>
             </div>
 
@@ -142,7 +291,7 @@ export async function POST(request: Request) {
                 Szczegóły swojego zapisu znajdziesz w panelu uczestnika.
               </p>
 
-              <a href="${myEventsUrl}" style="display:inline-block;padding:12px 16px;border-radius:10px;background:#22c55e;color:#052e16;text-decoration:none;font-weight:bold;font-size:14px;">
+              <a href="${safeMyEventsUrl}" style="display:inline-block;padding:12px 16px;border-radius:10px;background:#22c55e;color:#052e16;text-decoration:none;font-weight:bold;font-size:14px;">
                 Moje szkolenia
               </a>
             </div>
@@ -170,10 +319,10 @@ Cześć ${displayName},
 
 Twój zapis na szkolenie został przyjęty.
 
-Szkolenie: ${eventTitle ?? "-"}
+Szkolenie: ${eventTitle}
 Data: ${formattedDate}
-Godzina: ${startTime ?? "-"} - ${endTime ?? "-"}
-Miejsce: ${location ?? "-"}
+Godzina: ${startTime} - ${endTime}
+Miejsce: ${location}
 Status: ${formattedStatus}
 Płatność: ${formattedPrice}, płatność na miejscu
 
@@ -187,26 +336,23 @@ Centrum Szkolenia Krutla
 CSK Booking
     `;
 
-    const { error } = await resend.emails.send({
+    const resend = new Resend(resendApiKey);
+    const { error: resendError } = await resend.emails.send({
       from,
-      to: customerEmail,
+      to: recipientEmail,
       subject,
       html,
       text,
     });
 
-    if (error) {
-      return NextResponse.json(
-        { error: "Nie udało się wysłać emaila potwierdzającego." },
-        { status: 500 }
-      );
+    if (resendError) {
+      console.error("Event registration confirmation delivery failed");
+      return jsonError("delivery_failed", 502);
     }
 
-    return NextResponse.json({ ok: true });
+    return NextResponse.json({ ok: true, code: "sent" });
   } catch {
-    return NextResponse.json(
-      { error: "Wystąpił błąd podczas wysyłki emaila." },
-      { status: 500 }
-    );
+    console.error("Event registration confirmation endpoint failed");
+    return jsonError("internal_error", 500);
   }
 }

@@ -40,6 +40,11 @@ type RegisterEventResponse = {
   message?: string;
 };
 
+type EventRegistrationConfirmationResponse = {
+  ok: boolean;
+  code: string;
+};
+
 function isRegisterEventResponse(value: unknown): value is RegisterEventResponse {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     return false;
@@ -54,6 +59,18 @@ function isRegisterEventResponse(value: unknown): value is RegisterEventResponse
     typeof result.registrationId === "string" &&
     typeof result.registrationStatus === "string"
   );
+}
+
+function isEventRegistrationConfirmationResponse(
+  value: unknown
+): value is EventRegistrationConfirmationResponse {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return false;
+  }
+
+  const result = value as Partial<EventRegistrationConfirmationResponse>;
+
+  return typeof result.ok === "boolean" && typeof result.code === "string";
 }
 
 function getAlreadyRegisteredMessage(code: string) {
@@ -85,7 +102,6 @@ export default function EventsPage() {
   const registrationRequestsRef = useRef(new Set<string>());
 
   const [userId, setUserId] = useState("");
-  const [customerEmail, setCustomerEmail] = useState("");
 
   useEffect(() => {
     if (!registrationSuccess) return;
@@ -111,7 +127,6 @@ export default function EventsPage() {
 
       if (user) {
         setUserId(user.id);
-        setCustomerEmail(user.email ?? "");
       }
 
       const publicEventFields = `
@@ -278,27 +293,32 @@ export default function EventsPage() {
 
       const registrationStatus = registrationResult.registrationStatus;
 
-      fetch("/api/send-event-registration-confirmation", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          customerEmail,
-          eventTitle: eventItem.title,
-          eventDate: eventItem.event_date,
-          startTime: eventItem.start_time,
-          endTime: eventItem.end_time,
-          location: eventItem.location,
-          price: Number(eventItem.price),
-          registrationStatus,
-        }),
-      }).catch((emailError) => {
-        console.error(
-          "Event registration confirmation email error:",
-          emailError
+      let confirmationEmailSent = false;
+
+      try {
+        const emailResponse = await fetch(
+          "/api/send-event-registration-confirmation",
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${session.access_token}`,
+            },
+            body: JSON.stringify({
+              registrationId: registrationResult.registrationId,
+            }),
+          }
         );
-      });
+        const emailResult: unknown = await emailResponse.json().catch(() => null);
+
+        confirmationEmailSent =
+          emailResponse.ok &&
+          isEventRegistrationConfirmationResponse(emailResult) &&
+          emailResult.ok === true &&
+          emailResult.code === "sent";
+      } catch {
+        console.error("Event registration confirmation request failed");
+      }
 
       setEvents((currentEvents) =>
         currentEvents.map((event) =>
@@ -330,6 +350,12 @@ export default function EventsPage() {
             ? "Lista rezerwowa"
             : "Zapisany",
       });
+
+      if (!confirmationEmailSent) {
+        setMessage(
+          "Zapis został utworzony, ale wiadomość e-mail nie została wysłana."
+        );
+      }
     } catch (registrationError) {
       console.error("Event registration request failed:", registrationError);
       setRegistrationConfirmation(null);
