@@ -1,47 +1,145 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { getProfileDisplayName } from "../../../lib/profile-display-name";
 
 type RegisterEventPayload = {
-  eventId?: string;
-  asReserve?: boolean;
-  customerEmail?: string;
-  customerPhone?: string;
+  eventId?: unknown;
+  asReserve?: unknown;
 };
 
-type ProfileRecord = {
-  first_name: string | null;
-  last_name: string | null;
-  full_name: string | null;
-  email: string | null;
+type RegisterEventRpcResult = {
+  ok: boolean;
+  changed: boolean;
+  code: RegisterEventCode;
+  registration_id?: string;
+  registration_status?: string;
 };
 
-type EventRecord = {
-  id: string;
-  max_participants: number | null;
-  is_active: boolean | null;
+type RegisterEventCode =
+  | "registered"
+  | "reserve"
+  | "already_registered"
+  | "already_reserve"
+  | "already_active"
+  | "event_inactive"
+  | "profile_incomplete"
+  | "event_not_found"
+  | "event_ended"
+  | "conflict";
+
+const UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+const SUCCESS_CODES = new Set<RegisterEventCode>([
+  "registered",
+  "reserve",
+  "already_registered",
+  "already_reserve",
+  "already_active",
+]);
+
+const CHANGED_CODES = new Set<RegisterEventCode>(["registered", "reserve"]);
+
+const KNOWN_CODES = new Set<RegisterEventCode>([
+  ...SUCCESS_CODES,
+  "event_inactive",
+  "profile_incomplete",
+  "event_not_found",
+  "event_ended",
+  "conflict",
+]);
+
+const RESPONSE_MESSAGES: Record<RegisterEventCode, string> = {
+  registered: "Zapis na szkolenie został utworzony.",
+  reserve: "Dodano Cię do listy rezerwowej.",
+  already_registered: "Jesteś już zapisany na to szkolenie.",
+  already_reserve: "Jesteś już na liście rezerwowej tego szkolenia.",
+  already_active: "Masz już aktywny zapis na to szkolenie.",
+  event_inactive: "To szkolenie nie jest już aktywne.",
+  profile_incomplete:
+    "Uzupełnij imię, nazwisko, adres e-mail i telefon w profilu przed zapisem.",
+  event_not_found: "Nie znaleziono szkolenia.",
+  event_ended: "Nie można zapisać się na rozpoczęte szkolenie.",
+  conflict: "Nie udało się jednoznacznie potwierdzić zapisu. Odśwież stronę.",
 };
 
-function getAdminSupabaseClient() {
+function getAuthenticatedSupabaseClient(accessToken: string) {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
-  if (!supabaseUrl || !serviceRoleKey) {
-    throw new Error("Brak konfiguracji Supabase service role.");
+  if (!supabaseUrl || !anonKey) {
+    throw new Error("Brak konfiguracji Supabase Auth.");
   }
 
-  return createClient(supabaseUrl, serviceRoleKey, {
+  return createClient(supabaseUrl, anonKey, {
     auth: {
       persistSession: false,
       autoRefreshToken: false,
     },
+    global: {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+    },
   });
+}
+
+function isRegisterEventRpcResult(
+  value: unknown
+): value is RegisterEventRpcResult {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return false;
+  }
+
+  const result = value as Partial<RegisterEventRpcResult>;
+
+  if (
+    typeof result.ok !== "boolean" ||
+    typeof result.changed !== "boolean" ||
+    typeof result.code !== "string" ||
+    !KNOWN_CODES.has(result.code as RegisterEventCode)
+  ) {
+    return false;
+  }
+
+  const code = result.code as RegisterEventCode;
+
+  if (SUCCESS_CODES.has(code)) {
+    const expectedChanged = CHANGED_CODES.has(code);
+
+    return (
+      result.ok === true &&
+      result.changed === expectedChanged &&
+      typeof result.registration_id === "string" &&
+      UUID_PATTERN.test(result.registration_id) &&
+      typeof result.registration_status === "string" &&
+      result.registration_status.trim().length > 0
+    );
+  }
+
+  return result.ok === false && result.changed === false;
+}
+
+function getStatusForCode(code: RegisterEventCode) {
+  if (SUCCESS_CODES.has(code)) {
+    return 200;
+  }
+
+  if (code === "event_not_found") {
+    return 404;
+  }
+
+  if (code === "event_ended" || code === "conflict") {
+    return 409;
+  }
+
+  return 400;
 }
 
 export async function POST(request: Request) {
   try {
     const authorizationHeader = request.headers.get("authorization");
-    const accessToken = authorizationHeader?.replace("Bearer ", "").trim();
+    const authorizationMatch = authorizationHeader?.match(/^Bearer\s+(.+)$/i);
+    const accessToken = authorizationMatch?.[1]?.trim();
 
     if (!accessToken) {
       return NextResponse.json(
@@ -50,8 +148,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const supabase = getAdminSupabaseClient();
-
+    const supabase = getAuthenticatedSupabaseClient(accessToken);
     const {
       data: { user },
       error: userError,
@@ -59,184 +156,120 @@ export async function POST(request: Request) {
 
     if (userError || !user) {
       return NextResponse.json(
-        { error: "Nie udało się potwierdzić użytkownika." },
+        { error: "Sesja wygasła. Zaloguj się ponownie." },
         { status: 401 }
       );
     }
 
-    const body = (await request.json()) as RegisterEventPayload;
+    let parsedBody: unknown;
 
-    const {
-      eventId,
-      asReserve = false,
-      customerEmail,
-      customerPhone,
-    } = body;
-
-    if (!eventId) {
+    try {
+      parsedBody = await request.json();
+    } catch {
       return NextResponse.json(
-        { error: "Brak ID szkolenia." },
+        { error: "Nieprawidłowe dane żądania." },
         { status: 400 }
       );
     }
 
-    if (!customerPhone) {
+    if (
+      !parsedBody ||
+      typeof parsedBody !== "object" ||
+      Array.isArray(parsedBody)
+    ) {
       return NextResponse.json(
-        { error: "Brakuje numeru telefonu w Twoim koncie." },
+        { error: "Nieprawidłowe dane żądania." },
         { status: 400 }
       );
     }
 
-    const { data: profileData, error: profileError } = await supabase
-      .from("profiles")
-      .select("first_name, last_name, full_name, email")
-      .eq("user_id", user.id)
-      .maybeSingle();
+    const bodyKeys = Object.keys(parsedBody);
+    const allowedBodyKeys = new Set(["eventId", "asReserve"]);
 
-    if (profileError) {
-      console.error("Event registration profile query failed:", profileError);
+    if (
+      !("eventId" in parsedBody) ||
+      bodyKeys.some((key) => !allowedBodyKeys.has(key))
+    ) {
       return NextResponse.json(
-        { error: "Nie udało się pobrać profilu użytkownika." },
-        { status: 500 }
-      );
-    }
-
-    if (!profileData) {
-      return NextResponse.json(
-        { error: "Nie udało się pobrać profilu użytkownika." },
+        { error: "Nieprawidłowe dane żądania." },
         { status: 400 }
       );
     }
 
-    const profile = profileData as ProfileRecord;
-    const customerName = getProfileDisplayName(
+    const body = parsedBody as RegisterEventPayload;
+    const eventId =
+      typeof body.eventId === "string" ? body.eventId.trim() : "";
+
+    if (!eventId || !UUID_PATTERN.test(eventId)) {
+      return NextResponse.json(
+        { error: "Nieprawidłowy identyfikator szkolenia." },
+        { status: 400 }
+      );
+    }
+
+    if (body.asReserve !== undefined && typeof body.asReserve !== "boolean") {
+      return NextResponse.json(
+        { error: "Nieprawidłowy tryb zapisu." },
+        { status: 400 }
+      );
+    }
+
+    const { data: rpcData, error: rpcError } = await supabase.rpc(
+      "register_for_event",
       {
-        first_name: profile.first_name,
-        last_name: profile.last_name,
-        full_name: profile.full_name,
-        email: profile.email || user.email,
-      },
-      ""
+        p_event_id: eventId,
+        p_as_reserve: body.asReserve ?? false,
+      }
     );
 
-    if (!customerName) {
+    if (rpcError) {
+      console.error("Event registration RPC failed", {
+        code: rpcError.code,
+      });
+
+      return NextResponse.json(
+        { error: "Nie udało się zapisać na szkolenie. Spróbuj ponownie." },
+        { status: 500 }
+      );
+    }
+
+    if (!isRegisterEventRpcResult(rpcData)) {
+      console.error("Event registration RPC returned invalid data");
+
+      return NextResponse.json(
+        { error: "Nie udało się potwierdzić wyniku zapisu." },
+        { status: 500 }
+      );
+    }
+
+    const status = getStatusForCode(rpcData.code);
+    const message = RESPONSE_MESSAGES[rpcData.code];
+
+    if (status !== 200) {
       return NextResponse.json(
         {
-          error:
-            "Uzupełnij dane profilu przed zapisaniem się na szkolenie.",
+          ok: rpcData.ok,
+          changed: rpcData.changed,
+          code: rpcData.code,
+          error: message,
         },
-        { status: 400 }
-      );
-    }
-
-    const { data: eventData, error: eventError } = await supabase
-      .from("events")
-      .select("id, max_participants, is_active")
-      .eq("id", eventId)
-      .maybeSingle();
-
-    if (eventError || !eventData) {
-      return NextResponse.json(
-        { error: "Nie znaleziono szkolenia." },
-        { status: 404 }
-      );
-    }
-
-    const eventItem = eventData as EventRecord;
-
-    if (eventItem.is_active === false) {
-      return NextResponse.json(
-        { error: "To szkolenie nie jest już aktywne." },
-        { status: 400 }
-      );
-    }
-
-    const { data: existingRegistration, error: existingError } = await supabase
-      .from("event_registrations")
-      .select("id")
-      .eq("event_id", eventId)
-      .eq("user_id", user.id)
-      .neq("registration_status", "cancelled")
-      .maybeSingle();
-
-    if (existingError) {
-      return NextResponse.json(
-        { error: "Nie udało się sprawdzić istniejącego zapisu." },
-        { status: 500 }
-      );
-    }
-
-    if (existingRegistration) {
-      return NextResponse.json(
-        { error: "Jesteś już zapisany na to szkolenie lub listę rezerwową." },
-        { status: 409 }
-      );
-    }
-
-    const { count: participantsCount, error: participantsError } =
-      await supabase
-        .from("event_registrations")
-        .select("id", { count: "exact", head: true })
-        .eq("event_id", eventId)
-        .in("registration_status", ["registered", "approved"]);
-
-    if (participantsError) {
-      return NextResponse.json(
-        { error: "Nie udało się sprawdzić liczby uczestników." },
-        { status: 500 }
-      );
-    }
-
-    const { count: reserveCount, error: reserveError } = await supabase
-      .from("event_registrations")
-      .select("id", { count: "exact", head: true })
-      .eq("event_id", eventId)
-      .eq("registration_status", "reserve");
-
-    if (reserveError) {
-      return NextResponse.json(
-        { error: "Nie udało się sprawdzić listy rezerwowej." },
-        { status: 500 }
-      );
-    }
-
-    const maxParticipants = Number(eventItem.max_participants ?? 0);
-    const isFull = (participantsCount ?? 0) >= maxParticipants;
-    const hasReserveList = (reserveCount ?? 0) > 0;
-
-    const registrationStatus =
-      asReserve || isFull || hasReserveList ? "reserve" : "registered";
-
-    const { data: insertedRegistration, error: insertError } = await supabase
-      .from("event_registrations")
-      .insert({
-        event_id: eventId,
-        user_id: user.id,
-        customer_name: customerName ?? "",
-        customer_email: customerEmail ?? user.email ?? "",
-        customer_phone: customerPhone,
-        registration_status: registrationStatus,
-        payment_status: "pay_on_site",
-      })
-      .select("id, registration_status")
-      .single();
-
-    if (insertError) {
-      return NextResponse.json(
-        { error: `Błąd zapisu: ${insertError.message}` },
-        { status: 500 }
+        { status }
       );
     }
 
     return NextResponse.json({
-      ok: true,
-      registrationId: insertedRegistration.id,
-      registrationStatus,
-      customerName,
+      ok: rpcData.ok,
+      changed: rpcData.changed,
+      code: rpcData.code,
+      registrationId: rpcData.registration_id,
+      registrationStatus: rpcData.registration_status,
+      message,
     });
   } catch {
+    console.error("Event registration endpoint failed");
+
     return NextResponse.json(
-      { error: "Wystąpił błąd podczas zapisu na szkolenie." },
+      { error: "Nie udało się zapisać na szkolenie. Spróbuj ponownie." },
       { status: 500 }
     );
   }

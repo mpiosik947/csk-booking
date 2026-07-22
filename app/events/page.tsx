@@ -1,6 +1,6 @@
 ﻿"use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { supabase } from "../../lib/supabase";
 
 type EventRegistration = {
@@ -31,22 +31,61 @@ type RegistrationSuccess = {
   status: string;
 };
 
+type RegisterEventResponse = {
+  ok: boolean;
+  changed: boolean;
+  code: string;
+  registrationId: string;
+  registrationStatus: string;
+  message?: string;
+};
+
+function isRegisterEventResponse(value: unknown): value is RegisterEventResponse {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return false;
+  }
+
+  const result = value as Partial<RegisterEventResponse>;
+
+  return (
+    result.ok === true &&
+    typeof result.changed === "boolean" &&
+    typeof result.code === "string" &&
+    typeof result.registrationId === "string" &&
+    typeof result.registrationStatus === "string"
+  );
+}
+
+function getAlreadyRegisteredMessage(code: string) {
+  if (code === "already_registered") {
+    return "Jesteś już zapisany na to szkolenie.";
+  }
+
+  if (code === "already_reserve") {
+    return "Jesteś już na liście rezerwowej tego szkolenia.";
+  }
+
+  return "Masz już aktywny zapis na to szkolenie.";
+}
+
 export default function EventsPage() {
   const [events, setEvents] = useState<Event[]>([]);
   const [selectedEventId, setSelectedEventId] = useState("");
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
   const [message, setMessage] = useState("");
+  const [messageIsInformation, setMessageIsInformation] = useState(false);
   const [registrationSuccess, setRegistrationSuccess] =
     useState<RegistrationSuccess | null>(null);
   const [registrationConfirmation, setRegistrationConfirmation] = useState<{
     eventItem: Event;
     asReserve: boolean;
   } | null>(null);
+  const [registeringEventId, setRegisteringEventId] = useState("");
+  const registrationRequestsRef = useRef(new Set<string>());
 
   const [userId, setUserId] = useState("");
   const [customerEmail, setCustomerEmail] = useState("");
-  const [customerPhone, setCustomerPhone] = useState("");
 
   useEffect(() => {
     if (!registrationSuccess) return;
@@ -71,17 +110,8 @@ export default function EventsPage() {
       } = await supabase.auth.getUser();
 
       if (user) {
-        const metadata = user.user_metadata ?? {};
-
         setUserId(user.id);
         setCustomerEmail(user.email ?? "");
-        setCustomerPhone(
-          metadata.phone ??
-            metadata.telefon ??
-            metadata.phone_number ??
-            metadata.phoneNumber ??
-            ""
-        );
       }
 
       const publicEventFields = `
@@ -178,107 +208,138 @@ export default function EventsPage() {
 
   async function registerForEvent(eventItem: Event, asReserve = false) {
     setMessage("");
+    setMessageIsInformation(false);
 
     if (!userId) {
       setMessage("Musisz być zalogowany, aby zapisać się na szkolenie.");
       return;
     }
 
-    if (!customerPhone) {
-      setMessage("Brakuje numeru telefonu w Twoim koncie.");
+    if (registrationRequestsRef.current.has(eventItem.id)) {
       return;
     }
 
-    const {
-      data: { session },
-    } = await supabase.auth.getSession();
+    registrationRequestsRef.current.add(eventItem.id);
+    setRegisteringEventId(eventItem.id);
 
-    if (!session?.access_token) {
-      setMessage("Sesja wygasła. Zaloguj się ponownie.");
-      return;
-    }
+    try {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
 
-    const registrationResponse = await fetch("/api/register-event", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${session.access_token}`,
-      },
-      body: JSON.stringify({
-        eventId: eventItem.id,
-        asReserve,
-        customerEmail,
-        customerPhone,
-      }),
-    });
+      if (!session?.access_token) {
+        setRegistrationConfirmation(null);
+        setMessage("Sesja wygasła. Zaloguj się ponownie.");
+        return;
+      }
 
-    const registrationResult = await registrationResponse
-      .json()
-      .catch(() => null);
+      const registrationResponse = await fetch("/api/register-event", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({
+          eventId: eventItem.id,
+          asReserve,
+        }),
+      });
 
-    if (!registrationResponse.ok) {
-      setMessage(
-        registrationResult?.error ?? "Nie udało się zapisać na szkolenie."
+      const registrationResult: unknown = await registrationResponse
+        .json()
+        .catch(() => null);
+
+      if (!registrationResponse.ok) {
+        const errorMessage =
+          registrationResult &&
+          typeof registrationResult === "object" &&
+          "error" in registrationResult &&
+          typeof registrationResult.error === "string"
+            ? registrationResult.error
+            : "Nie udało się zapisać na szkolenie.";
+
+        setRegistrationConfirmation(null);
+        setMessage(errorMessage);
+        return;
+      }
+
+      if (!isRegisterEventResponse(registrationResult)) {
+        setRegistrationConfirmation(null);
+        setMessage("Nie udało się potwierdzić wyniku zapisu.");
+        return;
+      }
+
+      if (!registrationResult.changed) {
+        setRegistrationConfirmation(null);
+        setMessageIsInformation(true);
+        setMessage(getAlreadyRegisteredMessage(registrationResult.code));
+        return;
+      }
+
+      const registrationStatus = registrationResult.registrationStatus;
+
+      fetch("/api/send-event-registration-confirmation", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          customerEmail,
+          eventTitle: eventItem.title,
+          eventDate: eventItem.event_date,
+          startTime: eventItem.start_time,
+          endTime: eventItem.end_time,
+          location: eventItem.location,
+          price: Number(eventItem.price),
+          registrationStatus,
+        }),
+      }).catch((emailError) => {
+        console.error(
+          "Event registration confirmation email error:",
+          emailError
+        );
+      });
+
+      setEvents((currentEvents) =>
+        currentEvents.map((event) =>
+          event.id === eventItem.id
+            ? {
+                ...event,
+                event_registrations: [
+                  ...(event.event_registrations ?? []),
+                  {
+                    id: registrationResult.registrationId,
+                    registration_status: registrationStatus,
+                  },
+                ],
+              }
+            : event
+        )
       );
-      return;
-    }
 
-    const registrationStatus = registrationResult.registrationStatus as string;
-    const registeredCustomerName = registrationResult.customerName as string;
-
-        fetch("/api/send-event-registration-confirmation", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        customerEmail,
-        customerName: registeredCustomerName,
-        eventTitle: eventItem.title,
-        eventDate: eventItem.event_date,
+      setRegistrationConfirmation(null);
+      setRegistrationSuccess({
+        title: eventItem.title,
+        date: eventItem.event_date,
         startTime: eventItem.start_time,
         endTime: eventItem.end_time,
         location: eventItem.location,
         price: Number(eventItem.price),
-        registrationStatus,
-      }),
-    }).catch((emailError) => {
-      console.error(
-        "Event registration confirmation email error:",
-        emailError
+        status:
+          registrationStatus === "reserve"
+            ? "Lista rezerwowa"
+            : "Zapisany",
+      });
+    } catch (registrationError) {
+      console.error("Event registration request failed:", registrationError);
+      setRegistrationConfirmation(null);
+      setMessage("Nie udało się zapisać na szkolenie. Spróbuj ponownie.");
+    } finally {
+      registrationRequestsRef.current.delete(eventItem.id);
+      setRegisteringEventId((currentId) =>
+        currentId === eventItem.id ? "" : currentId
       );
-    });
-
-
-    setRegistrationSuccess({
-      title: eventItem.title,
-      date: eventItem.event_date,
-      startTime: eventItem.start_time,
-      endTime: eventItem.end_time,
-      location: eventItem.location,
-      price: Number(eventItem.price),
-      status:
-        registrationStatus === "reserve"
-          ? "Lista rezerwowa"
-          : "Zapisany",
-    });
-
-    setEvents((currentEvents) =>
-      currentEvents.map((event) =>
-        event.id === eventItem.id
-          ? {
-              ...event,
-              event_registrations: [
-                ...(event.event_registrations ?? []),
-                {
-                  id: registrationResult.registrationId ?? crypto.randomUUID(),
-                  registration_status: registrationStatus,
-                },
-              ],
-            }
-          : event
-      )
-    );
+    }
   }
 
   function getMessageClass(message: string) {
@@ -411,18 +472,24 @@ export default function EventsPage() {
           ) : isFull ? (
             <button
               type="button"
+              disabled={registeringEventId === event.id}
               onClick={() => setRegistrationConfirmation({ eventItem: event, asReserve: true })}
-              className="min-h-12 w-full rounded-xl border border-[#806a32] bg-[#2b2618] px-5 py-3 font-semibold text-[#e1c477] transition hover:bg-[#3a321f] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#c5a861] focus-visible:ring-offset-2 focus-visible:ring-offset-[#191e19]"
+              className="min-h-12 w-full rounded-xl border border-[#806a32] bg-[#2b2618] px-5 py-3 font-semibold text-[#e1c477] transition hover:bg-[#3a321f] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#c5a861] focus-visible:ring-offset-2 focus-visible:ring-offset-[#191e19] disabled:cursor-not-allowed disabled:opacity-60"
             >
-              Dołącz do listy rezerwowej
+              {registeringEventId === event.id
+                ? "Zapisywanie..."
+                : "Dołącz do listy rezerwowej"}
             </button>
           ) : (
             <button
               type="button"
+              disabled={registeringEventId === event.id}
               onClick={() => setRegistrationConfirmation({ eventItem: event, asReserve: false })}
-              className="min-h-12 w-full rounded-xl bg-[#536143] px-5 py-3 font-semibold text-[#f2efe4] transition hover:bg-[#78865f] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#c5a861] focus-visible:ring-offset-2 focus-visible:ring-offset-[#191e19]"
+              className="min-h-12 w-full rounded-xl bg-[#536143] px-5 py-3 font-semibold text-[#f2efe4] transition hover:bg-[#78865f] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#c5a861] focus-visible:ring-offset-2 focus-visible:ring-offset-[#191e19] disabled:cursor-not-allowed disabled:opacity-60"
             >
-              Zapisz się
+              {registeringEventId === event.id
+                ? "Zapisywanie..."
+                : "Zapisz się"}
             </button>
           )}
         </div>
@@ -523,28 +590,38 @@ export default function EventsPage() {
               <div className="mt-6 grid gap-3 sm:grid-cols-2">
                 <button
                   type="button"
+                  disabled={
+                    registeringEventId ===
+                    registrationConfirmation.eventItem.id
+                  }
                   onClick={() => setRegistrationConfirmation(null)}
-                  className="min-h-12 w-full rounded-xl border border-[#30372c] bg-[#191e19] px-5 py-3 font-semibold text-[#a9ada4] transition hover:border-[#78865f] hover:text-[#f2efe4] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#c5a861] focus-visible:ring-offset-2 focus-visible:ring-offset-[#141814]"
+                  className="min-h-12 w-full rounded-xl border border-[#30372c] bg-[#191e19] px-5 py-3 font-semibold text-[#a9ada4] transition hover:border-[#78865f] hover:text-[#f2efe4] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#c5a861] focus-visible:ring-offset-2 focus-visible:ring-offset-[#141814] disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   Wróć do szkoleń
                 </button>
 
                 <button
                   type="button"
-                  onClick={() => {
-                    registerForEvent(
+                  disabled={
+                    registeringEventId ===
+                    registrationConfirmation.eventItem.id
+                  }
+                  onClick={() =>
+                    void registerForEvent(
                       registrationConfirmation.eventItem,
                       registrationConfirmation.asReserve
-                    );
-                    setRegistrationConfirmation(null);
-                  }}
-                  className={`min-h-12 w-full rounded-xl px-5 py-3 font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#c5a861] focus-visible:ring-offset-2 focus-visible:ring-offset-[#141814] ${
+                    )
+                  }
+                  className={`min-h-12 w-full rounded-xl px-5 py-3 font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#c5a861] focus-visible:ring-offset-2 focus-visible:ring-offset-[#141814] disabled:cursor-not-allowed disabled:opacity-60 ${
                     registrationConfirmation.asReserve
                       ? "border border-[#806a32] bg-[#6f5a2e] text-[#f2efe4] hover:bg-[#9a7c3e]"
                       : "bg-[#536143] text-[#f2efe4] hover:bg-[#78865f]"
                   }`}
                 >
-                  Zapisz się
+                  {registeringEventId ===
+                  registrationConfirmation.eventItem.id
+                    ? "Zapisywanie..."
+                    : "Zapisz się"}
                 </button>
               </div>
             </div>
@@ -646,21 +723,33 @@ export default function EventsPage() {
               aria-describedby="event-registration-error-description"
               className="max-h-[calc(100vh-3rem)] w-full max-w-lg overflow-y-auto rounded-[2rem] border border-[#30372c] bg-[#141814] p-5 text-[#f2efe4] shadow-2xl shadow-black/40 sm:p-7"
             >
-              <div className="mb-4 rounded-full border border-[#744545] bg-[#2a1b1b] px-4 py-2 text-center text-sm font-bold uppercase tracking-[0.2em] text-[#e0a0a0]">
-                Komunikat
+              <div
+                className={`mb-4 rounded-full border px-4 py-2 text-center text-sm font-bold uppercase tracking-[0.2em] ${
+                  messageIsInformation
+                    ? "border-[#806a32] bg-[#2b2618] text-[#e1c477]"
+                    : "border-[#744545] bg-[#2a1b1b] text-[#e0a0a0]"
+                }`}
+              >
+                {messageIsInformation ? "Informacja" : "Komunikat"}
               </div>
 
               <h2
                 id="event-registration-error-title"
                 className="mb-3 text-2xl font-bold text-[#f2efe4]"
               >
-                Nie można wykonać zapisu
+                {messageIsInformation
+                  ? "Informacja o zapisie"
+                  : "Nie można wykonać zapisu"}
               </h2>
 
               <p
                 id="event-registration-error-description"
                 role="alert"
-                className="break-words rounded-2xl border border-[#744545] bg-[#2a1b1b] p-4 leading-6 text-[#e0a0a0]"
+                className={`break-words rounded-2xl border p-4 leading-6 ${
+                  messageIsInformation
+                    ? "border-[#806a32] bg-[#2b2618] text-[#e1c477]"
+                    : "border-[#744545] bg-[#2a1b1b] text-[#e0a0a0]"
+                }`}
               >
                 {message}
               </p>
@@ -668,7 +757,10 @@ export default function EventsPage() {
               <div className="mt-6 flex justify-end">
                 <button
                   type="button"
-                  onClick={() => setMessage("")}
+                  onClick={() => {
+                    setMessage("");
+                    setMessageIsInformation(false);
+                  }}
                   className="min-h-12 w-full rounded-xl border border-[#30372c] bg-[#191e19] px-5 py-3 font-semibold text-[#a9ada4] transition hover:border-[#78865f] hover:text-[#f2efe4] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#c5a861] focus-visible:ring-offset-2 focus-visible:ring-offset-[#141814] sm:w-auto"
                 >
                   Zamknij
