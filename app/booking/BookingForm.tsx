@@ -53,6 +53,26 @@ type ConfirmationData = {
   price: number;
 };
 
+type ReservationConfirmationResponse = {
+  ok: boolean;
+  code: string;
+};
+
+const UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function isReservationConfirmationResponse(
+  value: unknown
+): value is ReservationConfirmationResponse {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return false;
+  }
+
+  const result = value as Partial<ReservationConfirmationResponse>;
+
+  return typeof result.ok === "boolean" && typeof result.code === "string";
+}
+
 const durations = [
   { label: "1 godzina", value: 60 },
   { label: "2 godziny", value: 120 },
@@ -255,6 +275,7 @@ export default function BookingForm({ lanes }: BookingFormProps) {
     useState<ConfirmationData | null>(null);
   const confirmationButtonRef = useRef<HTMLButtonElement>(null);
   const confirmationTriggerRef = useRef<HTMLElement | null>(null);
+  const submissionInProgressRef = useRef(false);
 
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
@@ -497,6 +518,10 @@ export default function BookingForm({ lanes }: BookingFormProps) {
   }
 
   async function handleSubmit() {
+    if (submissionInProgressRef.current) {
+      return;
+    }
+
     setMessage("");
       if (isPastReservationDate(reservationDate)) {
     setMessage("Nie można dokonać rezerwacji z datą wsteczną.");
@@ -571,168 +596,204 @@ export default function BookingForm({ lanes }: BookingFormProps) {
         ? document.activeElement
         : null;
 
+    submissionInProgressRef.current = true;
     setLoading(true);
+    let reservationCreated = false;
 
-    if (!isVerified) {
-      const { data: activeReservations, error: activeReservationsError } =
+    try {
+      if (!isVerified) {
+        const { data: activeReservations, error: activeReservationsError } =
+          await supabase
+            .from("reservations")
+            .select("id")
+            .eq("user_id", userId)
+            .in("reservation_status", [RESERVATION_STATUS.CONFIRMED]);
+
+        if (activeReservationsError) {
+          setMessage(
+            "Nie udało się sprawdzić możliwości utworzenia rezerwacji. Spróbuj ponownie."
+          );
+          return;
+        }
+
+        if ((activeReservations ?? []).length >= 1) {
+          setMessage(
+            "Twoje konto oczekuje na weryfikację. Do czasu pierwszej wizyty i potwierdzenia danych przez pracownika możesz mieć tylko jedną aktywną rezerwację."
+          );
+          return;
+        }
+      }
+
+      const { data: allReservationsForLane, error: reservationsError } =
         await supabase
           .from("reservations")
-          .select("id")
-          .eq("user_id", userId)
-          .in("reservation_status", [RESERVATION_STATUS.CONFIRMED]);
+          .select(
+            "id, lane_id, reservation_date, start_time, end_time, reservation_status"
+          )
+          .eq("lane_id", laneId)
+          .eq("reservation_date", reservationDate);
 
-      if (activeReservationsError) {
-        setLoading(false);
-        setMessage(
-          "Nie udało się sprawdzić możliwości utworzenia rezerwacji. Spróbuj ponownie."
-        );
+      if (reservationsError) {
+        setMessage("Błąd sprawdzania rezerwacji.");
         return;
       }
 
-      if ((activeReservations ?? []).length >= 1) {
-        setLoading(false);
-        setMessage(
-          "Twoje konto oczekuje na weryfikację. Do czasu pierwszej wizyty i potwierdzenia danych przez pracownika możesz mieć tylko jedną aktywną rezerwację."
+      const reservationConflict = (
+        (allReservationsForLane ?? []) as BookedReservation[]
+      ).filter((reservation) => {
+        return (
+          isActiveReservation(reservation.reservation_status) &&
+          rangesOverlap(
+            selectedHour,
+            endTime,
+            reservation.start_time,
+            reservation.end_time
+          )
         );
+      });
+
+      if (reservationConflict.length > 0) {
+        setMessage(
+          `Nie można zarezerwować tego zakresu. Kolizja z istniejącą rezerwacją: ${normalizeTime(
+            reservationConflict[0].start_time
+          )} - ${normalizeTime(reservationConflict[0].end_time)}.`
+        );
+        setSelectedHour("");
         return;
       }
-    }
 
-    const { data: allReservationsForLane, error: reservationsError } =
-      await supabase
-        .from("reservations")
-        .select(
-          "id, lane_id, reservation_date, start_time, end_time, reservation_status"
-        )
+      const { data: allBlocksForLane, error: blocksError } = await supabase
+        .from("lane_blocks")
+        .select("id, start_time, end_time")
         .eq("lane_id", laneId)
-        .eq("reservation_date", reservationDate);
+        .eq("block_date", reservationDate)
+        .eq("is_active", true);
 
-    if (reservationsError) {
-      setLoading(false);
-      setMessage("Błąd sprawdzania rezerwacji.");
-      return;
-    }
+      if (blocksError) {
+        setMessage("Błąd sprawdzania blokad osi.");
+        return;
+      }
 
-    const reservationConflict = (
-      (allReservationsForLane ?? []) as BookedReservation[]
-    ).filter((reservation) => {
-      return (
-        isActiveReservation(reservation.reservation_status) &&
-        rangesOverlap(
-          selectedHour,
-          endTime,
-          reservation.start_time,
-          reservation.end_time
-        )
+      const blockConflict = ((allBlocksForLane ?? []) as LaneBlock[]).filter(
+        (block) =>
+          rangesOverlap(selectedHour, endTime, block.start_time, block.end_time)
       );
-    });
 
-    if (reservationConflict.length > 0) {
-      setLoading(false);
-      setMessage(
-        `Nie można zarezerwować tego zakresu. Kolizja z istniejącą rezerwacją: ${normalizeTime(
-          reservationConflict[0].start_time
-        )} - ${normalizeTime(reservationConflict[0].end_time)}.`
-      );
-      setSelectedHour("");
-      return;
-    }
+      if (blockConflict.length > 0) {
+        setMessage(
+          `Nie można zarezerwować tego zakresu. Kolizja z blokadą osi: ${normalizeTime(
+            blockConflict[0].start_time
+          )} - ${normalizeTime(blockConflict[0].end_time)}.`
+        );
+        setSelectedHour("");
+        return;
+      }
 
-    const { data: allBlocksForLane, error: blocksError } = await supabase
-      .from("lane_blocks")
-      .select("id, start_time, end_time")
-      .eq("lane_id", laneId)
-      .eq("block_date", reservationDate)
-      .eq("is_active", true);
+      const checkInToken = crypto.randomUUID();
+      const { data: insertedReservation, error } = await supabase
+        .from("reservations")
+        .insert({
+          user_id: userId,
+          lane_id: laneId,
+          customer_name: customerName,
+          customer_email: customerEmail,
+          customer_phone: customerPhone,
+          reservation_date: reservationDate,
+          start_time: selectedHour,
+          end_time: endTime,
+          duration_minutes: durationMinutes,
+          price: price,
+          reservation_status: RESERVATION_STATUS.CONFIRMED,
+          payment_status: PAYMENT_STATUS.PAY_ON_SITE,
+          check_in_token: checkInToken,
+        })
+        .select("id")
+        .single();
 
-    if (blocksError) {
-      setLoading(false);
-      setMessage("Błąd sprawdzania blokad osi.");
-      return;
-    }
+      if (error) {
+        setMessage("Nie udało się utworzyć rezerwacji. Spróbuj ponownie.");
+        return;
+      }
 
-    const blockConflict = ((allBlocksForLane ?? []) as LaneBlock[]).filter(
-      (block) =>
-        rangesOverlap(selectedHour, endTime, block.start_time, block.end_time)
-    );
+      reservationCreated = true;
+      const reservationId =
+        typeof insertedReservation?.id === "string"
+          ? insertedReservation.id.trim()
+          : "";
 
-    if (blockConflict.length > 0) {
-      setLoading(false);
-      setMessage(
-        `Nie można zarezerwować tego zakresu. Kolizja z blokadą osi: ${normalizeTime(
-          blockConflict[0].start_time
-        )} - ${normalizeTime(blockConflict[0].end_time)}.`
-      );
-      setSelectedHour("");
-      return;
-    }
+      if (!reservationId || !UUID_PATTERN.test(reservationId)) {
+        setMessage(
+          "Nie udało się potwierdzić utworzenia rezerwacji. Odśwież stronę przed ponowną próbą."
+        );
+        return;
+      }
 
-    const checkInToken = crypto.randomUUID();
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      let confirmationEmailSent = false;
 
-    const { error } = await supabase.from("reservations").insert({
-      user_id: userId,
-      lane_id: laneId,
-      customer_name: customerName,
-      customer_email: customerEmail,
-      customer_phone: customerPhone,
-      reservation_date: reservationDate,
-      start_time: selectedHour,
-      end_time: endTime,
-      duration_minutes: durationMinutes,
-      price: price,
-      reservation_status: RESERVATION_STATUS.CONFIRMED,
-      payment_status: PAYMENT_STATUS.PAY_ON_SITE,
-      check_in_token: checkInToken,
-    });
+      if (session?.access_token) {
+        try {
+          const emailResponse = await fetch(
+            "/api/send-reservation-confirmation",
+            {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${session.access_token}`,
+              },
+              body: JSON.stringify({ reservationId }),
+            }
+          );
+          const emailResult: unknown = await emailResponse
+            .json()
+            .catch(() => null);
 
-    setLoading(false);
+          confirmationEmailSent =
+            emailResponse.ok &&
+            isReservationConfirmationResponse(emailResult) &&
+            emailResult.ok === true &&
+            emailResult.code === "sent";
+        } catch {
+          console.error("Reservation confirmation request failed");
+        }
+      }
 
-    if (error) {
-      setMessage("Nie udało się utworzyć rezerwacji. Spróbuj ponownie.");
-      return;
-    }
-
-    const emailResponse = await fetch("/api/send-reservation-confirmation", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        customerEmail,
-        customerName,
-        reservationDate,
+      setConfirmationData({
+        date: reservationDate,
         startTime: selectedHour,
         endTime,
         laneName,
         price,
-        checkInToken,
-      }),
-    });
+      });
 
-    setConfirmationData({
-      date: reservationDate,
-      startTime: selectedHour,
-      endTime,
-      laneName,
-      price,
-    });
+      if (confirmationEmailSent) {
+        setMessage(
+          "Rezerwacja została zapisana. Email potwierdzający został wysłany. Płatność na miejscu."
+        );
+      } else {
+        setMessage(
+          "Rezerwacja została utworzona, ale wiadomość e-mail nie została wysłana."
+        );
+      }
 
-    if (!emailResponse.ok) {
+      setReservationDate("");
+      setLaneId("");
+      setDurationMinutes(60);
+      setSelectedHour("");
+      setAcceptedRules(false);
+      setBookedHours([]);
+    } catch {
       setMessage(
-        "Rezerwacja zosta\u0142a zapisana. Nie uda\u0142o si\u0119 wys\u0142a\u0107 emaila potwierdzaj\u0105cego."
+        reservationCreated
+          ? "Rezerwacja została utworzona, ale wiadomość e-mail nie została wysłana."
+          : "Nie udało się utworzyć rezerwacji. Spróbuj ponownie."
       );
-    } else {
-      setMessage(
-        "Rezerwacja zosta\u0142a zapisana. Email potwierdzaj\u0105cy zosta\u0142 wys\u0142any. P\u0142atno\u015b\u0107 na miejscu."
-      );
+    } finally {
+      submissionInProgressRef.current = false;
+      setLoading(false);
     }
-
-    setReservationDate("");
-    setLaneId("");
-    setDurationMinutes(60);
-    setSelectedHour("");
-    setAcceptedRules(false);
-    setBookedHours([]);
   }
 
   if (checkingUser) {
