@@ -1,12 +1,36 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { supabase } from "../../../lib/supabase";
 
-type HandleFreedEventPlaceResult = {
-  reserveFound: boolean;
-  emailsSent: number;
-  error: string;
+type RegistrationAction = "approve" | "cancel";
+
+type ApproveRegistrationResult = {
+  ok: boolean;
+  changed: boolean;
+  code: string;
+  registration_id?: string;
+  event_id?: string;
+  previous_status?: string;
+  new_status?: string;
+};
+
+type CancelRegistrationResult = {
+  success: boolean;
+  cancellation: {
+    registrationId: string;
+    eventId: string;
+    changed: boolean;
+    previousStatus: string;
+    newStatus: string;
+    freedParticipantPlace: boolean;
+  };
+  promotion: {
+    attempted: boolean;
+    succeeded: boolean;
+    warning: boolean;
+  };
+  message: string;
 };
 
 type Event = {
@@ -115,6 +139,10 @@ export default function AdminEventsPage() {
   const [registrations, setRegistrations] = useState<Registration[]>([]);
   const [message, setMessage] = useState("");
   const [userRole, setUserRole] = useState("");
+  const [registrationActions, setRegistrationActions] = useState<
+    Record<string, RegistrationAction>
+  >({});
+  const registrationActionLocksRef = useRef(new Set<string>());
 
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -181,7 +209,8 @@ export default function AdminEventsPage() {
       .order("created_at", { ascending: false });
 
     if (error) {
-      setMessage(`Błąd pobierania zapisów: ${error.message}`);
+      console.error("Event registrations loading failed", { code: error.code });
+      setMessage("Nie udało się pobrać zapisów. Spróbuj ponownie.");
       return;
     }
 
@@ -357,134 +386,292 @@ export default function AdminEventsPage() {
     loadEvents();
   }
 
-  async function handleFreedEventPlace(
-    eventId: string
-  ): Promise<HandleFreedEventPlaceResult> {
-    if (!canManageEvents) {
-      const error = "Brak uprawnień do zarządzania listą rezerwową.";
-      setMessage(error);
-      return {
-        reserveFound: false,
-        emailsSent: 0,
-        error,
-      };
+  function beginRegistrationAction(
+    registrationId: string,
+    action: RegistrationAction
+  ) {
+    if (registrationActionLocksRef.current.has(registrationId)) {
+      return false;
     }
 
-    const {
-      data: { session },
-      error: sessionError,
-    } = await supabase.auth.getSession();
+    registrationActionLocksRef.current.add(registrationId);
+    setRegistrationActions((current) => ({
+      ...current,
+      [registrationId]: action,
+    }));
+    return true;
+  }
 
-    if (sessionError || !session?.access_token) {
-      const error = "Brak aktywnej sesji. Zaloguj się ponownie.";
-      setMessage(error);
-      return {
-        reserveFound: false,
-        emailsSent: 0,
-        error,
-      };
+  function endRegistrationAction(registrationId: string) {
+    registrationActionLocksRef.current.delete(registrationId);
+    setRegistrationActions((current) => {
+      const next = { ...current };
+      delete next[registrationId];
+      return next;
+    });
+  }
+
+  function isApproveRegistrationResult(
+    value: unknown
+  ): value is ApproveRegistrationResult {
+    if (!value || typeof value !== "object" || Array.isArray(value)) {
+      return false;
     }
 
-    try {
-      const response = await fetch("/api/send-event-reserve-promotion", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${session.access_token}`,
-        },
-        body: JSON.stringify({
-          eventId,
-        }),
-      });
+    const result = value as Record<string, unknown>;
+    return (
+      typeof result.ok === "boolean" &&
+      typeof result.changed === "boolean" &&
+      typeof result.code === "string"
+    );
+  }
 
-      const data = await response.json().catch(() => null);
+  function isCancelRegistrationResult(
+    value: unknown
+  ): value is CancelRegistrationResult {
+    if (!value || typeof value !== "object" || Array.isArray(value)) {
+      return false;
+    }
 
-      if (!response.ok) {
-        return {
-          reserveFound: false,
-          emailsSent: 0,
-          error:
-            data?.error ??
-            "Nie udało się wysłać powiadomień do listy rezerwowej.",
-        };
-      }
+    const result = value as Record<string, unknown>;
+    const cancellation = result.cancellation;
+    const promotion = result.promotion;
 
-      return {
-        reserveFound: Boolean(data?.reserveFound),
-        emailsSent: Number(data?.emailsSent ?? 0),
-        error: "",
-      };
-    } catch {
-      return {
-        reserveFound: false,
-        emailsSent: 0,
-        error: "Wystąpił błąd podczas obsługi listy rezerwowej.",
-      };
+    if (
+      !cancellation ||
+      typeof cancellation !== "object" ||
+      Array.isArray(cancellation) ||
+      !promotion ||
+      typeof promotion !== "object" ||
+      Array.isArray(promotion)
+    ) {
+      return false;
+    }
+
+    const cancellationResult = cancellation as Record<string, unknown>;
+    const promotionResult = promotion as Record<string, unknown>;
+
+    return (
+      result.success === true &&
+      typeof result.message === "string" &&
+      typeof cancellationResult.registrationId === "string" &&
+      typeof cancellationResult.eventId === "string" &&
+      typeof cancellationResult.changed === "boolean" &&
+      typeof cancellationResult.previousStatus === "string" &&
+      typeof cancellationResult.newStatus === "string" &&
+      typeof cancellationResult.freedParticipantPlace === "boolean" &&
+      typeof promotionResult.attempted === "boolean" &&
+      typeof promotionResult.succeeded === "boolean" &&
+      typeof promotionResult.warning === "boolean"
+    );
+  }
+
+  async function reloadSelectedRegistrations() {
+    if (selectedEventId) {
+      await loadRegistrations(selectedEventId);
     }
   }
 
-  async function updateRegistrationStatus(
-    registrationId: string,
-    status: string
-  ) {
+  async function approveRegistration(registrationId: string) {
+    setMessage("");
+
     if (!canManageEvents) {
       setMessage("Brak uprawnień do zarządzania zapisami uczestników.");
       return;
     }
 
-    const currentRegistration = registrations.find(
-      (registration) => registration.id === registrationId
-    );
-
-    const shouldNotifyReserveList =
-      status === "cancelled" &&
-      selectedEventId &&
-      (currentRegistration?.registration_status === "registered" ||
-        currentRegistration?.registration_status === "approved");
-
-    const { error } = await supabase
-      .from("event_registrations")
-      .update({ registration_status: status })
-      .eq("id", registrationId);
-
-    if (error) {
-      setMessage(`Błąd zmiany statusu uczestnika: ${error.message}`);
+    if (!beginRegistrationAction(registrationId, "approve")) {
       return;
     }
 
-    let reserveResult = {
-      reserveFound: false,
-      emailsSent: 0,
-      error: "",
-    };
-
-    if (shouldNotifyReserveList) {
-      reserveResult = await handleFreedEventPlace(selectedEventId);
-    }
-
-    setRegistrations((current) =>
-      current.map((item) =>
-        item.id === registrationId
-          ? { ...item, registration_status: status }
-          : item
-      )
-    );
-
-    if (reserveResult.error) {
-      setMessage(
-        `Status uczestnika został zaktualizowany, ale nie udało się obsłużyć listy rezerwowej: ${reserveResult.error}`
+    try {
+      const { data, error } = await supabase.rpc(
+        "approve_event_registration",
+        { p_registration_id: registrationId }
       );
+
+      if (error) {
+        console.error("Event registration approval failed", {
+          code: error.code,
+        });
+        setMessage("Nie udało się zatwierdzić uczestnika. Spróbuj ponownie.");
+        return;
+      }
+
+      if (!isApproveRegistrationResult(data)) {
+        console.error("Event registration approval returned invalid data");
+        setMessage("Nie udało się potwierdzić wyniku zatwierdzenia.");
+        return;
+      }
+
+      if (data.code === "updated") {
+        if (
+          !data.ok ||
+          !data.changed ||
+          data.registration_id !== registrationId ||
+          data.event_id !== selectedEventId ||
+          data.previous_status !== "registered" ||
+          data.new_status !== "approved"
+        ) {
+          console.error("Event registration approval returned invalid update");
+          setMessage("Nie udało się potwierdzić wyniku zatwierdzenia.");
+          await reloadSelectedRegistrations();
+          return;
+        }
+
+        setRegistrations((current) =>
+          current.map((item) =>
+            item.id === registrationId
+              ? { ...item, registration_status: "approved" }
+              : item
+          )
+        );
+        setMessage("Uczestnik został zatwierdzony.");
+        return;
+      }
+
+      if (data.code === "unchanged") {
+        if (
+          !data.ok ||
+          data.changed ||
+          data.registration_id !== registrationId ||
+          data.event_id !== selectedEventId ||
+          data.previous_status !== "approved" ||
+          data.new_status !== "approved"
+        ) {
+          console.error("Event registration approval returned invalid no-op");
+          setMessage("Nie udało się potwierdzić wyniku zatwierdzenia.");
+          await reloadSelectedRegistrations();
+          return;
+        }
+
+        setMessage("Uczestnik jest już zatwierdzony.");
+        return;
+      }
+
+      if (data.code === "invalid_transition") {
+        setMessage("Zapisu w tym statusie nie można zatwierdzić.");
+        await reloadSelectedRegistrations();
+        return;
+      }
+
+      if (data.code === "unauthorized") {
+        setMessage("Nie masz uprawnień do zatwierdzenia uczestnika.");
+        return;
+      }
+
+      if (
+        data.code === "registration_not_found" ||
+        data.code === "event_not_found"
+      ) {
+        setMessage(
+          "Nie znaleziono zapisu lub szkolenia. Lista została odświeżona."
+        );
+        await reloadSelectedRegistrations();
+        return;
+      }
+
+      console.error("Event registration approval returned unknown code");
+      setMessage("Nie udało się potwierdzić wyniku zatwierdzenia.");
+    } catch {
+      setMessage("Nie udało się zatwierdzić uczestnika. Spróbuj ponownie.");
+    } finally {
+      endRegistrationAction(registrationId);
+    }
+  }
+
+  async function cancelRegistration(registrationId: string) {
+    setMessage("");
+
+    if (!canManageEvents) {
+      setMessage("Brak uprawnień do zarządzania zapisami uczestników.");
       return;
     }
 
-    if (reserveResult.reserveFound) {
+    if (!beginRegistrationAction(registrationId, "cancel")) {
+      return;
+    }
+
+    try {
+      const {
+        data: { session },
+        error: sessionError,
+      } = await supabase.auth.getSession();
+
+      if (sessionError || !session?.access_token) {
+        setMessage("Brak aktywnej sesji. Zaloguj się ponownie.");
+        return;
+      }
+
+      const response = await fetch("/api/cancel-event-registration", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({ registrationId }),
+      });
+      const data: unknown = await response.json().catch(() => null);
+
+      if (!response.ok) {
+        if (response.status === 401) {
+          setMessage("Brak aktywnej sesji. Zaloguj się ponownie.");
+        } else if (response.status === 403) {
+          setMessage("Nie masz uprawnień do anulowania tego zapisu.");
+        } else if (response.status === 404) {
+          setMessage(
+            "Nie znaleziono zapisu lub szkolenia. Lista została odświeżona."
+          );
+          await reloadSelectedRegistrations();
+        } else if (response.status === 409) {
+          setMessage("Zapisu w tym statusie nie można anulować.");
+          await reloadSelectedRegistrations();
+        } else {
+          setMessage("Nie udało się anulować zapisu. Spróbuj ponownie.");
+        }
+        return;
+      }
+
+      if (
+        !isCancelRegistrationResult(data) ||
+        data.cancellation.registrationId !== registrationId ||
+        data.cancellation.eventId !== selectedEventId ||
+        data.cancellation.newStatus !== "cancelled"
+      ) {
+        console.error("Event registration cancellation returned invalid data");
+        setMessage("Nie udało się potwierdzić wyniku anulowania.");
+        await reloadSelectedRegistrations();
+        return;
+      }
+
+      if (data.cancellation.changed) {
+        setRegistrations((current) =>
+          current.map((item) =>
+            item.id === registrationId
+              ? { ...item, registration_status: "cancelled" }
+              : item
+          )
+        );
+      } else {
+        await reloadSelectedRegistrations();
+      }
+
+      if (data.promotion.attempted) {
+        await reloadSelectedRegistrations();
+      }
+
       setMessage(
-        `Status uczestnika został zaktualizowany. Wysłano powiadomienia do listy rezerwowej: ${reserveResult.emailsSent}.`
+        data.promotion.warning
+          ? "Zapis anulowano, ale obsługa listy rezerwowej wymaga ponowienia."
+          : data.cancellation.changed
+            ? "Udział został anulowany."
+            : "Udział jest anulowany."
       );
-      return;
+    } catch {
+      setMessage("Nie udało się anulować zapisu. Spróbuj ponownie.");
+    } finally {
+      endRegistrationAction(registrationId);
     }
-
-    setMessage("Status uczestnika został zaktualizowany.");
   }
 
   async function markRegistrationPaid(registrationId: string) {
@@ -519,7 +706,9 @@ export default function AdminEventsPage() {
       message.includes("dodane") ||
       message.includes("zaktualizowany") ||
       message.includes("zaktualizowane") ||
-      message.includes("opłacony")
+      message.includes("opłacony") ||
+      message.includes("zatwierdzony") ||
+      message.includes("anulowany")
     ) {
       return "rounded-xl border border-green-800 bg-green-950 p-4 text-sm font-semibold text-green-300";
     }
@@ -1133,34 +1322,33 @@ export default function AdminEventsPage() {
                                               <div className="flex flex-wrap gap-2">
                                               <button
                                                 type="button"
-                                                onClick={() => updateRegistrationStatus(registration.id, "approved")}
-                                                className="rounded-lg border border-green-800 px-3 py-2 text-xs text-green-300 hover:bg-green-950"
+                                                onClick={() => approveRegistration(registration.id)}
+                                                disabled={Boolean(registrationActions[registration.id])}
+                                                className="rounded-lg border border-green-800 px-3 py-2 text-xs text-green-300 hover:bg-green-950 disabled:cursor-not-allowed disabled:opacity-50"
                                               >
-                                                Zatwierdź
-                                              </button>
-
-                                              <button
-                                                type="button"
-                                                onClick={() => updateRegistrationStatus(registration.id, "reserve")}
-                                                className="rounded-lg border border-yellow-800 px-3 py-2 text-xs text-yellow-300 hover:bg-yellow-950"
-                                              >
-                                                Rezerwowy
+                                                {registrationActions[registration.id] === "approve"
+                                                  ? "Zatwierdzanie..."
+                                                  : "Zatwierdź"}
                                               </button>
 
                                               <button
                                                 type="button"
                                                 onClick={() => markRegistrationPaid(registration.id)}
-                                                className="rounded-lg border border-blue-800 px-3 py-2 text-xs text-blue-300 hover:bg-blue-950"
+                                                disabled={Boolean(registrationActions[registration.id])}
+                                                className="rounded-lg border border-blue-800 px-3 py-2 text-xs text-blue-300 hover:bg-blue-950 disabled:cursor-not-allowed disabled:opacity-50"
                                               >
                                                 Opłacone
                                               </button>
 
                                               <button
                                                 type="button"
-                                                onClick={() => updateRegistrationStatus(registration.id, "cancelled")}
-                                                className="rounded-lg border border-red-800 px-3 py-2 text-xs text-red-300 hover:bg-red-950"
+                                                onClick={() => cancelRegistration(registration.id)}
+                                                disabled={Boolean(registrationActions[registration.id])}
+                                                className="rounded-lg border border-red-800 px-3 py-2 text-xs text-red-300 hover:bg-red-950 disabled:cursor-not-allowed disabled:opacity-50"
                                               >
-                                                Anuluj
+                                                {registrationActions[registration.id] === "cancel"
+                                                  ? "Anulowanie..."
+                                                  : "Anuluj"}
                                               </button>
                                               </div>
                                             </td>
@@ -1237,17 +1425,21 @@ export default function AdminEventsPage() {
                                               <button
                                                 type="button"
                                                 onClick={() => markRegistrationPaid(registration.id)}
-                                                className="rounded-lg border border-blue-800 px-3 py-2 text-xs text-blue-300 hover:bg-blue-950"
+                                                disabled={Boolean(registrationActions[registration.id])}
+                                                className="rounded-lg border border-blue-800 px-3 py-2 text-xs text-blue-300 hover:bg-blue-950 disabled:cursor-not-allowed disabled:opacity-50"
                                               >
                                                 Opłacone
                                               </button>
 
                                               <button
                                                 type="button"
-                                                onClick={() => updateRegistrationStatus(registration.id, "cancelled")}
-                                                className="rounded-lg border border-red-800 px-3 py-2 text-xs text-red-300 hover:bg-red-950"
+                                                onClick={() => cancelRegistration(registration.id)}
+                                                disabled={Boolean(registrationActions[registration.id])}
+                                                className="rounded-lg border border-red-800 px-3 py-2 text-xs text-red-300 hover:bg-red-950 disabled:cursor-not-allowed disabled:opacity-50"
                                               >
-                                                Anuluj
+                                                {registrationActions[registration.id] === "cancel"
+                                                  ? "Anulowanie..."
+                                                  : "Anuluj"}
                                               </button>
                                               </div>
                                             </td>
