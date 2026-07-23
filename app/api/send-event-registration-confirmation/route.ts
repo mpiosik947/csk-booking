@@ -6,6 +6,10 @@ import {
   getConfirmationEmailConfiguration,
   getConfirmationServiceRoleClient,
 } from "@/lib/server/confirmation-email-delivery";
+import {
+  checkConfirmationEmailRateLimit,
+  getConfirmationRateLimitSecret,
+} from "@/lib/server/confirmation-email-rate-limit";
 
 type EventRegistrationConfirmationPayload = {
   registrationId?: unknown;
@@ -165,6 +169,47 @@ export async function POST(request: Request) {
     if (!registrationId || !UUID_PATTERN.test(registrationId)) {
       console.error("Event registration confirmation invalid registration id");
       return jsonError("invalid_request", 400);
+    }
+
+    const configuration = getConfirmationEmailConfiguration();
+    const rateLimitSecret = getConfirmationRateLimitSecret();
+
+    if (!configuration || !rateLimitSecret) {
+      console.error(
+        "Event registration confirmation server configuration missing"
+      );
+      return jsonError("internal_error", 500);
+    }
+
+    const completionClient =
+      getConfirmationServiceRoleClient(configuration);
+    const rateLimit = await checkConfirmationEmailRateLimit({
+      request,
+      userId: user.id,
+      secret: rateLimitSecret,
+      rpc: async (ipHash) =>
+        completionClient.rpc("check_confirmation_email_rate_limit", {
+          p_user_id: user.id,
+          p_ip_hash: ipHash,
+        }),
+    });
+
+    if (rateLimit.kind === "error") {
+      console.error("Event registration confirmation rate limit failed");
+      return jsonError("internal_error", 500);
+    }
+
+    if (rateLimit.kind === "rate_limited") {
+      return NextResponse.json(
+        { ok: false, code: "rate_limited" },
+        {
+          status: 429,
+          headers: {
+            "Retry-After": String(rateLimit.retryAfterSeconds),
+            "Cache-Control": "no-store",
+          },
+        }
+      );
     }
 
     const { data: registrationData, error: registrationError } = await supabase
@@ -333,18 +378,7 @@ Centrum Szkolenia Krutla
 CSK Booking
     `;
 
-    const configuration = getConfirmationEmailConfiguration();
-
-    if (!configuration) {
-      console.error(
-        "Event registration confirmation email configuration missing"
-      );
-      return jsonError("internal_error", 500);
-    }
-
     const resend = new Resend(configuration.resendApiKey);
-    const completionClient =
-      getConfirmationServiceRoleClient(configuration);
     const outcome = await deliverConfirmationEmail({
       prepare: async () =>
         supabase.rpc("prepare_confirmation_email", {
