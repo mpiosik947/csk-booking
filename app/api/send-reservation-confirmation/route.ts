@@ -1,6 +1,11 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { Resend } from "resend";
+import {
+  deliverConfirmationEmail,
+  getConfirmationEmailConfiguration,
+  getConfirmationServiceRoleClient,
+} from "@/lib/server/confirmation-email-delivery";
 
 type ReservationConfirmationPayload = {
   reservationId?: unknown;
@@ -207,14 +212,6 @@ export async function POST(request: Request) {
       return jsonError("delivery_failed", 502);
     }
 
-    const resendApiKey = process.env.RESEND_API_KEY;
-    const from = process.env.RESERVATION_EMAIL_FROM;
-
-    if (!resendApiKey || !from) {
-      console.error("Reservation confirmation email configuration missing");
-      return jsonError("internal_error", 500);
-    }
-
     const lane = laneData as LaneRow;
     const displayName = reservation.customer_name?.trim() || "Kliencie";
     const formattedDate = formatDate(reservation.reservation_date);
@@ -324,21 +321,42 @@ Centrum Szkolenia Krutla
 CSK Booking
     `;
 
-    const resend = new Resend(resendApiKey);
-    const { error: resendError } = await resend.emails.send({
-      from,
-      to: recipientEmail,
-      subject,
-      html,
-      text,
-    });
+    const configuration = getConfirmationEmailConfiguration();
 
-    if (resendError) {
-      console.error("Reservation confirmation delivery failed");
-      return jsonError("delivery_failed", 502);
+    if (!configuration) {
+      console.error("Reservation confirmation email configuration missing");
+      return jsonError("internal_error", 500);
     }
 
-    return NextResponse.json({ ok: true, code: "sent" });
+    const resend = new Resend(configuration.resendApiKey);
+    const completionClient =
+      getConfirmationServiceRoleClient(configuration);
+    const outcome = await deliverConfirmationEmail({
+      prepare: async () =>
+        supabase.rpc("prepare_confirmation_email", {
+          p_message_type: "reservation_confirmation",
+          p_record_id: reservationId,
+        }),
+      send: async (idempotencyKey) => {
+        return resend.emails.send(
+          {
+            from: configuration.from,
+            to: recipientEmail,
+            subject,
+            html,
+            text,
+          },
+          { idempotencyKey }
+        );
+      },
+      complete: async (input) =>
+        completionClient.rpc("complete_confirmation_email", input),
+    });
+
+    return NextResponse.json(
+      { ok: outcome.ok, code: outcome.code },
+      { status: outcome.status }
+    );
   } catch {
     console.error("Reservation confirmation endpoint failed");
     return jsonError("internal_error", 500);
