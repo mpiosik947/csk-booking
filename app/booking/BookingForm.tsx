@@ -1,48 +1,69 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "../../lib/supabase";
-import { PAYMENT_STATUS } from "../../lib/payment-status";
 import { getProfileDisplayName } from "../../lib/profile-display-name";
-import {
-  RESERVATION_STATUS,
-  isCancelledReservationStatus,
-} from "../../lib/reservation-status";
 
-type Lane = {
+export type BookingLane = {
   id: string;
   name: string;
-  price_per_hour: number;
+  max_shooters: number;
+  booking_step_minutes: number;
+  display_order: number;
+  currency_code: string;
+};
+
+export type BookingDuration = {
+  id: string;
+  lane_id: string;
+  duration_minutes: number;
+  display_order: number;
+};
+
+export type BookingPricingRule = {
+  id: string;
+  lane_id: string;
+  min_shooters: number;
+  max_shooters: number;
+  label: string;
+  hourly_price: number;
+  display_order: number;
 };
 
 type BookingFormProps = {
-  lanes: Lane[];
+  lanes: BookingLane[];
+  durations: BookingDuration[];
+  pricingRules: BookingPricingRule[];
 };
 
-type BookedReservation = {
-  id?: string;
-  lane_id?: string;
-  reservation_date?: string;
-  start_time: string;
-  end_time: string;
-  reservation_status?: string | null;
-};
-
-type LaneBlock = {
-  id?: string;
+type BusyRange = {
   start_time: string;
   end_time: string;
 };
 
 type Profile = {
-  user_id: string;
   email: string | null;
   first_name: string | null;
   last_name: string | null;
   full_name: string | null;
   phone: string | null;
-  role: string | null;
   verification_status: string | null;
+};
+
+type CreateReservationResponse = {
+  ok: boolean;
+  changed: boolean;
+  code: string;
+  reservationId?: string;
+  reservationStatus?: string;
+  laneName?: string;
+  shootersCount?: number;
+  durationMinutes?: number;
+  pricePerHour?: number;
+  totalPrice?: number;
+  currencyCode?: string;
+  message?: string;
+  error?: string;
 };
 
 type ConfirmationData = {
@@ -50,127 +71,62 @@ type ConfirmationData = {
   startTime: string;
   endTime: string;
   laneName: string;
-  price: number;
-};
-
-type ReservationConfirmationResponse = {
-  ok: boolean;
-  code: string;
+  shootersCount: number;
+  durationMinutes: number;
+  totalPrice: number;
+  currencyCode: string;
 };
 
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-function isReservationConfirmationResponse(
-  value: unknown
-): value is ReservationConfirmationResponse {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    return false;
-  }
+const CODE_MESSAGES: Record<string, string> = {
+  unauthorized: "Sesja wygasła. Zaloguj się ponownie.",
+  not_allowed: "To konto nie może tworzyć rezerwacji.",
+  profile_not_found: "Nie znaleziono profilu użytkownika.",
+  profile_incomplete:
+    "Profil wymaga uzupełnienia imienia i nazwiska, e-maila oraz telefonu.",
+  profile_rejected: "Konto zostało odrzucone. Skontaktuj się z obsługą CSK.",
+  verification_limit_reached:
+    "Konto oczekuje na weryfikację i ma już aktywną rezerwację.",
+  invalid_date: "Wybierz prawidłową datę.",
+  reservation_already_started: "Wybrany termin już się rozpoczął.",
+  invalid_start_time: "Wybrana godzina nie jest dostępna dla tej osi.",
+  outside_booking_hours: "Rezerwacja musi zakończyć się najpóźniej o 20:00.",
+  invalid_duration: "Wybrana długość nie jest już dostępna.",
+  invalid_shooters_count: "Wybierz prawidłową liczbę strzelców.",
+  capacity_exceeded: "Liczba strzelców przekracza pojemność osi.",
+  lane_not_found: "Nie znaleziono wybranej osi.",
+  lane_inactive: "Wybrana oś nie jest już aktywna.",
+  pricing_not_configured: "Cennik osi nie jest skonfigurowany.",
+  lane_blocked: "Oś jest zablokowana w wybranym terminie.",
+  slot_unavailable: "Termin został właśnie zajęty. Wybierz inną godzinę.",
+  idempotency_conflict:
+    "Dane tej próby rezerwacji uległy zmianie. Spróbuj ponownie.",
+  internal_error: "Nie udało się utworzyć rezerwacji. Spróbuj ponownie.",
+};
 
-  const result = value as Partial<ReservationConfirmationResponse>;
-
-  return typeof result.ok === "boolean" && typeof result.code === "string";
-}
-
-const durations = [
-  { label: "1 godzina", value: 60 },
-  { label: "2 godziny", value: 120 },
-  { label: "3 godziny", value: 180 },
-  { label: "4 godziny", value: 240 },
-];
-
-const hours = [
-  "08:00",
-  "09:00",
-  "10:00",
-  "11:00",
-  "12:00",
-  "13:00",
-  "14:00",
-  "15:00",
-  "16:00",
-  "17:00",
-  "18:00",
-  "19:00",
-];
 function getTodayDateString() {
-  const today = new Date();
-  const year = today.getFullYear();
-  const month = String(today.getMonth() + 1).padStart(2, "0");
-  const day = String(today.getDate()).padStart(2, "0");
-
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const day = String(now.getDate()).padStart(2, "0");
   return `${year}-${month}-${day}`;
 }
 
-const reservationDateFormatter = new Intl.DateTimeFormat("pl-PL", {
-  day: "numeric",
-  month: "long",
-  year: "numeric",
-  timeZone: "UTC",
-});
-
-function formatReservationDate(date: string) {
-  const [year, month, day] = date.split("-").map(Number);
-
-  return reservationDateFormatter.format(
-    new Date(Date.UTC(year, month - 1, day))
-  );
+function normalizeTime(value: string) {
+  return value.slice(0, 5);
 }
 
-function getCurrentTimeInMinutes() {
-  const now = new Date();
-  return now.getHours() * 60 + now.getMinutes();
+function timeToMinutes(value: string) {
+  const [hour, minute] = normalizeTime(value).split(":").map(Number);
+  return hour * 60 + minute;
 }
 
-function isPastReservationDate(date: string) {
-  if (!date) return false;
-
-  return date < getTodayDateString();
-}
-
-function isTodayReservationDate(date: string) {
-  return date === getTodayDateString();
-}
-
-function isPastStartHour(date: string, hour: string) {
-  if (!date || !hour) return false;
-
-  if (!isTodayReservationDate(date)) {
-    return false;
-  }
-
-  return timeToMinutes(hour) <= getCurrentTimeInMinutes();
-}
-
-function normalizeTime(time: string) {
-  return time.slice(0, 5);
-}
-
-function isActiveReservation(status?: string | null) {
-  const normalizedStatus = (status ?? RESERVATION_STATUS.CONFIRMED).toLowerCase();
-
-  return (
-    !isCancelledReservationStatus(normalizedStatus) &&
-    normalizedStatus !== RESERVATION_STATUS.COMPLETED &&
-    normalizedStatus !== RESERVATION_STATUS.NO_SHOW
-  );
-}
-
-function addMinutesToTime(time: string, minutes: number) {
-  const [hour, mins] = normalizeTime(time).split(":").map(Number);
-
-  const date = new Date();
-  date.setHours(hour);
-  date.setMinutes(mins + minutes);
-  date.setSeconds(0);
-
-  return date.toTimeString().slice(0, 5);
-}
-
-function timeToMinutes(time: string) {
-  const [hour, minutes] = normalizeTime(time).split(":").map(Number);
-  return hour * 60 + minutes;
+function minutesToTime(value: number) {
+  const hour = Math.floor(value / 60);
+  const minute = value % 60;
+  return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
 }
 
 function rangesOverlap(
@@ -185,177 +141,144 @@ function rangesOverlap(
   );
 }
 
-function getBlockedHoursFromRanges(blocks: LaneBlock[]) {
-  const blockedHours: string[] = [];
-
-  for (const block of blocks) {
-    for (const hour of hours) {
-      const hourEnd = addMinutesToTime(hour, 60);
-
-      if (
-        rangesOverlap(
-          hour,
-          hourEnd,
-          normalizeTime(block.start_time),
-          normalizeTime(block.end_time)
-        )
-      ) {
-        blockedHours.push(hour);
-      }
-    }
+function formatDuration(minutes: number) {
+  if (minutes % 60 === 0) {
+    const hours = minutes / 60;
+    return `${hours} ${hours === 1 ? "godzina" : hours < 5 ? "godziny" : "godzin"}`;
   }
-
-  return blockedHours;
+  return `${minutes} minut`;
 }
 
-function getSelectedRange(startTime: string, durationMinutes: number) {
-  if (!startTime) return [];
-
-  const endTime = addMinutesToTime(startTime, durationMinutes);
-
-  return hours.filter((hour) => {
-    const hourEnd = addMinutesToTime(hour, 60);
-    return rangesOverlap(hour, hourEnd, startTime, endTime);
-  });
+function formatMoney(value: number, currency: string) {
+  return new Intl.NumberFormat("pl-PL", {
+    style: "currency",
+    currency,
+  }).format(value);
 }
 
-function getMessageClass(message: string) {
-  if (message.includes("zapisana")) {
-    return "rounded-xl border border-[#3f6848] bg-[#1b2a1d] p-4 text-sm font-semibold text-[#a9d4ad]";
-  }
-
-  return "rounded-xl border border-[#744545] bg-[#2a1b1b] p-4 text-sm font-semibold text-[#e0a0a0]";
+function formatReservationDate(date: string) {
+  const [year, month, day] = date.split("-").map(Number);
+  return new Intl.DateTimeFormat("pl-PL", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+    timeZone: "UTC",
+  }).format(new Date(Date.UTC(year, month - 1, day)));
 }
 
-function getVerificationBox(status: string) {
-  if (status === "verified") {
-    return null;
+function isCreateReservationResponse(
+  value: unknown
+): value is CreateReservationResponse {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return false;
   }
-
-  if (status === "rejected") {
-    return {
-      title: "Konto nie zostało zatwierdzone",
-      text: "Twoje konto zostało odrzucone lub wymaga dodatkowego kontaktu z obsługą CSK. Rezerwacja osi jest obecnie zablokowana.",
-      className:
-        "rounded-xl border border-[#744545] bg-[#2a1b1b] p-4 text-sm text-[#e0a0a0]",
-      titleClassName: "font-semibold text-[#e0a0a0]",
-    };
-  }
-
-  return {
-    title: "Konto oczekuje na weryfikację",
-    text: "Możesz wykonać jedną rezerwację na pierwszą wizytę. Podczas wizyty pracownik recepcji sprawdzi Twoje dane i zweryfikuje konto. Do czasu weryfikacji nie możesz mieć więcej niż jednej aktywnej rezerwacji.",
-    className:
-      "rounded-xl border border-[#806a32] bg-[#2b2618] p-4 text-sm text-[#e1c477]",
-    titleClassName: "font-semibold text-[#e1c477]",
-  };
+  const result = value as Partial<CreateReservationResponse>;
+  return (
+    typeof result.ok === "boolean" &&
+    typeof result.changed === "boolean" &&
+    typeof result.code === "string"
+  );
 }
 
-export default function BookingForm({ lanes }: BookingFormProps) {
+export default function BookingForm({
+  lanes,
+  durations,
+  pricingRules,
+}: BookingFormProps) {
   const [checkingUser, setCheckingUser] = useState(true);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
-
-  const [userId, setUserId] = useState("");
-  const [verificationStatus, setVerificationStatus] = useState("pending");
-
-  const [customerName, setCustomerName] = useState("");
-  const [customerEmail, setCustomerEmail] = useState("");
-  const [customerPhone, setCustomerPhone] = useState("");
-
+  const [profile, setProfile] = useState<Profile | null>(null);
   const [reservationDate, setReservationDate] = useState("");
   const [laneId, setLaneId] = useState("");
-  const [durationMinutes, setDurationMinutes] = useState(60);
+  const [durationMinutes, setDurationMinutes] = useState(0);
+  const [shootersCount, setShootersCount] = useState(1);
   const [selectedHour, setSelectedHour] = useState("");
+  const [reservationNote, setReservationNote] = useState("");
   const [acceptedRules, setAcceptedRules] = useState(false);
-
-  const [bookedHours, setBookedHours] = useState<string[]>([]);
+  const [busyRanges, setBusyRanges] = useState<BusyRange[]>([]);
   const [checkingAvailability, setCheckingAvailability] = useState(false);
-
-  const [confirmationData, setConfirmationData] =
-    useState<ConfirmationData | null>(null);
-  const confirmationButtonRef = useRef<HTMLButtonElement>(null);
-  const confirmationTriggerRef = useRef<HTMLElement | null>(null);
-  const submissionInProgressRef = useRef(false);
-
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
+  const [messageSuccess, setMessageSuccess] = useState(false);
+  const [confirmationData, setConfirmationData] =
+    useState<ConfirmationData | null>(null);
+  const creationRequestIdRef = useRef("");
+  const submissionInProgressRef = useRef(false);
 
-  useEffect(() => {
-    if (!confirmationData) return;
+  const selectedLane = lanes.find((lane) => lane.id === laneId);
+  const laneDurations = useMemo(
+    () => durations.filter((duration) => duration.lane_id === laneId),
+    [durations, laneId]
+  );
+  const matchingPricingRule = pricingRules.find(
+    (rule) =>
+      rule.lane_id === laneId &&
+      rule.min_shooters <= shootersCount &&
+      rule.max_shooters >= shootersCount
+  );
+  const estimatedPrice =
+    matchingPricingRule && durationMinutes > 0
+      ? Math.round(
+          (Number(matchingPricingRule.hourly_price) * durationMinutes * 100) /
+            60
+        ) / 100
+      : null;
 
-    function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape") {
-        setConfirmationData(null);
-      }
+  const availableHours = useMemo(() => {
+    if (!selectedLane || durationMinutes <= 0) {
+      return [];
     }
 
-    confirmationButtonRef.current?.focus();
-    document.addEventListener("keydown", handleKeyDown);
+    const result: string[] = [];
+    const step = Number(selectedLane.booking_step_minutes);
 
-    return () => {
-      document.removeEventListener("keydown", handleKeyDown);
-      confirmationTriggerRef.current?.focus();
-    };
-  }, [confirmationData]);
+    for (
+      let start = 8 * 60;
+      start + durationMinutes <= 20 * 60;
+      start += step
+    ) {
+      result.push(minutesToTime(start));
+    }
+
+    return result;
+  }, [durationMinutes, selectedLane]);
+
+  function resetAttempt() {
+    creationRequestIdRef.current = "";
+    setMessage("");
+    setMessageSuccess(false);
+  }
+
+  function getCreationRequestId() {
+    if (!creationRequestIdRef.current) {
+      creationRequestIdRef.current = crypto.randomUUID();
+    }
+    return creationRequestIdRef.current;
+  }
 
   useEffect(() => {
     async function loadUser() {
-      setCheckingUser(true);
-      setMessage("");
-
       const {
         data: { user },
-        error: userError,
+        error,
       } = await supabase.auth.getUser();
 
-      if (userError || !user) {
+      if (error || !user) {
         setIsLoggedIn(false);
         setCheckingUser(false);
         return;
       }
 
-      setIsLoggedIn(true);
-      setUserId(user.id);
-      setCustomerEmail(user.email ?? "");
-
-      const { data: profile, error: profileError } = await supabase
+      const { data } = await supabase
         .from("profiles")
         .select(
-          "user_id,email,first_name,last_name,full_name,phone,role,verification_status"
+          "email,first_name,last_name,full_name,phone,verification_status"
         )
         .eq("user_id", user.id)
-        .single();
+        .maybeSingle();
 
-      if (profileError || !profile) {
-        setVerificationStatus("pending");
-        setCustomerName(getProfileDisplayName({ email: user.email }, ""));
-        setCustomerPhone(String(user.user_metadata?.phone ?? ""));
-        setMessage(
-          "Nie udało się pobrać profilu użytkownika. Skontaktuj się z obsługą CSK."
-        );
-        setCheckingUser(false);
-        return;
-      }
-
-      const typedProfile = profile as Profile;
-
-      setVerificationStatus(typedProfile.verification_status ?? "pending");
-      setCustomerName(
-        getProfileDisplayName(
-          {
-            first_name: typedProfile.first_name,
-            last_name: typedProfile.last_name,
-            full_name: typedProfile.full_name,
-            email: typedProfile.email || user.email,
-          },
-          ""
-        )
-      );
-      setCustomerEmail(typedProfile.email || user.email || "");
-      setCustomerPhone(
-        typedProfile.phone || String(user.user_metadata?.phone ?? "")
-      );
-
+      setProfile((data as Profile | null) ?? null);
+      setIsLoggedIn(true);
       setCheckingUser(false);
     }
 
@@ -363,9 +286,8 @@ export default function BookingForm({ lanes }: BookingFormProps) {
   }, []);
 
   useEffect(() => {
-    async function loadBookedHours() {
-      setMessage("");
-      setBookedHours([]);
+    async function loadAvailability() {
+      setBusyRanges([]);
       setSelectedHour("");
 
       if (!reservationDate || !laneId) {
@@ -373,422 +295,186 @@ export default function BookingForm({ lanes }: BookingFormProps) {
       }
 
       setCheckingAvailability(true);
-
-      const { data, error } = await supabase
-        .from("reservations")
-        .select(
-          "id, lane_id, reservation_date, start_time, end_time, reservation_status"
-        )
-        .eq("lane_id", laneId)
-        .eq("reservation_date", reservationDate);
-
-      const { data: blockedData, error: blockedError } = await supabase
-        .from("lane_blocks")
-        .select("id, start_time, end_time")
-        .eq("lane_id", laneId)
-        .eq("block_date", reservationDate)
-        .eq("is_active", true);
-
+      const { data, error } = await supabase.rpc(
+        "get_lane_booking_busy_ranges",
+        {
+          p_lane_id: laneId,
+          p_reservation_date: reservationDate,
+        }
+      );
       setCheckingAvailability(false);
 
-      if (error || blockedError) {
-        setMessage("Błąd pobierania dostępnych godzin.");
+      if (error) {
+        setMessage("Nie udało się pobrać podglądu dostępności.");
         return;
       }
 
-      const activeReservations = ((data ?? []) as BookedReservation[]).filter(
-        (reservation) => isActiveReservation(reservation.reservation_status)
-      );
-
-      const reservedHours = getBlockedHoursFromRanges(activeReservations);
-
-      const blockedHours = getBlockedHoursFromRanges(
-        (blockedData ?? []) as LaneBlock[]
-      );
-
-      setBookedHours([...new Set([...reservedHours, ...blockedHours])]);
+      setBusyRanges((data ?? []) as BusyRange[]);
     }
 
-    loadBookedHours();
-  }, [reservationDate, laneId]);
+    loadAvailability();
+  }, [laneId, reservationDate]);
 
-  const selectedLane = lanes.find((lane) => lane.id === laneId);
+  function hourIsAvailable(hour: string) {
+    const end = minutesToTime(timeToMinutes(hour) + durationMinutes);
+    const now = new Date();
 
-  const price = selectedLane
-    ? (Number(selectedLane.price_per_hour) / 60) * durationMinutes
-    : 0;
-
-  const selectedRange = getSelectedRange(selectedHour, durationMinutes);
-
-  function getUnavailableHoursInRange(hour: string) {
-    const range = getSelectedRange(hour, durationMinutes);
-    return range.filter((rangeHour) => bookedHours.includes(rangeHour));
-  }
-
-  function isRangeInsideOpeningHours(hour: string) {
-    if (!hour) return false;
-
-    const endTime = addMinutesToTime(hour, durationMinutes);
-    const lastPossibleEnd = addMinutesToTime(hours[hours.length - 1], 60);
-
-    return timeToMinutes(endTime) <= timeToMinutes(lastPossibleEnd);
-  }
-
- function canSelectStartHour(hour: string) {
-  if (!hour) return false;
-
-  if (isPastReservationDate(reservationDate)) {
-    return false;
-  }
-
-  if (isPastStartHour(reservationDate, hour)) {
-    return false;
-  }
-
-  if (!isRangeInsideOpeningHours(hour)) {
-    return false;
-  }
-
-  const unavailableHours = getUnavailableHoursInRange(hour);
-
-  return unavailableHours.length === 0;
-}
-
-  const hasSelectedRangeConflict =
-    selectedHour !== "" && !canSelectStartHour(selectedHour);
-
-  const hasAvailableStartHour = hours.some(canSelectStartHour);
-
-  const isVerified = verificationStatus === "verified";
-  const isRejected = verificationStatus === "rejected";
-  const canUseBookingForm = !isRejected;
-
-  const canSubmit =
-  !loading &&
-  canUseBookingForm &&
-  userId !== "" &&
-  customerName !== "" &&
-  customerEmail !== "" &&
-  customerPhone !== "" &&
-  reservationDate !== "" &&
-  !isPastReservationDate(reservationDate) &&
-  laneId !== "" &&
-  selectedHour !== "" &&
-  !isPastStartHour(reservationDate, selectedHour) &&
-  acceptedRules &&
-  !hasSelectedRangeConflict;
-
-  const verificationBox = getVerificationBox(verificationStatus);
-
-  function handleHourClick(hour: string) {
-    setMessage("");
-      if (isPastReservationDate(reservationDate)) {
-    setSelectedHour("");
-    setMessage("Nie można dokonać rezerwacji z datą wsteczną.");
-    return;
-  }
-
-  if (isPastStartHour(reservationDate, hour)) {
-    setSelectedHour("");
-    setMessage("Nie można wybrać godziny, która już minęła.");
-    return;
-  }
-
-    if (!isRangeInsideOpeningHours(hour)) {
-      setSelectedHour("");
-      setMessage(
-        "Wybrany czas rezerwacji wychodzi poza dostępne godziny pracy. Wybierz wcześniejszą godzinę startu albo krótszy czas rezerwacji."
-      );
-      return;
+    if (
+      reservationDate === getTodayDateString() &&
+      timeToMinutes(hour) <= now.getHours() * 60 + now.getMinutes()
+    ) {
+      return false;
     }
 
-    const unavailableHours = getUnavailableHoursInRange(hour);
+    return !busyRanges.some((range) =>
+      rangesOverlap(hour, end, range.start_time, range.end_time)
+    );
+  }
 
-    if (unavailableHours.length > 0) {
-      setSelectedHour("");
-      setMessage(
-        `Nie można rozpocząć rezerwacji o tej godzinie. Wybrany czas rezerwacji zachodziłby na zajęte godziny: ${unavailableHours.join(
-          ", "
-        )}.`
-      );
-      return;
+  async function sendConfirmationEmail(
+    accessToken: string,
+    reservationId: string
+  ) {
+    try {
+      const response = await fetch("/api/send-reservation-confirmation", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({ reservationId }),
+      });
+      const result: unknown = await response.json().catch(() => null);
+
+      if (!result || typeof result !== "object" || Array.isArray(result)) {
+        return false;
+      }
+
+      const code = (result as { code?: unknown }).code;
+      return response.ok && (code === "sent" || code === "already_sent");
+    } catch {
+      return false;
     }
-
-    setSelectedHour(hour);
   }
 
   async function handleSubmit() {
-    if (submissionInProgressRef.current) {
+    if (submissionInProgressRef.current || loading) {
       return;
     }
 
     setMessage("");
-      if (isPastReservationDate(reservationDate)) {
-    setMessage("Nie można dokonać rezerwacji z datą wsteczną.");
-    setSelectedHour("");
-    return;
-  }
-
-  if (isPastStartHour(reservationDate, selectedHour)) {
-    setMessage("Nie można dokonać rezerwacji na godzinę, która już minęła.");
-    setSelectedHour("");
-    return;
-  }
-
-    if (isRejected) {
-      setMessage(
-        "Twoje konto nie jest zatwierdzone. Skontaktuj się z obsługą CSK."
-      );
-      return;
-    }
-
-    if (!userId) {
-      setMessage("Musisz być zalogowany, aby dokonać rezerwacji.");
-      return;
-    }
+    setMessageSuccess(false);
 
     if (
-      !customerName ||
-      !customerEmail ||
-      !customerPhone ||
       !reservationDate ||
       !laneId ||
-      !selectedHour
+      !selectedHour ||
+      durationMinutes <= 0 ||
+      shootersCount <= 0 ||
+      !acceptedRules ||
+      !matchingPricingRule
     ) {
-      setMessage("Uzupełnij wszystkie wymagane pola.");
+      setMessage("Uzupełnij wszystkie wymagane pola rezerwacji.");
       return;
     }
 
-    if (!acceptedRules) {
-      setMessage("Musisz zaakceptować regulamin i zasady bezpieczeństwa.");
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+
+    if (!session?.access_token) {
+      setMessage("Sesja wygasła. Zaloguj się ponownie.");
       return;
     }
-
-    if (!isRangeInsideOpeningHours(selectedHour)) {
-      setMessage(
-        "Wybrany czas rezerwacji wychodzi poza dostępne godziny pracy."
-      );
-      setSelectedHour("");
-      return;
-    }
-
-    const selectedRangeHours = getSelectedRange(selectedHour, durationMinutes);
-
-    const collisionHours = selectedRangeHours.filter((hour) =>
-      bookedHours.includes(hour)
-    );
-
-    if (collisionHours.length > 0) {
-      setMessage(
-        `Nie można utworzyć rezerwacji. Wybrany zakres zachodzi na zajęte godziny: ${collisionHours.join(
-          ", "
-        )}.`
-      );
-      setSelectedHour("");
-      return;
-    }
-
-    const endTime = addMinutesToTime(selectedHour, durationMinutes);
-    const laneName = selectedLane?.name ?? "Wybrana oś";
-
-    confirmationTriggerRef.current =
-      document.activeElement instanceof HTMLElement
-        ? document.activeElement
-        : null;
 
     submissionInProgressRef.current = true;
     setLoading(true);
-    let reservationCreated = false;
 
     try {
-      if (!isVerified) {
-        const { data: activeReservations, error: activeReservationsError } =
-          await supabase
-            .from("reservations")
-            .select("id")
-            .eq("user_id", userId)
-            .in("reservation_status", [RESERVATION_STATUS.CONFIRMED]);
-
-        if (activeReservationsError) {
-          setMessage(
-            "Nie udało się sprawdzić możliwości utworzenia rezerwacji. Spróbuj ponownie."
-          );
-          return;
-        }
-
-        if ((activeReservations ?? []).length >= 1) {
-          setMessage(
-            "Twoje konto oczekuje na weryfikację. Do czasu pierwszej wizyty i potwierdzenia danych przez pracownika możesz mieć tylko jedną aktywną rezerwację."
-          );
-          return;
-        }
-      }
-
-      const { data: allReservationsForLane, error: reservationsError } =
-        await supabase
-          .from("reservations")
-          .select(
-            "id, lane_id, reservation_date, start_time, end_time, reservation_status"
-          )
-          .eq("lane_id", laneId)
-          .eq("reservation_date", reservationDate);
-
-      if (reservationsError) {
-        setMessage("Błąd sprawdzania rezerwacji.");
-        return;
-      }
-
-      const reservationConflict = (
-        (allReservationsForLane ?? []) as BookedReservation[]
-      ).filter((reservation) => {
-        return (
-          isActiveReservation(reservation.reservation_status) &&
-          rangesOverlap(
-            selectedHour,
-            endTime,
-            reservation.start_time,
-            reservation.end_time
-          )
-        );
+      const response = await fetch("/api/create-reservation", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({
+          laneId,
+          reservationDate,
+          startTime: selectedHour,
+          durationMinutes,
+          shootersCount,
+          creationRequestId: getCreationRequestId(),
+          reservationNote: reservationNote.trim() || null,
+        }),
       });
+      const result: unknown = await response.json().catch(() => null);
 
-      if (reservationConflict.length > 0) {
+      if (!isCreateReservationResponse(result)) {
+        setMessage("Nie udało się potwierdzić wyniku rezerwacji.");
+        return;
+      }
+
+      if (!response.ok || !result.ok) {
         setMessage(
-          `Nie można zarezerwować tego zakresu. Kolizja z istniejącą rezerwacją: ${normalizeTime(
-            reservationConflict[0].start_time
-          )} - ${normalizeTime(reservationConflict[0].end_time)}.`
+          CODE_MESSAGES[result.code] ??
+            result.error ??
+            "Nie udało się utworzyć rezerwacji."
         );
-        setSelectedHour("");
         return;
       }
 
-      const { data: allBlocksForLane, error: blocksError } = await supabase
-        .from("lane_blocks")
-        .select("id, start_time, end_time")
-        .eq("lane_id", laneId)
-        .eq("block_date", reservationDate)
-        .eq("is_active", true);
-
-      if (blocksError) {
-        setMessage("Błąd sprawdzania blokad osi.");
+      if (
+        !result.reservationId ||
+        !UUID_PATTERN.test(result.reservationId) ||
+        typeof result.totalPrice !== "number" ||
+        typeof result.durationMinutes !== "number" ||
+        typeof result.shootersCount !== "number" ||
+        !result.laneName ||
+        !result.currencyCode
+      ) {
+        setMessage("Rezerwacja istnieje, ale odpowiedź serwera jest niepełna.");
         return;
       }
 
-      const blockConflict = ((allBlocksForLane ?? []) as LaneBlock[]).filter(
-        (block) =>
-          rangesOverlap(selectedHour, endTime, block.start_time, block.end_time)
+      const endTime = minutesToTime(
+        timeToMinutes(selectedHour) + result.durationMinutes
       );
-
-      if (blockConflict.length > 0) {
-        setMessage(
-          `Nie można zarezerwować tego zakresu. Kolizja z blokadą osi: ${normalizeTime(
-            blockConflict[0].start_time
-          )} - ${normalizeTime(blockConflict[0].end_time)}.`
-        );
-        setSelectedHour("");
-        return;
-      }
-
-      const checkInToken = crypto.randomUUID();
-      const { data: insertedReservation, error } = await supabase
-        .from("reservations")
-        .insert({
-          user_id: userId,
-          lane_id: laneId,
-          customer_name: customerName,
-          customer_email: customerEmail,
-          customer_phone: customerPhone,
-          reservation_date: reservationDate,
-          start_time: selectedHour,
-          end_time: endTime,
-          duration_minutes: durationMinutes,
-          price: price,
-          reservation_status: RESERVATION_STATUS.CONFIRMED,
-          payment_status: PAYMENT_STATUS.PAY_ON_SITE,
-          check_in_token: checkInToken,
-        })
-        .select("id")
-        .single();
-
-      if (error) {
-        setMessage("Nie udało się utworzyć rezerwacji. Spróbuj ponownie.");
-        return;
-      }
-
-      reservationCreated = true;
-      const reservationId =
-        typeof insertedReservation?.id === "string"
-          ? insertedReservation.id.trim()
-          : "";
-
-      if (!reservationId || !UUID_PATTERN.test(reservationId)) {
-        setMessage(
-          "Nie udało się potwierdzić utworzenia rezerwacji. Odśwież stronę przed ponowną próbą."
-        );
-        return;
-      }
-
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-      let confirmationEmailSent = false;
-
-      if (session?.access_token) {
-        try {
-          const emailResponse = await fetch(
-            "/api/send-reservation-confirmation",
-            {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-                Authorization: `Bearer ${session.access_token}`,
-              },
-              body: JSON.stringify({ reservationId }),
-            }
-          );
-          const emailResult: unknown = await emailResponse
-            .json()
-            .catch(() => null);
-
-          confirmationEmailSent =
-            emailResponse.ok &&
-            isReservationConfirmationResponse(emailResult) &&
-            emailResult.ok === true &&
-            emailResult.code === "sent";
-        } catch {
-          console.error("Reservation confirmation request failed");
-        }
-      }
+      const emailSent = await sendConfirmationEmail(
+        session.access_token,
+        result.reservationId
+      );
 
       setConfirmationData({
         date: reservationDate,
         startTime: selectedHour,
         endTime,
-        laneName,
-        price,
+        laneName: result.laneName,
+        shootersCount: result.shootersCount,
+        durationMinutes: result.durationMinutes,
+        totalPrice: result.totalPrice,
+        currencyCode: result.currencyCode,
       });
+      setMessageSuccess(true);
+      setMessage(
+        emailSent
+          ? result.code === "already_created"
+            ? "Rezerwacja była już utworzona. Potwierdzenie e-mail jest zabezpieczone przed duplikatem."
+            : "Rezerwacja została utworzona, a potwierdzenie wysłane e-mailem."
+          : "Rezerwacja istnieje, ale nie udało się wysłać e-maila. Wysyłkę można ponowić."
+      );
 
-      if (confirmationEmailSent) {
-        setMessage(
-          "Rezerwacja została zapisana. Email potwierdzający został wysłany. Płatność na miejscu."
-        );
-      } else {
-        setMessage(
-          "Rezerwacja została utworzona, ale wiadomość e-mail nie została wysłana."
-        );
-      }
-
+      creationRequestIdRef.current = "";
       setReservationDate("");
       setLaneId("");
-      setDurationMinutes(60);
+      setDurationMinutes(0);
+      setShootersCount(1);
       setSelectedHour("");
+      setReservationNote("");
       setAcceptedRules(false);
-      setBookedHours([]);
+      setBusyRanges([]);
     } catch {
       setMessage(
-        reservationCreated
-          ? "Rezerwacja została utworzona, ale wiadomość e-mail nie została wysłana."
-          : "Nie udało się utworzyć rezerwacji. Spróbuj ponownie."
+        "Nie udało się połączyć z serwerem. Ponowienie zachowa identyfikator tej samej próby."
       );
     } finally {
       submissionInProgressRef.current = false;
@@ -798,11 +484,7 @@ export default function BookingForm({ lanes }: BookingFormProps) {
 
   if (checkingUser) {
     return (
-      <div
-        role="status"
-        aria-live="polite"
-        className="rounded-2xl border border-[#30372c] bg-[#191e19] p-6 text-[#a9ada4]"
-      >
+      <div className="rounded-2xl border border-[#30372c] bg-[#191e19] p-6 text-[#a9ada4]">
         Sprawdzanie użytkownika...
       </div>
     );
@@ -810,37 +492,28 @@ export default function BookingForm({ lanes }: BookingFormProps) {
 
   if (!isLoggedIn) {
     return (
-      <div
-        role="alert"
-        className="rounded-2xl border border-[#744545] bg-[#2a1b1b] p-6 text-center sm:p-8"
-      >
-        <h2 className="mb-3 text-2xl font-bold text-[#f2efe4]">
-          Logowanie wymagane
-        </h2>
-
-        <p className="mx-auto mb-6 max-w-xl text-[#e0a0a0]">
-          Aby zarezerwować oś strzelecką, musisz najpierw zalogować się na
-          swoje konto albo utworzyć nowe konto użytkownika.
+      <div className="rounded-2xl border border-[#744545] bg-[#2a1b1b] p-6 text-center">
+        <h2 className="text-2xl font-bold">Logowanie wymagane</h2>
+        <p className="mt-3 text-[#e0a0a0]">
+          Zaloguj się, aby utworzyć rezerwację.
         </p>
-
-        <div className="flex flex-col gap-3 sm:flex-row sm:justify-center">
-          <a
-            href="/login?redirectTo=%2Fbooking"
-            className="min-h-12 rounded-xl bg-[#536143] px-5 py-3 font-semibold text-[#f2efe4] transition hover:bg-[#78865f] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#c5a861] focus-visible:ring-offset-2 focus-visible:ring-offset-[#2a1b1b]"
-          >
-            Zaloguj się
-          </a>
-
-          <a
-            href="/register"
-            className="min-h-12 rounded-xl border border-[#744545] px-5 py-3 font-semibold text-[#f2efe4] transition hover:bg-[#3a2424] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#c5a861] focus-visible:ring-offset-2 focus-visible:ring-offset-[#2a1b1b]"
-          >
-            Utwórz konto
-          </a>
-        </div>
+        <a
+          href="/login?redirectTo=%2Fbooking"
+          className="mt-5 inline-flex rounded-xl bg-[#536143] px-5 py-3 font-semibold"
+        >
+          Zaloguj się
+        </a>
       </div>
     );
   }
+
+  const displayName = getProfileDisplayName(profile ?? {}, "");
+  const verificationStatus = profile?.verification_status ?? "pending";
+  const profileRejected = verificationStatus === "rejected";
+  const noLaneConfiguration =
+    Boolean(laneId) &&
+    (laneDurations.length === 0 ||
+      !pricingRules.some((rule) => rule.lane_id === laneId));
 
   return (
     <>
@@ -849,458 +522,304 @@ export default function BookingForm({ lanes }: BookingFormProps) {
           <div
             role="dialog"
             aria-modal="true"
-            aria-labelledby="booking-confirmation-title"
-            aria-describedby="booking-confirmation-description"
-            className="w-full max-w-lg rounded-[2rem] border border-[#30372c] bg-[#141814] p-6 text-[#f2efe4] shadow-2xl sm:p-8"
+            className="w-full max-w-lg rounded-[2rem] border border-[#30372c] bg-[#141814] p-6 shadow-2xl"
           >
-            <div className="mb-4 rounded-full border border-[#3f6848] bg-[#1b2a1d] px-4 py-2 text-center text-sm font-bold uppercase tracking-[0.2em] text-[#a9d4ad]">
+            <p className="text-sm font-bold uppercase tracking-[0.2em] text-[#a9d4ad]">
               Rezerwacja przyjęta
-            </div>
-
-            <h2
-              id="booking-confirmation-title"
-              className="mb-3 text-3xl font-bold"
-            >
+            </p>
+            <h2 className="mt-3 text-3xl font-bold">
               Udało się dokonać rezerwacji
             </h2>
-
-            <p
-              id="booking-confirmation-description"
-              className="mb-6 text-[#a9ada4]"
+            <div className="mt-5 grid gap-3 rounded-2xl border border-[#30372c] bg-[#191e19] p-5">
+              <p>{formatReservationDate(confirmationData.date)}</p>
+              <p>
+                {confirmationData.startTime}–{confirmationData.endTime}
+              </p>
+              <p>{confirmationData.laneName}</p>
+              <p>
+                {confirmationData.shootersCount} strzelców ·{" "}
+                {formatDuration(confirmationData.durationMinutes)}
+              </p>
+              <p className="font-semibold text-[#d7c895]">
+                {formatMoney(
+                  confirmationData.totalPrice,
+                  confirmationData.currencyCode
+                )}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                window.location.href = "/my-reservations";
+              }}
+              className="mt-6 min-h-12 w-full rounded-xl bg-[#536143] px-5 py-3 font-semibold"
             >
-              Poniżej znajduje się podsumowanie Twojej rezerwacji.
-            </p>
-
-            <div className="grid gap-3 rounded-2xl border border-[#30372c] bg-[#191e19] p-5 text-sm">
-              <div>
-                <p className="text-[#858c7f]">Data</p>
-                <p className="text-lg font-semibold text-[#f2efe4]">
-                  {formatReservationDate(confirmationData.date)}
-                </p>
-              </div>
-
-              <div>
-                <p className="text-[#858c7f]">Godzina</p>
-                <p className="text-lg font-semibold text-[#f2efe4]">
-                  {confirmationData.startTime} - {confirmationData.endTime}
-                </p>
-              </div>
-
-              <div>
-                <p className="text-[#858c7f]">Oś</p>
-                <p className="text-lg font-semibold text-[#f2efe4]">
-                  {confirmationData.laneName}
-                </p>
-              </div>
-
-              <div>
-                <p className="text-[#858c7f]">Cena</p>
-                <p className="text-lg font-semibold text-[#d7c895]">
-                  {confirmationData.price.toFixed(0)} zł
-                </p>
-              </div>
-
-              <div>
-                <p className="text-[#858c7f]">Płatność</p>
-                <p className="text-lg font-semibold text-[#d7c895]">
-                  Na miejscu
-                </p>
-              </div>
-            </div>
-
-            <div className="mt-6 grid gap-3">
-              <button
-                ref={confirmationButtonRef}
-                type="button"
-                onClick={() => {
-                  window.location.href = "/my-reservations";
-                }}
-                className="min-h-12 rounded-xl bg-[#536143] px-5 py-3 font-semibold text-[#f2efe4] transition hover:bg-[#78865f] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#c5a861] focus-visible:ring-offset-2 focus-visible:ring-offset-[#141814]"
-              >
-                Gotowe
-              </button>
-
-            </div>
+              Gotowe
+            </button>
           </div>
         </div>
       )}
 
-      <form className="grid gap-5 rounded-2xl border border-[#30372c] bg-[#191e19] p-4 text-[#f2efe4] sm:gap-6 sm:p-6">
-        {verificationBox && (
+      <form
+        onSubmit={(event) => {
+          event.preventDefault();
+          void handleSubmit();
+        }}
+        className="grid gap-5 rounded-2xl border border-[#30372c] bg-[#191e19] p-4 sm:p-6"
+      >
+        {verificationStatus !== "verified" && (
           <div
-            role={isRejected ? "alert" : "status"}
-            aria-live={isRejected ? undefined : "polite"}
-            className={verificationBox.className}
+            role={profileRejected ? "alert" : "status"}
+            className={`rounded-xl border p-4 text-sm ${
+              profileRejected
+                ? "border-[#744545] bg-[#2a1b1b] text-[#e0a0a0]"
+                : "border-[#806a32] bg-[#2b2618] text-[#e1c477]"
+            }`}
           >
-            <p className={verificationBox.titleClassName}>
-              {verificationBox.title}
-            </p>
-
-            <p className="mt-2 opacity-80">{verificationBox.text}</p>
+            {profileRejected
+              ? "Konto zostało odrzucone. Rezerwacja jest zablokowana."
+              : "Do czasu weryfikacji możesz mieć tylko jedną aktywną rezerwację."}
           </div>
         )}
 
-        <div className="grid gap-4 rounded-2xl border border-[#30372c] bg-[#141814] p-4 md:grid-cols-3 sm:p-5">
-          <div>
-            <label
-              htmlFor="booking-full-name"
-              className="mb-2 block text-sm font-medium text-[#a9ada4]"
-            >
-              Imię i nazwisko
-            </label>
-
+        <div className="grid gap-4 md:grid-cols-3">
+          <label className="grid gap-2 text-sm text-[#a9ada4]">
+            Imię i nazwisko
             <input
-              id="booking-full-name"
-              type="text"
-              value={customerName}
+              value={displayName}
               disabled
-              className="min-h-12 w-full rounded-xl border border-[#30372c] bg-[#191e19] px-4 py-3.5 text-[#858c7f] disabled:cursor-not-allowed"
+              className="min-h-12 rounded-xl border border-[#30372c] bg-[#141814] px-4 text-[#858c7f]"
             />
-          </div>
-
-          <div>
-            <label
-              htmlFor="booking-email"
-              className="mb-2 block text-sm font-medium text-[#a9ada4]"
-            >
-              E-mail
-            </label>
-
+          </label>
+          <label className="grid gap-2 text-sm text-[#a9ada4]">
+            E-mail
             <input
-              id="booking-email"
-              type="email"
-              value={customerEmail}
+              value={profile?.email ?? ""}
               disabled
-              className="min-h-12 w-full rounded-xl border border-[#30372c] bg-[#191e19] px-4 py-3.5 text-[#858c7f] disabled:cursor-not-allowed"
+              className="min-h-12 rounded-xl border border-[#30372c] bg-[#141814] px-4 text-[#858c7f]"
             />
-          </div>
-
-          <div>
-            <label
-              htmlFor="booking-phone"
-              className="mb-2 block text-sm font-medium text-[#a9ada4]"
-            >
-              Telefon
-            </label>
-
+          </label>
+          <label className="grid gap-2 text-sm text-[#a9ada4]">
+            Telefon
             <input
-              id="booking-phone"
-              type="tel"
-              value={customerPhone}
-              onChange={(event) => setCustomerPhone(event.target.value)}
-              placeholder="Wpisz numer telefonu"
-              disabled={!canUseBookingForm}
-              className="min-h-12 w-full rounded-xl border border-[#30372c] bg-[#191e19] px-4 py-3.5 text-[#f2efe4] outline-none placeholder:text-[#858c7f] focus:border-[#78865f] focus-visible:ring-2 focus-visible:ring-[#c5a861] focus-visible:ring-offset-2 focus-visible:ring-offset-[#141814] disabled:cursor-not-allowed disabled:text-[#858c7f]"
+              value={profile?.phone ?? ""}
+              disabled
+              className="min-h-12 rounded-xl border border-[#30372c] bg-[#141814] px-4 text-[#858c7f]"
             />
-          </div>
+          </label>
         </div>
 
-        <div className="grid gap-5 rounded-2xl border border-[#30372c] bg-[#141814] p-4 sm:p-5 md:grid-cols-3">
-          <div>
-            <label
-              htmlFor="booking-date"
-              className="mb-2 block text-sm font-medium text-[#a9ada4]"
-            >
-              Data rezerwacji
-            </label>
-
-            <input
-              id="booking-date"
-              type="date"
-              value={reservationDate}
-              min={getTodayDateString()}
-              disabled={!canUseBookingForm}
-              onChange={(event) => {
-                const newDate = event.target.value;
-
-                setReservationDate(newDate);
-                setSelectedHour("");
-
-                if (isPastReservationDate(newDate)) {
-                  setMessage("Nie można wybrać daty wstecznej.");
-                  return;
-                }
-
-                setMessage("");
-              }}
-              className="min-h-12 w-full rounded-xl border border-[#30372c] bg-[#191e19] px-4 py-3.5 text-[#f2efe4] outline-none focus:border-[#78865f] focus-visible:ring-2 focus-visible:ring-[#c5a861] focus-visible:ring-offset-2 focus-visible:ring-offset-[#141814] disabled:cursor-not-allowed disabled:text-[#858c7f]"
-            />
-          </div>
-
-          <div>
-            <label
-              htmlFor="booking-lane"
-              className="mb-2 block text-sm font-medium text-[#a9ada4]"
-            >
-              Oś / stanowisko
-            </label>
-
+        <div className="grid gap-4 md:grid-cols-2">
+          <label className="grid gap-2 text-sm text-[#a9ada4]">
+            Oś / stanowisko
             <select
-              id="booking-lane"
               value={laneId}
-              disabled={!canUseBookingForm}
+              disabled={profileRejected || loading}
               onChange={(event) => {
-                setLaneId(event.target.value);
+                const nextLaneId = event.target.value;
+                const nextDurations = durations.filter(
+                  (duration) => duration.lane_id === nextLaneId
+                );
+                setLaneId(nextLaneId);
+                setDurationMinutes(nextDurations[0]?.duration_minutes ?? 0);
+                setShootersCount(1);
                 setSelectedHour("");
-                setMessage("");
+                resetAttempt();
               }}
-              className="min-h-12 w-full rounded-xl border border-[#30372c] bg-[#191e19] px-4 py-3.5 text-[#f2efe4] outline-none focus:border-[#78865f] focus-visible:ring-2 focus-visible:ring-[#c5a861] focus-visible:ring-offset-2 focus-visible:ring-offset-[#141814] disabled:cursor-not-allowed disabled:text-[#858c7f]"
+              className="min-h-12 rounded-xl border border-[#30372c] bg-[#141814] px-4 text-[#f2efe4]"
             >
               <option value="">Wybierz oś</option>
-
               {lanes.map((lane) => (
                 <option key={lane.id} value={lane.id}>
-                  {lane.name} — {lane.price_per_hour} zł / h
+                  {lane.name} · maks. {lane.max_shooters}
                 </option>
               ))}
             </select>
-          </div>
+          </label>
 
-          <div>
-            <label
-              htmlFor="booking-duration"
-              className="mb-2 block text-sm font-medium text-[#a9ada4]"
-            >
-              Czas rezerwacji
-            </label>
+          <label className="grid gap-2 text-sm text-[#a9ada4]">
+            Data
+            <input
+              type="date"
+              min={getTodayDateString()}
+              value={reservationDate}
+              disabled={profileRejected || loading}
+              onChange={(event) => {
+                setReservationDate(event.target.value);
+                setSelectedHour("");
+                resetAttempt();
+              }}
+              className="min-h-12 rounded-xl border border-[#30372c] bg-[#141814] px-4 text-[#f2efe4]"
+            />
+          </label>
 
+          <label className="grid gap-2 text-sm text-[#a9ada4]">
+            Liczba strzelców
             <select
-              id="booking-duration"
+              value={shootersCount}
+              disabled={!selectedLane || profileRejected || loading}
+              onChange={(event) => {
+                setShootersCount(Number(event.target.value));
+                resetAttempt();
+              }}
+              className="min-h-12 rounded-xl border border-[#30372c] bg-[#141814] px-4 text-[#f2efe4]"
+            >
+              {Array.from(
+                { length: selectedLane?.max_shooters ?? 1 },
+                (_, index) => index + 1
+              ).map((count) => (
+                <option key={count} value={count}>
+                  {count}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label className="grid gap-2 text-sm text-[#a9ada4]">
+            Czas rezerwacji
+            <select
               value={durationMinutes}
-              disabled={!canUseBookingForm}
+              disabled={!laneId || laneDurations.length === 0 || loading}
               onChange={(event) => {
                 setDurationMinutes(Number(event.target.value));
                 setSelectedHour("");
-                setMessage("");
+                resetAttempt();
               }}
-              className="min-h-12 w-full rounded-xl border border-[#30372c] bg-[#191e19] px-4 py-3.5 text-[#f2efe4] outline-none focus:border-[#78865f] focus-visible:ring-2 focus-visible:ring-[#c5a861] focus-visible:ring-offset-2 focus-visible:ring-offset-[#141814] disabled:cursor-not-allowed disabled:text-[#858c7f]"
+              className="min-h-12 rounded-xl border border-[#30372c] bg-[#141814] px-4 text-[#f2efe4]"
             >
-              {durations.map((duration) => (
-                <option key={duration.value} value={duration.value}>
-                  {duration.label}
+              {laneDurations.length === 0 && (
+                <option value={0}>Brak konfiguracji</option>
+              )}
+              {laneDurations.map((duration) => (
+                <option key={duration.id} value={duration.duration_minutes}>
+                  {formatDuration(duration.duration_minutes)}
                 </option>
               ))}
             </select>
-          </div>
+          </label>
         </div>
 
-        <div className="rounded-2xl border border-[#30372c] bg-[#141814] p-4 sm:p-5">
-          <div className="mb-3 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
-            <label className="block text-sm font-medium text-[#a9ada4]">
-              Wybierz godzinę startu
-            </label>
-
-            {reservationDate && laneId && (
-              <span className="text-xs text-[#858c7f]">
-                Każdy kafelek oznacza pełny przedział jednej godziny, np.
-                12:00–13:00.
-              </span>
-            )}
+        {noLaneConfiguration && (
+          <div className="rounded-xl border border-[#806a32] bg-[#2b2618] p-4 text-sm text-[#e1c477]">
+            Ta oś nie ma kompletnej konfiguracji długości lub cennika.
           </div>
+        )}
 
-          {!canUseBookingForm ? (
-            <div
-              role="alert"
-              className="rounded-xl border border-[#744545] bg-[#2a1b1b] p-4 text-sm text-[#e0a0a0]"
-            >
-              Godziny rezerwacji są niedostępne dla kont odrzuconych.
-            </div>
-          ) : !reservationDate || !laneId ? (
-            <div
-              role="status"
-              aria-live="polite"
-              className="rounded-xl border border-[#30372c] bg-[#191e19] p-4 text-sm text-[#a9ada4]"
-            >
-              Najpierw wybierz datę oraz oś, aby zobaczyć dostępne godziny.
-            </div>
-          ) : checkingAvailability ? (
-            <div
-              role="status"
-              aria-live="polite"
-              className="rounded-xl border border-[#30372c] bg-[#191e19] p-4 text-sm text-[#a9ada4]"
-            >
-              Sprawdzanie dostępnych godzin...
-            </div>
-          ) : (
+        <div className="rounded-xl border border-[#30372c] bg-[#141814] p-4">
+          <p className="text-sm text-[#a9ada4]">Cena orientacyjna</p>
+          {matchingPricingRule && estimatedPrice !== null && selectedLane ? (
             <>
-              <div className="mb-3 rounded-xl border border-[#30372c] bg-[#191e19] p-3 text-xs text-[#a9ada4]">
-                <p>
-                  <span className="font-semibold text-[#e0a0a0]">Zajęte</span> —
-                  ta godzina jest już zarezerwowana.
-                </p>
-                <p>
-                  <span className="font-semibold text-[#a9ada4]">
-                    Start niedostępny
-                  </span>{" "}
-                  — wybrany czas rezerwacji zachodziłby na zajęty termin.
-                </p>
-                <p>
-                  <span className="font-semibold text-[#d7c895]">
-                    Wybrany zakres
-                  </span>{" "}
-                  — godziny objęte Twoją aktualną rezerwacją.
-                </p>
-              </div>
-
-              {reservationDate &&
-                laneId &&
-                durationMinutes > 0 &&
-                !checkingAvailability &&
-                !hasAvailableStartHour && (
-                  <div
-                    role="status"
-                    aria-live="polite"
-                    className="mb-3 rounded-xl border border-[#806a32] bg-[#2b2618] p-4 text-sm text-[#e1c477]"
-                  >
-                    <p className="font-semibold text-[#f2efe4]">
-                      Brak wolnych godzin dla wybranej daty, osi i czasu
-                      rezerwacji.
-                    </p>
-                    <p className="mt-1 text-[#a9ada4]">
-                      Wybierz inną datę, oś lub czas rezerwacji.
-                    </p>
-                  </div>
+              <p className="mt-1 text-2xl font-bold text-[#d7c895]">
+                {formatMoney(estimatedPrice, selectedLane.currency_code)}
+              </p>
+              <p className="mt-1 text-sm text-[#858c7f]">
+                {matchingPricingRule.label} ·{" "}
+                {formatMoney(
+                  Number(matchingPricingRule.hourly_price),
+                  selectedLane.currency_code
                 )}
-
-              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
-                {hours.map((hour) => {
-                  const hourEnd = addMinutesToTime(hour, 60);
-                  const isBooked = bookedHours.includes(hour);
-                  const isSelected = selectedHour === hour;
-                  const isInSelectedRange = selectedRange.includes(hour);
-                  const isInsideOpeningHours = isRangeInsideOpeningHours(hour);
-                  const unavailableHours = getUnavailableHoursInRange(hour);
-                  const hasRangeConflict = unavailableHours.length > 0;
-                  const isPastHour = isPastStartHour(reservationDate, hour);
-const isStartAvailable =
-  isInsideOpeningHours && !hasRangeConflict && !isPastHour;
-
-                  return (
-                    <button
-                      key={hour}
-                      type="button"
-                      onClick={() => handleHourClick(hour)}
-                      disabled={!isStartAvailable}
-                      className={
-                        isInSelectedRange
-                          ? isSelected
-                            ? "min-h-14 cursor-pointer rounded-xl border border-[#9a7c3e] bg-[#536143] px-3 py-3 font-semibold text-[#f2efe4] shadow-sm"
-                            : "min-h-14 cursor-default rounded-xl border border-[#6f5a2e] bg-[#2b2618] px-3 py-3 font-semibold text-[#d7c895]"
-                          : !isStartAvailable
-                            ? isBooked
-                              ? "min-h-14 cursor-not-allowed rounded-xl border border-[#744545] bg-[#2a1b1b] px-3 py-3 font-semibold text-[#e0a0a0] opacity-80"
-                              : "min-h-14 cursor-not-allowed rounded-xl border border-[#30372c] bg-[#191e19] px-3 py-3 font-semibold text-[#858c7f] opacity-70"
-                            : "min-h-14 rounded-xl border border-[#30372c] bg-[#191e19] px-3 py-3 font-semibold text-[#f2efe4] transition hover:border-[#78865f] hover:bg-[#536143] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#c5a861] focus-visible:ring-offset-2 focus-visible:ring-offset-[#141814]"
-                      }
-                    >
-                      <span className="block text-sm">
-                        {hour}–{hourEnd}
-                      </span>
-
-                      <span className="mt-1 block text-xs">
-                        {isInSelectedRange
-  ? "Wybrany zakres"
-  : !isStartAvailable
-    ? isBooked
-      ? "Zajęte"
-      : isPastHour
-        ? "Godzina minęła"
-        : "Start niedostępny"
-    : "Wolne"}
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
+                /h. Ostateczną cenę wylicza serwer.
+              </p>
             </>
-          )}
-        </div>
-
-        <div className="rounded-2xl border border-[#30372c] bg-[#141814] p-4 text-sm text-[#a9ada4] sm:p-5">
-          <p>
-            Status konta:{" "}
-            <span
-              className={
-                isVerified
-                  ? "font-semibold text-[#a9d4ad]"
-                  : verificationStatus === "rejected"
-                    ? "font-semibold text-[#e0a0a0]"
-                    : "font-semibold text-[#e1c477]"
-              }
-            >
-              {isVerified
-                ? "zweryfikowane"
-                : verificationStatus === "rejected"
-                  ? "odrzucone"
-                  : "oczekuje na weryfikację"}
-            </span>
-          </p>
-
-          {!isVerified && verificationStatus !== "rejected" && (
-            <p className="mt-2 text-[#e1c477]">
-              Możesz wykonać jedną rezerwację na pierwszą wizytę. Kolejne
-              rezerwacje będą dostępne po weryfikacji konta przez pracownika.
+          ) : (
+            <p className="mt-1 text-sm text-[#e1c477]">
+              Brak dopasowanej reguły cenowej.
             </p>
           )}
-
-          <p>
-            Status rezerwacji:{" "}
-            <span className="font-semibold text-[#a9d4ad]">
-              potwierdzona automatycznie
-            </span>
-          </p>
-
-          <p>
-            Płatność:{" "}
-            <span className="font-semibold text-[#a9d4ad]">na miejscu</span>
-          </p>
-
-          <p>
-            Cena orientacyjna:{" "}
-            <span className="font-semibold text-[#d7c895]">
-              {price.toFixed(0)} zł
-            </span>
-          </p>
         </div>
 
-        <label className="flex min-h-12 items-start gap-3 rounded-xl border border-[#30372c] bg-[#141814] p-4 text-sm text-[#a9ada4]">
+        <fieldset className="rounded-xl border border-[#30372c] bg-[#141814] p-4">
+          <legend className="px-2 text-sm text-[#a9ada4]">
+            Godzina rozpoczęcia
+          </legend>
+          {checkingAvailability ? (
+            <p className="text-sm text-[#858c7f]">Sprawdzanie dostępności...</p>
+          ) : availableHours.length === 0 ? (
+            <p className="text-sm text-[#e1c477]">
+              Brak godzin dla wybranej konfiguracji.
+            </p>
+          ) : (
+            <div className="grid grid-cols-3 gap-2 sm:grid-cols-5 md:grid-cols-6">
+              {availableHours.map((hour) => {
+                const available = hourIsAvailable(hour);
+                return (
+                  <button
+                    key={hour}
+                    type="button"
+                    disabled={!available || loading}
+                    onClick={() => {
+                      setSelectedHour(hour);
+                      resetAttempt();
+                    }}
+                    className={`min-h-11 rounded-lg border px-2 text-sm ${
+                      selectedHour === hour
+                        ? "border-[#d7c895] bg-[#536143]"
+                        : available
+                          ? "border-[#30372c] bg-[#191e19]"
+                          : "cursor-not-allowed border-[#30372c] bg-[#111411] text-[#555b51]"
+                    }`}
+                  >
+                    {hour}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </fieldset>
+
+        <label className="grid gap-2 text-sm text-[#a9ada4]">
+          Notatka do rezerwacji (opcjonalnie)
+          <textarea
+            value={reservationNote}
+            maxLength={1000}
+            disabled={loading}
+            onChange={(event) => {
+              setReservationNote(event.target.value);
+              resetAttempt();
+            }}
+            className="min-h-24 rounded-xl border border-[#30372c] bg-[#141814] p-4 text-[#f2efe4]"
+          />
+        </label>
+
+        <label className="flex gap-3 text-sm text-[#a9ada4]">
           <input
             type="checkbox"
             checked={acceptedRules}
-            disabled={!canUseBookingForm}
+            disabled={loading}
             onChange={(event) => setAcceptedRules(event.target.checked)}
-            className="mt-0.5 size-5 shrink-0 accent-[#536143] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#c5a861] focus-visible:ring-offset-2 focus-visible:ring-offset-[#141814] disabled:cursor-not-allowed"
           />
-
-          <span>
-            Potwierdzam zapoznanie się z regulaminem i zasadami bezpieczeństwa.
-          </span>
+          Akceptuję regulamin i zasady bezpieczeństwa.
         </label>
 
         {message && (
           <div
-            role={message.includes("zapisana") ? "status" : "alert"}
-            aria-live={message.includes("zapisana") ? "polite" : undefined}
-            className={getMessageClass(message)}
+            role={messageSuccess ? "status" : "alert"}
+            className={`rounded-xl border p-4 text-sm ${
+              messageSuccess
+                ? "border-[#3f6848] bg-[#1b2a1d] text-[#a9d4ad]"
+                : "border-[#744545] bg-[#2a1b1b] text-[#e0a0a0]"
+            }`}
           >
             {message}
           </div>
         )}
 
         <button
-          type="button"
-          onClick={handleSubmit}
-          disabled={!canSubmit}
-          className="min-h-12 w-full rounded-xl bg-[#536143] px-4 py-3.5 font-semibold text-[#f2efe4] transition hover:bg-[#78865f] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#c5a861] focus-visible:ring-offset-2 focus-visible:ring-offset-[#191e19] disabled:cursor-not-allowed disabled:bg-[#30372c] disabled:text-[#858c7f]"
+          type="submit"
+          disabled={
+            loading ||
+            profileRejected ||
+            !reservationDate ||
+            !laneId ||
+            !selectedHour ||
+            !matchingPricingRule ||
+            !acceptedRules
+          }
+          className="min-h-12 rounded-xl bg-[#536143] px-5 py-3 font-semibold disabled:cursor-not-allowed disabled:opacity-50"
         >
-          {loading
-            ? "Zapisywanie..."
-            : isRejected
-              ? "Konto odrzucone"
-              : "Potwierdź rezerwację"}
+          {loading ? "Tworzenie rezerwacji..." : "Potwierdź rezerwację"}
         </button>
       </form>
     </>
   );
 }
-
