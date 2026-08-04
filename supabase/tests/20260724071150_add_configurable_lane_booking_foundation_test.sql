@@ -153,21 +153,32 @@ begin
     'Każda tabela powinna mieć politykę odczytu i zarządzania.'
   );
 
-  select exists (
-    select 1
-    from pg_catalog.pg_policies
-    where schemaname = 'public'
-      and tablename = 'reservations'
-      and policyname = 'Users can insert own reservations'
-  )
+  select case
+    when pg_catalog.to_regprocedure(
+      'public.create_reservation(uuid,date,time without time zone,integer,integer,uuid,text)'
+    ) is null then exists (
+      select 1
+      from pg_catalog.pg_policies
+      where schemaname = 'public'
+        and tablename = 'reservations'
+        and policyname = 'Users can insert own reservations'
+    )
+    else not exists (
+      select 1
+      from pg_catalog.pg_policies
+      where schemaname = 'public'
+        and tablename = 'reservations'
+        and policyname = 'Users can insert own reservations'
+    )
+  end
   into v_passed;
 
   insert into test_results
   values (
     8,
-    'Legacy INSERT policy pozostaje',
+    'Polityka INSERT jest zgodna z etapem',
     v_passed,
-    'Polityka zostanie usunięta dopiero po przełączeniu frontendu na RPC.'
+    'Przed RPC polityka legacy istnieje, a po wdrożeniu RPC jest usunięta.'
   );
 end;
 $catalog_tests$;
