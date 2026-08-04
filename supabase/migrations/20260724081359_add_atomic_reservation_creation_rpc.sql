@@ -19,6 +19,7 @@ begin
     values
       ('reservations', 'shooters_count'),
       ('reservations', 'pricing_rule_id'),
+      ('reservations', 'pricing_day_group_snapshot'),
       ('reservations', 'lane_name_snapshot'),
       ('reservations', 'pricing_label_snapshot'),
       ('reservations', 'price_per_hour_snapshot'),
@@ -29,7 +30,8 @@ begin
       ('shooting_lanes', 'max_shooters'),
       ('shooting_lanes', 'booking_step_minutes'),
       ('shooting_lanes', 'display_order'),
-      ('shooting_lanes', 'currency_code')
+      ('shooting_lanes', 'currency_code'),
+      ('lane_pricing_rules', 'day_group')
   ) as required(table_name, column_name)
   where not exists (
     select 1
@@ -245,6 +247,7 @@ declare
   v_start_in_warsaw timestamptz;
   v_total_price numeric(12,2);
   v_pricing_count integer;
+  v_pricing_day_group text;
   v_constraint_name text;
 begin
   if v_user_id is null then
@@ -270,6 +273,12 @@ begin
       'ok', false, 'changed', false, 'code', 'invalid_date'
     );
   end if;
+
+  v_pricing_day_group := case
+    when extract(isodow from p_reservation_date)::integer between 1 and 4
+      then 'mon_thu'
+    else 'fri_sun'
+  end;
 
   if p_start_time is null then
     return pg_catalog.jsonb_build_object(
@@ -369,6 +378,7 @@ begin
       'lane_name', v_existing.lane_name_snapshot,
       'shooters_count', v_existing.shooters_count,
       'duration_minutes', v_existing.duration_minutes,
+      'pricing_day_group', v_existing.pricing_day_group_snapshot,
       'price_per_hour', v_existing.price_per_hour_snapshot,
       'total_price', v_existing.total_price,
       'currency_code', v_existing.currency_code
@@ -520,6 +530,7 @@ begin
   into v_pricing_count
   from public.lane_pricing_rules as rule
   where rule.lane_id = p_lane_id
+    and rule.day_group = v_pricing_day_group
     and rule.is_active
     and rule.min_shooters <= p_shooters_count
     and rule.max_shooters >= p_shooters_count
@@ -535,6 +546,7 @@ begin
   into strict v_pricing_rule
   from public.lane_pricing_rules as rule
   where rule.lane_id = p_lane_id
+    and rule.day_group = v_pricing_day_group
     and rule.is_active
     and rule.min_shooters <= p_shooters_count
     and rule.max_shooters >= p_shooters_count
@@ -577,6 +589,7 @@ begin
       reservation_note,
       shooters_count,
       pricing_rule_id,
+      pricing_day_group_snapshot,
       lane_name_snapshot,
       pricing_label_snapshot,
       price_per_hour_snapshot,
@@ -601,6 +614,7 @@ begin
       v_note,
       p_shooters_count,
       v_pricing_rule.id,
+      v_pricing_day_group,
       pg_catalog.btrim(v_lane.name),
       pg_catalog.btrim(v_pricing_rule.label),
       v_pricing_rule.hourly_price,
@@ -651,6 +665,7 @@ begin
       'duration_minutes', v_created.duration_minutes,
       'shooters_count', v_created.shooters_count,
       'pricing_rule_id', v_created.pricing_rule_id,
+      'pricing_day_group', v_created.pricing_day_group_snapshot,
       'total_price', v_created.total_price,
       'currency_code', v_created.currency_code
     )
@@ -665,6 +680,7 @@ begin
     'lane_name', v_created.lane_name_snapshot,
     'shooters_count', v_created.shooters_count,
     'duration_minutes', v_created.duration_minutes,
+    'pricing_day_group', v_created.pricing_day_group_snapshot,
     'price_per_hour', v_created.price_per_hour_snapshot,
     'total_price', v_created.total_price,
     'currency_code', v_created.currency_code

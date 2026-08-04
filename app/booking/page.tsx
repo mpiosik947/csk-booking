@@ -39,7 +39,7 @@ export default function BookingPage() {
         supabase
           .from("lane_pricing_rules")
           .select(
-            "id,lane_id,min_shooters,max_shooters,label,hourly_price,display_order"
+            "id,lane_id,day_group,min_shooters,max_shooters,label,hourly_price,display_order"
           )
           .eq("is_active", true)
           .order("display_order")

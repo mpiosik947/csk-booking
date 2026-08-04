@@ -118,6 +118,7 @@ export async function POST(request: Request) {
       laneName: data.lane_name,
       shootersCount: data.shooters_count,
       durationMinutes: data.duration_minutes,
+      pricingDayGroup: data.pricing_day_group,
       pricePerHour: data.price_per_hour,
       totalPrice: data.total_price,
       currencyCode: data.currency_code,

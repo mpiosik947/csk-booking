@@ -61,6 +61,7 @@ declare
   v_lane_2 uuid := pg_catalog.gen_random_uuid();
   v_lane_inactive uuid := pg_catalog.gen_random_uuid();
   v_rule_1 uuid;
+  v_rule_1_weekend uuid;
   v_rule_2 uuid;
   v_user_1 uuid := pg_catalog.gen_random_uuid();
   v_user_2 uuid := pg_catalog.gen_random_uuid();
@@ -70,8 +71,14 @@ declare
   v_request_1 uuid := pg_catalog.gen_random_uuid();
   v_request_2 uuid := pg_catalog.gen_random_uuid();
   v_request_3 uuid := pg_catalog.gen_random_uuid();
-  v_date date := current_date + 30;
+  v_date date := date '2030-07-22';
   v_result jsonb;
+  v_monday_result jsonb;
+  v_thursday_result jsonb;
+  v_friday_result jsonb;
+  v_saturday_result jsonb;
+  v_sunday_result jsonb;
+  v_friday_request_id uuid := pg_catalog.gen_random_uuid();
   v_created_id uuid;
   v_second_id uuid;
   v_direct_blocked boolean;
@@ -100,24 +107,31 @@ begin
     (v_lane_inactive, 60, 1);
 
   insert into public.lane_pricing_rules (
-    lane_id, min_shooters, max_shooters, label, hourly_price, display_order
+    lane_id, day_group, min_shooters, max_shooters, label, hourly_price, display_order
   )
   values
-    (v_lane_1, 1, 4, '[TEST] 1-4', 100, 1)
+    (v_lane_1, 'mon_thu', 1, 4, '[TEST] 1-4', 100, 1)
     returning id into v_rule_1;
 
   insert into public.lane_pricing_rules (
-    lane_id, min_shooters, max_shooters, label, hourly_price, display_order
+    lane_id, day_group, min_shooters, max_shooters, label, hourly_price, display_order
   )
   values
-    (v_lane_2, 1, 5, '[TEST] druga oś', 80, 1)
+    (v_lane_1, 'fri_sun', 1, 4, '[TEST] weekend 1-4', 130, 1)
+    returning id into v_rule_1_weekend;
+
+  insert into public.lane_pricing_rules (
+    lane_id, day_group, min_shooters, max_shooters, label, hourly_price, display_order
+  )
+  values
+    (v_lane_2, 'mon_thu', 1, 5, '[TEST] druga oś', 80, 1)
     returning id into v_rule_2;
 
   insert into public.lane_pricing_rules (
-    lane_id, min_shooters, max_shooters, label, hourly_price, display_order
+    lane_id, day_group, min_shooters, max_shooters, label, hourly_price, display_order
   )
   values
-    (v_lane_inactive, 1, 2, '[TEST] nieaktywna', 50, 1);
+    (v_lane_inactive, 'mon_thu', 1, 2, '[TEST] nieaktywna', 50, 1);
 
   insert into public.lane_blocks (
     lane_id, block_date, start_time, end_time, reason, is_active
@@ -205,6 +219,11 @@ begin
     'Oczekiwano profile_rejected.'
   );
 
+  perform pg_catalog.set_config(
+    'request.jwt.claims',
+    pg_catalog.jsonb_build_object('sub', v_admin, 'role', 'authenticated')::text,
+    true
+  );
   update public.profiles
   set verification_status = 'verified', phone = null
   where user_id = v_user_3;
@@ -215,6 +234,11 @@ begin
   perform pg_temp.record_result(
     5, 'Niekompletny profil', v_result->>'code' = 'profile_incomplete',
     'Oczekiwano profile_incomplete.'
+  );
+  perform pg_catalog.set_config(
+    'request.jwt.claims',
+    pg_catalog.jsonb_build_object('sub', v_admin, 'role', 'authenticated')::text,
+    true
   );
   update public.profiles set phone = '333' where user_id = v_user_3;
 
@@ -321,6 +345,7 @@ begin
   where id = v_created_id
     and lane_name_snapshot = '[TEST] RPC oś 1'
     and pricing_label_snapshot = '[TEST] 1-4'
+    and pricing_day_group_snapshot = 'mon_thu'
     and pricing_rule_id = v_rule_1
     and shooters_count = 2
     and duration_minutes = 120;
@@ -332,6 +357,7 @@ begin
   perform pg_temp.record_result(
     17, 'Cena obliczona przez bazę',
     (v_result->>'total_price')::numeric = 200.00
+    and v_result->>'pricing_day_group' = 'mon_thu'
     and (v_result->>'price_per_hour')::numeric = 100.00,
     'Oczekiwano 100/h i 200 łącznie.'
   );
@@ -380,6 +406,7 @@ begin
     22, 'Identyczny retry',
     v_result->>'code' = 'already_created'
     and not (v_result->>'changed')::boolean
+    and v_result->>'pricing_day_group' = 'mon_thu'
     and (v_result->>'reservation_id')::uuid = v_created_id,
     'Oczekiwano already_created tego samego rekordu.'
   );
@@ -394,6 +421,11 @@ begin
     'Oczekiwano idempotency_conflict.'
   );
 
+  perform pg_catalog.set_config(
+    'request.jwt.claims',
+    pg_catalog.jsonb_build_object('sub', v_admin, 'role', 'authenticated')::text,
+    true
+  );
   update public.profiles
   set verification_status = 'pending'
   where user_id = v_user_2;
@@ -468,14 +500,14 @@ begin
       user_id, lane_id, customer_name, customer_email, customer_phone,
       reservation_date, start_time, end_time, duration_minutes, price,
       reservation_status, payment_status, check_in_token, shooters_count,
-      pricing_rule_id, lane_name_snapshot, pricing_label_snapshot,
+      pricing_rule_id, pricing_day_group_snapshot, lane_name_snapshot, pricing_label_snapshot,
       price_per_hour_snapshot, total_price, currency_code, creation_request_id
     )
     values (
       v_user_1, v_lane_2, '[TEST]', '[TEST]@example.invalid', '[TEST]',
       v_date, time '18:00', time '19:00', 60, 80,
       'confirmed', 'pay_on_site', pg_catalog.gen_random_uuid(), 1,
-      v_rule_2, '[TEST]', '[TEST]', 80, 80, 'PLN',
+      v_rule_2, 'mon_thu', '[TEST]', '[TEST]', 80, 80, 'PLN',
       pg_catalog.gen_random_uuid()
     );
   exception
@@ -502,14 +534,14 @@ begin
       user_id, lane_id, customer_name, customer_email, customer_phone,
       reservation_date, start_time, end_time, duration_minutes, price,
       reservation_status, payment_status, check_in_token, shooters_count,
-      pricing_rule_id, lane_name_snapshot, pricing_label_snapshot,
+      pricing_rule_id, pricing_day_group_snapshot, lane_name_snapshot, pricing_label_snapshot,
       price_per_hour_snapshot, total_price, currency_code, creation_request_id
     )
     values (
       v_admin, v_lane_2, '[TEST]', '[TEST]@example.invalid', '[TEST]',
       v_date, time '18:00', time '19:00', 60, 80,
       'confirmed', 'pay_on_site', pg_catalog.gen_random_uuid(), 1,
-      v_rule_2, '[TEST]', '[TEST]', 80, 80, 'PLN',
+      v_rule_2, 'mon_thu', '[TEST]', '[TEST]', 80, 80, 'PLN',
       pg_catalog.gen_random_uuid()
     );
   exception
@@ -708,6 +740,111 @@ begin
       )
     ) !~ 'customer_|email|phone|full_name',
     'Funkcja powinna zwracać wyłącznie przedziały czasu.'
+  );
+
+  v_monday_result := pg_temp.call_create_reservation(
+    v_user_3, v_lane_1, date '2030-07-29', time '08:00', 60, 2,
+    pg_catalog.gen_random_uuid()
+  );
+  v_thursday_result := pg_temp.call_create_reservation(
+    v_user_3, v_lane_1, date '2030-07-25', time '08:00', 60, 2,
+    pg_catalog.gen_random_uuid()
+  );
+  v_friday_result := pg_temp.call_create_reservation(
+    v_user_3, v_lane_1, date '2030-07-26', time '08:00', 60, 2,
+    v_friday_request_id
+  );
+  v_saturday_result := pg_temp.call_create_reservation(
+    v_user_3, v_lane_1, date '2030-07-27', time '08:00', 60, 2,
+    pg_catalog.gen_random_uuid()
+  );
+  v_sunday_result := pg_temp.call_create_reservation(
+    v_user_3, v_lane_1, date '2030-07-28', time '08:00', 60, 2,
+    pg_catalog.gen_random_uuid()
+  );
+
+  perform pg_temp.record_result(
+    44, 'Poniedziałek wybiera mon_thu',
+    v_monday_result->>'code' = 'created'
+      and v_monday_result->>'pricing_day_group' = 'mon_thu',
+    'Stała data 2030-07-29 powinna użyć mon_thu.'
+  );
+  perform pg_temp.record_result(
+    45, 'Czwartek wybiera mon_thu',
+    v_thursday_result->>'code' = 'created'
+      and v_thursday_result->>'pricing_day_group' = 'mon_thu',
+    'Stała data 2030-07-25 powinna użyć mon_thu.'
+  );
+  perform pg_temp.record_result(
+    46, 'Piątek wybiera fri_sun',
+    v_friday_result->>'code' = 'created'
+      and v_friday_result->>'pricing_day_group' = 'fri_sun',
+    'Stała data 2030-07-26 powinna użyć fri_sun.'
+  );
+  perform pg_temp.record_result(
+    47, 'Sobota wybiera fri_sun',
+    v_saturday_result->>'code' = 'created'
+      and v_saturday_result->>'pricing_day_group' = 'fri_sun',
+    'Stała data 2030-07-27 powinna użyć fri_sun.'
+  );
+  perform pg_temp.record_result(
+    48, 'Niedziela wybiera fri_sun',
+    v_sunday_result->>'code' = 'created'
+      and v_sunday_result->>'pricing_day_group' = 'fri_sun',
+    'Stała data 2030-07-28 powinna użyć fri_sun.'
+  );
+  perform pg_temp.record_result(
+    49, 'Cena zależy od grupy dnia',
+    (v_monday_result->>'price_per_hour')::numeric = 100
+      and (v_friday_result->>'price_per_hour')::numeric = 130
+      and (v_monday_result->>'total_price')::numeric
+          <> (v_friday_result->>'total_price')::numeric,
+    'Ten sam wariant powinien kosztować 100 w mon_thu i 130 w fri_sun.'
+  );
+  perform pg_temp.record_result(
+    50, 'Snapshot zapisuje grupę dnia',
+    exists (
+      select 1
+      from public.reservations
+      where id = (v_friday_result->>'reservation_id')::uuid
+        and pricing_rule_id = v_rule_1_weekend
+        and pricing_day_group_snapshot = 'fri_sun'
+        and price_per_hour_snapshot = 130
+    ),
+    'Rezerwacja piątkowa powinna zachować snapshot fri_sun.'
+  );
+
+  update public.lane_pricing_rules
+  set hourly_price = 140
+  where id = v_rule_1_weekend;
+  v_result := pg_temp.call_create_reservation(
+    v_user_3, v_lane_1, date '2030-07-26', time '08:00', 60, 2,
+    v_friday_request_id
+  );
+  perform pg_temp.record_result(
+    51, 'Idempotentny retry zwraca zapisany snapshot',
+    v_result->>'code' = 'already_created'
+      and v_result->>'pricing_day_group' = 'fri_sun'
+      and (v_result->>'price_per_hour')::numeric = 130,
+    'Retry nie może przeliczać istniejącej rezerwacji po zmianie cennika.'
+  );
+
+  v_result := pg_temp.call_create_reservation(
+    v_user_3, v_lane_1, date '2030-07-25', time '08:00', 60, 2,
+    v_friday_request_id
+  );
+  perform pg_temp.record_result(
+    52, 'Ta sama próba z inną datą jest konfliktem',
+    v_result->>'code' = 'idempotency_conflict',
+    'Zmiana piątku na czwartek przy tym samym request ID ma być odrzucona.'
+  );
+  perform pg_temp.record_result(
+    53, 'Granica czwartek-piątek zmienia taryfę',
+    v_thursday_result->>'pricing_day_group' = 'mon_thu'
+      and v_friday_result->>'pricing_day_group' = 'fri_sun'
+      and (v_thursday_result->>'price_per_hour')::numeric = 100
+      and (v_friday_result->>'price_per_hour')::numeric = 130,
+    'Daty 2030-07-25 i 2030-07-26 muszą użyć różnych taryf.'
   );
 end;
 $tests$;

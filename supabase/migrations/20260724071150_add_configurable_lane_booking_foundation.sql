@@ -197,6 +197,7 @@ execute function public.set_booking_configuration_updated_at();
 create table public.lane_pricing_rules (
   id uuid primary key default pg_catalog.gen_random_uuid(),
   lane_id uuid not null,
+  day_group text not null,
   min_shooters integer not null,
   max_shooters integer not null,
   label text not null,
@@ -211,6 +212,8 @@ create table public.lane_pricing_rules (
     foreign key (lane_id)
     references public.shooting_lanes (id)
     on delete restrict,
+  constraint lane_pricing_rules_day_group_check
+    check (day_group in ('mon_thu', 'fri_sun')),
   constraint lane_pricing_rules_min_shooters_check
     check (min_shooters >= 1),
   constraint lane_pricing_rules_shooters_range_check
@@ -224,13 +227,16 @@ create table public.lane_pricing_rules (
   constraint lane_pricing_rules_active_ranges_excl
     exclude using gist (
       lane_id with =,
+      day_group with =,
       int4range(min_shooters, max_shooters, '[]') with &&
     )
     where (is_active)
 );
 
 comment on table public.lane_pricing_rules is
-  'Aktywne i historyczne progi cenowe osi zależne od liczby strzelców.';
+  'Aktywne i historyczne progi cenowe osi zależne od grupy dni i liczby strzelców.';
+comment on column public.lane_pricing_rules.day_group is
+  'Grupa dni lokalnego kalendarza: mon_thu albo fri_sun.';
 comment on column public.lane_pricing_rules.label is
   'Snapshot tej etykiety jest zapisywany w reservations przy tworzeniu rezerwacji.';
 
@@ -240,6 +246,7 @@ on public.lane_pricing_rules (lane_id);
 create index lane_pricing_rules_active_order_idx
 on public.lane_pricing_rules (
   lane_id,
+  day_group,
   display_order,
   min_shooters,
   max_shooters
@@ -424,6 +431,7 @@ $verify_reservation_user_fk$;
 alter table public.reservations
   add column shooters_count integer not null,
   add column pricing_rule_id uuid not null,
+  add column pricing_day_group_snapshot text not null,
   add column lane_name_snapshot text not null,
   add column pricing_label_snapshot text not null,
   add column price_per_hour_snapshot numeric(12,2) not null,
@@ -462,6 +470,8 @@ alter table public.reservations
     ),
   add constraint reservations_time_range_check
     check (end_time > start_time),
+  add constraint reservations_pricing_day_group_snapshot_check
+    check (pricing_day_group_snapshot in ('mon_thu', 'fri_sun')),
   add constraint reservations_lane_name_snapshot_check
     check (pg_catalog.btrim(lane_name_snapshot) <> ''),
   add constraint reservations_pricing_label_snapshot_check
@@ -544,6 +554,8 @@ comment on column public.reservations.shooters_count is
   'Liczba strzelców zadeklarowana przy utworzeniu rezerwacji.';
 comment on column public.reservations.pricing_rule_id is
   'Reguła cenowa użyta do wyliczenia snapshotów rezerwacji.';
+comment on column public.reservations.pricing_day_group_snapshot is
+  'Historyczna grupa dni cennika użyta przy utworzeniu rezerwacji.';
 comment on column public.reservations.lane_name_snapshot is
   'Historyczna nazwa osi z chwili utworzenia rezerwacji.';
 comment on column public.reservations.pricing_label_snapshot is

@@ -53,6 +53,7 @@ export type CreateReservationRpcResult = {
   lane_name?: string;
   shooters_count?: number;
   duration_minutes?: number;
+  pricing_day_group?: "mon_thu" | "fri_sun";
   price_per_hour?: number;
   total_price?: number;
   currency_code?: string;
@@ -190,6 +191,8 @@ export function isCreateReservationRpcResult(
     typeof result.lane_name === "string" &&
     typeof result.shooters_count === "number" &&
     typeof result.duration_minutes === "number" &&
+    (result.pricing_day_group === "mon_thu" ||
+      result.pricing_day_group === "fri_sun") &&
     typeof result.price_per_hour === "number" &&
     typeof result.total_price === "number" &&
     typeof result.currency_code === "string"

@@ -280,12 +280,13 @@ begin
   begin
     insert into public.lane_pricing_rules (
       lane_id,
+      day_group,
       min_shooters,
       max_shooters,
       label,
       hourly_price
     )
-    values (v_lane_id, 0, 1, '[TEST]', 10);
+    values (v_lane_id, 'mon_thu', 0, 1, '[TEST]', 10);
   exception
     when check_violation then
       v_rejected := true;
@@ -303,12 +304,13 @@ begin
   begin
     insert into public.lane_pricing_rules (
       lane_id,
+      day_group,
       min_shooters,
       max_shooters,
       label,
       hourly_price
     )
-    values (v_lane_id, 3, 2, '[TEST]', 10);
+    values (v_lane_id, 'mon_thu', 3, 2, '[TEST]', 10);
   exception
     when check_violation then
       v_rejected := true;
@@ -324,25 +326,27 @@ begin
 
   insert into public.lane_pricing_rules (
     lane_id,
+    day_group,
     min_shooters,
     max_shooters,
     label,
     hourly_price,
     display_order
   )
-  values (v_lane_id, 1, 2, '[TEST] 1-2', 50, 1)
+  values (v_lane_id, 'mon_thu', 1, 2, '[TEST] 1-2', 50, 1)
   returning id into v_rule_id;
 
   v_rejected := false;
   begin
     insert into public.lane_pricing_rules (
       lane_id,
+      day_group,
       min_shooters,
       max_shooters,
       label,
       hourly_price
     )
-    values (v_lane_id, 2, 3, '[TEST] overlap', 70);
+    values (v_lane_id, 'mon_thu', 2, 3, '[TEST] overlap', 70);
   exception
     when exclusion_violation then
       v_rejected := true;
@@ -358,24 +362,26 @@ begin
 
   insert into public.lane_pricing_rules (
     lane_id,
+    day_group,
     min_shooters,
     max_shooters,
     label,
     hourly_price,
     display_order
   )
-  values (v_lane_id, 3, 5, '[TEST] 3-5', 100, 2)
+  values (v_lane_id, 'mon_thu', 3, 5, '[TEST] 3-5', 100, 2)
   returning id into v_second_rule_id;
 
   insert into public.lane_pricing_rules (
     lane_id,
+    day_group,
     min_shooters,
     max_shooters,
     label,
     hourly_price,
     display_order
   )
-  values (v_second_lane_id, 1, 5, '[TEST] druga oś', 50, 1)
+  values (v_second_lane_id, 'mon_thu', 1, 5, '[TEST] druga oś', 50, 1)
   returning id into v_other_lane_rule_id;
 
   insert into test_results
@@ -388,13 +394,14 @@ begin
 
   insert into public.lane_pricing_rules (
     lane_id,
+    day_group,
     min_shooters,
     max_shooters,
     label,
     hourly_price,
     is_active
   )
-  values (v_lane_id, 1, 5, '[TEST] historyczny', 1, false);
+  values (v_lane_id, 'mon_thu', 1, 5, '[TEST] historyczny', 1, false);
 
   insert into test_results
   values (
@@ -519,8 +526,9 @@ begin
       payment_status,
       check_in_token,
       shooters_count,
-      pricing_rule_id,
-      lane_name_snapshot,
+     pricing_rule_id,
+      pricing_day_group_snapshot,
+     lane_name_snapshot,
       pricing_label_snapshot,
       price_per_hour_snapshot,
       total_price,
@@ -543,8 +551,9 @@ begin
       'pay_on_site',
       pg_catalog.gen_random_uuid(),
       0,
-      v_rule_id,
-      '[TEST] Oś 1',
+     v_rule_id,
+      'mon_thu',
+     '[TEST] Oś 1',
       '[TEST] 1-2',
       50,
       50,
@@ -582,8 +591,9 @@ begin
       payment_status,
       check_in_token,
       shooters_count,
-      pricing_rule_id,
-      lane_name_snapshot,
+     pricing_rule_id,
+      pricing_day_group_snapshot,
+     lane_name_snapshot,
       pricing_label_snapshot,
       price_per_hour_snapshot,
       total_price,
@@ -606,8 +616,9 @@ begin
       'pay_on_site',
       pg_catalog.gen_random_uuid(),
       1,
-      v_rule_id,
-      '[TEST] Oś 1',
+     v_rule_id,
+      'mon_thu',
+     '[TEST] Oś 1',
       '[TEST] 1-2',
       50,
       50,
@@ -643,8 +654,9 @@ begin
     payment_status,
     check_in_token,
     shooters_count,
-    pricing_rule_id,
-    lane_name_snapshot,
+   pricing_rule_id,
+    pricing_day_group_snapshot,
+   lane_name_snapshot,
     pricing_label_snapshot,
     price_per_hour_snapshot,
     total_price,
@@ -667,8 +679,9 @@ begin
     'pay_on_site',
     pg_catalog.gen_random_uuid(),
     1,
-    v_rule_id,
-    '[TEST] Oś 1',
+   v_rule_id,
+    'mon_thu',
+   '[TEST] Oś 1',
     '[TEST] 1-2',
     50,
     50,
@@ -695,8 +708,9 @@ begin
       payment_status,
       check_in_token,
       shooters_count,
-      pricing_rule_id,
-      lane_name_snapshot,
+     pricing_rule_id,
+      pricing_day_group_snapshot,
+     lane_name_snapshot,
       pricing_label_snapshot,
       price_per_hour_snapshot,
       total_price,
@@ -719,8 +733,9 @@ begin
       'pay_on_site',
       pg_catalog.gen_random_uuid(),
       1,
-      v_rule_id,
-      '[TEST] Oś 1',
+     v_rule_id,
+      'mon_thu',
+     '[TEST] Oś 1',
       '[TEST] 1-2',
       50,
       50,
@@ -756,8 +771,9 @@ begin
     payment_status,
     check_in_token,
     shooters_count,
-    pricing_rule_id,
-    lane_name_snapshot,
+   pricing_rule_id,
+    pricing_day_group_snapshot,
+   lane_name_snapshot,
     pricing_label_snapshot,
     price_per_hour_snapshot,
     total_price,
@@ -780,8 +796,9 @@ begin
     'pay_on_site',
     pg_catalog.gen_random_uuid(),
     1,
-    v_rule_id,
-    '[TEST] Oś 1',
+   v_rule_id,
+    'mon_thu',
+   '[TEST] Oś 1',
     '[TEST] 1-2',
     50,
     50,
@@ -813,8 +830,9 @@ begin
     payment_status,
     check_in_token,
     shooters_count,
-    pricing_rule_id,
-    lane_name_snapshot,
+   pricing_rule_id,
+    pricing_day_group_snapshot,
+   lane_name_snapshot,
     pricing_label_snapshot,
     price_per_hour_snapshot,
     total_price,
@@ -837,8 +855,9 @@ begin
     'pay_on_site',
     pg_catalog.gen_random_uuid(),
     1,
-    v_other_lane_rule_id,
-    '[TEST] Oś 2',
+   v_other_lane_rule_id,
+    'mon_thu',
+   '[TEST] Oś 2',
     '[TEST] 1-2',
     50,
     50,
@@ -874,8 +893,9 @@ begin
     payment_status,
     check_in_token,
     shooters_count,
-    pricing_rule_id,
-    lane_name_snapshot,
+   pricing_rule_id,
+    pricing_day_group_snapshot,
+   lane_name_snapshot,
     pricing_label_snapshot,
     price_per_hour_snapshot,
     total_price,
@@ -898,8 +918,9 @@ begin
     'pay_on_site',
     pg_catalog.gen_random_uuid(),
     1,
-    v_rule_id,
-    '[TEST] Oś 1',
+   v_rule_id,
+    'mon_thu',
+   '[TEST] Oś 1',
     '[TEST] 1-2',
     50,
     50,
@@ -967,8 +988,9 @@ begin
       payment_status,
       check_in_token,
       shooters_count,
-      pricing_rule_id,
-      lane_name_snapshot,
+     pricing_rule_id,
+      pricing_day_group_snapshot,
+     lane_name_snapshot,
       pricing_label_snapshot,
       price_per_hour_snapshot,
       total_price,
@@ -991,8 +1013,9 @@ begin
       'pay_on_site',
       pg_catalog.gen_random_uuid(),
       1,
-      v_rule_id,
-      '[TEST] Oś 1',
+     v_rule_id,
+      'mon_thu',
+     '[TEST] Oś 1',
       '[TEST] 1-2',
       50,
       50,
@@ -1029,8 +1052,9 @@ begin
       reservation_status,
       payment_status,
       check_in_token,
-      pricing_rule_id,
-      lane_name_snapshot,
+     pricing_rule_id,
+      pricing_day_group_snapshot,
+     lane_name_snapshot,
       pricing_label_snapshot,
       price_per_hour_snapshot,
       total_price,
@@ -1052,8 +1076,9 @@ begin
       'confirmed',
       'pay_on_site',
       pg_catalog.gen_random_uuid(),
-      v_rule_id,
-      '[TEST] Oś 1',
+     v_rule_id,
+      'mon_thu',
+     '[TEST] Oś 1',
       '[TEST] 1-2',
       50,
       50,
@@ -1092,6 +1117,7 @@ begin
       check_in_token,
       shooters_count,
       pricing_rule_id,
+      pricing_day_group_snapshot,
       pricing_label_snapshot,
       price_per_hour_snapshot,
       total_price,
@@ -1114,8 +1140,9 @@ begin
       'pay_on_site',
       pg_catalog.gen_random_uuid(),
       1,
-      v_rule_id,
-      '[TEST] 1-2',
+     v_rule_id,
+      'mon_thu',
+     '[TEST] 1-2',
       50,
       50,
       'PLN',
@@ -1152,8 +1179,9 @@ begin
       payment_status,
       check_in_token,
       shooters_count,
-      pricing_rule_id,
-      lane_name_snapshot,
+     pricing_rule_id,
+      pricing_day_group_snapshot,
+     lane_name_snapshot,
       pricing_label_snapshot,
       price_per_hour_snapshot,
       total_price,
@@ -1175,8 +1203,9 @@ begin
       'pay_on_site',
       pg_catalog.gen_random_uuid(),
       1,
-      v_rule_id,
-      '[TEST] Oś 1',
+     v_rule_id,
+      'mon_thu',
+     '[TEST] Oś 1',
       '[TEST] 1-2',
       50,
       50,
@@ -1213,8 +1242,9 @@ begin
       payment_status,
       check_in_token,
       shooters_count,
-      pricing_rule_id,
-      lane_name_snapshot,
+     pricing_rule_id,
+      pricing_day_group_snapshot,
+     lane_name_snapshot,
       pricing_label_snapshot,
       price_per_hour_snapshot,
       total_price,
@@ -1237,8 +1267,9 @@ begin
       'pay_on_site',
       pg_catalog.gen_random_uuid(),
       1,
-      v_rule_id,
-      '[TEST] Oś 1',
+     v_rule_id,
+      'mon_thu',
+     '[TEST] Oś 1',
       '[TEST] 1-2',
       -1,
       -1,
@@ -1276,8 +1307,9 @@ begin
       payment_status,
       check_in_token,
       shooters_count,
-      pricing_rule_id,
-      lane_name_snapshot,
+     pricing_rule_id,
+      pricing_day_group_snapshot,
+     lane_name_snapshot,
       pricing_label_snapshot,
       price_per_hour_snapshot,
       total_price,
@@ -1300,8 +1332,9 @@ begin
       'pay_on_site',
       pg_catalog.gen_random_uuid(),
       1,
-      v_rule_id,
-      '[TEST] Oś 1',
+     v_rule_id,
+      'mon_thu',
+     '[TEST] Oś 1',
       '[TEST] 1-2',
       50,
       50,
@@ -1383,6 +1416,7 @@ begin
   begin
     insert into public.lane_pricing_rules (
       lane_id,
+      day_group,
       min_shooters,
       max_shooters,
       label,
@@ -1391,6 +1425,7 @@ begin
     )
     values (
       v_second_lane_id,
+      'mon_thu',
       6,
       6,
       '[TEST] user forbidden',
@@ -1439,6 +1474,7 @@ begin
   execute 'set local role authenticated';
   insert into public.lane_pricing_rules (
     lane_id,
+    day_group,
     min_shooters,
     max_shooters,
     label,
@@ -1448,6 +1484,7 @@ begin
   )
   values (
     v_second_lane_id,
+    'mon_thu',
     6,
     6,
     '[TEST] employee policy',
@@ -1500,6 +1537,7 @@ begin
   begin
     insert into public.lane_pricing_rules (
       lane_id,
+      day_group,
       min_shooters,
       max_shooters,
       label,
@@ -1508,6 +1546,7 @@ begin
     )
     values (
       v_second_lane_id,
+      'mon_thu',
       7,
       7,
       '[TEST] instructor forbidden',
@@ -1526,6 +1565,101 @@ begin
     'Instruktor nie zarządza konfiguracją',
     v_duration_rejected and v_pricing_rejected,
     'Oczekiwano blokady RLS w obu tabelach.'
+  );
+
+  insert into test_results
+  values (
+    34,
+    'Kolumny grupy dnia są wymagane',
+    (
+      select is_nullable = 'NO'
+      from information_schema.columns
+      where table_schema = 'public'
+        and table_name = 'lane_pricing_rules'
+        and column_name = 'day_group'
+    )
+    and (
+      select is_nullable = 'NO'
+      from information_schema.columns
+      where table_schema = 'public'
+        and table_name = 'reservations'
+        and column_name = 'pricing_day_group_snapshot'
+    ),
+    'day_group i jego snapshot powinny mieć NOT NULL.'
+  );
+
+  v_rejected := false;
+  begin
+    insert into public.lane_pricing_rules (
+      lane_id, day_group, min_shooters, max_shooters, label,
+      hourly_price, is_active
+    )
+    values (v_second_lane_id, 'holiday', 8, 8, '[TEST] invalid', 1, false);
+  exception
+    when check_violation then
+      v_rejected := true;
+  end;
+  insert into test_results
+  values (
+    35, 'Nieznana grupa dnia jest odrzucana', v_rejected,
+    'Oczekiwano CHECK dopuszczającego tylko mon_thu i fri_sun.'
+  );
+
+  insert into public.lane_pricing_rules (
+    lane_id, day_group, min_shooters, max_shooters, label,
+    hourly_price, display_order
+  )
+  values (v_second_lane_id, 'fri_sun', 1, 5, '[TEST] weekend', 75, 1);
+  insert into test_results
+  values (
+    36, 'Ten sam zakres jest dozwolony w obu taryfach', true,
+    'Exclusion constraint powinien rozdzielać day_group.'
+  );
+
+  v_rejected := false;
+  begin
+    insert into public.lane_pricing_rules (
+      lane_id, day_group, min_shooters, max_shooters, label, hourly_price
+    )
+    values (v_second_lane_id, 'fri_sun', 5, 6, '[TEST] weekend overlap', 80);
+  exception
+    when exclusion_violation then
+      v_rejected := true;
+  end;
+  insert into test_results
+  values (
+    37, 'Nakładający zakres fri_sun jest odrzucany', v_rejected,
+    'Aktywne zakresy tej samej taryfy nie mogą się nakładać.'
+  );
+
+  v_rejected := false;
+  begin
+    update public.reservations
+    set pricing_day_group_snapshot = null
+    where id = v_reservation_id;
+  exception
+    when not_null_violation then
+      v_rejected := true;
+  end;
+  insert into test_results
+  values (
+    38, 'Snapshot grupy dnia jest wymagany', v_rejected,
+    'Oczekiwano NOT NULL dla pricing_day_group_snapshot.'
+  );
+
+  v_rejected := false;
+  begin
+    update public.reservations
+    set pricing_day_group_snapshot = 'holiday'
+    where id = v_reservation_id;
+  exception
+    when check_violation then
+      v_rejected := true;
+  end;
+  insert into test_results
+  values (
+    39, 'Snapshot odrzuca nieznaną grupę dnia', v_rejected,
+    'Snapshot powinien dopuszczać tylko mon_thu i fri_sun.'
   );
 end;
 $constraint_tests$;

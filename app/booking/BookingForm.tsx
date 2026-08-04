@@ -3,6 +3,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "../../lib/supabase";
 import { getProfileDisplayName } from "../../lib/profile-display-name";
+import {
+  BOOKING_DAY_GROUP_LABELS,
+  getBookingDayGroup,
+  type BookingDayGroup,
+} from "../../lib/booking-day-group";
 
 export type BookingLane = {
   id: string;
@@ -23,6 +28,7 @@ export type BookingDuration = {
 export type BookingPricingRule = {
   id: string;
   lane_id: string;
+  day_group: BookingDayGroup;
   min_shooters: number;
   max_shooters: number;
   label: string;
@@ -59,6 +65,7 @@ type CreateReservationResponse = {
   laneName?: string;
   shootersCount?: number;
   durationMinutes?: number;
+  pricingDayGroup?: BookingDayGroup;
   pricePerHour?: number;
   totalPrice?: number;
   currencyCode?: string;
@@ -73,6 +80,7 @@ type ConfirmationData = {
   laneName: string;
   shootersCount: number;
   durationMinutes: number;
+  pricingDayGroup: BookingDayGroup;
   totalPrice: number;
   currencyCode: string;
 };
@@ -166,6 +174,24 @@ function formatReservationDate(date: string) {
   }).format(new Date(Date.UTC(year, month - 1, day)));
 }
 
+function getLanePricingNotice(laneName: string) {
+  const normalizedName = laneName.trim().toLocaleLowerCase("pl-PL");
+
+  if (normalizedName.includes("trap") || normalizedName.includes("skeet")) {
+    return "Cena obejmuje wyłączną rezerwację osi. Rzutki i amunicja rozliczane są oddzielnie na miejscu.";
+  }
+
+  if (normalizedName.includes("100 m")) {
+    return "Grupy powyżej 6 osób prosimy o kontakt z obsługą.";
+  }
+
+  if (normalizedName.includes("50 m")) {
+    return "Grupy powyżej 5 osób prosimy o kontakt z obsługą.";
+  }
+
+  return null;
+}
+
 function isCreateReservationResponse(
   value: unknown
 ): value is CreateReservationResponse {
@@ -206,6 +232,7 @@ export default function BookingForm({
   const submissionInProgressRef = useRef(false);
 
   const selectedLane = lanes.find((lane) => lane.id === laneId);
+  const selectedDayGroup = getBookingDayGroup(reservationDate);
   const laneDurations = useMemo(
     () => durations.filter((duration) => duration.lane_id === laneId),
     [durations, laneId]
@@ -213,6 +240,7 @@ export default function BookingForm({
   const matchingPricingRule = pricingRules.find(
     (rule) =>
       rule.lane_id === laneId &&
+      rule.day_group === selectedDayGroup &&
       rule.min_shooters <= shootersCount &&
       rule.max_shooters >= shootersCount
   );
@@ -428,6 +456,8 @@ export default function BookingForm({
         !UUID_PATTERN.test(result.reservationId) ||
         typeof result.totalPrice !== "number" ||
         typeof result.durationMinutes !== "number" ||
+        (result.pricingDayGroup !== "mon_thu" &&
+          result.pricingDayGroup !== "fri_sun") ||
         typeof result.shootersCount !== "number" ||
         !result.laneName ||
         !result.currencyCode
@@ -451,6 +481,7 @@ export default function BookingForm({
         laneName: result.laneName,
         shootersCount: result.shootersCount,
         durationMinutes: result.durationMinutes,
+        pricingDayGroup: result.pricingDayGroup,
         totalPrice: result.totalPrice,
         currencyCode: result.currencyCode,
       });
@@ -514,6 +545,9 @@ export default function BookingForm({
     Boolean(laneId) &&
     (laneDurations.length === 0 ||
       !pricingRules.some((rule) => rule.lane_id === laneId));
+  const lanePricingNotice = selectedLane
+    ? getLanePricingNotice(selectedLane.name)
+    : null;
 
   return (
     <>
@@ -540,6 +574,7 @@ export default function BookingForm({
                 {confirmationData.shootersCount} strzelców ·{" "}
                 {formatDuration(confirmationData.durationMinutes)}
               </p>
+              <p>{BOOKING_DAY_GROUP_LABELS[confirmationData.pricingDayGroup]}</p>
               <p className="font-semibold text-[#d7c895]">
                 {formatMoney(
                   confirmationData.totalPrice,
@@ -720,6 +755,14 @@ export default function BookingForm({
                 )}
                 /h. Ostateczną cenę wylicza serwer.
               </p>
+              <p className="mt-2 text-sm font-semibold text-[#a9ada4]">
+                Taryfa {BOOKING_DAY_GROUP_LABELS[matchingPricingRule.day_group].toLowerCase()}
+              </p>
+              {lanePricingNotice && (
+                <p className="mt-2 text-sm text-[#a9ada4]">
+                  {lanePricingNotice}
+                </p>
+              )}
             </>
           ) : (
             <p className="mt-1 text-sm text-[#e1c477]">
