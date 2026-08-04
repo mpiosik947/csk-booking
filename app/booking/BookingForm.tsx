@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "../../lib/supabase";
 import { getProfileDisplayName } from "../../lib/profile-display-name";
 import {
@@ -8,6 +8,14 @@ import {
   getBookingDayGroup,
   type BookingDayGroup,
 } from "../../lib/booking-day-group";
+import {
+  addMinutesToTime,
+  bookingSlotIsAvailable,
+  classifyBookingSlot,
+  getOccupiedSlotStarts,
+  type BookingSlotState,
+  type BookingTimeRange,
+} from "../../lib/booking-time-range";
 
 export type BookingLane = {
   id: string;
@@ -42,7 +50,7 @@ type BookingFormProps = {
   pricingRules: BookingPricingRule[];
 };
 
-type BusyRange = {
+type BusyRangeRow = {
   start_time: string;
   end_time: string;
 };
@@ -126,29 +134,6 @@ function normalizeTime(value: string) {
   return value.slice(0, 5);
 }
 
-function timeToMinutes(value: string) {
-  const [hour, minute] = normalizeTime(value).split(":").map(Number);
-  return hour * 60 + minute;
-}
-
-function minutesToTime(value: number) {
-  const hour = Math.floor(value / 60);
-  const minute = value % 60;
-  return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
-}
-
-function rangesOverlap(
-  startA: string,
-  endA: string,
-  startB: string,
-  endB: string
-) {
-  return (
-    timeToMinutes(startA) < timeToMinutes(endB) &&
-    timeToMinutes(endA) > timeToMinutes(startB)
-  );
-}
-
 function formatDuration(minutes: number) {
   if (minutes % 60 === 0) {
     const hours = minutes / 60;
@@ -221,8 +206,10 @@ export default function BookingForm({
   const [selectedHour, setSelectedHour] = useState("");
   const [reservationNote, setReservationNote] = useState("");
   const [acceptedRules, setAcceptedRules] = useState(false);
-  const [busyRanges, setBusyRanges] = useState<BusyRange[]>([]);
+  const [busyRanges, setBusyRanges] = useState<BookingTimeRange[]>([]);
+  const [blockedRanges, setBlockedRanges] = useState<BookingTimeRange[]>([]);
   const [checkingAvailability, setCheckingAvailability] = useState(false);
+  const [availabilityReady, setAvailabilityReady] = useState(false);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
   const [messageSuccess, setMessageSuccess] = useState(false);
@@ -230,6 +217,7 @@ export default function BookingForm({
     useState<ConfirmationData | null>(null);
   const creationRequestIdRef = useRef("");
   const submissionInProgressRef = useRef(false);
+  const availabilityRequestRef = useRef(0);
 
   const selectedLane = lanes.find((lane) => lane.id === laneId);
   const selectedDayGroup = getBookingDayGroup(reservationDate);
@@ -252,8 +240,8 @@ export default function BookingForm({
         ) / 100
       : null;
 
-  const availableHours = useMemo(() => {
-    if (!selectedLane || durationMinutes <= 0) {
+  const bookingSlots = useMemo(() => {
+    if (!selectedLane) {
       return [];
     }
 
@@ -262,14 +250,23 @@ export default function BookingForm({
 
     for (
       let start = 8 * 60;
-      start + durationMinutes <= 20 * 60;
+      start < 20 * 60;
       start += step
     ) {
-      result.push(minutesToTime(start));
+      result.push(addMinutesToTime("00:00", start));
     }
 
     return result;
-  }, [durationMinutes, selectedLane]);
+  }, [selectedLane]);
+
+  const selectedRangeSlots = useMemo(
+    () => getOccupiedSlotStarts(selectedHour, durationMinutes, bookingSlots),
+    [bookingSlots, durationMinutes, selectedHour]
+  );
+
+  const selectedEndTime = selectedHour
+    ? addMinutesToTime(selectedHour, durationMinutes)
+    : "";
 
   function resetAttempt() {
     creationRequestIdRef.current = "";
@@ -313,51 +310,87 @@ export default function BookingForm({
     loadUser();
   }, []);
 
-  useEffect(() => {
-    async function loadAvailability() {
-      setBusyRanges([]);
-      setSelectedHour("");
-
-      if (!reservationDate || !laneId) {
-        return;
-      }
-
-      setCheckingAvailability(true);
-      const { data, error } = await supabase.rpc(
-        "get_lane_booking_busy_ranges",
-        {
-          p_lane_id: laneId,
-          p_reservation_date: reservationDate,
-        }
-      );
-      setCheckingAvailability(false);
-
-      if (error) {
-        setMessage("Nie udało się pobrać podglądu dostępności.");
-        return;
-      }
-
-      setBusyRanges((data ?? []) as BusyRange[]);
-    }
-
-    loadAvailability();
-  }, [laneId, reservationDate]);
-
-  function hourIsAvailable(hour: string) {
-    const end = minutesToTime(timeToMinutes(hour) + durationMinutes);
-    const now = new Date();
-
-    if (
-      reservationDate === getTodayDateString() &&
-      timeToMinutes(hour) <= now.getHours() * 60 + now.getMinutes()
-    ) {
+  const loadAvailability = useCallback(async (
+    targetLaneId: string,
+    targetDate: string
+  ) => {
+    if (!targetDate || !targetLaneId) {
       return false;
     }
 
-    return !busyRanges.some((range) =>
-      rangesOverlap(hour, end, range.start_time, range.end_time)
+    const requestNumber = ++availabilityRequestRef.current;
+
+    const [busyResult, blockResult] = await Promise.all([
+      supabase.rpc(
+        "get_lane_booking_busy_ranges",
+        {
+          p_lane_id: targetLaneId,
+          p_reservation_date: targetDate,
+        }
+      ),
+      supabase
+        .from("lane_blocks")
+        .select("start_time,end_time")
+        .eq("lane_id", targetLaneId)
+        .eq("block_date", targetDate)
+        .eq("is_active", true),
+    ]);
+
+    if (requestNumber !== availabilityRequestRef.current) {
+      return false;
+    }
+
+    setCheckingAvailability(false);
+
+    if (busyResult.error || blockResult.error) {
+      setAvailabilityReady(false);
+      setMessage("Nie udało się pobrać podglądu dostępności.");
+      return false;
+    }
+
+    const normalizeRanges = (rows: BusyRangeRow[]): BookingTimeRange[] =>
+      rows.map((range) => ({
+        startTime: normalizeTime(range.start_time),
+        endTime: normalizeTime(range.end_time),
+      }));
+
+    setBusyRanges(normalizeRanges((busyResult.data ?? []) as BusyRangeRow[]));
+    setBlockedRanges(
+      normalizeRanges((blockResult.data ?? []) as BusyRangeRow[])
     );
-  }
+    setAvailabilityReady(true);
+    return true;
+  }, []);
+
+  const getSlotState = useCallback((
+    hour: string,
+    candidateDuration = durationMinutes,
+    candidateSelection = selectedHour
+  ): BookingSlotState => {
+    const now = new Date();
+    const [hourValue, minuteValue] = hour.split(":").map(Number);
+
+    return classifyBookingSlot({
+      slotStart: hour,
+      slotMinutes: Number(selectedLane?.booking_step_minutes ?? 60),
+      durationMinutes: candidateDuration,
+      openingStart: "08:00",
+      openingEnd: "20:00",
+      busyRanges,
+      blockedRanges,
+      selectedStart: candidateSelection,
+      isPast:
+        reservationDate === getTodayDateString() &&
+        hourValue * 60 + minuteValue <= now.getHours() * 60 + now.getMinutes(),
+    });
+  }, [
+    blockedRanges,
+    busyRanges,
+    durationMinutes,
+    reservationDate,
+    selectedHour,
+    selectedLane?.booking_step_minutes,
+  ]);
 
   async function sendConfirmationEmail(
     accessToken: string,
@@ -443,6 +476,19 @@ export default function BookingForm({
       }
 
       if (!response.ok || !result.ok) {
+        if (result.code === "slot_unavailable") {
+          setSelectedHour("");
+          creationRequestIdRef.current = "";
+          setAvailabilityReady(false);
+          setCheckingAvailability(true);
+          await loadAvailability(laneId, reservationDate);
+          setMessageSuccess(false);
+          setMessage(
+            "Ten przedział został właśnie zajęty. Wybierz inną godzinę."
+          );
+          return;
+        }
+
         setMessage(
           CODE_MESSAGES[result.code] ??
             result.error ??
@@ -466,9 +512,7 @@ export default function BookingForm({
         return;
       }
 
-      const endTime = minutesToTime(
-        timeToMinutes(selectedHour) + result.durationMinutes
-      );
+      const endTime = addMinutesToTime(selectedHour, result.durationMinutes);
       const emailSent = await sendConfirmationEmail(
         session.access_token,
         result.reservationId
@@ -503,6 +547,8 @@ export default function BookingForm({
       setReservationNote("");
       setAcceptedRules(false);
       setBusyRanges([]);
+      setBlockedRanges([]);
+      setAvailabilityReady(false);
     } catch {
       setMessage(
         "Nie udało się połączyć z serwerem. Ponowienie zachowa identyfikator tej samej próby."
@@ -659,6 +705,14 @@ export default function BookingForm({
                 setDurationMinutes(nextDurations[0]?.duration_minutes ?? 0);
                 setShootersCount(1);
                 setSelectedHour("");
+                availabilityRequestRef.current += 1;
+                setBusyRanges([]);
+                setBlockedRanges([]);
+                setAvailabilityReady(false);
+                setCheckingAvailability(Boolean(nextLaneId && reservationDate));
+                if (nextLaneId && reservationDate) {
+                  void loadAvailability(nextLaneId, reservationDate);
+                }
                 resetAttempt();
               }}
               className="min-h-12 rounded-xl border border-[#30372c] bg-[#141814] px-4 text-[#f2efe4]"
@@ -680,8 +734,17 @@ export default function BookingForm({
               value={reservationDate}
               disabled={profileRejected || loading}
               onChange={(event) => {
-                setReservationDate(event.target.value);
+                const nextDate = event.target.value;
+                setReservationDate(nextDate);
                 setSelectedHour("");
+                availabilityRequestRef.current += 1;
+                setBusyRanges([]);
+                setBlockedRanges([]);
+                setAvailabilityReady(false);
+                setCheckingAvailability(Boolean(laneId && nextDate));
+                if (laneId && nextDate) {
+                  void loadAvailability(laneId, nextDate);
+                }
                 resetAttempt();
               }}
               className="min-h-12 rounded-xl border border-[#30372c] bg-[#141814] px-4 text-[#f2efe4]"
@@ -716,9 +779,20 @@ export default function BookingForm({
               value={durationMinutes}
               disabled={!laneId || laneDurations.length === 0 || loading}
               onChange={(event) => {
-                setDurationMinutes(Number(event.target.value));
-                setSelectedHour("");
+                const nextDuration = Number(event.target.value);
+                setDurationMinutes(nextDuration);
                 resetAttempt();
+                if (
+                  selectedHour &&
+                  !bookingSlotIsAvailable(
+                    getSlotState(selectedHour, nextDuration, selectedHour)
+                  )
+                ) {
+                  setSelectedHour("");
+                  setMessage(
+                    "Wybrany przedział nie mieści się w dostępnych godzinach. Wybierz inną godzinę rozpoczęcia."
+                  );
+                }
               }}
               className="min-h-12 rounded-xl border border-[#30372c] bg-[#141814] px-4 text-[#f2efe4]"
             >
@@ -777,36 +851,68 @@ export default function BookingForm({
           </legend>
           {checkingAvailability ? (
             <p className="text-sm text-[#858c7f]">Sprawdzanie dostępności...</p>
-          ) : availableHours.length === 0 ? (
+          ) : bookingSlots.length === 0 ? (
             <p className="text-sm text-[#e1c477]">
               Brak godzin dla wybranej konfiguracji.
             </p>
           ) : (
             <div className="grid grid-cols-3 gap-2 sm:grid-cols-5 md:grid-cols-6">
-              {availableHours.map((hour) => {
-                const available = hourIsAvailable(hour);
+              {bookingSlots.map((hour) => {
+                const state = getSlotState(hour);
+                const available = bookingSlotIsAvailable(state);
+                const isSelectedStart = state === "selected_start";
+                const isSelectedRange = state === "selected_range";
+                const labels: Record<BookingSlotState, string> = {
+                  available: "Wolne",
+                  selected_start: "Początek",
+                  selected_range: "Wybrany przedział",
+                  occupied: "Zajęte",
+                  blocked: "Zablokowane",
+                  insufficient_time: "Za mało wolnego czasu",
+                  outside_hours: "Poza godzinami",
+                  past: "Godzina minęła",
+                };
                 return (
                   <button
                     key={hour}
                     type="button"
-                    disabled={!available || loading}
+                    disabled={!availabilityReady || !available || loading}
                     onClick={() => {
                       setSelectedHour(hour);
                       resetAttempt();
                     }}
-                    className={`min-h-11 rounded-lg border px-2 text-sm ${
-                      selectedHour === hour
-                        ? "border-[#d7c895] bg-[#536143]"
-                        : available
-                          ? "border-[#30372c] bg-[#191e19]"
-                          : "cursor-not-allowed border-[#30372c] bg-[#111411] text-[#555b51]"
+                    aria-pressed={isSelectedStart}
+                    className={`min-h-14 rounded-lg border px-2 py-2 text-sm ${
+                      isSelectedStart
+                        ? "border-[#d7c895] bg-[#536143] font-semibold text-[#f2efe4]"
+                        : isSelectedRange
+                          ? "cursor-default border-[#6f5a2e] bg-[#2b2618] font-semibold text-[#d7c895]"
+                          : state === "occupied"
+                            ? "cursor-not-allowed border-[#744545] bg-[#2a1b1b] text-[#e0a0a0]"
+                            : state === "blocked"
+                              ? "cursor-not-allowed border-[#806a32] bg-[#2b2618] text-[#e1c477]"
+                              : available
+                                ? "border-[#30372c] bg-[#191e19] transition hover:border-[#78865f] hover:bg-[#536143]"
+                                : "cursor-not-allowed border-[#30372c] bg-[#111411] text-[#858c7f]"
                     }`}
                   >
-                    {hour}
+                    <span className="block font-semibold">{hour}</span>
+                    <span className="mt-1 block text-[0.68rem] leading-tight">
+                      {labels[state]}
+                    </span>
                   </button>
                 );
               })}
             </div>
+          )}
+          {selectedHour && selectedRangeSlots.length > 0 && (
+            <p
+              role="status"
+              aria-live="polite"
+              className="mt-4 rounded-lg border border-[#6f5a2e] bg-[#2b2618] px-3 py-2 text-sm font-semibold text-[#d7c895]"
+            >
+              Wybrany przedział: {selectedHour}–{selectedEndTime}
+            </p>
           )}
         </fieldset>
 
