@@ -12,6 +12,7 @@ import {
   addMinutesToTime,
   bookingSlotIsAvailable,
   classifyBookingSlot,
+  getBookingSlotVisualClass,
   getOccupiedSlotStarts,
   normalizeBookingTime,
   type BookingSlotState,
@@ -260,6 +261,10 @@ export default function BookingForm({
   const selectedRangeSlots = useMemo(
     () => getOccupiedSlotStarts(selectedHour, durationMinutes, bookingSlots),
     [bookingSlots, durationMinutes, selectedHour]
+  );
+  const selectedRangeSlotSet = useMemo(
+    () => new Set(selectedRangeSlots.map(normalizeBookingTime)),
+    [selectedRangeSlots]
   );
 
   const selectedEndTime = selectedHour
@@ -856,10 +861,21 @@ export default function BookingForm({
           ) : (
             <div className="grid grid-cols-3 gap-2 sm:grid-cols-5 md:grid-cols-6">
               {bookingSlots.map((hour) => {
-                const state = getSlotState(hour);
+                const normalizedHour = normalizeBookingTime(hour);
+                const normalizedSelectedStart = selectedHour
+                  ? normalizeBookingTime(selectedHour)
+                  : "";
+                const baseState = getSlotState(hour, durationMinutes, "");
+                const state: BookingSlotState =
+                  normalizedSelectedStart === normalizedHour
+                    ? "selected_start"
+                    : selectedRangeSlotSet.has(normalizedHour)
+                      ? "selected_range"
+                      : baseState;
                 const available = bookingSlotIsAvailable(state);
                 const isSelectedStart = state === "selected_start";
                 const isSelectedRange = state === "selected_range";
+                const slotVisualClass = getBookingSlotVisualClass(state);
                 const labels: Record<BookingSlotState, string> = {
                   available: "Wolne",
                   selected_start: "Początek",
@@ -896,19 +912,7 @@ export default function BookingForm({
                             }
                           : undefined
                     }
-                    className={`min-h-14 rounded-lg border px-2 py-2 text-sm disabled:opacity-100 ${
-                      isSelectedStart
-                        ? "border-[#e1c477] bg-[#536143] font-semibold text-[#ffffff] ring-2 ring-[#c5a861] ring-offset-1 ring-offset-[#141814]"
-                        : isSelectedRange
-                          ? "cursor-default border-[#78865f] bg-[#3f4935] font-semibold text-[#f2efe4]"
-                          : state === "occupied"
-                            ? "cursor-not-allowed border-[#744545] bg-[#2a1b1b] text-[#e0a0a0]"
-                            : state === "blocked"
-                              ? "cursor-not-allowed border-[#806a32] bg-[#2b2618] text-[#e1c477]"
-                              : available
-                                ? "border-[#30372c] bg-[#191e19] transition hover:border-[#78865f] hover:bg-[#536143]"
-                                : "cursor-not-allowed border-[#30372c] bg-[#111411] text-[#858c7f]"
-                    }`}
+                    className={`min-h-14 rounded-lg border px-2 py-2 text-sm ${slotVisualClass}`}
                   >
                     <span className="block font-semibold">{hour}</span>
                     <span className="mt-1 block text-[0.68rem] leading-tight">

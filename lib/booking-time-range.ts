@@ -143,6 +143,23 @@ export function classifyBookingSlot({
   return "available";
 }
 
+export function getBookingSlotVisualClass(state: BookingSlotState) {
+  switch (state) {
+    case "selected_start":
+      return "border-[#e1c477] bg-[#536143] font-semibold text-[#ffffff] ring-2 ring-[#c5a861] ring-offset-1 ring-offset-[#141814] disabled:opacity-100";
+    case "selected_range":
+      return "cursor-default border-[#78865f] bg-[#3f4935] font-semibold text-[#f2efe4] disabled:opacity-100";
+    case "blocked":
+      return "cursor-not-allowed border-[#806a32] bg-[#2b2618] text-[#e1c477]";
+    case "occupied":
+      return "cursor-not-allowed border-[#744545] bg-[#2a1b1b] text-[#e0a0a0]";
+    case "available":
+      return "border-[#30372c] bg-[#191e19] transition hover:border-[#78865f] hover:bg-[#536143]";
+    default:
+      return "cursor-not-allowed border-[#30372c] bg-[#111411] text-[#858c7f]";
+  }
+}
+
 export function bookingSlotIsAvailable(state: BookingSlotState) {
   return state === "available" || state === "selected_start";
 }
