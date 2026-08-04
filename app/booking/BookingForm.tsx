@@ -13,6 +13,7 @@ import {
   bookingSlotIsAvailable,
   classifyBookingSlot,
   getOccupiedSlotStarts,
+  normalizeBookingTime,
   type BookingSlotState,
   type BookingTimeRange,
 } from "../../lib/booking-time-range";
@@ -130,9 +131,6 @@ function getTodayDateString() {
   return `${year}-${month}-${day}`;
 }
 
-function normalizeTime(value: string) {
-  return value.slice(0, 5);
-}
 
 function formatDuration(minutes: number) {
   if (minutes % 60 === 0) {
@@ -350,8 +348,8 @@ export default function BookingForm({
 
     const normalizeRanges = (rows: BusyRangeRow[]): BookingTimeRange[] =>
       rows.map((range) => ({
-        startTime: normalizeTime(range.start_time),
-        endTime: normalizeTime(range.end_time),
+        startTime: normalizeBookingTime(range.start_time),
+        endTime: normalizeBookingTime(range.end_time),
       }));
 
     setBusyRanges(normalizeRanges((busyResult.data ?? []) as BusyRangeRow[]));
@@ -882,11 +880,27 @@ export default function BookingForm({
                       resetAttempt();
                     }}
                     aria-pressed={isSelectedStart}
-                    className={`min-h-14 rounded-lg border px-2 py-2 text-sm ${
+                    data-slot-state={state}
+                    style={
                       isSelectedStart
-                        ? "border-[#d7c895] bg-[#536143] font-semibold text-[#f2efe4]"
+                        ? {
+                            backgroundColor: "#536143",
+                            borderColor: "#e1c477",
+                            color: "#ffffff",
+                          }
                         : isSelectedRange
-                          ? "cursor-default border-[#6f5a2e] bg-[#2b2618] font-semibold text-[#d7c895]"
+                          ? {
+                              backgroundColor: "#3f4935",
+                              borderColor: "#78865f",
+                              color: "#f2efe4",
+                            }
+                          : undefined
+                    }
+                    className={`min-h-14 rounded-lg border px-2 py-2 text-sm disabled:opacity-100 ${
+                      isSelectedStart
+                        ? "border-[#e1c477] bg-[#536143] font-semibold text-[#ffffff] ring-2 ring-[#c5a861] ring-offset-1 ring-offset-[#141814]"
+                        : isSelectedRange
+                          ? "cursor-default border-[#78865f] bg-[#3f4935] font-semibold text-[#f2efe4]"
                           : state === "occupied"
                             ? "cursor-not-allowed border-[#744545] bg-[#2a1b1b] text-[#e0a0a0]"
                             : state === "blocked"

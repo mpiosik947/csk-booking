@@ -25,12 +25,12 @@ type ClassifyBookingSlotInput = {
   isPast?: boolean;
 };
 
-function normalizeTime(value: string) {
+export function normalizeBookingTime(value: string) {
   return value.slice(0, 5);
 }
 
 export function timeToMinutes(value: string) {
-  const [hours, minutes] = normalizeTime(value).split(":").map(Number);
+  const [hours, minutes] = normalizeBookingTime(value).split(":").map(Number);
   return hours * 60 + minutes;
 }
 
@@ -107,6 +107,12 @@ export function classifyBookingSlot({
 
   if (
     selectedRange &&
+    timeToMinutes(slotStart) === timeToMinutes(selectedRange.startTime)
+  ) {
+    return "selected_start";
+  }
+  if (
+    selectedRange &&
     timeToMinutes(slotStart) > timeToMinutes(selectedRange.startTime) &&
     timeToMinutes(slotStart) < timeToMinutes(selectedRange.endTime)
   ) {
@@ -133,9 +139,6 @@ export function classifyBookingSlot({
     return "insufficient_time";
   }
 
-  if (selectedStart === slotStart) {
-    return "selected_start";
-  }
 
   return "available";
 }
