@@ -13,7 +13,7 @@ export default function CalendarViewSwitch({
       aria-label="Widok kalendarza"
       className="flex w-full rounded-xl border border-[#3a4236] bg-[#111511] p-1 md:inline-flex md:w-auto"
     >
-      {(["day", "week"] as const).map((option) => {
+      {(["day", "week", "month"] as const).map((option) => {
         const active = view === option;
         return (
           <button
@@ -21,13 +21,17 @@ export default function CalendarViewSwitch({
             type="button"
             aria-pressed={active}
             onClick={() => onChange(option)}
-            className={`min-h-10 flex-1 rounded-lg px-4 text-sm font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d7c895] md:flex-none ${
+            className={`min-h-10 min-w-0 flex-1 rounded-lg px-2 text-xs font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d7c895] sm:px-4 sm:text-sm md:flex-none ${
               active
                 ? "bg-[#536143] text-[#f2efe4]"
                 : "text-[#a9ada4] hover:text-[#f2efe4]"
             }`}
           >
-            {option === "day" ? "Dzień" : "Tydzień"}
+            {option === "day"
+              ? "Dzień"
+              : option === "week"
+                ? "Tydzień"
+                : "Miesiąc"}
             {active && <span className="sr-only"> (aktywny widok)</span>}
           </button>
         );

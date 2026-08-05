@@ -32,15 +32,21 @@ const ui = await import(
 
 const {
   addCalendarDays,
+  addCalendarMonths,
   buildCalendarPageUrl,
   filterCalendarEntries,
+  formatCalendarMonth,
   formatCalendarWeekRange,
   getCalendarEntryGeometry,
+  getCalendarLaneLabel,
+  getCalendarMonthDates,
+  getCalendarMonthRange,
   getVisibleCalendarLanes,
   getCalendarWeekDates,
   getCalendarWeekPresentation,
   getCalendarWeekRange,
   groupCalendarWeekDays,
+  groupCalendarMonthDays,
   layoutCalendarLaneEntries,
   parseCalendarPageState,
   resolveCalendarLaneId,
@@ -281,6 +287,135 @@ test("Polish week range formats two different years", () => {
   );
 });
 
+test("month lane label identifies all lanes and exact selected lane names", () => {
+  const lanes = [
+    {
+      id: "11111111-1111-4111-8111-111111111111",
+      name: "Oś 50 m — stanowisko 1",
+      isActive: true,
+      isHistoricalOnly: false,
+      displayOrder: 10,
+      bookingStepMinutes: 60,
+    },
+    {
+      id: "22222222-2222-4222-8222-222222222222",
+      name: "Oś 100 m",
+      isActive: true,
+      isHistoricalOnly: false,
+      displayOrder: 30,
+      bookingStepMinutes: 60,
+    },
+  ];
+  assert.equal(getCalendarLaneLabel("all", lanes), "Wszystkie osie");
+  assert.equal(
+    getCalendarLaneLabel("11111111-1111-4111-8111-111111111111", lanes),
+    "Oś 50 m — stanowisko 1"
+  );
+  assert.equal(
+    getCalendarLaneLabel("22222222-2222-4222-8222-222222222222", lanes),
+    "Oś 100 m"
+  );
+});
+
+test("month heading lane badge wraps without forcing horizontal scrolling", async () => {
+  const pageSource = await readFile(new URL("./page.tsx", import.meta.url), "utf8");
+  assert.match(pageSource, /flex min-w-0 flex-wrap items-center gap-2/);
+  assert.match(pageSource, /max-w-full break-words rounded-full/);
+  assert.match(pageSource, /\{calendarLaneLabel\}/);
+});
+
+test("week heading reuses the responsive lane scope badge", async () => {
+  const pageSource = await readFile(new URL("./page.tsx", import.meta.url), "utf8");
+  assert.match(pageSource, /\(view === "week" \|\| view === "month"\)/);
+  assert.match(
+    pageSource,
+    /const calendarLaneLabel = getCalendarLaneLabel\(requestLaneId, knownLanes\)/
+  );
+  assert.equal((pageSource.match(/\{calendarLaneLabel\}/g) ?? []).length, 1);
+});
+
+for (const [name, anchor, expected] of [
+  ["five-week month starting Monday", "2026-06-15", { rangeStart: "2026-06-01", rangeEnd: "2026-07-05", dayCount: 35 }],
+  ["six-week month", "2026-08-05", { rangeStart: "2026-07-27", rangeEnd: "2026-09-06", dayCount: 42 }],
+  ["month starting Sunday", "2026-02-10", { rangeStart: "2026-01-26", rangeEnd: "2026-03-01", dayCount: 35 }],
+  ["ordinary February", "2027-02-10", { rangeStart: "2027-02-01", rangeEnd: "2027-03-07", dayCount: 35 }],
+  ["leap February", "2028-02-29", { rangeStart: "2028-01-31", rangeEnd: "2028-03-05", dayCount: 35 }],
+  ["December crossing into January", "2026-12-15", { rangeStart: "2026-11-30", rangeEnd: "2027-01-03", dayCount: 35 }],
+  ["January containing previous December", "2027-01-15", { rangeStart: "2026-12-28", rangeEnd: "2027-01-31", dayCount: 35 }],
+]) {
+  test(`month range handles ${name}`, () => {
+    const range = getCalendarMonthRange(anchor);
+    assert.deepEqual(
+      range && {
+        rangeStart: range.rangeStart,
+        rangeEnd: range.rangeEnd,
+        dayCount: range.dayCount,
+      },
+      expected
+    );
+    const dates = getCalendarMonthDates(anchor);
+    assert.equal(dates?.length, expected.dayCount);
+    assert.equal(new Date(`${dates?.[0]}T12:00:00Z`).getUTCDay(), 1);
+    assert.equal(new Date(`${dates?.at(-1)}T12:00:00Z`).getUTCDay(), 0);
+  });
+}
+
+test("month navigation clamps the anchor day and crosses years", () => {
+  assert.equal(addCalendarMonths("2026-01-31", 1), "2026-02-28");
+  assert.equal(addCalendarMonths("2028-01-31", 1), "2028-02-29");
+  assert.equal(addCalendarMonths("2028-02-29", 1), "2028-03-29");
+  assert.equal(addCalendarMonths("2026-12-31", 1), "2027-01-31");
+  assert.equal(addCalendarMonths("2027-01-31", -1), "2026-12-31");
+});
+
+test("Polish month heading uses a lowercase standalone month", () => {
+  assert.equal(formatCalendarMonth("2026-08-05"), "sierpień 2026");
+  assert.equal(formatCalendarMonth("2027-01-31"), "styczeń 2027");
+  assert.equal(formatCalendarMonth("2028-02-29"), "luty 2028");
+});
+
+test("month summaries cover all cells and preserve outside-month data", () => {
+  const dates = getCalendarMonthDates("2026-08-05");
+  const outsideDate = "2026-07-27";
+  const days = groupCalendarMonthDays(dates, [
+    {
+      date: outsideDate,
+      reservationCount: 1,
+      blockCount: 2,
+      eventCount: 3,
+      availableMinutes: 720,
+      occupiedMinutes: 240,
+      occupancyPercent: 33,
+      isFull: false,
+      flags: ["outside_opening_hours"],
+    },
+  ]);
+  assert.equal(days.length, 42);
+  assert.equal(days[0].date, outsideDate);
+  assert.equal(days[0].summary.occupancyPercent, 33);
+  assert.equal(days[1].summary.reservationCount, 0);
+});
+
+test("an empty five-week month still contains all 35 cells", () => {
+  const dates = getCalendarMonthDates("2026-06-15");
+  const days = groupCalendarMonthDays(dates, []);
+  assert.equal(days.length, 35);
+  assert.equal(days.every((day) => day.summary.reservationCount === 0), true);
+});
+
+test("month view uses summaries without entry labels or customer data", async () => {
+  const source = await readFile(
+    new URL("./_components/MonthCalendar.tsx", import.meta.url),
+    "utf8"
+  );
+  assert.doesNotMatch(source, /entry\.label|customer_name|customer_email|customer_phone|profiles|service_role/i);
+  assert.match(source, /summary\.eventCount/);
+  assert.match(source, /summary\.occupiedMinutes/);
+  assert.match(source, /summary\.isFull/);
+  assert.match(source, /summary\.flags/);
+  assert.match(source, /grid-cols-7/);
+});
+
 test("week grouping always returns Monday through Sunday", () => {
   const dates = getCalendarWeekDates("2026-08-05");
   const grouped = groupCalendarWeekDays(
@@ -334,6 +469,25 @@ test("calendar URL parsing and day navigation are canonical", () => {
   );
 });
 
+test("month query state is canonical and a selected day preserves the lane", () => {
+  const laneId = "11111111-1111-4111-8111-111111111111";
+  assert.deepEqual(
+    parseCalendarPageState(
+      new URLSearchParams(`view=month&date=2026-08-05&lane=${laneId}`),
+      "2026-08-06"
+    ),
+    { view: "month", date: "2026-08-05", laneId }
+  );
+  assert.equal(
+    buildCalendarPageUrl({ view: "month", date: "2026-08-05", laneId }),
+    `/admin/calendar?view=month&date=2026-08-05&lane=${laneId}`
+  );
+  assert.equal(
+    buildCalendarPageUrl({ view: "day", date: "2026-08-31", laneId }),
+    `/admin/calendar?view=day&date=2026-08-31&lane=${laneId}`
+  );
+});
+
 test("calendar view changes preserve date and lane in both directions", () => {
   const laneId = "11111111-1111-4111-8111-111111111111";
   const current = { date: "2026-08-07", laneId };
@@ -359,12 +513,14 @@ test("calendar view switch remains visible and accessible on mobile", async () =
   assert.match(switchSource, /aria-pressed=\{active\}/);
   assert.match(switchSource, /active\s*\?\s*"bg-\[#536143\] text-\[#f2efe4\]"/);
   assert.match(switchSource, /\(aktywny widok\)/);
+  assert.match(switchSource, /\["day", "week", "month"\]/);
+  assert.match(switchSource, /"Miesiąc"/);
 });
 
 test("invalid URL values fall back safely", () => {
   assert.deepEqual(
     parseCalendarPageState(
-      new URLSearchParams("view=month&date=2026-02-30&lane=missing"),
+      new URLSearchParams("view=year&date=2026-02-30&lane=missing"),
       "2026-08-06"
     ),
     { view: "day", date: "2026-08-06", laneId: "all" }

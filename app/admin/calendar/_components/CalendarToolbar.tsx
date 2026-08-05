@@ -71,7 +71,13 @@ export default function CalendarToolbar({
             className={controlClass}
             onClick={onPreviousDay}
             disabled={disabled}
-            aria-label={view === "day" ? "Poprzedni dzień" : "Poprzedni tydzień"}
+            aria-label={
+              view === "day"
+                ? "Poprzedni dzień"
+                : view === "week"
+                  ? "Poprzedni tydzień"
+                  : "Poprzedni miesiąc"
+            }
           >
             ←
           </button>
@@ -88,7 +94,13 @@ export default function CalendarToolbar({
             className={controlClass}
             onClick={onNextDay}
             disabled={disabled}
-            aria-label={view === "day" ? "Następny dzień" : "Następny tydzień"}
+            aria-label={
+              view === "day"
+                ? "Następny dzień"
+                : view === "week"
+                  ? "Następny tydzień"
+                  : "Następny miesiąc"
+            }
           >
             →
           </button>

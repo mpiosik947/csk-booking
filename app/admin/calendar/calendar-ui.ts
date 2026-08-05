@@ -7,11 +7,12 @@ import type {
 import {
   calendarTimeToMinutes,
   clipCalendarTimeRange,
+  countCalendarDaysInclusive,
   isValidCalendarDate,
 } from "@/lib/admin/calendar/time";
 
 export const CALENDAR_HOUR_HEIGHT = 72;
-export type CalendarView = "day" | "week";
+export type CalendarView = "day" | "week" | "month";
 
 export type CalendarPageState = {
   view: CalendarView;
@@ -23,6 +24,11 @@ export type CalendarWeekDay = {
   date: string;
   summary: CalendarDaySummary;
   entries: CalendarEntry[];
+};
+
+export type CalendarMonthDay = {
+  date: string;
+  summary: CalendarDaySummary;
 };
 
 const UUID_PATTERN =
@@ -74,6 +80,63 @@ export function getCalendarWeekDates(anchorDate: string) {
   return Array.from({ length: 7 }, (_, index) =>
     addCalendarDays(range.rangeStart, index)
   ).filter((date): date is string => date !== null);
+}
+
+export function getCalendarMonthRange(anchorDate: string) {
+  if (!isValidCalendarDate(anchorDate)) return null;
+  const [year, month] = anchorDate.split("-").map(Number);
+  const monthStart = `${year}-${String(month).padStart(2, "0")}-01`;
+  const lastDay = new Date(Date.UTC(year, month, 0)).getUTCDate();
+  const monthEnd = `${year}-${String(month).padStart(2, "0")}-${String(
+    lastDay
+  ).padStart(2, "0")}`;
+  const firstWeek = getCalendarWeekRange(monthStart);
+  const lastWeek = getCalendarWeekRange(monthEnd);
+  if (!firstWeek || !lastWeek) return null;
+  const naturalDays = countCalendarDaysInclusive(
+    firstWeek.rangeStart,
+    lastWeek.rangeEnd
+  );
+  if (naturalDays === null) return null;
+  const dayCount = naturalDays <= 35 ? 35 : 42;
+  const rangeStart = firstWeek.rangeStart;
+  const rangeEnd = addCalendarDays(rangeStart, dayCount - 1);
+  if (!rangeEnd) return null;
+  return { monthStart, monthEnd, rangeStart, rangeEnd, dayCount };
+}
+
+export function getCalendarMonthDates(anchorDate: string) {
+  const range = getCalendarMonthRange(anchorDate);
+  if (!range) return null;
+  return Array.from({ length: range.dayCount }, (_, index) =>
+    addCalendarDays(range.rangeStart, index)
+  ).filter((date): date is string => date !== null);
+}
+
+export function addCalendarMonths(date: string, months: number) {
+  if (!isValidCalendarDate(date) || !Number.isInteger(months)) return null;
+  const [year, month, day] = date.split("-").map(Number);
+  const target = new Date(Date.UTC(year, month - 1 + months, 1));
+  const targetYear = target.getUTCFullYear();
+  const targetMonth = target.getUTCMonth() + 1;
+  const targetLastDay = new Date(
+    Date.UTC(targetYear, targetMonth, 0)
+  ).getUTCDate();
+  return `${targetYear}-${String(targetMonth).padStart(2, "0")}-${String(
+    Math.min(day, targetLastDay)
+  ).padStart(2, "0")}`;
+}
+
+export function formatCalendarMonth(anchorDate: string) {
+  if (!isValidCalendarDate(anchorDate)) return null;
+  const [year, month] = anchorDate.split("-").map(Number);
+  return new Intl.DateTimeFormat("pl-PL", {
+    timeZone: "Europe/Warsaw",
+    month: "long",
+    year: "numeric",
+  })
+    .format(new Date(Date.UTC(year, month - 1, 1, 12)))
+    .toLocaleLowerCase("pl-PL");
 }
 
 export function formatCalendarWeekRange(
@@ -130,7 +193,10 @@ export function parseCalendarPageState(
   const requestedDate = params.get("date");
   const requestedLane = params.get("lane");
   return {
-    view: requestedView === "week" ? "week" : "day",
+    view:
+      requestedView === "week" || requestedView === "month"
+        ? requestedView
+        : "day",
     date:
       requestedDate && isValidCalendarDate(requestedDate)
         ? requestedDate
@@ -207,6 +273,28 @@ export function groupCalendarWeekDays(
   }));
 }
 
+export function groupCalendarMonthDays(
+  dates: string[],
+  summaries: CalendarDaySummary[]
+): CalendarMonthDay[] {
+  const summaryMap = new Map(summaries.map((summary) => [summary.date, summary]));
+  return dates.map((date) => ({
+    date,
+    summary:
+      summaryMap.get(date) ?? {
+        date,
+        reservationCount: 0,
+        blockCount: 0,
+        eventCount: 0,
+        availableMinutes: 0,
+        occupiedMinutes: 0,
+        occupancyPercent: null,
+        isFull: false,
+        flags: [],
+      },
+  }));
+}
+
 export function getCalendarEntryGeometry(
   entry: Pick<CalendarEntry, "startTime" | "endTime">,
   openingStart: string,
@@ -258,6 +346,14 @@ export function getVisibleCalendarLanes(
   laneId: string | "all"
 ) {
   return laneId === "all" ? lanes : lanes.filter((lane) => lane.id === laneId);
+}
+
+export function getCalendarLaneLabel(
+  laneId: string | "all",
+  lanes: CalendarLane[]
+) {
+  if (laneId === "all") return "Wszystkie osie";
+  return lanes.find((lane) => lane.id === laneId)?.name ?? "Wybrana oś";
 }
 
 export function layoutCalendarLaneEntries(
