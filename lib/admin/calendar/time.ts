@@ -224,8 +224,8 @@ export function getCalendarTimeRangesUnionMinutes(ranges: CalendarTimeRange[]) {
 
 export function clipCalendarTimeRange(
   range: CalendarTimeRange,
-  openingStart = CALENDAR_OPENING_START,
-  openingEnd = CALENDAR_OPENING_END
+  openingStart: string = CALENDAR_OPENING_START,
+  openingEnd: string = CALENDAR_OPENING_END
 ): CalendarTimeRange | null {
   const start = calendarTimeToMinutes(range.startTime);
   const end = calendarTimeToMinutes(range.endTime);
