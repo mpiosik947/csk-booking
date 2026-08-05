@@ -14,6 +14,10 @@ type DayCalendarProps = {
   entries: CalendarEntry[];
   openingStart: string;
   openingEnd: string;
+  onSelectEntry: (
+    entry: Exclude<CalendarEntry, { type: "event" }>,
+    activator: HTMLButtonElement
+  ) => void;
 };
 
 function getHourLabels(openingStart: string, openingEnd: string) {
@@ -32,6 +36,7 @@ function CalendarGrid({
   entries,
   openingStart,
   openingEnd,
+  onSelectEntry,
   mobile = false,
 }: DayCalendarProps & { mobile?: boolean }) {
   const start = calendarTimeToMinutes(openingStart) ?? 0;
@@ -105,7 +110,11 @@ function CalendarGrid({
               }}
             >
               {positioned.map((item) => (
-                <CalendarEntryBlock key={item.entry.id} positioned={item} />
+                <CalendarEntryBlock
+                  key={item.entry.id}
+                  positioned={item}
+                  onSelectEntry={onSelectEntry}
+                />
               ))}
             </section>
           );

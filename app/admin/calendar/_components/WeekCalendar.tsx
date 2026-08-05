@@ -25,7 +25,13 @@ function getHourLabels(openingStart: string, openingEnd: string) {
   return labels;
 }
 
-function WeekEvents({ days }: { days: CalendarWeekDay[] }) {
+function WeekEvents({
+  days,
+  onSelectEntry,
+}: {
+  days: CalendarWeekDay[];
+  onSelectEntry: (entry: CalendarEventEntry, activator: HTMLButtonElement) => void;
+}) {
   const eventDays = days
     .map((day) => ({
       date: day.date,
@@ -44,11 +50,16 @@ function WeekEvents({ days }: { days: CalendarWeekDay[] }) {
           <div key={day.date} className="rounded-xl border border-[#5f522d] bg-[#2b2618] p-3">
             <p className="text-xs font-bold capitalize text-[#d7c895]">{shortDay(day.date)}</p>
             {day.events.map((event) => (
-              <article key={event.id} className="mt-2 border-t border-[#5f522d] pt-2 first:border-0 first:pt-0">
+              <button
+                key={event.id}
+                type="button"
+                onClick={(clickEvent) => onSelectEntry(event, clickEvent.currentTarget)}
+                className="mt-2 block w-full cursor-pointer border-t border-[#5f522d] pt-2 text-left first:border-0 first:pt-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#e1c477]"
+              >
                 <p className="text-xs font-bold text-[#f2efe4]">E · {event.startTime}–{event.endTime}</p>
                 <p className="truncate text-sm text-[#c7cbbf]">{event.label}</p>
                 <p className="truncate text-xs text-[#a9ada4]">{event.location || "Lokalizacja niepodana"} · limit {event.maxParticipants}</p>
-              </article>
+              </button>
             ))}
           </div>
         ))}
@@ -64,6 +75,7 @@ export default function WeekCalendar({
   openingEnd,
   today,
   onSelectDay,
+  onSelectEntry,
 }: {
   days: CalendarWeekDay[];
   laneId: string;
@@ -71,6 +83,10 @@ export default function WeekCalendar({
   openingEnd: string;
   today: string;
   onSelectDay: (date: string) => void;
+  onSelectEntry: (
+    entry: CalendarWeekDay["entries"][number],
+    activator: HTMLButtonElement
+  ) => void;
 }) {
   const start = calendarTimeToMinutes(openingStart) ?? 0;
   const end = calendarTimeToMinutes(openingEnd) ?? start;
@@ -80,7 +96,7 @@ export default function WeekCalendar({
 
   return (
     <>
-      <WeekEvents days={days} />
+      <WeekEvents days={days} onSelectEntry={onSelectEntry} />
       <div className="max-h-[72vh] overflow-auto rounded-2xl border border-[#30372c] bg-[#111511]">
         <div
           className="relative grid min-w-full"
@@ -127,7 +143,13 @@ export default function WeekCalendar({
                   backgroundImage: "repeating-linear-gradient(to bottom, transparent 0, transparent 71px, rgba(66,75,63,0.65) 71px, rgba(66,75,63,0.65) 72px)",
                 }}
               >
-                {positioned.map((item) => <CalendarEntryBlock key={item.entry.id} positioned={item} />)}
+                {positioned.map((item) => (
+                  <CalendarEntryBlock
+                    key={item.entry.id}
+                    positioned={item}
+                    onSelectEntry={onSelectEntry}
+                  />
+                ))}
               </section>
             );
           })}

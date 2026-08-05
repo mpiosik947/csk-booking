@@ -1,10 +1,12 @@
 "use client";
 
-import { Suspense, useEffect, useMemo, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import AdminShell from "@/app/admin/_components/AdminShell";
 import type {
   CalendarEntryType,
+  CalendarEntry,
   CalendarEventEntry,
   CalendarFeed,
   CalendarFeedResponse,
@@ -13,6 +15,7 @@ import type {
 import { getWarsawCalendarDate } from "@/lib/admin/calendar/time";
 import { supabase } from "@/lib/supabase";
 import CalendarEvents from "./_components/CalendarEvents";
+import CalendarEntryPreview from "./_components/CalendarEntryPreview";
 import CalendarLegend from "./_components/CalendarLegend";
 import CalendarToolbar from "./_components/CalendarToolbar";
 import CalendarViewSwitch from "./_components/CalendarViewSwitch";
@@ -30,6 +33,8 @@ import {
   formatCalendarWeekRange,
   formatCalendarMonth,
   getCalendarLaneLabel,
+  getCalendarEntryPreviewData,
+  getCalendarEntryPreviewNavigation,
   getCalendarMonthDates,
   getCalendarMonthRange,
   getCalendarWeekDates,
@@ -39,6 +44,8 @@ import {
   groupCalendarMonthDays,
   groupCalendarWeekDays,
   parseCalendarPageState,
+  parseCalendarPreviewRole,
+  type CalendarPreviewRole,
   resolveCalendarLaneId,
   type CalendarPageState,
   type CalendarView,
@@ -117,6 +124,10 @@ function AdminCalendarContent() {
   const [message, setMessage] = useState("");
   const [requestVersion, setRequestVersion] = useState(0);
   const [isMobile, setIsMobile] = useState(false);
+  const [previewRole, setPreviewRole] = useState<CalendarPreviewRole | null>(null);
+  const [selectedEntry, setSelectedEntry] = useState<CalendarEntry | null>(null);
+  const previewActivatorRef = useRef<HTMLButtonElement | null>(null);
+  const previewRoleRequestedRef = useRef(false);
 
   const knownLanes = laneOptions.length > 0 ? laneOptions : feed?.lanes ?? [];
   const requestLaneId =
@@ -144,6 +155,16 @@ function AdminCalendarContent() {
     update();
     media.addEventListener("change", update);
     return () => media.removeEventListener("change", update);
+  }, []);
+
+  useEffect(() => {
+    if (previewRoleRequestedRef.current) return;
+    previewRoleRequestedRef.current = true;
+    async function loadPreviewRole() {
+      const { data, error } = await supabase.rpc("get_my_role");
+      setPreviewRole(error ? null : parseCalendarPreviewRole(data));
+    }
+    loadPreviewRole();
   }, []);
 
   useEffect(() => {
@@ -254,6 +275,46 @@ function AdminCalendarContent() {
         : formatSelectedDate(date);
   const calendarLaneLabel = getCalendarLaneLabel(requestLaneId, knownLanes);
 
+  const openEntryPreview = useCallback(
+    (entry: CalendarEntry, activator: HTMLButtonElement) => {
+      previewActivatorRef.current = activator;
+      setSelectedEntry(entry);
+    },
+    [setSelectedEntry]
+  );
+
+  const closeEntryPreview = useCallback(() => {
+    setSelectedEntry(null);
+    const activator = previewActivatorRef.current;
+    previewActivatorRef.current = null;
+    window.requestAnimationFrame(() => {
+      if (activator?.isConnected) activator.focus();
+    });
+  }, [setSelectedEntry]);
+
+  useEffect(() => {
+    if (!selectedEntry) return;
+    let isVisible = false;
+    if (view === "day" && feed) {
+      isVisible = dayEntries.some((entry) => entry.id === selectedEntry.id);
+    } else if (
+      view === "week" &&
+      weekPresentation === "grid" &&
+      requestLaneId !== "all" &&
+      feed
+    ) {
+      isVisible = feed.entries.some(
+        (entry) =>
+          entry.id === selectedEntry.id &&
+          (entry.type === "event" || entry.laneId === requestLaneId)
+      );
+    }
+    if (!isVisible) {
+      const frame = window.requestAnimationFrame(closeEntryPreview);
+      return () => window.cancelAnimationFrame(frame);
+    }
+  }, [closeEntryPreview, dayEntries, feed, requestLaneId, selectedEntry, view, weekPresentation]);
+
   function changePeriod(direction: -1 | 1) {
     const shifted =
       view === "month"
@@ -340,7 +401,7 @@ function AdminCalendarContent() {
 
         {viewState === "ready" && feed && view === "day" && (
           <>
-            <CalendarEvents events={dayEvents} />
+            <CalendarEvents events={dayEvents} onSelectEntry={openEntryPreview} />
             {feed.lanes.length === 0 ? (
               <div className="rounded-2xl border border-[#806a32] bg-[#2b2618] p-6 text-[#e1c477]">Brak osi dostępnych dla wybranego dnia i filtrów.</div>
             ) : visibleLanes.length === 0 ? (
@@ -348,7 +409,7 @@ function AdminCalendarContent() {
             ) : (
               <>
                 {dayLaneEntries.length === 0 && <p className="mb-3 rounded-xl border border-[#30372c] bg-[#191e19] p-3 text-sm text-[#a9ada4]">Brak wpisów dla wybranych filtrów. Siatka pokazuje wolne terminy.</p>}
-                <DayCalendar lanes={visibleLanes} entries={dayLaneEntries} openingStart={feed.openingStart} openingEnd={feed.openingEnd} />
+                <DayCalendar lanes={visibleLanes} entries={dayLaneEntries} openingStart={feed.openingStart} openingEnd={feed.openingEnd} onSelectEntry={openEntryPreview} />
               </>
             )}
           </>
@@ -361,7 +422,7 @@ function AdminCalendarContent() {
             {weekPresentation === "cards" ? (
               <WeekSummary days={weekDays} laneId={requestLaneId} today={today} onSelectDay={selectDay} />
             ) : requestLaneId !== "all" ? (
-              <div className="hidden md:block"><WeekCalendar days={weekDays} laneId={requestLaneId} openingStart={feed.openingStart} openingEnd={feed.openingEnd} today={today} onSelectDay={selectDay} /></div>
+              <div className="hidden md:block"><WeekCalendar days={weekDays} laneId={requestLaneId} openingStart={feed.openingStart} openingEnd={feed.openingEnd} today={today} onSelectDay={selectDay} onSelectEntry={openEntryPreview} /></div>
             ) : null}
           </>
         )}
@@ -378,6 +439,26 @@ function AdminCalendarContent() {
           </>
         )}
       </div>
+
+      <div className="mt-6">
+        <Link
+          href="/admin"
+          className="inline-flex min-h-11 max-w-full items-center rounded-xl border border-[#3d4638] px-4 py-2.5 text-left text-sm font-semibold text-[#c7cbbf] hover:border-[#536143] hover:bg-[#20271e] hover:text-[#f2efe4] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d7c895]"
+        >
+          ← Wróć do panelu administracyjnego
+        </Link>
+      </div>
+
+      {selectedEntry && (
+        <CalendarEntryPreview
+          entry={getCalendarEntryPreviewData(selectedEntry)}
+          navigation={getCalendarEntryPreviewNavigation(
+            selectedEntry.type,
+            previewRole
+          )}
+          onClose={closeEntryPreview}
+        />
+      )}
     </AdminShell>
   );
 }

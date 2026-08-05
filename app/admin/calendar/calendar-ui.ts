@@ -54,6 +54,99 @@ export type CalendarUiFilters = {
   includeHistoricalStatuses: boolean;
 };
 
+export type CalendarPreviewRole = "admin" | "pracownik" | "instruktor";
+
+export type CalendarEntryPreviewData =
+  | {
+      type: "reservation";
+      title: "Rezerwacja";
+      time: string;
+      laneName: string;
+      label: string;
+      shootersCount: number;
+      isHistorical: boolean;
+    }
+  | {
+      type: "lane_block";
+      title: "Blokada osi";
+      time: string;
+      laneName: string;
+      reason: string | null;
+      isHistorical: boolean;
+    }
+  | {
+      type: "event";
+      title: "Wydarzenie";
+      time: string;
+      label: string;
+      location: string;
+    };
+
+export type CalendarEntryPreviewNavigation = {
+  href: "/admin/reservations" | "/admin/lane-blocks" | "/admin/events";
+  label: "Otwórz rezerwacje" | "Otwórz blokady" | "Otwórz eventy";
+};
+
+export function parseCalendarPreviewRole(
+  value: unknown
+): CalendarPreviewRole | null {
+  return value === "admin" || value === "pracownik" || value === "instruktor"
+    ? value
+    : null;
+}
+
+export function getCalendarEntryPreviewData(
+  entry: CalendarEntry
+): CalendarEntryPreviewData {
+  const time = `${entry.startTime}–${entry.endTime}`;
+  if (entry.type === "reservation") {
+    return {
+      type: entry.type,
+      title: "Rezerwacja",
+      time,
+      laneName: entry.laneName,
+      label: entry.label,
+      shootersCount: entry.shootersCount,
+      isHistorical: entry.isHistorical,
+    };
+  }
+  if (entry.type === "lane_block") {
+    return {
+      type: entry.type,
+      title: "Blokada osi",
+      time,
+      laneName: entry.laneName,
+      reason: entry.reason,
+      isHistorical: entry.isHistorical,
+    };
+  }
+  return {
+    type: entry.type,
+    title: "Wydarzenie",
+    time,
+    label: entry.label,
+    location: entry.location,
+  };
+}
+
+export function getCalendarEntryPreviewNavigation(
+  entryType: string,
+  role: CalendarPreviewRole | null
+): CalendarEntryPreviewNavigation | null {
+  if (role === null) return null;
+  if (entryType === "event") {
+    return { href: "/admin/events", label: "Otwórz eventy" };
+  }
+  if (role !== "admin" && role !== "pracownik") return null;
+  if (entryType === "reservation") {
+    return { href: "/admin/reservations", label: "Otwórz rezerwacje" };
+  }
+  if (entryType === "lane_block") {
+    return { href: "/admin/lane-blocks", label: "Otwórz blokady" };
+  }
+  return null;
+}
+
 export function addCalendarDays(date: string, days: number) {
   if (!isValidCalendarDate(date) || !Number.isInteger(days)) return null;
   const [year, month, day] = date.split("-").map(Number);

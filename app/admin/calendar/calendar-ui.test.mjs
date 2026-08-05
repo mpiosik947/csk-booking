@@ -37,6 +37,8 @@ const {
   filterCalendarEntries,
   formatCalendarMonth,
   formatCalendarWeekRange,
+  getCalendarEntryPreviewData,
+  getCalendarEntryPreviewNavigation,
   getCalendarEntryGeometry,
   getCalendarLaneLabel,
   getCalendarMonthDates,
@@ -49,6 +51,7 @@ const {
   groupCalendarMonthDays,
   layoutCalendarLaneEntries,
   parseCalendarPageState,
+  parseCalendarPreviewRole,
   resolveCalendarLaneId,
 } = ui;
 
@@ -528,4 +531,203 @@ test("invalid URL values fall back safely", () => {
   const lanes = [{ id: "known", isActive: true }];
   assert.equal(resolveCalendarLaneId("missing", lanes, "week", false), "all");
   assert.equal(resolveCalendarLaneId("all", lanes, "day", true), "known");
+});
+
+test("preview DTO exposes only the approved reservation fields", () => {
+  const preview = getCalendarEntryPreviewData(
+    reservation("private-id", "08:00", "12:00", {
+      label: "Neutralna etykieta",
+      laneName: "Oś 50 m",
+      shootersCount: 2,
+      isHistorical: true,
+      customer_name: "must-not-leak",
+    })
+  );
+  assert.deepEqual(preview, {
+    type: "reservation",
+    title: "Rezerwacja",
+    time: "08:00–12:00",
+    laneName: "Oś 50 m",
+    label: "Neutralna etykieta",
+    shootersCount: 2,
+    isHistorical: true,
+  });
+  assert.equal("id" in preview, false);
+  assert.equal("links" in preview, false);
+  assert.equal("customer_name" in preview, false);
+});
+
+test("preview DTO exposes optional block reason and no technical fields", () => {
+  assert.deepEqual(
+    getCalendarEntryPreviewData(
+      {
+        ...block("block-id", "10:00", "13:00", {
+          laneName: "Oś 100 m",
+          isHistorical: true,
+        }),
+        reason: null,
+      }
+    ),
+    {
+      type: "lane_block",
+      title: "Blokada osi",
+      time: "10:00–13:00",
+      laneName: "Oś 100 m",
+      reason: null,
+      isHistorical: true,
+    }
+  );
+});
+
+test("preview DTO exposes event label, time and optional location without capacity", () => {
+  const preview = getCalendarEntryPreviewData(
+    event("event-id", { location: "Strzelnica CSK" })
+  );
+  assert.deepEqual(preview, {
+    type: "event",
+    title: "Wydarzenie",
+    time: "10:00–11:00",
+    label: "Szkolenie",
+    location: "Strzelnica CSK",
+  });
+  assert.equal("maxParticipants" in preview, false);
+});
+
+test("preview navigation uses a strict local allowlist", () => {
+  assert.deepEqual(getCalendarEntryPreviewNavigation("reservation", "admin"), {
+    href: "/admin/reservations",
+    label: "Otwórz rezerwacje",
+  });
+  assert.deepEqual(getCalendarEntryPreviewNavigation("lane_block", "pracownik"), {
+    href: "/admin/lane-blocks",
+    label: "Otwórz blokady",
+  });
+  assert.deepEqual(getCalendarEntryPreviewNavigation("event", "instruktor"), {
+    href: "/admin/events",
+    label: "Otwórz eventy",
+  });
+  assert.equal(getCalendarEntryPreviewNavigation("unknown", "admin"), null);
+  const spoofed = reservation("id", "10:00", "11:00", {
+    links: { primary: "https://example.invalid", checkIn: null },
+  });
+  assert.equal(
+    getCalendarEntryPreviewNavigation(spoofed.type, "admin").href,
+    "/admin/reservations"
+  );
+});
+
+test("preview role permissions fail closed", () => {
+  for (const role of ["admin", "pracownik"]) {
+    assert.ok(getCalendarEntryPreviewNavigation("reservation", role));
+    assert.ok(getCalendarEntryPreviewNavigation("lane_block", role));
+    assert.ok(getCalendarEntryPreviewNavigation("event", role));
+  }
+  assert.equal(getCalendarEntryPreviewNavigation("reservation", "instruktor"), null);
+  assert.equal(getCalendarEntryPreviewNavigation("lane_block", "instruktor"), null);
+  assert.ok(getCalendarEntryPreviewNavigation("event", "instruktor"));
+  assert.equal(getCalendarEntryPreviewNavigation("event", null), null);
+  assert.equal(parseCalendarPreviewRole("unknown"), null);
+  assert.equal(parseCalendarPreviewRole(undefined), null);
+});
+
+test("entry preview is accessible and restores focus without nested controls", async () => {
+  const previewSource = await readFile(
+    new URL("./_components/CalendarEntryPreview.tsx", import.meta.url),
+    "utf8"
+  );
+  const blockSource = await readFile(
+    new URL("./_components/CalendarEntryBlock.tsx", import.meta.url),
+    "utf8"
+  );
+  const eventsSource = await readFile(
+    new URL("./_components/CalendarEvents.tsx", import.meta.url),
+    "utf8"
+  );
+  const pageSource = await readFile(new URL("./page.tsx", import.meta.url), "utf8");
+  assert.match(previewSource, /role="dialog"/);
+  assert.match(previewSource, /aria-modal="true"/);
+  assert.match(previewSource, /aria-labelledby=/);
+  assert.match(previewSource, /aria-describedby=/);
+  assert.match(previewSource, /event\.key === "Escape"/);
+  assert.match(previewSource, /closeButtonRef\.current\?\.focus\(\)/);
+  assert.match(previewSource, />\s*Zamknij\s*</);
+  assert.match(previewSource, /event\.currentTarget === event\.target/);
+  assert.equal((previewSource.match(/<Link\b/g) ?? []).length, 1);
+  assert.match(blockSource, /<button/);
+  assert.doesNotMatch(blockSource, /<article|<Link|<a\b/);
+  assert.match(eventsSource, /<button/);
+  assert.doesNotMatch(eventsSource, /<article|<Link|<a\b/);
+  assert.match(blockSource, /focus-visible:ring/);
+  assert.match(eventsSource, /focus-visible:ring/);
+  assert.match(pageSource, /activator\?\.isConnected/);
+  assert.match(pageSource, /activator\.focus\(\)/);
+});
+
+test("only day and exact desktop week wire entry selection", async () => {
+  const pageSource = await readFile(new URL("./page.tsx", import.meta.url), "utf8");
+  const daySource = await readFile(
+    new URL("./_components/DayCalendar.tsx", import.meta.url),
+    "utf8"
+  );
+  const weekSource = await readFile(
+    new URL("./_components/WeekCalendar.tsx", import.meta.url),
+    "utf8"
+  );
+  const summarySource = await readFile(
+    new URL("./_components/WeekSummary.tsx", import.meta.url),
+    "utf8"
+  );
+  const monthSource = await readFile(
+    new URL("./_components/MonthCalendar.tsx", import.meta.url),
+    "utf8"
+  );
+  assert.match(daySource, /onSelectEntry/);
+  assert.match(weekSource, /onSelectEntry/);
+  assert.match(pageSource, /weekPresentation === "cards"/);
+  assert.match(pageSource, /requestLaneId !== "all"/);
+  assert.doesNotMatch(summarySource, /onSelectEntry|CalendarEntryPreview/);
+  assert.doesNotMatch(monthSource, /onSelectEntry|CalendarEntryPreview/);
+});
+
+test("calendar preview reads role once and does not add sensitive queries", async () => {
+  const files = await Promise.all(
+    [
+      "./page.tsx",
+      "./calendar-ui.ts",
+      "./_components/CalendarEntryPreview.tsx",
+      "./_components/CalendarEntryBlock.tsx",
+      "./_components/CalendarEvents.tsx",
+      "./_components/DayCalendar.tsx",
+      "./_components/WeekCalendar.tsx",
+    ].map((file) => readFile(new URL(file, import.meta.url), "utf8"))
+  );
+  const source = files.join("\n");
+  const pageSource = files[0];
+  assert.equal((pageSource.match(/rpc\("get_my_role"\)/g) ?? []).length, 1);
+  assert.doesNotMatch(
+    source,
+    /customer_name|customer_email|customer_phone|event_registrations|\.from\(["']profiles["']\)/i
+  );
+  const previewSource = files[2];
+  assert.doesNotMatch(previewSource, /entry\.id|maxParticipants|links\.primary/);
+  assert.match(previewSource, /entry\.label/);
+  assert.doesNotMatch(previewSource, /entry\.shootersCount|peopleLabel/);
+});
+
+test("calendar always renders one admin return link outside the preview modal", async () => {
+  const pageSource = await readFile(new URL("./page.tsx", import.meta.url), "utf8");
+  const previewSource = await readFile(
+    new URL("./_components/CalendarEntryPreview.tsx", import.meta.url),
+    "utf8"
+  );
+  const linkIndex = pageSource.indexOf('href="/admin"');
+  const lastViewIndex = pageSource.lastIndexOf('view === "month"');
+  const modalIndex = pageSource.indexOf("{selectedEntry &&");
+  assert.match(pageSource, /import Link from "next\/link"/);
+  assert.equal((pageSource.match(/href="\/admin"/g) ?? []).length, 1);
+  assert.match(pageSource, /← Wróć do panelu administracyjnego/);
+  assert.match(pageSource, /href="\/admin"[\s\S]*focus-visible:ring/);
+  assert.ok(linkIndex > lastViewIndex);
+  assert.ok(linkIndex < modalIndex);
+  assert.doesNotMatch(previewSource, /← Wróć do panelu administracyjnego|href="\/admin"/);
 });

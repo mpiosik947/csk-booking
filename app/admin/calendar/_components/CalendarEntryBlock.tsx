@@ -9,8 +9,13 @@ function statusLabel(status: string) {
 
 export default function CalendarEntryBlock({
   positioned,
+  onSelectEntry,
 }: {
   positioned: CalendarPositionedEntry;
+  onSelectEntry: (
+    entry: CalendarPositionedEntry["entry"],
+    activator: HTMLButtonElement
+  ) => void;
 }) {
   const { entry, geometry, columnIndex, columnCount } = positioned;
   const historicalStatus = statusLabel(entry.status);
@@ -19,9 +24,11 @@ export default function CalendarEntryBlock({
   const width = 100 / columnCount;
 
   return (
-    <article
+    <button
+      type="button"
       aria-label={`${isReservation ? "Rezerwacja" : "Blokada"}: ${entry.startTime}–${entry.endTime}, ${entry.label}`}
-      className={`absolute overflow-hidden rounded-lg border px-2 py-1.5 shadow-lg ${
+      onClick={(event) => onSelectEntry(entry, event.currentTarget)}
+      className={`absolute cursor-pointer overflow-hidden rounded-lg border px-2 py-1.5 text-left shadow-lg focus-visible:z-20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#f2efe4] ${
         entry.isHistorical
           ? "border-[#596057] bg-[#202420]/95 text-[#b5baaf] opacity-75"
           : isReservation
@@ -54,6 +61,6 @@ export default function CalendarEntryBlock({
           Poza godzinami
         </span>
       )}
-    </article>
+    </button>
   );
 }
