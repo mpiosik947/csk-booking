@@ -67,6 +67,12 @@ function calendarDateToEpochDay(value: string) {
   );
 }
 
+function minutesToCalendarTime(minutes: number) {
+  return `${String(Math.floor(minutes / 60)).padStart(2, "0")}:${String(
+    minutes % 60
+  ).padStart(2, "0")}`;
+}
+
 export function isValidCalendarDate(value: string) {
   return parseCalendarDate(value) !== null;
 }
@@ -87,6 +93,26 @@ export function countCalendarDaysInclusive(start: string, end: string) {
   if (startDay === null || endDay === null || endDay < startDay) return null;
 
   return endDay - startDay + 1;
+}
+
+export function getCalendarDatesInclusive(start: string, end: string) {
+  const startDay = calendarDateToEpochDay(start);
+  const endDay = calendarDateToEpochDay(end);
+
+  if (startDay === null || endDay === null || endDay < startDay) return null;
+
+  const dates: string[] = [];
+  for (let epochDay = startDay; epochDay <= endDay; epochDay += 1) {
+    const date = new Date(epochDay * MILLISECONDS_PER_DAY);
+    dates.push(
+      `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(
+        2,
+        "0"
+      )}-${String(date.getUTCDate()).padStart(2, "0")}`
+    );
+  }
+
+  return dates;
 }
 
 export function getWarsawCalendarDate(now = new Date()) {
@@ -160,6 +186,42 @@ export function calendarTimeRangesOverlap(
   return firstStart < secondEnd && firstEnd > secondStart;
 }
 
+export function mergeCalendarTimeRanges(ranges: CalendarTimeRange[]) {
+  const normalized = ranges
+    .map((range) => {
+      const start = calendarTimeToMinutes(range.startTime);
+      const end = calendarTimeToMinutes(range.endTime);
+      if (start === null || end === null || start >= end) {
+        throw new Error("Invalid calendar time range.");
+      }
+      return { start, end };
+    })
+    .sort((first, second) => first.start - second.start || first.end - second.end);
+
+  const merged: Array<{ start: number; end: number }> = [];
+  for (const range of normalized) {
+    const previous = merged.at(-1);
+    if (!previous || range.start > previous.end) {
+      merged.push({ ...range });
+      continue;
+    }
+    previous.end = Math.max(previous.end, range.end);
+  }
+
+  return merged.map((range) => ({
+    startTime: minutesToCalendarTime(range.start),
+    endTime: minutesToCalendarTime(range.end),
+  }));
+}
+
+export function getCalendarTimeRangesUnionMinutes(ranges: CalendarTimeRange[]) {
+  return mergeCalendarTimeRanges(ranges).reduce(
+    (total, range) =>
+      total + (getCalendarRangeDurationMinutes(range.startTime, range.endTime) ?? 0),
+    0
+  );
+}
+
 export function clipCalendarTimeRange(
   range: CalendarTimeRange,
   openingStart = CALENDAR_OPENING_START,
@@ -186,13 +248,8 @@ export function clipCalendarTimeRange(
 
   if (clippedStart >= clippedEnd) return null;
 
-  const toTime = (minutes: number) =>
-    `${String(Math.floor(minutes / 60)).padStart(2, "0")}:${String(
-      minutes % 60
-    ).padStart(2, "0")}`;
-
   return {
-    startTime: toTime(clippedStart),
-    endTime: toTime(clippedEnd),
+    startTime: minutesToCalendarTime(clippedStart),
+    endTime: minutesToCalendarTime(clippedEnd),
   };
 }

@@ -86,6 +86,28 @@ export type CalendarEntry =
   | CalendarLaneBlockEntry
   | CalendarEventEntry;
 
+export const CALENDAR_DAY_FLAGS = [
+  "full_day",
+  "full_lane_block",
+  "overlapping_blocks",
+  "outside_opening_hours",
+  "missing_lane_metadata",
+] as const;
+
+export type CalendarDayFlag = (typeof CALENDAR_DAY_FLAGS)[number];
+
+export type CalendarDaySummary = {
+  date: string;
+  reservationCount: number;
+  blockCount: number;
+  eventCount: number;
+  availableMinutes: number;
+  occupiedMinutes: number;
+  occupancyPercent: number | null;
+  isFull: boolean;
+  flags: CalendarDayFlag[];
+};
+
 export type CalendarFeed = {
   ok: true;
   rangeStart: string;
@@ -96,6 +118,7 @@ export type CalendarFeed = {
   occupancyBasis: "current_active_lanes";
   lanes: CalendarLane[];
   entries: CalendarEntry[];
+  dailySummaries: CalendarDaySummary[];
 };
 
 export type CalendarFeedErrorCode =

@@ -1,6 +1,9 @@
 import {
   CALENDAR_FEED_ROLES,
   type CalendarEntry,
+  CALENDAR_DAY_FLAGS,
+  type CalendarDayFlag,
+  type CalendarDaySummary,
   type CalendarFeed,
   type CalendarFeedQuery,
   type CalendarFeedRole,
@@ -12,7 +15,12 @@ import {
   CALENDAR_OPENING_START,
   CALENDAR_TIME_ZONE,
   compareCalendarDates,
+  calendarTimeRangesOverlap,
+  calendarTimeToMinutes,
+  clipCalendarTimeRange,
+  getCalendarDatesInclusive,
   getCalendarRangeDurationMinutes,
+  getCalendarTimeRangesUnionMinutes,
   isValidCalendarDate,
   isValidCalendarTime,
 } from "./time";
@@ -163,6 +171,129 @@ export function getReservationCalendarState(status: unknown, includeHistorical: 
   return null;
 }
 
+export function buildCalendarDaySummaries(
+  query: CalendarFeedQuery,
+  lanes: CalendarLane[],
+  entries: CalendarEntry[]
+): CalendarDaySummary[] {
+  const dates = getCalendarDatesInclusive(query.rangeStart, query.rangeEnd);
+  if (!dates) throw new Error("Invalid calendar summary range.");
+
+  const activeLaneIds = new Set(
+    lanes.filter((lane) => lane.isActive).map((lane) => lane.id)
+  );
+  const openingMinutes = getCalendarRangeDurationMinutes(
+    CALENDAR_OPENING_START,
+    CALENDAR_OPENING_END
+  );
+  if (openingMinutes === null) throw new Error("Invalid calendar opening hours.");
+
+  return dates.map((date) => {
+    const dayEntries = entries.filter((entry) => entry.date === date);
+    const intervalsByLane = new Map<
+      string,
+      Array<{ startTime: string; endTime: string }>
+    >();
+    const flags = new Set<CalendarDayFlag>();
+    const activeBlocks = dayEntries.filter(
+      (entry) => entry.type === "lane_block" && entry.isActive
+    );
+
+    for (const entry of dayEntries) {
+      if (
+        (entry.type === "reservation" ||
+          (entry.type === "lane_block" && entry.isActive)) &&
+        (calendarTimeToMinutes(entry.startTime) ?? 0) <
+          (calendarTimeToMinutes(CALENDAR_OPENING_START) ?? 0)
+      ) {
+        flags.add("outside_opening_hours");
+      }
+      if (
+        (entry.type === "reservation" ||
+          (entry.type === "lane_block" && entry.isActive)) &&
+        (calendarTimeToMinutes(entry.endTime) ?? 0) >
+          (calendarTimeToMinutes(CALENDAR_OPENING_END) ?? 0)
+      ) {
+        flags.add("outside_opening_hours");
+      }
+      if (
+        (entry.type === "reservation" || entry.type === "lane_block") &&
+        !entry.laneMetadataAvailable
+      ) {
+        flags.add("missing_lane_metadata");
+      }
+
+      if (
+        !entry.occupiesLane ||
+        !entry.laneMetadataAvailable ||
+        !activeLaneIds.has(entry.laneId)
+      ) {
+        continue;
+      }
+
+      const clipped = clipCalendarTimeRange(entry);
+      if (!clipped) {
+        flags.add("outside_opening_hours");
+        continue;
+      }
+      const laneIntervals = intervalsByLane.get(entry.laneId) ?? [];
+      laneIntervals.push(clipped);
+      intervalsByLane.set(entry.laneId, laneIntervals);
+
+      if (
+        entry.type === "lane_block" &&
+        clipped.startTime === CALENDAR_OPENING_START &&
+        clipped.endTime === CALENDAR_OPENING_END
+      ) {
+        flags.add("full_lane_block");
+      }
+    }
+
+    for (let firstIndex = 0; firstIndex < activeBlocks.length; firstIndex += 1) {
+      for (
+        let secondIndex = firstIndex + 1;
+        secondIndex < activeBlocks.length;
+        secondIndex += 1
+      ) {
+        const first = activeBlocks[firstIndex];
+        const second = activeBlocks[secondIndex];
+        if (
+          first.type === "lane_block" &&
+          second.type === "lane_block" &&
+          first.laneId === second.laneId &&
+          calendarTimeRangesOverlap(first, second)
+        ) {
+          flags.add("overlapping_blocks");
+        }
+      }
+    }
+
+    const availableMinutes = activeLaneIds.size * openingMinutes;
+    const occupiedMinutes = [...intervalsByLane.values()].reduce(
+      (total, intervals) => total + getCalendarTimeRangesUnionMinutes(intervals),
+      0
+    );
+    const isFull = availableMinutes > 0 && occupiedMinutes === availableMinutes;
+    const occupancyPercent =
+      availableMinutes === 0
+        ? null
+        : Math.min(100, Math.max(0, Math.round((occupiedMinutes / availableMinutes) * 100)));
+    if (isFull) flags.add("full_day");
+
+    return {
+      date,
+      reservationCount: dayEntries.filter((entry) => entry.type === "reservation").length,
+      blockCount: dayEntries.filter((entry) => entry.type === "lane_block").length,
+      eventCount: dayEntries.filter((entry) => entry.type === "event").length,
+      availableMinutes,
+      occupiedMinutes,
+      occupancyPercent,
+      isFull,
+      flags: CALENDAR_DAY_FLAGS.filter((flag) => flags.has(flag)),
+    };
+  });
+}
+
 export function buildCalendarFeed(
   query: CalendarFeedQuery,
   role: CalendarFeedRole,
@@ -199,6 +330,7 @@ export function buildCalendarFeed(
       );
       if (!state) continue;
       const laneId = requireString(row.lane_id, "reservation lane id");
+      if (query.laneId !== "all" && laneId !== query.laneId) continue;
       const date = requireDate(row.reservation_date);
       const range = requireTimeRange(row.start_time, row.end_time);
       const durationMinutes = requireNonNegativeInteger(
@@ -236,6 +368,7 @@ export function buildCalendarFeed(
       const historical = !isActive && compareCalendarDates(date, today) === -1;
       if (!isActive && (!query.includeHistoricalStatuses || !historical)) continue;
       const laneId = requireString(row.lane_id, "lane block lane id");
+      if (query.laneId !== "all" && laneId !== query.laneId) continue;
       const lane = laneMap.get(laneId);
       referencedLaneIds.add(laneId);
       entries.push({
@@ -294,6 +427,8 @@ export function buildCalendarFeed(
       first.id.localeCompare(second.id)
   );
 
+  const dailySummaries = buildCalendarDaySummaries(query, lanes, entries);
+
   return {
     ok: true,
     rangeStart: query.rangeStart,
@@ -304,5 +439,6 @@ export function buildCalendarFeed(
     occupancyBasis: "current_active_lanes",
     lanes,
     entries,
+    dailySummaries,
   };
 }
