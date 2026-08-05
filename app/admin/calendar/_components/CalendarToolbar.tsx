@@ -2,6 +2,8 @@ import type {
   CalendarEntryType,
   CalendarLane,
 } from "@/lib/admin/calendar/types";
+import type { CalendarView } from "../calendar-ui";
+import CalendarViewSwitch from "./CalendarViewSwitch";
 
 const TYPE_OPTIONS: Array<{ value: CalendarEntryType; label: string }> = [
   { value: "reservation", label: "Rezerwacje" },
@@ -11,12 +13,15 @@ const TYPE_OPTIONS: Array<{ value: CalendarEntryType; label: string }> = [
 
 type CalendarToolbarProps = {
   date: string;
+  view: CalendarView;
+  periodLabel: string;
   laneId: string | "all";
   lanes: CalendarLane[];
   types: CalendarEntryType[];
   includeHistoricalStatuses: boolean;
   disabled?: boolean;
   onDateChange: (date: string) => void;
+  onViewChange: (view: CalendarView) => void;
   onPreviousDay: () => void;
   onNextDay: () => void;
   onToday: () => void;
@@ -30,12 +35,15 @@ const controlClass =
 
 export default function CalendarToolbar({
   date,
+  view,
+  periodLabel,
   laneId,
   lanes,
   types,
   includeHistoricalStatuses,
   disabled = false,
   onDateChange,
+  onViewChange,
   onPreviousDay,
   onNextDay,
   onToday,
@@ -48,6 +56,14 @@ export default function CalendarToolbar({
       aria-label="Sterowanie kalendarzem"
       className="mb-5 rounded-2xl border border-[#30372c] bg-[#191e19] p-4"
     >
+      <div className="mb-4 flex flex-col gap-3 border-b border-[#30372c] pb-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="hidden md:block">
+          <CalendarViewSwitch view={view} onChange={onViewChange} />
+        </div>
+        <p className="text-sm font-semibold text-[#d7c895]">
+          {periodLabel}
+        </p>
+      </div>
       <div className="grid gap-4 xl:grid-cols-[auto_minmax(180px,1fr)_minmax(210px,1fr)]">
         <div className="flex flex-wrap items-end gap-2">
           <button
@@ -55,7 +71,7 @@ export default function CalendarToolbar({
             className={controlClass}
             onClick={onPreviousDay}
             disabled={disabled}
-            aria-label="Poprzedni dzień"
+            aria-label={view === "day" ? "Poprzedni dzień" : "Poprzedni tydzień"}
           >
             ←
           </button>
@@ -72,7 +88,7 @@ export default function CalendarToolbar({
             className={controlClass}
             onClick={onNextDay}
             disabled={disabled}
-            aria-label="Następny dzień"
+            aria-label={view === "day" ? "Następny dzień" : "Następny tydzień"}
           >
             →
           </button>

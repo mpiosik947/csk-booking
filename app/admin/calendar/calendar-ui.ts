@@ -1,4 +1,5 @@
 import type {
+  CalendarDaySummary,
   CalendarEntry,
   CalendarEntryType,
   CalendarLane,
@@ -10,6 +11,22 @@ import {
 } from "@/lib/admin/calendar/time";
 
 export const CALENDAR_HOUR_HEIGHT = 72;
+export type CalendarView = "day" | "week";
+
+export type CalendarPageState = {
+  view: CalendarView;
+  date: string;
+  laneId: string | "all";
+};
+
+export type CalendarWeekDay = {
+  date: string;
+  summary: CalendarDaySummary;
+  entries: CalendarEntry[];
+};
+
+const UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export type CalendarEntryGeometry = {
   top: number;
@@ -39,6 +56,155 @@ export function addCalendarDays(date: string, days: number) {
     2,
     "0"
   )}-${String(shifted.getUTCDate()).padStart(2, "0")}`;
+}
+
+export function getCalendarWeekRange(anchorDate: string) {
+  if (!isValidCalendarDate(anchorDate)) return null;
+  const [year, month, day] = anchorDate.split("-").map(Number);
+  const weekday = new Date(Date.UTC(year, month - 1, day)).getUTCDay();
+  const mondayOffset = weekday === 0 ? -6 : 1 - weekday;
+  const rangeStart = addCalendarDays(anchorDate, mondayOffset);
+  const rangeEnd = rangeStart ? addCalendarDays(rangeStart, 6) : null;
+  return rangeStart && rangeEnd ? { rangeStart, rangeEnd } : null;
+}
+
+export function getCalendarWeekDates(anchorDate: string) {
+  const range = getCalendarWeekRange(anchorDate);
+  if (!range) return null;
+  return Array.from({ length: 7 }, (_, index) =>
+    addCalendarDays(range.rangeStart, index)
+  ).filter((date): date is string => date !== null);
+}
+
+export function formatCalendarWeekRange(
+  rangeStart: string,
+  rangeEnd: string
+) {
+  if (!isValidCalendarDate(rangeStart) || !isValidCalendarDate(rangeEnd)) {
+    return null;
+  }
+  const toDate = (value: string) => {
+    const [year, month, day] = value.split("-").map(Number);
+    return new Date(Date.UTC(year, month - 1, day, 12));
+  };
+  const start = toDate(rangeStart);
+  const end = toDate(rangeEnd);
+  const format = (
+    date: Date,
+    options: Intl.DateTimeFormatOptions
+  ) =>
+    new Intl.DateTimeFormat("pl-PL", {
+      timeZone: "Europe/Warsaw",
+      ...options,
+    })
+      .format(date)
+      .toLocaleLowerCase("pl-PL");
+  const sameYear = start.getUTCFullYear() === end.getUTCFullYear();
+  const sameMonth =
+    sameYear && start.getUTCMonth() === end.getUTCMonth();
+
+  if (sameMonth) {
+    return `${format(start, { day: "numeric" })}–${format(end, {
+      day: "numeric",
+      month: "long",
+      year: "numeric",
+    })}`;
+  }
+
+  return `${format(start, {
+    day: "numeric",
+    month: "long",
+    year: sameYear ? undefined : "numeric",
+  })} – ${format(end, {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  })}`;
+}
+
+export function parseCalendarPageState(
+  params: URLSearchParams,
+  today: string
+): CalendarPageState {
+  const requestedView = params.get("view");
+  const requestedDate = params.get("date");
+  const requestedLane = params.get("lane");
+  return {
+    view: requestedView === "week" ? "week" : "day",
+    date:
+      requestedDate && isValidCalendarDate(requestedDate)
+        ? requestedDate
+        : today,
+    laneId:
+      requestedLane === "all" ||
+      (requestedLane !== null && UUID_PATTERN.test(requestedLane))
+        ? requestedLane
+        : "all",
+  };
+}
+
+export function buildCalendarPageUrl(state: CalendarPageState) {
+  const params = new URLSearchParams({
+    view: state.view,
+    date: state.date,
+    lane: state.laneId,
+  });
+  return `/admin/calendar?${params.toString()}`;
+}
+
+export function getCalendarWeekPresentation(
+  laneId: string | "all",
+  isMobile: boolean
+) {
+  return isMobile || laneId === "all" ? "cards" : "grid";
+}
+
+export function resolveCalendarLaneId(
+  requestedLaneId: string | "all",
+  lanes: CalendarLane[],
+  view: CalendarView,
+  isMobile: boolean
+) {
+  if (
+    requestedLaneId !== "all" &&
+    lanes.some((lane) => lane.id === requestedLaneId)
+  ) {
+    return requestedLaneId;
+  }
+  const firstLane = lanes.find((lane) => lane.isActive) ?? lanes[0];
+  if (view === "day" && isMobile && firstLane) return firstLane.id;
+  return "all";
+}
+
+export function groupCalendarWeekDays(
+  dates: string[],
+  entries: CalendarEntry[],
+  summaries: CalendarDaySummary[]
+): CalendarWeekDay[] {
+  const summaryMap = new Map(summaries.map((summary) => [summary.date, summary]));
+  return dates.map((date) => ({
+    date,
+    summary:
+      summaryMap.get(date) ?? {
+        date,
+        reservationCount: 0,
+        blockCount: 0,
+        eventCount: 0,
+        availableMinutes: 0,
+        occupiedMinutes: 0,
+        occupancyPercent: null,
+        isFull: false,
+        flags: [],
+      },
+    entries: entries
+      .filter((entry) => entry.date === date)
+      .sort(
+        (first, second) =>
+          first.startTime.localeCompare(second.startTime) ||
+          first.endTime.localeCompare(second.endTime) ||
+          first.id.localeCompare(second.id)
+      ),
+  }));
 }
 
 export function getCalendarEntryGeometry(
