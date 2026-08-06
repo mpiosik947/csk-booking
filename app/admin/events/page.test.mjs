@@ -119,3 +119,68 @@ test("this stage keeps existing mutations and the public events page separate", 
   assert.match(adminSource, /\.from\("events"\)[\s\S]*\.update\(/);
   assert.doesNotMatch(publicSource, /event-management|normalizeAdminEvent/);
 });
+
+test("every admin event card renders its normalized lane assignment", async () => {
+  const source = await readAdminPage();
+  const summary = functionSource(
+    source,
+    "function EventLanesSummary(",
+    "function FieldHelp("
+  );
+
+  assert.equal(
+    (source.match(/<EventLanesSummary lanes=\{event\.lanes\} \/>/g) ?? [])
+      .length,
+    1
+  );
+  assert.match(summary, /lanes: AdminEvent\["lanes"\]/);
+  assert.match(summary, /Zajmowane osie/);
+  assert.match(summary, /lanes\.length === 0/);
+  assert.match(summary, /Event globalny — nie blokuje osi/);
+  assert.match(summary, /lanes\.map\(\(lane\) =>/);
+  assert.match(summary, /\{lane\.name\}/);
+  assert.match(summary, /!lane\.is_active/);
+  assert.match(summary, /Nieaktywna/);
+});
+
+test("lane summary preserves helper order and is read-only for every admin role", async () => {
+  const source = await readAdminPage();
+  const summary = functionSource(
+    source,
+    "function EventLanesSummary(",
+    "function FieldHelp("
+  );
+  const loadEvents = functionSource(
+    source,
+    "async function loadEvents()",
+    "async function loadRegistrations("
+  );
+
+  assert.doesNotMatch(summary, /\.sort\(|canManageEvents|userRole/);
+  assert.doesNotMatch(summary, /lane\.(?:type|display_order)/);
+  assert.doesNotMatch(summary, />\s*\{lane\.id\}\s*</);
+  assert.match(summary, /flex flex-wrap gap-2/);
+  assert.match(summary, /inline-flex max-w-full flex-wrap/);
+  assert.match(summary, /break-words/);
+  assert.equal((loadEvents.match(/\.from\("events"\)/g) ?? []).length, 1);
+  assert.doesNotMatch(loadEvents, /\.from\("shooting_lanes"\)/);
+  assert.doesNotMatch(
+    source,
+    /createLaneIds|editLaneIds|setCreateLaneIds|setEditLaneIds/
+  );
+});
+
+test("public events and existing event mutations remain outside lane summary changes", async () => {
+  const adminSource = await readAdminPage();
+  const publicSource = await readFile(publicPageUrl, "utf8");
+
+  assert.doesNotMatch(publicSource, /EventLanesSummary|Zajmowane osie/);
+  assert.doesNotMatch(
+    adminSource,
+    /admin_create_event|admin_update_event|admin_set_event_active/
+  );
+  assert.match(adminSource, /async function createEvent\(\)/);
+  assert.match(adminSource, /function startEditing\(event: AdminEvent\)/);
+  assert.match(adminSource, /async function saveEditedEvent\(eventId: string\)/);
+  assert.match(adminSource, /async function toggleEvent\(/);
+});

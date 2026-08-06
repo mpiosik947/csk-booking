@@ -122,6 +122,38 @@ function getCancelledRegistrations(registrations: Registration[]) {
   );
 }
 
+function EventLanesSummary({ lanes }: { lanes: AdminEvent["lanes"] }) {
+  return (
+    <div className="mt-4 rounded-xl border border-zinc-800 bg-zinc-950 p-4">
+      <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
+        Zajmowane osie
+      </p>
+
+      {lanes.length === 0 ? (
+        <p className="mt-2 text-sm text-zinc-400">
+          Event globalny — nie blokuje osi
+        </p>
+      ) : (
+        <div className="mt-2 flex flex-wrap gap-2">
+          {lanes.map((lane) => (
+            <span
+              key={lane.id}
+              className="inline-flex max-w-full flex-wrap items-center gap-2 rounded-full border border-zinc-700 bg-zinc-900 px-3 py-1.5 text-sm font-semibold text-zinc-200"
+            >
+              <span className="break-words">{lane.name}</span>
+              {!lane.is_active && (
+                <span className="rounded-full bg-yellow-950 px-2 py-0.5 text-xs font-semibold text-yellow-300">
+                  Nieaktywna
+                </span>
+              )}
+            </span>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function FieldHelp({ children }: { children: React.ReactNode }) {
   return <p className="mt-2 text-xs leading-relaxed text-zinc-500">{children}</p>;
 }
@@ -1253,6 +1285,8 @@ export default function AdminEventsPage() {
                             )}
                           </div>
                         </div>
+
+                        <EventLanesSummary lanes={event.lanes} />
                       </div>
 
                       <div className="flex min-w-[220px] flex-col gap-3">
