@@ -81,7 +81,7 @@ test("event loading ignores stale responses and clears only its own old error", 
 
   assert.match(source, /const eventsLoadRequestRef = useRef\(0\)/);
   assert.match(loadEvents, /const requestId = \+\+eventsLoadRequestRef\.current/);
-  assert.match(loadEvents, /if \(requestId !== eventsLoadRequestRef\.current\) \{\s*return;\s*\}/);
+  assert.match(loadEvents, /!componentMountedRef\.current[\s\S]*requestId !== eventsLoadRequestRef\.current/);
   assert.ok(loadEvents.indexOf("requestId !== eventsLoadRequestRef.current") < loadEvents.indexOf("setLoading(false)"));
   assert.match(
     loadEvents,

@@ -341,7 +341,10 @@ export default function AdminEventsPage() {
       `)
       .order("event_date", { ascending: true });
 
-    if (requestId !== eventsLoadRequestRef.current) {
+    if (
+      !componentMountedRef.current ||
+      requestId !== eventsLoadRequestRef.current
+    ) {
       return;
     }
 
