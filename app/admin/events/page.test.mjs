@@ -107,7 +107,7 @@ test("startEditing safely maps nullable values and PostgreSQL times", async () =
   assert.equal("12:30:00".slice(0, 5), "12:30");
 });
 
-test("create and edit use their atomic RPCs while toggle and public events remain separate", async () => {
+test("create, edit, and toggle use their atomic RPCs while public events remain separate", async () => {
   const adminSource = await readAdminPage();
   const publicSource = await readFile(publicPageUrl, "utf8");
   const createEvent = functionSource(
@@ -132,9 +132,45 @@ test("create and edit use their atomic RPCs while toggle and public events remai
   assert.match(saveEditedEvent, /buildUpdateEventPayload\(eventId, form\.value\)/);
   assert.match(saveEditedEvent, /\.rpc\("admin_update_event", payload\.value\)/);
   assert.doesNotMatch(saveEditedEvent, /\.from\("events"\)[\s\S]*\.update\(/);
-  assert.doesNotMatch(toggleEvent, /admin_set_event_active/);
-  assert.match(toggleEvent, /\.from\("events"\)[\s\S]*\.update\(\{ is_active:/);
+  assert.match(toggleEvent, /buildSetEventActivePayload\(eventId, targetStatus\)/);
+  assert.match(toggleEvent, /\.rpc\(\s*"admin_set_event_active",\s*payload\.value\s*\)/);
+  assert.doesNotMatch(toggleEvent, /\.from\("events"\)[\s\S]*\.update\(/);
   assert.doesNotMatch(publicSource, /event-management|normalizeAdminEvent/);
+});
+
+test("event activation uses an isolated lock, validates the RPC result, and preserves other event controls", async () => {
+  const source = await readAdminPage();
+  const toggleEvent = functionSource(
+    source,
+    "async function toggleEvent(",
+    "function beginRegistrationAction("
+  );
+
+  assert.match(source, /const \[eventToggleActions, setEventToggleActions\] = useState<[\s\S]*Record<string, boolean>[\s\S]*>\(\{\}\)/);
+  assert.match(source, /const eventToggleLocksRef = useRef\(new Set<string>\(\)\)/);
+  assert.match(toggleEvent, /eventToggleLocksRef\.current\.has\(eventId\)/);
+  assert.match(toggleEvent, /const targetStatus = !currentStatus/);
+  assert.match(toggleEvent, /buildSetEventActivePayload\(eventId, targetStatus\)/);
+  assert.match(toggleEvent, /eventToggleLocksRef\.current\.add\(eventId\)/);
+  assert.match(toggleEvent, /setEventToggleActions\(\(current\) => \(\{[\s\S]*\[eventId\]: targetStatus/);
+  assert.match(toggleEvent, /validateEventRpcResult\(data\)/);
+  assert.match(toggleEvent, /result\.ok && result\.value\.event_id !== eventId/);
+  assert.match(toggleEvent, /result\.value\.code === "activated" && !targetStatus/);
+  assert.match(toggleEvent, /result\.value\.code === "deactivated" && targetStatus/);
+  assert.match(toggleEvent, /getEventManagementMessage\(/);
+  assert.match(toggleEvent, /getEditableEventLanes\(activeLanes, event\?\.lanes \?\? \[\]\)/);
+  assert.match(toggleEvent, /result\.value\.code === "activated"[\s\S]*result\.value\.code === "deactivated"[\s\S]*void loadEvents\(\)/);
+  assert.doesNotMatch(toggleEvent, /setEvents\(/);
+  assert.doesNotMatch(toggleEvent, /error\.message|conflict_lane_id/);
+  assert.match(toggleEvent, /finally \{[\s\S]*eventToggleLocksRef\.current\.delete\(eventId\)[\s\S]*delete next\[eventId\]/);
+  assert.match(toggleEvent, /if \(!componentMountedRef\.current\) \{\s*return;\s*\}/);
+  assert.match(toggleEvent, /if \(componentMountedRef\.current\) \{[\s\S]*setEventToggleActions/);
+  assert.match(toggleEvent, /if \(editingEventId === eventId\) \{\s*return;\s*\}/);
+  assert.match(source, /const isTogglePending = toggleTargetStatus !== undefined/);
+  assert.match(source, /disabled=\{isTogglePending \|\| editingEventId === event\.id\}/);
+  assert.match(source, /"Aktywowanie…"/);
+  assert.match(source, /"Ukrywanie…"/);
+  assert.match(source, /disabled=\{editSubmitting \|\| isTogglePending\}/);
 });
 
 test("every admin event card renders its normalized lane assignment", async () => {
@@ -319,7 +355,7 @@ test("edit form preserves assigned inactive lanes and saves only through admin_u
   assert.match(saveEditedEvent, /result\.value\.code === "updated"[\s\S]*void loadEvents\(\)[\s\S]*resetEditingState\(\)/);
   assert.match(saveEditedEvent, /result\.value\.code === "no_change"[\s\S]*resetEditingState\(\)/);
   assert.match(saveEditedEvent, /finally \{[\s\S]*editSubmittingRef\.current = false[\s\S]*setEditSubmitting\(false\)/);
-  assert.match(source, /onClick=\{\(\) => startEditing\(event\)\}[\s\S]*disabled=\{editSubmitting\}/);
+  assert.match(source, /onClick=\{\(\) => startEditing\(event\)\}[\s\S]*disabled=\{editSubmitting \|\| isTogglePending\}/);
 });
 
 test("create validates and maps only safe RPC results before its success-only reset", async () => {

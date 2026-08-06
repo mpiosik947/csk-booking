@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import {
   buildCreateEventPayload,
+  buildSetEventActivePayload,
   buildUpdateEventPayload,
   getEditableEventLanes,
   getEventManagementMessage,
@@ -191,6 +192,12 @@ export default function AdminEventsPage() {
   const [editMessage, setEditMessage] = useState<CreateFormMessage | null>(
     null
   );
+  const [toggleMessage, setToggleMessage] = useState<CreateFormMessage | null>(
+    null
+  );
+  const [eventToggleActions, setEventToggleActions] = useState<
+    Record<string, boolean>
+  >({});
   const [registrationActions, setRegistrationActions] = useState<
     Record<string, RegistrationAction>
   >({});
@@ -200,6 +207,7 @@ export default function AdminEventsPage() {
   const componentMountedRef = useRef(true);
   const createSubmittingRef = useRef(false);
   const editSubmittingRef = useRef(false);
+  const eventToggleLocksRef = useRef(new Set<string>());
   const editInitialInactiveLaneIdsRef = useRef<string[]>([]);
 
   const [title, setTitle] = useState("");
@@ -669,23 +677,107 @@ export default function AdminEventsPage() {
 
   async function toggleEvent(eventId: string, currentStatus: boolean) {
     if (!canManageEvents) {
-      setMessage(
-        "Brak dostępu. Instruktor nie może aktywować ani ukrywać szkoleń."
+      setToggleMessage(
+        getEventManagementMessage({ code: "not_allowed" })
       );
       return;
     }
 
-    const { error } = await supabase
-      .from("events")
-      .update({ is_active: !currentStatus })
-      .eq("id", eventId);
-
-    if (error) {
-      setMessage(`Błąd zmiany statusu szkolenia: ${error.message}`);
+    if (eventToggleLocksRef.current.has(eventId)) {
       return;
     }
 
-    loadEvents();
+    if (editingEventId === eventId) {
+      return;
+    }
+
+    const targetStatus = !currentStatus;
+    const payload = buildSetEventActivePayload(eventId, targetStatus);
+
+    if (!payload.ok) {
+      setToggleMessage({ kind: "error", message: payload.message });
+      return;
+    }
+
+    const event = events.find((item) => item.id === eventId);
+    const laneNames = new Map(
+      getEditableEventLanes(activeLanes, event?.lanes ?? []).map((lane) => [
+        lane.id,
+        lane.name,
+      ])
+    );
+    eventToggleLocksRef.current.add(eventId);
+    setEventToggleActions((current) => ({
+      ...current,
+      [eventId]: targetStatus,
+    }));
+    setToggleMessage(null);
+
+    try {
+      const { data, error } = await supabase.rpc(
+        "admin_set_event_active",
+        payload.value
+      );
+
+      if (!componentMountedRef.current) {
+        return;
+      }
+
+      if (error) {
+        setToggleMessage(
+          getEventManagementMessage({ code: "invalid_rpc_response" })
+        );
+        return;
+      }
+
+      const result = validateEventRpcResult(data);
+      if (result.ok && result.value.event_id !== eventId) {
+        setToggleMessage(
+          getEventManagementMessage({ code: "invalid_rpc_response" })
+        );
+        return;
+      }
+
+      if (
+        result.ok &&
+        ((result.value.code === "activated" && !targetStatus) ||
+          (result.value.code === "deactivated" && targetStatus))
+      ) {
+        setToggleMessage(
+          getEventManagementMessage({ code: "invalid_rpc_response" })
+        );
+        return;
+      }
+
+      const resultMessage = getEventManagementMessage(
+        result.ok ? result.value : { code: "invalid_rpc_response" },
+        laneNames
+      );
+      setToggleMessage(resultMessage);
+
+      if (
+        result.ok &&
+        (result.value.code === "activated" ||
+          result.value.code === "deactivated")
+      ) {
+        void loadEvents();
+      }
+    } catch {
+      if (componentMountedRef.current) {
+        setToggleMessage(
+          getEventManagementMessage({ code: "invalid_rpc_response" })
+        );
+      }
+    } finally {
+      eventToggleLocksRef.current.delete(eventId);
+      if (componentMountedRef.current) {
+        setEventToggleActions((current) => {
+          const next = { ...current };
+          delete next[eventId];
+          return next;
+        });
+      }
+    }
   }
 
   function beginRegistrationAction(
@@ -1045,6 +1137,20 @@ export default function AdminEventsPage() {
           <div className={`mb-6 ${getMessageClass(message)}`}>{message}</div>
         )}
 
+        {toggleMessage && (
+          <div
+            className={
+              toggleMessage.kind === "success"
+                ? "mb-6 rounded-xl border border-green-800 bg-green-950 p-4 text-sm font-semibold text-green-300"
+                : toggleMessage.kind === "neutral"
+                  ? "mb-6 rounded-xl border border-zinc-700 bg-zinc-900 p-4 text-sm font-semibold text-zinc-200"
+                  : "mb-6 rounded-xl border border-red-800 bg-red-950 p-4 text-sm font-semibold text-red-300"
+            }
+          >
+            {toggleMessage.message}
+          </div>
+        )}
+
         {canManageEvents && (
           <div className="mb-10 rounded-2xl border border-zinc-800 bg-zinc-900 p-6">
             <div className="mb-6">
@@ -1329,6 +1435,8 @@ export default function AdminEventsPage() {
                 ? Math.max(event.max_participants - activeRegistrationsCount, 0)
                 : null;
             const editableLanes = getEditableEventLanes(activeLanes, event.lanes);
+            const toggleTargetStatus = eventToggleActions[event.id];
+            const isTogglePending = toggleTargetStatus !== undefined;
 
             return (
               <div
@@ -1656,7 +1764,7 @@ export default function AdminEventsPage() {
                           <button
                             type="button"
                             onClick={() => startEditing(event)}
-                            disabled={editSubmitting}
+                            disabled={editSubmitting || isTogglePending}
                             className="rounded-xl border border-blue-800 px-4 py-3 text-sm font-semibold text-blue-300 transition hover:bg-blue-950 disabled:cursor-not-allowed disabled:opacity-60"
                           >
                             Edytuj szkolenie
@@ -1677,15 +1785,20 @@ export default function AdminEventsPage() {
                             onClick={() =>
                               toggleEvent(event.id, event.is_active)
                             }
+                            disabled={isTogglePending || editingEventId === event.id}
                             className={
                               event.is_active
-                                ? "rounded-xl border border-red-800 px-4 py-3 text-sm font-semibold text-red-400 transition hover:bg-red-950"
-                                : "rounded-xl border border-green-800 px-4 py-3 text-sm font-semibold text-green-400 transition hover:bg-green-950"
+                                ? "rounded-xl border border-red-800 px-4 py-3 text-sm font-semibold text-red-400 transition hover:bg-red-950 disabled:cursor-not-allowed disabled:opacity-60"
+                                : "rounded-xl border border-green-800 px-4 py-3 text-sm font-semibold text-green-400 transition hover:bg-green-950 disabled:cursor-not-allowed disabled:opacity-60"
                             }
                           >
-                            {event.is_active
-                              ? "Ukryj szkolenie"
-                              : "Aktywuj szkolenie"}
+                            {isTogglePending
+                              ? toggleTargetStatus
+                                ? "Aktywowanie…"
+                                : "Ukrywanie…"
+                              : event.is_active
+                                ? "Ukryj szkolenie"
+                                : "Aktywuj szkolenie"}
                           </button>
                         )}
                       </div>
