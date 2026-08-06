@@ -71,20 +71,43 @@ export type CalendarLaneBlockEntry = CalendarEntryBase & {
   isActive: boolean;
 };
 
-export type CalendarEventEntry = CalendarEntryBase & {
+type CalendarEventDetails = CalendarEntryBase & {
   type: "event";
-  laneId: null;
-  laneName: null;
   status: "active";
-  occupiesLane: false;
   location: string;
   maxParticipants: number;
+  sourceEventId: string;
+  laneIds: string[];
+  lanes: Array<{ id: string; name: string }>;
 };
+
+export type CalendarGlobalEventEntry = CalendarEventDetails & {
+  laneId: null;
+  laneName: null;
+  laneMetadataAvailable: false;
+  occupiesLane: false;
+  isLaneProjection: false;
+};
+
+export type CalendarLaneEventEntry = CalendarEventDetails & {
+  laneId: string;
+  laneName: string;
+  laneMetadataAvailable: true;
+  occupiesLane: true;
+  isLaneProjection: true;
+};
+
+export type CalendarEventEntry = CalendarGlobalEventEntry | CalendarLaneEventEntry;
 
 export type CalendarEntry =
   | CalendarReservationEntry
   | CalendarLaneBlockEntry
   | CalendarEventEntry;
+
+export type CalendarLaneOccupyingEntry =
+  | CalendarReservationEntry
+  | CalendarLaneBlockEntry
+  | CalendarLaneEventEntry;
 
 export const CALENDAR_DAY_FLAGS = [
   "full_day",

@@ -1,4 +1,4 @@
-import type { CalendarEventEntry } from "@/lib/admin/calendar/types";
+import type { CalendarEventEntry, CalendarLaneOccupyingEntry } from "@/lib/admin/calendar/types";
 import { calendarTimeToMinutes } from "@/lib/admin/calendar/time";
 import type { CalendarWeekDay } from "../calendar-ui";
 import { CALENDAR_HOUR_HEIGHT, layoutCalendarLaneEntries } from "../calendar-ui";
@@ -36,7 +36,7 @@ function WeekEvents({
     .map((day) => ({
       date: day.date,
       events: day.entries.filter(
-        (entry): entry is CalendarEventEntry => entry.type === "event"
+        (entry): entry is CalendarEventEntry => entry.type === "event" && !entry.isLaneProjection
       ),
     }))
     .filter((day) => day.events.length > 0);
@@ -130,7 +130,8 @@ export default function WeekCalendar({
 
           {days.map((day) => {
             const entries = day.entries.filter(
-              (entry) => entry.type !== "event" && entry.laneId === laneId
+              (entry): entry is CalendarLaneOccupyingEntry =>
+                (entry.type !== "event" || entry.isLaneProjection) && entry.laneId === laneId
             );
             const positioned = layoutCalendarLaneEntries(entries, openingStart, openingEnd);
             return (

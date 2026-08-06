@@ -579,18 +579,22 @@ test("preview DTO exposes optional block reason and no technical fields", () => 
   );
 });
 
-test("preview DTO exposes event label, time and optional location without capacity", () => {
+test("preview DTO exposes event details without technical fields or PII", () => {
   const preview = getCalendarEntryPreviewData(
     event("event-id", { location: "Strzelnica CSK" })
   );
   assert.deepEqual(preview, {
     type: "event",
     title: "Wydarzenie",
+    date: "2026-08-05",
     time: "10:00–11:00",
     label: "Szkolenie",
     location: "Strzelnica CSK",
+    laneName: null,
+    maxParticipants: 10,
   });
-  assert.equal("maxParticipants" in preview, false);
+  assert.equal("id" in preview, false);
+  assert.equal("laneIds" in preview, false);
 });
 
 test("preview navigation uses a strict local allowlist", () => {
@@ -689,6 +693,27 @@ test("only day and exact desktop week wire entry selection", async () => {
   assert.doesNotMatch(monthSource, /onSelectEntry|CalendarEntryPreview/);
 });
 
+test("day and week grids render lane event projections while event lists keep source events only", async () => {
+  const [pageSource, daySource, weekSource, entryBlockSource] = await Promise.all(
+    [
+      "./page.tsx",
+      "./_components/DayCalendar.tsx",
+      "./_components/WeekCalendar.tsx",
+      "./_components/CalendarEntryBlock.tsx",
+    ].map((file) => readFile(new URL(file, import.meta.url), "utf8"))
+  );
+  assert.match(pageSource, /entry\.type === "event" && !entry\.isLaneProjection/);
+  assert.match(daySource, /entries: CalendarLaneOccupyingEntry\[\]/);
+  assert.match(weekSource, /entry\.isLaneProjection/);
+  assert.match(entryBlockSource, /E Event/);
+  assert.doesNotMatch(entryBlockSource, /event_id|lane_id|customer_name|customer_email|customer_phone/i);
+  const weekSummarySource = await readFile(
+    new URL("./_components/WeekSummary.tsx", import.meta.url),
+    "utf8"
+  );
+  assert.match(weekSummarySource, /entry\.type === "event" && !entry\.isLaneProjection/);
+});
+
 test("calendar preview reads role once and does not add sensitive queries", async () => {
   const files = await Promise.all(
     [
@@ -709,8 +734,9 @@ test("calendar preview reads role once and does not add sensitive queries", asyn
     /customer_name|customer_email|customer_phone|event_registrations|\.from\(["']profiles["']\)/i
   );
   const previewSource = files[2];
-  assert.doesNotMatch(previewSource, /entry\.id|maxParticipants|links\.primary/);
+  assert.doesNotMatch(previewSource, /entry\.id|links\.primary/);
   assert.match(previewSource, /entry\.label/);
+  assert.match(previewSource, /entry\.maxParticipants/);
   assert.doesNotMatch(previewSource, /entry\.shootersCount|peopleLabel/);
 });
 

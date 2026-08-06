@@ -133,7 +133,7 @@ export async function GET(request: Request) {
     if (query.types.includes("event")) {
       const { data, error } = await supabase
         .from("events")
-        .select("id,title,event_date,start_time,end_time,location,max_participants,is_active")
+        .select("id,title,event_date,start_time,end_time,location,max_participants,is_active,event_lanes(lane_id,shooting_lanes(id,name))")
         .gte("event_date", query.rangeStart)
         .lte("event_date", query.rangeEnd)
         .eq("is_active", true);

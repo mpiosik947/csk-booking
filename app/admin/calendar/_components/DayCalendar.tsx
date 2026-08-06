@@ -1,6 +1,6 @@
 import type {
-  CalendarEntry,
   CalendarLane,
+  CalendarLaneOccupyingEntry,
 } from "@/lib/admin/calendar/types";
 import { calendarTimeToMinutes } from "@/lib/admin/calendar/time";
 import {
@@ -11,11 +11,11 @@ import CalendarEntryBlock from "./CalendarEntryBlock";
 
 type DayCalendarProps = {
   lanes: CalendarLane[];
-  entries: CalendarEntry[];
+  entries: CalendarLaneOccupyingEntry[];
   openingStart: string;
   openingEnd: string;
   onSelectEntry: (
-    entry: Exclude<CalendarEntry, { type: "event" }>,
+    entry: CalendarLaneOccupyingEntry,
     activator: HTMLButtonElement
   ) => void;
 };
@@ -91,7 +91,7 @@ function CalendarGrid({
 
         {lanes.map((lane) => {
           const laneEntries = entries.filter(
-            (entry) => entry.type !== "event" && entry.laneId === lane.id
+            (entry) => entry.laneId === lane.id
           );
           const positioned = layoutCalendarLaneEntries(
             laneEntries,

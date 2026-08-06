@@ -11,6 +11,7 @@ import type {
   CalendarFeed,
   CalendarFeedResponse,
   CalendarLane,
+  CalendarLaneOccupyingEntry,
 } from "@/lib/admin/calendar/types";
 import { getWarsawCalendarDate } from "@/lib/admin/calendar/time";
 import { supabase } from "@/lib/supabase";
@@ -251,12 +252,15 @@ function AdminCalendarContent() {
     [date, feed, includeHistoricalStatuses, requestLaneId, types]
   );
   const dayEvents = dayEntries.filter(
-    (entry): entry is CalendarEventEntry => entry.type === "event"
+    (entry): entry is CalendarEventEntry => entry.type === "event" && !entry.isLaneProjection
   );
   const visibleLanes = feed
     ? getVisibleCalendarLanes(feed.lanes, requestLaneId)
     : [];
-  const dayLaneEntries = dayEntries.filter((entry) => entry.type !== "event");
+  const dayLaneEntries = dayEntries.filter(
+    (entry): entry is CalendarLaneOccupyingEntry =>
+      entry.type !== "event" || entry.isLaneProjection
+  );
   const daySummary = feed?.dailySummaries[0] ?? null;
   const weekDates = getCalendarWeekDates(date) ?? [];
   const weekDays = feed

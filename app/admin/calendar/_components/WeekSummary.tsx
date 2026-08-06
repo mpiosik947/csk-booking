@@ -33,8 +33,12 @@ export default function WeekSummary({
     <section aria-label="Podsumowanie tygodnia" className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
       {days.map((day) => {
         const percent = day.summary.occupancyPercent;
-        const laneEntries = day.entries.filter((entry) => entry.type !== "event");
-        const events = day.entries.filter((entry) => entry.type === "event");
+        const laneEntries = day.entries.filter(
+          (entry) => entry.type !== "event" || entry.isLaneProjection
+        );
+        const events = day.entries.filter(
+          (entry) => entry.type === "event" && !entry.isLaneProjection
+        );
         const previewEntries = laneId === "all" ? [] : laneEntries.slice(0, 3);
         const hiddenCount = laneEntries.length - previewEntries.length;
         return (
@@ -75,7 +79,7 @@ export default function WeekSummary({
               <div className="mt-3 space-y-2 border-t border-[#30372c] pt-3">
                 {previewEntries.map((entry) => (
                   <div key={entry.id} className="min-w-0 text-xs text-[#c7cbbf]">
-                    <p className="font-bold">{entry.startTime}–{entry.endTime} · {entry.type === "reservation" ? "Rezerwacja" : "Blokada"}</p>
+                    <p className="font-bold">{entry.startTime}–{entry.endTime} · {entry.type === "reservation" ? "Rezerwacja" : entry.type === "event" ? "Event" : "Blokada"}</p>
                     <p className="truncate text-[#a9ada4]">{entry.label}{entry.isHistorical ? " · historyczny" : ""}</p>
                   </div>
                 ))}

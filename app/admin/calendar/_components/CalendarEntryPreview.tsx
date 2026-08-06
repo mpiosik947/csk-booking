@@ -76,6 +76,7 @@ export default function CalendarEntryPreview({
               {entry.label}
             </p>
           )}
+          {entry.type === "event" && <p>Data: {entry.date}</p>}
           <p className="font-bold tabular-nums text-[#f2efe4]">{entry.time}</p>
           {entry.type !== "event" && <p>{entry.laneName}</p>}
           {entry.type === "reservation" && (
@@ -87,6 +88,8 @@ export default function CalendarEntryPreview({
           {entry.type === "event" && entry.location && (
             <p className="break-words">{entry.location}</p>
           )}
+          {entry.type === "event" && entry.laneName && <p>{entry.laneName}</p>}
+          {entry.type === "event" && <p>Limit uczestnikĂłw: {entry.maxParticipants}</p>}
         </div>
 
         {navigation && (

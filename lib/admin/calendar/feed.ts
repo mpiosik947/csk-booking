@@ -65,6 +65,7 @@ export type CalendarEventRow = {
   location: unknown;
   max_participants: unknown;
   is_active: unknown;
+  event_lanes?: unknown;
 };
 
 export type CalendarFeedRows = {
@@ -284,7 +285,9 @@ export function buildCalendarDaySummaries(
       date,
       reservationCount: dayEntries.filter((entry) => entry.type === "reservation").length,
       blockCount: dayEntries.filter((entry) => entry.type === "lane_block").length,
-      eventCount: dayEntries.filter((entry) => entry.type === "event").length,
+      eventCount: dayEntries.filter(
+        (entry) => entry.type === "event" && !entry.isLaneProjection
+      ).length,
       availableMinutes,
       occupiedMinutes,
       occupancyPercent,
@@ -393,21 +396,66 @@ export function buildCalendarFeed(
   if (query.types.includes("event")) {
     for (const row of rows.events) {
       if (!requireBoolean(row.is_active, "event status")) continue;
-      entries.push({
-        id: requireString(row.id, "event id"),
-        type: "event",
-        date: requireDate(row.event_date),
-        ...requireTimeRange(row.start_time, row.end_time),
-        laneId: null,
-        laneName: null,
-        status: "active",
+      const eventId = requireString(row.id, "event id");
+      const eventLanes = new Map<string, { id: string; name: string }>();
+      if (Array.isArray(row.event_lanes)) {
+        for (const relation of row.event_lanes) {
+          if (!relation || typeof relation !== "object") continue;
+          const rawLaneId = (relation as { lane_id?: unknown }).lane_id;
+          if (typeof rawLaneId !== "string" || !rawLaneId.trim()) continue;
+          const laneId = rawLaneId.trim();
+          const laneRow = (relation as { shooting_lanes?: unknown }).shooting_lanes;
+          if (!laneRow || typeof laneRow !== "object") continue;
+          const rawLaneName = (laneRow as { name?: unknown }).name;
+          if (typeof rawLaneName !== "string" || !rawLaneName.trim()) continue;
+          const laneName = rawLaneName.trim();
+          eventLanes.set(laneId, { id: laneId, name: laneName });
+        }
+      }
+      const lanes = [...eventLanes.values()].sort((first, second) =>
+        first.id.localeCompare(second.id)
+      );
+      const date = requireDate(row.event_date);
+      const range = requireTimeRange(row.start_time, row.end_time);
+      const sharedEvent = {
+        sourceEventId: eventId,
+        laneIds: lanes.map((lane) => lane.id),
+        lanes,
+        date,
+        ...range,
+        status: "active" as const,
         location: requireString(row.location, "event location"),
         maxParticipants: requireNonNegativeInteger(row.max_participants, "event limit"),
         label: requireString(row.title, "event title"),
-        occupiesLane: false,
         isHistorical: false,
-        links: { primary: "/admin/events", checkIn: null },
+        links: { primary: "/admin/events" as const, checkIn: null },
+      };
+      entries.push({
+        id: eventId,
+        type: "event",
+        laneId: null,
+        laneName: null,
+        laneMetadataAvailable: false,
+        occupiesLane: false,
+        isLaneProjection: false,
+        ...sharedEvent,
       });
+      for (const eventLane of lanes) {
+        if (query.laneId !== "all" && eventLane.id !== query.laneId) continue;
+        const lane = laneMap.get(eventLane.id);
+        if (!lane) continue;
+        referencedLaneIds.add(eventLane.id);
+        entries.push({
+          id: `${eventId}:${eventLane.id}`,
+          type: "event",
+          laneId: eventLane.id,
+          laneName: lane.name,
+          laneMetadataAvailable: true,
+          occupiesLane: true,
+          isLaneProjection: true,
+          ...sharedEvent,
+        });
+      }
     }
   }
 

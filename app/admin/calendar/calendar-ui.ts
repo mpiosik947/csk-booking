@@ -3,6 +3,7 @@ import type {
   CalendarEntry,
   CalendarEntryType,
   CalendarLane,
+  CalendarLaneOccupyingEntry,
 } from "@/lib/admin/calendar/types";
 import {
   calendarTimeToMinutes,
@@ -41,11 +42,17 @@ export type CalendarEntryGeometry = {
 };
 
 export type CalendarPositionedEntry = {
-  entry: Exclude<CalendarEntry, { type: "event" }>;
+  entry: CalendarLaneOccupyingEntry;
   geometry: CalendarEntryGeometry;
   columnIndex: number;
   columnCount: number;
 };
+
+function isCalendarLaneEntry(
+  entry: CalendarEntry
+): entry is CalendarLaneOccupyingEntry {
+  return entry.type !== "event" || entry.isLaneProjection;
+}
 
 export type CalendarUiFilters = {
   date: string;
@@ -77,9 +84,12 @@ export type CalendarEntryPreviewData =
   | {
       type: "event";
       title: "Wydarzenie";
+      date: string;
       time: string;
       label: string;
       location: string;
+      laneName: string | null;
+      maxParticipants: number;
     };
 
 export type CalendarEntryPreviewNavigation = {
@@ -123,9 +133,12 @@ export function getCalendarEntryPreviewData(
   return {
     type: entry.type,
     title: "Wydarzenie",
+    date: entry.date,
     time,
     label: entry.label,
     location: entry.location,
+    laneName: entry.laneName,
+    maxParticipants: entry.maxParticipants,
   };
 }
 
@@ -429,7 +442,9 @@ export function filterCalendarEntries(
   return entries.filter((entry) => {
     if (entry.date !== filters.date || !visibleTypes.has(entry.type)) return false;
     if (!filters.includeHistoricalStatuses && entry.isHistorical) return false;
-    if (entry.type === "event") return true;
+    if (entry.type === "event") {
+      return !entry.isLaneProjection || filters.laneId === "all" || entry.laneId === filters.laneId;
+    }
     return filters.laneId === "all" || entry.laneId === filters.laneId;
   });
 }
@@ -456,10 +471,7 @@ export function layoutCalendarLaneEntries(
   hourHeight = CALENDAR_HOUR_HEIGHT
 ): CalendarPositionedEntry[] {
   const candidates = entries
-    .filter(
-      (entry): entry is Exclude<CalendarEntry, { type: "event" }> =>
-        entry.type !== "event"
-    )
+    .filter(isCalendarLaneEntry)
     .map((entry) => ({
       entry,
       geometry: getCalendarEntryGeometry(

@@ -20,20 +20,23 @@ export default function CalendarEntryBlock({
   const { entry, geometry, columnIndex, columnCount } = positioned;
   const historicalStatus = statusLabel(entry.status);
   const isReservation = entry.type === "reservation";
+  const isEvent = entry.type === "event";
   const left = (columnIndex / columnCount) * 100;
   const width = 100 / columnCount;
 
   return (
     <button
       type="button"
-      aria-label={`${isReservation ? "Rezerwacja" : "Blokada"}: ${entry.startTime}–${entry.endTime}, ${entry.label}`}
+      aria-label={`${isReservation ? "Rezerwacja" : isEvent ? "Event" : "Blokada"}: ${entry.startTime}–${entry.endTime}, ${entry.label}`}
       onClick={(event) => onSelectEntry(entry, event.currentTarget)}
       className={`absolute cursor-pointer overflow-hidden rounded-lg border px-2 py-1.5 text-left shadow-lg focus-visible:z-20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#f2efe4] ${
         entry.isHistorical
           ? "border-[#596057] bg-[#202420]/95 text-[#b5baaf] opacity-75"
           : isReservation
             ? "border-[#55719a] bg-[#172235]/95 text-[#dce8ff]"
-            : "border-[#9a6648] bg-[#302118]/95 text-[#f2d0b6]"
+            : isEvent
+              ? "border-[#806a32] bg-[#2b2618]/95 text-[#e1c477]"
+              : "border-[#9a6648] bg-[#302118]/95 text-[#f2d0b6]"
       }`}
       style={{
         top: geometry.top,
@@ -42,7 +45,12 @@ export default function CalendarEntryBlock({
         width: `calc(${width}% - 6px)`,
       }}
     >
-      <p className="truncate text-[10px] font-black uppercase tracking-[0.1em]">
+      {isEvent && (
+        <p className="truncate text-[10px] font-black uppercase tracking-[0.1em]">
+          E Event
+        </p>
+      )}
+      <p className={isEvent ? "hidden" : "truncate text-[10px] font-black uppercase tracking-[0.1em]"}>
         {isReservation ? "R · Rezerwacja" : "B · Blokada"}
       </p>
       <p className="truncate text-xs font-bold">{entry.startTime}–{entry.endTime}</p>
@@ -51,7 +59,7 @@ export default function CalendarEntryBlock({
         <p className="truncate text-[10px] opacity-80">
           {entry.shootersCount} os.{historicalStatus ? ` · ${historicalStatus}` : ""}
         </p>
-      ) : (
+      ) : isEvent ? null : (
         <p className="truncate text-[10px] opacity-80">
           {entry.reason || "Bez podanego powodu"}{historicalStatus ? ` · ${historicalStatus}` : ""}
         </p>
