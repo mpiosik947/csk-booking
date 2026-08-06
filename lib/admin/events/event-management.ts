@@ -215,6 +215,30 @@ function compareLaneCandidates(first: AdminEventLane, second: AdminEventLane) {
     : Number(second.is_active) - Number(first.is_active);
 }
 
+export function normalizeActiveEventLanes(
+  value: unknown
+): AdminEventLane[] | null {
+  if (!Array.isArray(value)) {
+    return null;
+  }
+
+  const lanes: AdminEventLane[] = [];
+  const laneIds = new Set<string>();
+
+  for (const candidate of value) {
+    const lane = normalizeLane(candidate);
+
+    if (!lane || !lane.is_active || laneIds.has(lane.id)) {
+      return null;
+    }
+
+    laneIds.add(lane.id);
+    lanes.push(lane);
+  }
+
+  return lanes.sort(compareLanes);
+}
+
 export function normalizeAdminEvent(value: unknown): NormalizationResult {
   if (!isRecord(value)) {
     return {

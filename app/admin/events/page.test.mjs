@@ -107,16 +107,32 @@ test("startEditing safely maps nullable values and PostgreSQL times", async () =
   assert.equal("12:30:00".slice(0, 5), "12:30");
 });
 
-test("this stage keeps existing mutations and the public events page separate", async () => {
+test("create uses the atomic RPC while edit, toggle, and public events remain separate", async () => {
   const adminSource = await readAdminPage();
   const publicSource = await readFile(publicPageUrl, "utf8");
-
-  assert.doesNotMatch(
+  const createEvent = functionSource(
     adminSource,
-    /admin_create_event|admin_update_event|admin_set_event_active/
+    "async function createEvent()",
+    "function toggleCreateLane("
   );
-  assert.match(adminSource, /\.from\("events"\)\.insert\(/);
-  assert.match(adminSource, /\.from\("events"\)[\s\S]*\.update\(/);
+  const saveEditedEvent = functionSource(
+    adminSource,
+    "async function saveEditedEvent(",
+    "async function toggleEvent("
+  );
+  const toggleEvent = functionSource(
+    adminSource,
+    "async function toggleEvent(",
+    "function beginRegistrationAction("
+  );
+
+  assert.match(createEvent, /buildCreateEventPayload\(form\.value\)/);
+  assert.match(createEvent, /\.rpc\("admin_create_event", payload\)/);
+  assert.doesNotMatch(createEvent, /\.from\("events"\)\.insert\(/);
+  assert.doesNotMatch(saveEditedEvent, /admin_update_event/);
+  assert.match(saveEditedEvent, /\.from\("events"\)[\s\S]*\.update\(/);
+  assert.doesNotMatch(toggleEvent, /admin_set_event_active/);
+  assert.match(toggleEvent, /\.from\("events"\)[\s\S]*\.update\(\{ is_active:/);
   assert.doesNotMatch(publicSource, /event-management|normalizeAdminEvent/);
 });
 
@@ -150,35 +166,130 @@ test("lane summary preserves helper order and is read-only for every admin role"
     "function EventLanesSummary(",
     "function FieldHelp("
   );
-  const loadEvents = functionSource(
-    source,
-    "async function loadEvents()",
-    "async function loadRegistrations("
-  );
-
   assert.doesNotMatch(summary, /\.sort\(|canManageEvents|userRole/);
   assert.doesNotMatch(summary, /lane\.(?:type|display_order)/);
   assert.doesNotMatch(summary, />\s*\{lane\.id\}\s*</);
   assert.match(summary, /flex flex-wrap gap-2/);
   assert.match(summary, /inline-flex max-w-full flex-wrap/);
   assert.match(summary, /break-words/);
-  assert.equal((loadEvents.match(/\.from\("events"\)/g) ?? []).length, 1);
-  assert.doesNotMatch(loadEvents, /\.from\("shooting_lanes"\)/);
-  assert.doesNotMatch(
+});
+
+test("active lanes load only for management roles with a fail-closed stable contract", async () => {
+  const source = await readAdminPage();
+  const loadRole = functionSource(
     source,
-    /createLaneIds|editLaneIds|setCreateLaneIds|setEditLaneIds/
+    "async function loadRole()",
+    "async function loadActiveLanes()"
+  );
+  const loadActiveLanes = functionSource(
+    source,
+    "async function loadActiveLanes()",
+    "async function loadEvents()"
+  );
+
+  assert.match(source, /useState<AdminEventLane\[\]>\(\[\]\)/);
+  assert.match(source, /const \[activeLanesLoading, setActiveLanesLoading\] = useState\(false\)/);
+  assert.match(source, /const \[activeLanesLoaded, setActiveLanesLoaded\] = useState\(false\)/);
+  assert.match(source, /const \[activeLanesError, setActiveLanesError\] = useState<string \| null>/);
+  assert.match(source, /const activeLanesRequestRef = useRef\(0\)/);
+  assert.match(source, /const componentMountedRef = useRef\(true\)/);
+  assert.match(source, /return \(\) => \{[\s\S]*componentMountedRef\.current = false[\s\S]*activeLanesRequestRef\.current \+= 1/);
+  assert.match(loadRole, /role === "admin" \|\| role === "pracownik"/);
+  assert.match(loadRole, /void loadActiveLanes\(\)/);
+  assert.doesNotMatch(loadRole, /instruktor[\s\S]*loadActiveLanes/);
+  assert.match(loadActiveLanes, /\.from\("shooting_lanes"\)/);
+  assert.match(loadActiveLanes, /\.select\("id,name,type,is_active,display_order"\)/);
+  assert.doesNotMatch(loadActiveLanes, /\.select\(\s*["'`]\*["'`]\s*\)/);
+  assert.match(loadActiveLanes, /\.eq\("is_active", true\)/);
+  assert.match(loadActiveLanes, /\.order\("display_order", \{ ascending: true \}\)/);
+  assert.match(loadActiveLanes, /\.order\("name", \{ ascending: true \}\)/);
+  assert.match(loadActiveLanes, /\.order\("id", \{ ascending: true \}\)/);
+  assert.match(loadActiveLanes, /const requestId = \+\+activeLanesRequestRef\.current/);
+  assert.match(loadActiveLanes, /!componentMountedRef\.current[\s\S]*requestId !== activeLanesRequestRef\.current/);
+  assert.match(loadActiveLanes, /normalizeActiveEventLanes\(data\)/);
+  assert.match(loadActiveLanes, /if \(error \|\| normalizedLanes === null\)/);
+  assert.doesNotMatch(loadActiveLanes, /setActiveLanes\(\[\]\)|error\.message|console\./);
+});
+
+test("create form exposes safe lane selection states and never displays lane UUIDs", async () => {
+  const source = await readAdminPage();
+
+  assert.match(source, /const \[createLaneIds, setCreateLaneIds\] = useState<string\[\]>\(\[\]\)/);
+  assert.doesNotMatch(source, /editLaneIds|setEditLaneIds/);
+  assert.match(source, /function toggleCreateLane\(laneId: string\)/);
+  assert.match(source, /if \(createSubmittingRef\.current\) \{\s*return;\s*\}/);
+  assert.match(source, /new Set\(current\)/);
+  assert.match(source, /activeLanes\s*\.filter\(\(lane\) => selectedLaneIds\.has\(lane\.id\)\)/);
+  assert.match(source, /Brak zaznaczonych osi oznacza event globalny/);
+  assert.match(source, /Ładowanie osi…/);
+  assert.match(source, /Brak aktywnych osi\./);
+  assert.match(source, /Nie udało się wczytać listy osi\./);
+  assert.match(source, /type="checkbox"/);
+  assert.match(source, /checked=\{createLaneIds\.includes\(lane\.id\)\}/);
+  assert.match(source, /disabled=\{createSubmitting\}/);
+  assert.match(source, /\{lane\.name\}/);
+  assert.doesNotMatch(source, />\s*\{lane\.id\}\s*</);
+  assert.match(source, /flex flex-wrap gap-3/);
+});
+
+test("a successful lane reload removes hidden selections but an error preserves them", async () => {
+  const source = await readAdminPage();
+  const loadActiveLanes = functionSource(
+    source,
+    "async function loadActiveLanes()",
+    "async function loadEvents()"
+  );
+
+  assert.match(loadActiveLanes, /setActiveLanes\(normalizedLanes\)/);
+  assert.match(loadActiveLanes, /setCreateLaneIds\(\(current\) => \{/);
+  assert.match(loadActiveLanes, /const activeLaneIds = new Set\(normalizedLanes\.map\(\(lane\) => lane\.id\)\)/);
+  assert.match(loadActiveLanes, /current\.filter\(\(laneId\) => activeLaneIds\.has\(laneId\)\)/);
+  assert.ok(
+    loadActiveLanes.indexOf("if (error || normalizedLanes === null)") <
+      loadActiveLanes.indexOf("setCreateLaneIds((current) =>")
   );
 });
 
-test("public events and existing event mutations remain outside lane summary changes", async () => {
+test("create validates and maps only safe RPC results before its success-only reset", async () => {
+  const source = await readAdminPage();
+  const createEvent = functionSource(
+    source,
+    "async function createEvent()",
+    "function toggleCreateLane("
+  );
+
+  assert.match(source, /const createSubmittingRef = useRef\(false\)/);
+  assert.match(createEvent, /createSubmittingRef\.current/);
+  assert.match(createEvent, /validateEventForm\(\{/);
+  assert.match(createEvent, /laneIds: createLaneIds/);
+  assert.match(createEvent, /validateEventRpcResult\(data\)/);
+  assert.match(createEvent, /getEventManagementMessage\(/);
+  assert.match(
+    createEvent,
+    /new Map\(activeLanes\.map\(\(lane\) => \[lane\.id, lane\.name\]\)\)/
+  );
+  assert.match(createEvent, /result\.value\.code !== "created"/);
+  assert.match(createEvent, /setCreateLaneIds\(\[\]\)/);
+  assert.match(createEvent, /void loadEvents\(\)/);
+  assert.match(createEvent, /finally \{[\s\S]*createSubmittingRef\.current = false[\s\S]*setCreateSubmitting\(false\)/);
+  assert.doesNotMatch(createEvent, /error\.message|event_id|conflict_lane_id/);
+  assert.ok(createEvent.indexOf('result.value.code !== "created"') < createEvent.indexOf("setTitle(\"\")"));
+});
+
+test("create button fails closed while lanes are unknown, loading, or unavailable", async () => {
+  const source = await readAdminPage();
+
+  assert.match(source, /disabled=\{[\s\S]*createSubmitting[\s\S]*activeLanesLoading[\s\S]*!activeLanesLoaded[\s\S]*activeLanesError !== null[\s\S]*\}/);
+  assert.match(source, /\{createSubmitting \? "Dodawanie…" : "Dodaj szkolenie"\}/);
+  assert.match(source, /activeLanesLoading \|\| !activeLanesLoaded \|\| activeLanesError/);
+});
+
+test("public events remain unchanged while lane selection does not alter existing cards", async () => {
   const adminSource = await readAdminPage();
   const publicSource = await readFile(publicPageUrl, "utf8");
 
   assert.doesNotMatch(publicSource, /EventLanesSummary|Zajmowane osie/);
-  assert.doesNotMatch(
-    adminSource,
-    /admin_create_event|admin_update_event|admin_set_event_active/
-  );
+  assert.doesNotMatch(publicSource, /createLaneIds|admin_create_event/);
   assert.match(adminSource, /async function createEvent\(\)/);
   assert.match(adminSource, /function startEditing\(event: AdminEvent\)/);
   assert.match(adminSource, /async function saveEditedEvent\(eventId: string\)/);

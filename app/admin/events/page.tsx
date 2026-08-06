@@ -2,8 +2,15 @@
 
 import { useEffect, useRef, useState } from "react";
 import {
+  buildCreateEventPayload,
+  getEventManagementMessage,
+  normalizeActiveEventLanes,
   normalizeAdminEvent,
   type AdminEvent,
+  type AdminEventLane,
+  type EventManagementMessage,
+  validateEventForm,
+  validateEventRpcResult,
 } from "../../../lib/admin/events/event-management";
 import { supabase } from "../../../lib/supabase";
 
@@ -11,6 +18,9 @@ type RegistrationAction = "approve" | "cancel";
 
 const EVENTS_LOAD_ERROR_MESSAGE =
   "Nie udało się poprawnie wczytać listy szkoleń.";
+const ACTIVE_LANES_LOAD_ERROR_MESSAGE = "Nie udało się wczytać listy osi.";
+
+type CreateFormMessage = Pick<EventManagementMessage, "message" | "kind">;
 
 type ApproveRegistrationResult = {
   ok: boolean;
@@ -165,11 +175,25 @@ export default function AdminEventsPage() {
   const [registrations, setRegistrations] = useState<Registration[]>([]);
   const [message, setMessage] = useState("");
   const [userRole, setUserRole] = useState("");
+  const [activeLanes, setActiveLanes] = useState<AdminEventLane[]>([]);
+  const [activeLanesLoading, setActiveLanesLoading] = useState(false);
+  const [activeLanesLoaded, setActiveLanesLoaded] = useState(false);
+  const [activeLanesError, setActiveLanesError] = useState<string | null>(
+    null
+  );
+  const [createLaneIds, setCreateLaneIds] = useState<string[]>([]);
+  const [createSubmitting, setCreateSubmitting] = useState(false);
+  const [createMessage, setCreateMessage] = useState<CreateFormMessage | null>(
+    null
+  );
   const [registrationActions, setRegistrationActions] = useState<
     Record<string, RegistrationAction>
   >({});
   const registrationActionLocksRef = useRef(new Set<string>());
   const eventsLoadRequestRef = useRef(0);
+  const activeLanesRequestRef = useRef(0);
+  const componentMountedRef = useRef(true);
+  const createSubmittingRef = useRef(false);
 
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -193,21 +217,71 @@ export default function AdminEventsPage() {
   const canManageEvents = userRole === "admin" || userRole === "pracownik";
 
   useEffect(() => {
-    loadEvents();
-    loadRole();
+    componentMountedRef.current = true;
+    void loadEvents();
+    void loadRole();
+
+    return () => {
+      componentMountedRef.current = false;
+      activeLanesRequestRef.current += 1;
+    };
   }, []);
 
   async function loadRole() {
     const { data, error } = await supabase.rpc("get_my_role");
+
+    if (!componentMountedRef.current) {
+      return;
+    }
 
     if (error) {
       setUserRole("");
       return;
     }
 
-    if (data) {
-      setUserRole(String(data));
+    const role = typeof data === "string" ? data : "";
+    setUserRole(role);
+
+    if (role === "admin" || role === "pracownik") {
+      void loadActiveLanes();
     }
+  }
+
+  async function loadActiveLanes() {
+    const requestId = ++activeLanesRequestRef.current;
+    setActiveLanesLoading(true);
+    setActiveLanesError(null);
+
+    const { data, error } = await supabase
+      .from("shooting_lanes")
+      .select("id,name,type,is_active,display_order")
+      .eq("is_active", true)
+      .order("display_order", { ascending: true })
+      .order("name", { ascending: true })
+      .order("id", { ascending: true });
+
+    if (
+      !componentMountedRef.current ||
+      requestId !== activeLanesRequestRef.current
+    ) {
+      return;
+    }
+
+    setActiveLanesLoading(false);
+
+    const normalizedLanes = normalizeActiveEventLanes(data);
+
+    if (error || normalizedLanes === null) {
+      setActiveLanesError(ACTIVE_LANES_LOAD_ERROR_MESSAGE);
+      return;
+    }
+
+    setActiveLanes(normalizedLanes);
+    setCreateLaneIds((current) => {
+      const activeLaneIds = new Set(normalizedLanes.map((lane) => lane.id));
+      return current.filter((laneId) => activeLaneIds.has(laneId));
+    });
+    setActiveLanesLoaded(true);
   }
 
   async function loadEvents() {
@@ -293,66 +367,100 @@ export default function AdminEventsPage() {
   }
 
   async function createEvent() {
-    setMessage("");
-
-    if (!canManageEvents) {
-      setMessage("Brak dostępu. Instruktor nie może tworzyć szkoleń.");
+    if (!canManageEvents || createSubmittingRef.current) {
       return;
     }
 
-    if (
-      !title ||
-      !description ||
-      !eventDate ||
-      !startTime ||
-      !endTime ||
-      !location ||
-      !price ||
-      !maxParticipants
-    ) {
-      setMessage("Uzupełnij wszystkie pola.");
+    if (activeLanesLoading || !activeLanesLoaded || activeLanesError) {
+      setCreateMessage({
+        kind: "error",
+        message: ACTIVE_LANES_LOAD_ERROR_MESSAGE,
+      });
       return;
     }
 
-    if (Number(price) < 0) {
-      setMessage("Cena nie może być ujemna.");
-      return;
-    }
-
-    if (Number(maxParticipants) <= 0) {
-      setMessage("Liczba miejsc musi być większa od zera.");
-      return;
-    }
-
-    const { error } = await supabase.from("events").insert({
+    const form = validateEventForm({
       title,
       description,
-      event_date: eventDate,
-      start_time: startTime,
-      end_time: endTime,
+      eventDate,
+      startTime,
+      endTime,
       location,
-      price: Number(price),
-      max_participants: Number(maxParticipants),
-      is_active: true,
+      price,
+      maxParticipants,
+      laneIds: createLaneIds,
     });
 
-    if (error) {
-      setMessage(`Błąd tworzenia szkolenia: ${error.message}`);
+    if (!form.ok) {
+      setCreateMessage({ kind: "error", message: form.message });
       return;
     }
 
-    setMessage("Szkolenie zostało dodane.");
+    const payload = buildCreateEventPayload(form.value);
+    const laneNames = new Map(activeLanes.map((lane) => [lane.id, lane.name]));
+    createSubmittingRef.current = true;
+    setCreateSubmitting(true);
+    setCreateMessage(null);
 
-    setTitle("");
-    setDescription("");
-    setEventDate("");
-    setStartTime("");
-    setEndTime("");
-    setLocation("");
-    setPrice("");
-    setMaxParticipants("10");
+    try {
+      const { data, error } = await supabase.rpc("admin_create_event", payload);
 
-    loadEvents();
+      if (error) {
+        setCreateMessage(
+          getEventManagementMessage({ code: "invalid_rpc_response" })
+        );
+        return;
+      }
+
+      const result = validateEventRpcResult(data);
+      const resultMessage = getEventManagementMessage(
+        result.ok ? result.value : { code: "invalid_rpc_response" },
+        laneNames
+      );
+      setCreateMessage(resultMessage);
+
+      if (!result.ok || result.value.code !== "created") {
+        return;
+      }
+
+      setTitle("");
+      setDescription("");
+      setEventDate("");
+      setStartTime("");
+      setEndTime("");
+      setLocation("");
+      setPrice("");
+      setMaxParticipants("10");
+      setCreateLaneIds([]);
+      void loadEvents();
+    } catch {
+      setCreateMessage(
+        getEventManagementMessage({ code: "invalid_rpc_response" })
+      );
+    } finally {
+      createSubmittingRef.current = false;
+      setCreateSubmitting(false);
+    }
+  }
+
+  function toggleCreateLane(laneId: string) {
+    if (createSubmittingRef.current) {
+      return;
+    }
+
+    setCreateLaneIds((current) => {
+      const selectedLaneIds = new Set(current);
+
+      if (selectedLaneIds.has(laneId)) {
+        selectedLaneIds.delete(laneId);
+      } else {
+        selectedLaneIds.add(laneId);
+      }
+
+      return activeLanes
+        .filter((lane) => selectedLaneIds.has(lane.id))
+        .map((lane) => lane.id);
+    });
   }
 
   function startEditing(event: AdminEvent) {
@@ -975,6 +1083,46 @@ export default function AdminEventsPage() {
                 </FieldHelp>
               </div>
 
+              <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-4">
+                <h3 className="text-sm font-semibold text-zinc-200">
+                  Zajmowane osie
+                </h3>
+                <p className="mt-1 text-sm text-zinc-400">
+                  Brak zaznaczonych osi oznacza event globalny, który nie blokuje
+                  rezerwacji osi.
+                </p>
+
+                {activeLanesLoading ? (
+                  <p className="mt-3 text-sm text-zinc-400">Ładowanie osi…</p>
+                ) : activeLanesError ? (
+                  <p className="mt-3 text-sm font-semibold text-red-300">
+                    {ACTIVE_LANES_LOAD_ERROR_MESSAGE}
+                  </p>
+                ) : activeLanesLoaded && activeLanes.length === 0 ? (
+                  <p className="mt-3 text-sm text-zinc-400">
+                    Brak aktywnych osi.
+                  </p>
+                ) : (
+                  <div className="mt-3 flex flex-wrap gap-3">
+                    {activeLanes.map((lane) => (
+                      <label
+                        key={lane.id}
+                        className="flex max-w-full items-center gap-2 rounded-lg border border-zinc-700 px-3 py-2 text-sm text-zinc-200"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={createLaneIds.includes(lane.id)}
+                          onChange={() => toggleCreateLane(lane.id)}
+                          disabled={createSubmitting}
+                          className="h-4 w-4 shrink-0 accent-green-600 disabled:cursor-not-allowed"
+                        />
+                        <span className="break-words">{lane.name}</span>
+                      </label>
+                    ))}
+                  </div>
+                )}
+              </div>
+
               <div className="rounded-xl border border-green-900 bg-green-950/40 p-4 text-sm text-green-200">
                 <p className="font-semibold">Informacja o wolnych miejscach</p>
                 <p className="mt-1 text-green-300">
@@ -983,12 +1131,32 @@ export default function AdminEventsPage() {
                 </p>
               </div>
 
+              {createMessage && (
+                <div
+                  className={
+                    createMessage.kind === "success"
+                      ? "rounded-xl border border-green-800 bg-green-950 p-4 text-sm font-semibold text-green-300"
+                      : createMessage.kind === "neutral"
+                        ? "rounded-xl border border-zinc-700 bg-zinc-900 p-4 text-sm font-semibold text-zinc-200"
+                        : "rounded-xl border border-red-800 bg-red-950 p-4 text-sm font-semibold text-red-300"
+                  }
+                >
+                  {createMessage.message}
+                </div>
+              )}
+
               <button
                 type="button"
                 onClick={createEvent}
-                className="rounded-xl bg-green-700 px-4 py-3 font-semibold transition hover:bg-green-600"
+                disabled={
+                  createSubmitting ||
+                  activeLanesLoading ||
+                  !activeLanesLoaded ||
+                  activeLanesError !== null
+                }
+                className="rounded-xl bg-green-700 px-4 py-3 font-semibold transition hover:bg-green-600 disabled:cursor-not-allowed disabled:opacity-50"
               >
-                Dodaj szkolenie
+                {createSubmitting ? "Dodawanie…" : "Dodaj szkolenie"}
               </button>
             </div>
           </div>
