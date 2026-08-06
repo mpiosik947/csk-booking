@@ -107,7 +107,7 @@ test("startEditing safely maps nullable values and PostgreSQL times", async () =
   assert.equal("12:30:00".slice(0, 5), "12:30");
 });
 
-test("create uses the atomic RPC while edit, toggle, and public events remain separate", async () => {
+test("create and edit use their atomic RPCs while toggle and public events remain separate", async () => {
   const adminSource = await readAdminPage();
   const publicSource = await readFile(publicPageUrl, "utf8");
   const createEvent = functionSource(
@@ -129,8 +129,9 @@ test("create uses the atomic RPC while edit, toggle, and public events remain se
   assert.match(createEvent, /buildCreateEventPayload\(form\.value\)/);
   assert.match(createEvent, /\.rpc\("admin_create_event", payload\)/);
   assert.doesNotMatch(createEvent, /\.from\("events"\)\.insert\(/);
-  assert.doesNotMatch(saveEditedEvent, /admin_update_event/);
-  assert.match(saveEditedEvent, /\.from\("events"\)[\s\S]*\.update\(/);
+  assert.match(saveEditedEvent, /buildUpdateEventPayload\(eventId, form\.value\)/);
+  assert.match(saveEditedEvent, /\.rpc\("admin_update_event", payload\.value\)/);
+  assert.doesNotMatch(saveEditedEvent, /\.from\("events"\)[\s\S]*\.update\(/);
   assert.doesNotMatch(toggleEvent, /admin_set_event_active/);
   assert.match(toggleEvent, /\.from\("events"\)[\s\S]*\.update\(\{ is_active:/);
   assert.doesNotMatch(publicSource, /event-management|normalizeAdminEvent/);
@@ -215,7 +216,6 @@ test("create form exposes safe lane selection states and never displays lane UUI
   const source = await readAdminPage();
 
   assert.match(source, /const \[createLaneIds, setCreateLaneIds\] = useState<string\[\]>\(\[\]\)/);
-  assert.doesNotMatch(source, /editLaneIds|setEditLaneIds/);
   assert.match(source, /function toggleCreateLane\(laneId: string\)/);
   assert.match(source, /if \(createSubmittingRef\.current\) \{\s*return;\s*\}/);
   assert.match(source, /new Set\(current\)/);
@@ -244,10 +244,82 @@ test("a successful lane reload removes hidden selections but an error preserves 
   assert.match(loadActiveLanes, /setCreateLaneIds\(\(current\) => \{/);
   assert.match(loadActiveLanes, /const activeLaneIds = new Set\(normalizedLanes\.map\(\(lane\) => lane\.id\)\)/);
   assert.match(loadActiveLanes, /current\.filter\(\(laneId\) => activeLaneIds\.has\(laneId\)\)/);
+  assert.match(loadActiveLanes, /setEditLaneIds\(\(current\) => \{/);
+  assert.match(loadActiveLanes, /\.\.\.editInitialInactiveLaneIdsRef\.current/);
+  assert.match(loadActiveLanes, /allowedLaneIds\.has\(laneId\)/);
   assert.ok(
     loadActiveLanes.indexOf("if (error || normalizedLanes === null)") <
       loadActiveLanes.indexOf("setCreateLaneIds((current) =>")
   );
+});
+
+test("edit form preserves assigned inactive lanes and saves only through admin_update_event", async () => {
+  const source = await readAdminPage();
+  const startEditing = functionSource(
+    source,
+    "function startEditing(",
+    "function resetEditingState("
+  );
+  const resetEditingState = functionSource(
+    source,
+    "function resetEditingState()",
+    "function cancelEditing("
+  );
+  const cancelEditing = functionSource(
+    source,
+    "function cancelEditing()",
+    "async function saveEditedEvent("
+  );
+  const saveEditedEvent = functionSource(
+    source,
+    "async function saveEditedEvent(",
+    "function toggleEditLane("
+  );
+  const toggleEditLane = functionSource(
+    source,
+    "function toggleEditLane(",
+    "function toggleEvent("
+  );
+
+  assert.match(source, /const \[editLaneIds, setEditLaneIds\] = useState<string\[\]>\(\[\]\)/);
+  assert.match(source, /const \[editInitialInactiveLaneIds, setEditInitialInactiveLaneIds\] = useState<[\s\S]*string\[\][\s\S]*>\(\[\]\)/);
+  assert.match(source, /const \[editSubmitting, setEditSubmitting\] = useState\(false\)/);
+  assert.match(source, /const editSubmittingRef = useRef\(false\)/);
+  assert.match(source, /const editInitialInactiveLaneIdsRef = useRef<string\[\]>\(\[\]\)/);
+  assert.match(startEditing, /setEditLaneIds\(\[\.\.\.event\.laneIds\]\)/);
+  assert.match(startEditing, /if \(editSubmittingRef\.current\) \{\s*return;\s*\}/);
+  assert.match(startEditing, /event\.lanes[\s\S]*\.filter\(\(lane\) => !lane\.is_active\)[\s\S]*\.map\(\(lane\) => lane\.id\)/);
+  assert.match(startEditing, /setEditMessage\(null\)/);
+  assert.match(startEditing, /editInitialInactiveLaneIdsRef\.current = initialInactiveLaneIds/);
+  assert.match(resetEditingState, /setEditLaneIds\(\[\]\)/);
+  assert.match(resetEditingState, /editInitialInactiveLaneIdsRef\.current = \[\]/);
+  assert.match(resetEditingState, /setEditInitialInactiveLaneIds\(\[\]\)/);
+  assert.match(cancelEditing, /editSubmittingRef\.current/);
+  assert.match(cancelEditing, /resetEditingState\(\)/);
+  assert.match(cancelEditing, /setEditMessage\(null\)/);
+  assert.match(source, /const editableLanes = getEditableEventLanes\(activeLanes, event\.lanes\)/);
+  assert.match(source, /const isSelected = editLaneIds\.includes\(lane\.id\)/);
+  assert.match(source, /checked=\{isSelected\}/);
+  assert.match(source, /Nieaktywna/);
+  assert.match(source, /disabled=\{isDisabled\}/);
+  assert.match(source, /disabled=\{editSubmitting\}/);
+  assert.match(toggleEditLane, /if \(editSubmittingRef\.current\) \{\s*return;\s*\}/);
+  assert.match(toggleEditLane, /if \(!isActive\) \{\s*return current;\s*\}/);
+  assert.match(toggleEditLane, /editableLanes[\s\S]*\.filter\(\(lane\) => selectedLaneIds\.has\(lane\.id\)\)/);
+  assert.match(saveEditedEvent, /activeLanesLoading \|\| !activeLanesLoaded \|\| activeLanesError/);
+  assert.match(saveEditedEvent, /\.\.\.editInitialInactiveLaneIds/);
+  assert.match(saveEditedEvent, /validateEventForm\(\{/);
+  assert.match(saveEditedEvent, /laneIds: editLaneIds/);
+  assert.match(saveEditedEvent, /buildUpdateEventPayload\(eventId, form\.value\)/);
+  assert.match(saveEditedEvent, /validateEventRpcResult\(data\)/);
+  assert.match(saveEditedEvent, /result\.ok && result\.value\.event_id !== eventId/);
+  assert.match(saveEditedEvent, /getEventManagementMessage\(/);
+  assert.match(saveEditedEvent, /\.rpc\("admin_update_event", payload\.value\)/);
+  assert.doesNotMatch(saveEditedEvent, /\.from\("events"\)[\s\S]*\.update\(/);
+  assert.match(saveEditedEvent, /result\.value\.code === "updated"[\s\S]*void loadEvents\(\)[\s\S]*resetEditingState\(\)/);
+  assert.match(saveEditedEvent, /result\.value\.code === "no_change"[\s\S]*resetEditingState\(\)/);
+  assert.match(saveEditedEvent, /finally \{[\s\S]*editSubmittingRef\.current = false[\s\S]*setEditSubmitting\(false\)/);
+  assert.match(source, /onClick=\{\(\) => startEditing\(event\)\}[\s\S]*disabled=\{editSubmitting\}/);
 });
 
 test("create validates and maps only safe RPC results before its success-only reset", async () => {

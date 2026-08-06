@@ -3,6 +3,8 @@
 import { useEffect, useRef, useState } from "react";
 import {
   buildCreateEventPayload,
+  buildUpdateEventPayload,
+  getEditableEventLanes,
   getEventManagementMessage,
   normalizeActiveEventLanes,
   normalizeAdminEvent,
@@ -186,6 +188,9 @@ export default function AdminEventsPage() {
   const [createMessage, setCreateMessage] = useState<CreateFormMessage | null>(
     null
   );
+  const [editMessage, setEditMessage] = useState<CreateFormMessage | null>(
+    null
+  );
   const [registrationActions, setRegistrationActions] = useState<
     Record<string, RegistrationAction>
   >({});
@@ -194,6 +199,8 @@ export default function AdminEventsPage() {
   const activeLanesRequestRef = useRef(0);
   const componentMountedRef = useRef(true);
   const createSubmittingRef = useRef(false);
+  const editSubmittingRef = useRef(false);
+  const editInitialInactiveLaneIdsRef = useRef<string[]>([]);
 
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -213,6 +220,11 @@ export default function AdminEventsPage() {
   const [editLocation, setEditLocation] = useState("");
   const [editPrice, setEditPrice] = useState("");
   const [editMaxParticipants, setEditMaxParticipants] = useState("");
+  const [editLaneIds, setEditLaneIds] = useState<string[]>([]);
+  const [editInitialInactiveLaneIds, setEditInitialInactiveLaneIds] = useState<
+    string[]
+  >([]);
+  const [editSubmitting, setEditSubmitting] = useState(false);
 
   const canManageEvents = userRole === "admin" || userRole === "pracownik";
 
@@ -280,6 +292,14 @@ export default function AdminEventsPage() {
     setCreateLaneIds((current) => {
       const activeLaneIds = new Set(normalizedLanes.map((lane) => lane.id));
       return current.filter((laneId) => activeLaneIds.has(laneId));
+    });
+    setEditLaneIds((current) => {
+      const activeLaneIds = new Set(normalizedLanes.map((lane) => lane.id));
+      const allowedLaneIds = new Set([
+        ...activeLaneIds,
+        ...editInitialInactiveLaneIdsRef.current,
+      ]);
+      return current.filter((laneId) => allowedLaneIds.has(laneId));
     });
     setActiveLanesLoaded(true);
   }
@@ -464,6 +484,10 @@ export default function AdminEventsPage() {
   }
 
   function startEditing(event: AdminEvent) {
+    if (editSubmittingRef.current) {
+      return;
+    }
+
     if (!canManageEvents) {
       setMessage("Brak dostępu. Instruktor nie może edytować szkoleń.");
       return;
@@ -478,9 +502,16 @@ export default function AdminEventsPage() {
     setEditLocation(event.location ?? "");
     setEditPrice(String(event.price));
     setEditMaxParticipants(String(event.max_participants));
+    setEditLaneIds([...event.laneIds]);
+    const initialInactiveLaneIds = event.lanes
+      .filter((lane) => !lane.is_active)
+      .map((lane) => lane.id);
+    editInitialInactiveLaneIdsRef.current = initialInactiveLaneIds;
+    setEditInitialInactiveLaneIds(initialInactiveLaneIds);
+    setEditMessage(null);
   }
 
-  function cancelEditing() {
+  function resetEditingState() {
     setEditingEventId("");
     setEditTitle("");
     setEditDescription("");
@@ -490,62 +521,150 @@ export default function AdminEventsPage() {
     setEditLocation("");
     setEditPrice("");
     setEditMaxParticipants("");
+    setEditLaneIds([]);
+    editInitialInactiveLaneIdsRef.current = [];
+    setEditInitialInactiveLaneIds([]);
+  }
+
+  function cancelEditing() {
+    if (editSubmittingRef.current) {
+      return;
+    }
+
+    resetEditingState();
+    setEditMessage(null);
   }
 
   async function saveEditedEvent(eventId: string) {
-    setMessage("");
-
-    if (!canManageEvents) {
-      setMessage("Brak dostępu. Instruktor nie może edytować szkoleń.");
+    if (!canManageEvents || editSubmittingRef.current) {
       return;
     }
 
-    if (
-      !editTitle ||
-      !editDescription ||
-      !editEventDate ||
-      !editStartTime ||
-      !editEndTime ||
-      !editLocation ||
-      !editPrice ||
-      !editMaxParticipants
-    ) {
-      setMessage("Uzupełnij wszystkie pola edycji.");
+    if (activeLanesLoading || !activeLanesLoaded || activeLanesError) {
+      setEditMessage({
+        kind: "error",
+        message: ACTIVE_LANES_LOAD_ERROR_MESSAGE,
+      });
       return;
     }
 
-    if (Number(editPrice) < 0) {
-      setMessage("Cena nie może być ujemna.");
+    const allowedLaneIds = new Set([
+      ...activeLanes.map((lane) => lane.id),
+      ...editInitialInactiveLaneIds,
+    ]);
+
+    if (editLaneIds.some((laneId) => !allowedLaneIds.has(laneId))) {
+      setEditMessage({ kind: "error", message: "Sprawdź wybrane osie." });
       return;
     }
 
-    if (Number(editMaxParticipants) <= 0) {
-      setMessage("Liczba miejsc musi być większa od zera.");
+    const form = validateEventForm({
+      title: editTitle,
+      description: editDescription,
+      eventDate: editEventDate,
+      startTime: editStartTime,
+      endTime: editEndTime,
+      location: editLocation,
+      price: editPrice,
+      maxParticipants: editMaxParticipants,
+      laneIds: editLaneIds,
+    });
+
+    if (!form.ok) {
+      setEditMessage({ kind: "error", message: form.message });
       return;
     }
 
-    const { error } = await supabase
-      .from("events")
-      .update({
-        title: editTitle,
-        description: editDescription,
-        event_date: editEventDate,
-        start_time: editStartTime,
-        end_time: editEndTime,
-        location: editLocation,
-        price: Number(editPrice),
-        max_participants: Number(editMaxParticipants),
-      })
-      .eq("id", eventId);
+    const payload = buildUpdateEventPayload(eventId, form.value);
 
-    if (error) {
-      setMessage(`Błąd edycji szkolenia: ${error.message}`);
+    if (!payload.ok) {
+      setEditMessage({ kind: "error", message: payload.message });
       return;
     }
 
-    setMessage("Szkolenie zostało zaktualizowane.");
-    cancelEditing();
-    loadEvents();
+    const editingEvent = events.find((event) => event.id === eventId);
+    const laneNames = new Map(
+      getEditableEventLanes(activeLanes, editingEvent?.lanes ?? []).map(
+        (lane) => [lane.id, lane.name]
+      )
+    );
+    editSubmittingRef.current = true;
+    setEditSubmitting(true);
+    setEditMessage(null);
+
+    try {
+      const { data, error } = await supabase.rpc("admin_update_event", payload.value);
+
+      if (error) {
+        setEditMessage(
+          getEventManagementMessage({ code: "invalid_rpc_response" })
+        );
+        return;
+      }
+
+      const result = validateEventRpcResult(data);
+      if (result.ok && result.value.event_id !== eventId) {
+        setEditMessage(
+          getEventManagementMessage({ code: "invalid_rpc_response" })
+        );
+        return;
+      }
+
+      const resultMessage = getEventManagementMessage(
+        result.ok ? result.value : { code: "invalid_rpc_response" },
+        laneNames
+      );
+      setEditMessage(resultMessage);
+
+      if (!result.ok) {
+        return;
+      }
+
+      if (result.value.code === "updated") {
+        void loadEvents();
+        resetEditingState();
+        return;
+      }
+
+      if (result.value.code === "no_change") {
+        resetEditingState();
+      }
+    } catch {
+      setEditMessage(
+        getEventManagementMessage({ code: "invalid_rpc_response" })
+      );
+    } finally {
+      editSubmittingRef.current = false;
+      setEditSubmitting(false);
+    }
+  }
+
+  function toggleEditLane(
+    laneId: string,
+    isActive: boolean,
+    editableLanes: readonly AdminEventLane[]
+  ) {
+    if (editSubmittingRef.current) {
+      return;
+    }
+
+    setEditLaneIds((current) => {
+      const selectedLaneIds = new Set(current);
+
+      if (selectedLaneIds.has(laneId)) {
+        selectedLaneIds.delete(laneId);
+      } else {
+        if (!isActive) {
+          return current;
+        }
+
+        selectedLaneIds.add(laneId);
+      }
+
+      return editableLanes
+        .filter((lane) => selectedLaneIds.has(lane.id))
+        .map((lane) => lane.id);
+    });
   }
 
   async function toggleEvent(eventId: string, currentStatus: boolean) {
@@ -1145,6 +1264,20 @@ export default function AdminEventsPage() {
                 </div>
               )}
 
+              {editMessage && (
+                <div
+                  className={
+                    editMessage.kind === "success"
+                      ? "rounded-xl border border-green-800 bg-green-950 p-4 text-sm font-semibold text-green-300"
+                      : editMessage.kind === "neutral"
+                        ? "rounded-xl border border-zinc-700 bg-zinc-900 p-4 text-sm font-semibold text-zinc-200"
+                        : "rounded-xl border border-red-800 bg-red-950 p-4 text-sm font-semibold text-red-300"
+                  }
+                >
+                  {editMessage.message}
+                </div>
+              )}
+
               <button
                 type="button"
                 onClick={createEvent}
@@ -1195,6 +1328,7 @@ export default function AdminEventsPage() {
               selectedEventId === event.id
                 ? Math.max(event.max_participants - activeRegistrationsCount, 0)
                 : null;
+            const editableLanes = getEditableEventLanes(activeLanes, event.lanes);
 
             return (
               <div
@@ -1347,6 +1481,64 @@ export default function AdminEventsPage() {
                       </FieldHelp>
                     </div>
 
+                    <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-4">
+                      <p className="text-sm font-semibold text-zinc-200">
+                        Zajmowane osie
+                      </p>
+                      <p className="mt-1 text-sm text-zinc-400">
+                        Brak zaznaczonych osi oznacza event globalny.
+                      </p>
+
+                      {activeLanesLoading ? (
+                        <p className="mt-3 text-sm text-zinc-400">Ładowanie osi…</p>
+                      ) : activeLanesError ? (
+                        <p className="mt-3 text-sm text-red-300">
+                          {ACTIVE_LANES_LOAD_ERROR_MESSAGE}
+                        </p>
+                      ) : activeLanesLoaded && editableLanes.length === 0 ? (
+                        <p className="mt-3 text-sm text-zinc-400">Brak aktywnych osi.</p>
+                      ) : (
+                        <div className="mt-3 flex flex-wrap gap-3">
+                          {editableLanes.map((lane) => {
+                            const isSelected = editLaneIds.includes(lane.id);
+                            const isInitiallyInactive = editInitialInactiveLaneIds.includes(
+                              lane.id
+                            );
+                            const isDisabled =
+                              editSubmitting ||
+                              (!lane.is_active &&
+                                (!isInitiallyInactive || !isSelected));
+
+                            return (
+                              <label
+                                key={lane.id}
+                                className="inline-flex max-w-full items-center gap-2 rounded-lg border border-zinc-700 px-3 py-2 text-sm text-zinc-200"
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={isSelected}
+                                  disabled={isDisabled}
+                                  onChange={() =>
+                                    toggleEditLane(
+                                      lane.id,
+                                      lane.is_active,
+                                      editableLanes
+                                    )
+                                  }
+                                />
+                                <span className="break-words">{lane.name}</span>
+                                {!lane.is_active ? (
+                                  <span className="rounded-full bg-amber-950 px-2 py-0.5 text-xs text-amber-200">
+                                    Nieaktywna
+                                  </span>
+                                ) : null}
+                              </label>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+
                     <div className="rounded-xl border border-green-900 bg-green-950/40 p-4 text-sm text-green-200">
                       <p className="font-semibold">
                         Wolnych miejsc nie edytujesz ręcznie
@@ -1361,15 +1553,17 @@ export default function AdminEventsPage() {
                       <button
                         type="button"
                         onClick={() => saveEditedEvent(event.id)}
-                        className="rounded-xl bg-green-700 px-5 py-3 text-sm font-semibold transition hover:bg-green-600"
+                        disabled={editSubmitting}
+                        className="rounded-xl bg-green-700 px-5 py-3 text-sm font-semibold transition hover:bg-green-600 disabled:cursor-not-allowed disabled:opacity-60"
                       >
-                        Zapisz zmiany
+                        {editSubmitting ? "Zapisywanie…" : "Zapisz zmiany"}
                       </button>
 
                       <button
                         type="button"
                         onClick={cancelEditing}
-                        className="rounded-xl border border-zinc-700 px-5 py-3 text-sm font-semibold text-zinc-300 transition hover:bg-zinc-800"
+                        disabled={editSubmitting}
+                        className="rounded-xl border border-zinc-700 px-5 py-3 text-sm font-semibold text-zinc-300 transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-60"
                       >
                         Anuluj edycję
                       </button>
@@ -1462,7 +1656,8 @@ export default function AdminEventsPage() {
                           <button
                             type="button"
                             onClick={() => startEditing(event)}
-                            className="rounded-xl border border-blue-800 px-4 py-3 text-sm font-semibold text-blue-300 transition hover:bg-blue-950"
+                            disabled={editSubmitting}
+                            className="rounded-xl border border-blue-800 px-4 py-3 text-sm font-semibold text-blue-300 transition hover:bg-blue-950 disabled:cursor-not-allowed disabled:opacity-60"
                           >
                             Edytuj szkolenie
                           </button>

@@ -239,6 +239,25 @@ export function normalizeActiveEventLanes(
   return lanes.sort(compareLanes);
 }
 
+export function getEditableEventLanes(
+  activeLanes: readonly AdminEventLane[],
+  assignedLanes: readonly AdminEventLane[]
+): AdminEventLane[] {
+  const lanesById = new Map<string, AdminEventLane>();
+
+  for (const lane of activeLanes) {
+    lanesById.set(lane.id, lane);
+  }
+
+  for (const lane of assignedLanes) {
+    if (!lane.is_active && !lanesById.has(lane.id)) {
+      lanesById.set(lane.id, lane);
+    }
+  }
+
+  return [...lanesById.values()].sort(compareLanes);
+}
+
 export function normalizeAdminEvent(value: unknown): NormalizationResult {
   if (!isRecord(value)) {
     return {
