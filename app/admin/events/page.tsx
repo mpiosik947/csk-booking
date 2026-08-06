@@ -1,9 +1,16 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import {
+  normalizeAdminEvent,
+  type AdminEvent,
+} from "../../../lib/admin/events/event-management";
 import { supabase } from "../../../lib/supabase";
 
 type RegistrationAction = "approve" | "cancel";
+
+const EVENTS_LOAD_ERROR_MESSAGE =
+  "Nie udało się poprawnie wczytać listy szkoleń.";
 
 type ApproveRegistrationResult = {
   ok: boolean;
@@ -31,19 +38,6 @@ type CancelRegistrationResult = {
     warning: boolean;
   };
   message: string;
-};
-
-type Event = {
-  id: string;
-  title: string;
-  description: string;
-  event_date: string;
-  start_time: string;
-  end_time: string;
-  location: string;
-  price: number;
-  max_participants: number;
-  is_active: boolean;
 };
 
 type Registration = {
@@ -134,7 +128,7 @@ function FieldHelp({ children }: { children: React.ReactNode }) {
 
 export default function AdminEventsPage() {
   const [loading, setLoading] = useState(true);
-  const [events, setEvents] = useState<Event[]>([]);
+  const [events, setEvents] = useState<AdminEvent[]>([]);
   const [selectedEventId, setSelectedEventId] = useState("");
   const [registrations, setRegistrations] = useState<Registration[]>([]);
   const [message, setMessage] = useState("");
@@ -143,6 +137,7 @@ export default function AdminEventsPage() {
     Record<string, RegistrationAction>
   >({});
   const registrationActionLocksRef = useRef(new Set<string>());
+  const eventsLoadRequestRef = useRef(0);
 
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -184,19 +179,67 @@ export default function AdminEventsPage() {
   }
 
   async function loadEvents() {
+    const requestId = ++eventsLoadRequestRef.current;
     const { data, error } = await supabase
       .from("events")
-      .select("*")
+      .select(`
+        id,
+        title,
+        description,
+        event_date,
+        start_time,
+        end_time,
+        location,
+        price,
+        max_participants,
+        is_active,
+        created_at,
+        event_lanes (
+          lane_id,
+          shooting_lanes (
+            id,
+            name,
+            type,
+            is_active,
+            display_order
+          )
+        )
+      `)
       .order("event_date", { ascending: true });
+
+    if (requestId !== eventsLoadRequestRef.current) {
+      return;
+    }
 
     setLoading(false);
 
     if (error) {
-      setMessage(`Błąd pobierania szkoleń: ${error.message}`);
+      setMessage(EVENTS_LOAD_ERROR_MESSAGE);
       return;
     }
 
-    setEvents((data ?? []) as Event[]);
+    if (!Array.isArray(data)) {
+      setMessage(EVENTS_LOAD_ERROR_MESSAGE);
+      return;
+    }
+
+    const normalizedEvents: AdminEvent[] = [];
+
+    for (const record of data) {
+      const normalized = normalizeAdminEvent(record);
+
+      if (!normalized.ok) {
+        setMessage(EVENTS_LOAD_ERROR_MESSAGE);
+        return;
+      }
+
+      normalizedEvents.push(normalized.value);
+    }
+
+    setEvents(normalizedEvents);
+    setMessage((current) =>
+      current === EVENTS_LOAD_ERROR_MESSAGE ? "" : current
+    );
   }
 
   async function loadRegistrations(eventId: string) {
@@ -280,7 +323,7 @@ export default function AdminEventsPage() {
     loadEvents();
   }
 
-  function startEditing(event: Event) {
+  function startEditing(event: AdminEvent) {
     if (!canManageEvents) {
       setMessage("Brak dostępu. Instruktor nie może edytować szkoleń.");
       return;
@@ -288,11 +331,11 @@ export default function AdminEventsPage() {
 
     setEditingEventId(event.id);
     setEditTitle(event.title);
-    setEditDescription(event.description);
+    setEditDescription(event.description ?? "");
     setEditEventDate(event.event_date);
     setEditStartTime(event.start_time.slice(0, 5));
     setEditEndTime(event.end_time.slice(0, 5));
-    setEditLocation(event.location);
+    setEditLocation(event.location ?? "");
     setEditPrice(String(event.price));
     setEditMaxParticipants(String(event.max_participants));
   }
