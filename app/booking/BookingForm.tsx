@@ -788,7 +788,7 @@ export default function BookingForm({
                 if (
                   selectedHour &&
                   !bookingSlotIsAvailable(
-                    getSlotState(selectedHour, nextDuration, selectedHour)
+                    getSlotState(selectedHour, nextDuration, "")
                   )
                 ) {
                   setSelectedHour("");
