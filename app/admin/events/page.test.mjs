@@ -265,7 +265,24 @@ test("create form exposes safe lane selection states and never displays lane UUI
   assert.match(source, /disabled=\{createSubmitting\}/);
   assert.match(source, /\{lane\.name\}/);
   assert.doesNotMatch(source, />\s*\{lane\.id\}\s*</);
-  assert.match(source, /flex flex-wrap gap-3/);
+  assert.match(source, /grid gap-2 sm:grid-cols-2 xl:grid-cols-3/);
+});
+
+test("event management form presents sectioned lane summaries without exposing lane identifiers", async () => {
+  const source = await readAdminPage();
+
+  assert.match(source, /function EventFormSection\(/);
+  assert.match(source, /function LaneSelectionSummary\(/);
+  assert.match(source, /Dodaj szkolenie \/ event/);
+  assert.match(source, /Tryb edycji/);
+  assert.match(source, /Event globalny/);
+  assert.match(source, /const laneCountLabel =/);
+  assert.match(source, /Zajmuje \$\{lanes\.length\} osie/);
+  assert.match(source, /Zajmuje \$\{lanes\.length\} osi/);
+  assert.match(source, /<LaneSelectionSummary lanes=\{selectedCreateLanes\} \/>/);
+  assert.match(source, /<LaneSelectionSummary lanes=\{selectedEditLanes\} \/>/);
+  assert.match(source, /\{event\.is_active \? "Aktywny" : "Ukryty"\}/);
+  assert.doesNotMatch(source, /\{lane\.id\}<\/span>/);
 });
 
 test("a successful lane reload removes hidden selections but an error preserves them", async () => {

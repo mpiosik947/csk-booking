@@ -171,6 +171,59 @@ function FieldHelp({ children }: { children: React.ReactNode }) {
   return <p className="mt-2 text-xs leading-relaxed text-zinc-500">{children}</p>;
 }
 
+function EventFormSection({
+  title,
+  children,
+}: {
+  title: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="rounded-2xl border border-zinc-800 bg-zinc-950/60 p-4 sm:p-5">
+      <h3 className="text-sm font-bold uppercase tracking-[0.16em] text-zinc-300">
+        {title}
+      </h3>
+      <div className="mt-4 grid gap-4">{children}</div>
+    </section>
+  );
+}
+
+function LaneSelectionSummary({ lanes }: { lanes: AdminEventLane[] }) {
+  if (lanes.length === 0) {
+    return (
+      <div className="rounded-xl border border-zinc-800 bg-zinc-900/70 p-3 text-sm">
+        <p className="font-semibold text-zinc-200">Event globalny</p>
+        <p className="mt-1 text-zinc-400">Nie blokuje żadnej osi.</p>
+      </div>
+    );
+  }
+
+  const laneCountLabel =
+    lanes.length === 1
+      ? "Zajmuje 1 oś"
+      : lanes.length >= 2 && lanes.length <= 4
+        ? `Zajmuje ${lanes.length} osie`
+        : `Zajmuje ${lanes.length} osi`;
+
+  return (
+    <div className="rounded-xl border border-green-900/80 bg-green-950/30 p-3 text-sm">
+      <p className="font-semibold text-green-200">
+        {laneCountLabel}
+      </p>
+      <div className="mt-2 flex flex-wrap gap-2">
+        {lanes.map((lane) => (
+          <span
+            key={lane.id}
+            className="max-w-full rounded-full border border-green-800 bg-zinc-950 px-3 py-1 text-xs font-semibold text-green-200 break-words"
+          >
+            {lane.name}
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export default function AdminEventsPage() {
   const [loading, setLoading] = useState(true);
   const [events, setEvents] = useState<AdminEvent[]>([]);
@@ -1113,6 +1166,10 @@ export default function AdminEventsPage() {
     return "rounded-xl border border-red-800 bg-red-950 p-4 text-sm font-semibold text-red-300";
   }
 
+  const selectedCreateLanes = activeLanes.filter((lane) =>
+    createLaneIds.includes(lane.id)
+  );
+
   return (
     <main className="min-h-screen bg-zinc-950 text-white">
       <section className="mx-auto max-w-7xl px-6 py-12">
@@ -1155,18 +1212,25 @@ export default function AdminEventsPage() {
         )}
 
         {canManageEvents && (
-          <div className="mb-10 rounded-2xl border border-zinc-800 bg-zinc-900 p-6">
+          <div className="mb-10 rounded-3xl border border-zinc-800 bg-zinc-900/90 p-4 shadow-2xl shadow-black/20 sm:p-6">
             <div className="mb-6">
-              <h2 className="text-2xl font-bold">Dodaj nowe szkolenie</h2>
+              <p className="text-xs font-bold uppercase tracking-[0.2em] text-green-400">
+                Nowe wydarzenie
+              </p>
+              <h2 className="mt-2 text-2xl font-bold sm:text-3xl">Dodaj szkolenie / event</h2>
 
               <p className="mt-2 text-sm text-zinc-400">
+                Uzupełnij dane, termin, limit uczestników i zajmowane osie.
+              </p>
+              <p className="sr-only">
                 Wypełnij dane szkolenia. Wolne miejsca nie są wpisywane ręcznie —
                 system liczy je automatycznie na podstawie liczby zapisanych
                 uczestników.
               </p>
             </div>
 
-            <div className="grid gap-5">
+            <div className="grid gap-6">
+              <EventFormSection title="Podstawowe informacje">
               <div>
                 <label className="mb-2 block text-sm font-semibold text-zinc-200">
                   Nazwa szkolenia
@@ -1184,7 +1248,9 @@ export default function AdminEventsPage() {
                   Wpisz krótką, czytelną nazwę szkolenia widoczną dla klienta.
                 </FieldHelp>
               </div>
+              </EventFormSection>
 
+              <EventFormSection title="Opis szkolenia">
               <div>
                 <label className="mb-2 block text-sm font-semibold text-zinc-200">
                   Opis szkolenia
@@ -1204,7 +1270,10 @@ export default function AdminEventsPage() {
                 </FieldHelp>
               </div>
 
-              <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-5">
+              </EventFormSection>
+
+              <EventFormSection title="Termin, uczestnicy i cena">
+              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
                 <div>
                   <label className="mb-2 block text-sm font-semibold text-zinc-200">
                     Data szkolenia
@@ -1293,7 +1362,10 @@ export default function AdminEventsPage() {
                 </div>
               </div>
 
-              <div>
+              <div className="border-t border-zinc-800 pt-4">
+                <p className="mb-3 text-sm font-bold uppercase tracking-[0.16em] text-zinc-300">
+                  Lokalizacja
+                </p>
                 <label className="mb-2 block text-sm font-semibold text-zinc-200">
                   Miejsce / oś
                 </label>
@@ -1310,8 +1382,9 @@ export default function AdminEventsPage() {
                   Wpisz miejsce prowadzenia szkolenia albo konkretną oś.
                 </FieldHelp>
               </div>
+              </EventFormSection>
 
-              <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-4">
+              <div className="rounded-2xl border border-zinc-800 bg-zinc-950/60 p-4 sm:p-5">
                 <h3 className="text-sm font-semibold text-zinc-200">
                   Zajmowane osie
                 </h3>
@@ -1319,6 +1392,10 @@ export default function AdminEventsPage() {
                   Brak zaznaczonych osi oznacza event globalny, który nie blokuje
                   rezerwacji osi.
                 </p>
+
+                <div className="mt-3">
+                  <LaneSelectionSummary lanes={selectedCreateLanes} />
+                </div>
 
                 {activeLanesLoading ? (
                   <p className="mt-3 text-sm text-zinc-400">Ładowanie osi…</p>
@@ -1331,11 +1408,15 @@ export default function AdminEventsPage() {
                     Brak aktywnych osi.
                   </p>
                 ) : (
-                  <div className="mt-3 flex flex-wrap gap-3">
+                  <div className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
                     {activeLanes.map((lane) => (
                       <label
                         key={lane.id}
-                        className="flex max-w-full items-center gap-2 rounded-lg border border-zinc-700 px-3 py-2 text-sm text-zinc-200"
+                        className={`flex min-h-11 max-w-full cursor-pointer items-center gap-2 rounded-xl border px-3 py-2 text-sm font-semibold transition ${
+                          createLaneIds.includes(lane.id)
+                            ? "border-green-700 bg-green-950/50 text-green-100"
+                            : "border-zinc-700 bg-zinc-900 text-zinc-200 hover:border-zinc-500"
+                        }`}
                       >
                         <input
                           type="checkbox"
@@ -1438,20 +1519,29 @@ export default function AdminEventsPage() {
                 ? Math.max(event.max_participants - activeRegistrationsCount, 0)
                 : null;
             const editableLanes = getEditableEventLanes(activeLanes, event.lanes);
+            const selectedEditLanes = editableLanes.filter((lane) =>
+              editLaneIds.includes(lane.id)
+            );
             const toggleTargetStatus = eventToggleActions[event.id];
             const isTogglePending = toggleTargetStatus !== undefined;
 
             return (
               <div
                 key={event.id}
-                className="rounded-2xl border border-zinc-800 bg-zinc-900 p-6"
+                className="rounded-3xl border border-zinc-800 bg-zinc-900 p-4 shadow-lg shadow-black/10 sm:p-6"
               >
                 {editingEventId === event.id && canManageEvents ? (
-                  <div className="grid gap-5">
+                  <div className="grid gap-6">
+                    <p className="text-xs font-bold uppercase tracking-[0.2em] text-green-400">
+                      Tryb edycji
+                    </p>
                     <h2 className="text-2xl font-bold text-green-400">
                       Edycja szkolenia
                     </h2>
 
+                    <p className="text-sm font-bold uppercase tracking-[0.16em] text-zinc-300">
+                      Podstawowe informacje
+                    </p>
                     <div>
                       <label className="mb-2 block text-sm font-semibold text-zinc-200">
                         Nazwa szkolenia
@@ -1489,7 +1579,11 @@ export default function AdminEventsPage() {
                       </FieldHelp>
                     </div>
 
-                    <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-5">
+                    <div>
+                      <p className="mb-4 text-sm font-bold uppercase tracking-[0.16em] text-zinc-300">
+                        Termin, uczestnicy i cena
+                      </p>
+                      <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-5">
                       <div>
                         <label className="mb-2 block text-sm font-semibold text-zinc-200">
                           Data szkolenia
@@ -1572,9 +1666,13 @@ export default function AdminEventsPage() {
                           Limit uczestników. Wolne miejsca liczy system.
                         </FieldHelp>
                       </div>
+                      </div>
                     </div>
 
                     <div>
+                      <p className="mb-3 text-sm font-bold uppercase tracking-[0.16em] text-zinc-300">
+                        Lokalizacja
+                      </p>
                       <label className="mb-2 block text-sm font-semibold text-zinc-200">
                         Miejsce / oś
                       </label>
@@ -1600,6 +1698,10 @@ export default function AdminEventsPage() {
                         Brak zaznaczonych osi oznacza event globalny.
                       </p>
 
+                      <div className="mt-3">
+                        <LaneSelectionSummary lanes={selectedEditLanes} />
+                      </div>
+
                       {activeLanesLoading ? (
                         <p className="mt-3 text-sm text-zinc-400">Ładowanie osi…</p>
                       ) : activeLanesError ? (
@@ -1609,7 +1711,7 @@ export default function AdminEventsPage() {
                       ) : activeLanesLoaded && editableLanes.length === 0 ? (
                         <p className="mt-3 text-sm text-zinc-400">Brak aktywnych osi.</p>
                       ) : (
-                        <div className="mt-3 flex flex-wrap gap-3">
+                        <div className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
                           {editableLanes.map((lane) => {
                             const isSelected = editLaneIds.includes(lane.id);
                             const isInitiallyInactive = editInitialInactiveLaneIds.includes(
@@ -1623,7 +1725,11 @@ export default function AdminEventsPage() {
                             return (
                               <label
                                 key={lane.id}
-                                className="inline-flex max-w-full items-center gap-2 rounded-lg border border-zinc-700 px-3 py-2 text-sm text-zinc-200"
+                                className={`flex min-h-11 max-w-full items-center gap-2 rounded-xl border px-3 py-2 text-sm font-semibold transition ${
+                                  isSelected
+                                    ? "border-green-700 bg-green-950/50 text-green-100"
+                                    : "border-zinc-700 bg-zinc-900 text-zinc-200"
+                                } ${isDisabled ? "cursor-not-allowed opacity-60" : "cursor-pointer hover:border-zinc-500"}`}
                               >
                                 <input
                                   type="checkbox"
@@ -1691,10 +1797,10 @@ export default function AdminEventsPage() {
                               : "mb-3 inline-block rounded-full bg-red-950 px-3 py-1 text-xs font-semibold text-red-400"
                           }
                         >
-                          {event.is_active ? "AKTYWNE" : "UKRYTE"}
+                          {event.is_active ? "Aktywny" : "Ukryty"}
                         </span>
 
-                        <h2 className="mb-3 text-3xl font-bold">
+                        <h2 className="mb-3 break-words text-2xl font-bold sm:text-3xl">
                           {event.title}
                         </h2>
 
@@ -1702,15 +1808,15 @@ export default function AdminEventsPage() {
                           {event.description}
                         </p>
 
-                        <div className="grid gap-3 text-sm text-zinc-400 md:grid-cols-2 lg:grid-cols-5">
-                          <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-4">
+                        <div className="grid gap-3 text-sm text-zinc-400 sm:grid-cols-2 xl:grid-cols-5">
+                          <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-3">
                             <p className="mb-1 text-zinc-500">Data</p>
                             <p className="font-semibold text-white">
                               {event.event_date}
                             </p>
                           </div>
 
-                          <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-4">
+                          <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-3">
                             <p className="mb-1 text-zinc-500">Godzina</p>
                             <p className="font-semibold text-white">
                               {event.start_time.slice(0, 5)} -{" "}
@@ -1718,21 +1824,21 @@ export default function AdminEventsPage() {
                             </p>
                           </div>
 
-                          <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-4">
+                          <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-3">
                             <p className="mb-1 text-zinc-500">Miejsce</p>
                             <p className="font-semibold text-white">
                               {event.location}
                             </p>
                           </div>
 
-                          <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-4">
+                          <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-3">
                             <p className="mb-1 text-zinc-500">Cena</p>
                             <p className="font-semibold text-green-500">
                               {Number(event.price).toFixed(0)} zł
                             </p>
                           </div>
 
-                          <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-4">
+                          <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-3">
                             <p className="mb-1 text-zinc-500">Miejsca</p>
                             <p className="font-semibold text-white">
                               Limit: {event.max_participants}
@@ -1762,7 +1868,7 @@ export default function AdminEventsPage() {
                         <EventLanesSummary lanes={event.lanes} />
                       </div>
 
-                      <div className="flex min-w-[220px] flex-col gap-3">
+                      <div className="flex w-full flex-col gap-3 lg:w-56 lg:shrink-0">
                         {canManageEvents && (
                           <button
                             type="button"
