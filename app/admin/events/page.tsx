@@ -201,7 +201,7 @@ function EventFormSection({
 }) {
   return (
     <section className="rounded-2xl border border-zinc-800 bg-zinc-950/60 p-4 sm:p-5">
-      <h3 className="text-sm font-bold uppercase tracking-[0.16em] text-zinc-300">
+      <h3 className="text-sm font-bold uppercase tracking-[0.16em] text-amber-300">
         {title}
       </h3>
       <div className="mt-4 grid gap-4">{children}</div>
@@ -227,15 +227,15 @@ function LaneSelectionSummary({ lanes }: { lanes: AdminEventLane[] }) {
         : `Zajmuje ${lanes.length} osi`;
 
   return (
-    <div className="rounded-xl border border-green-900/80 bg-green-950/30 p-3 text-sm">
-      <p className="font-semibold text-green-200">
+    <div className="rounded-xl border border-[#6b7d3b] bg-[#29321c] p-3 text-sm">
+      <p className="font-semibold text-lime-100">
         {laneCountLabel}
       </p>
       <div className="mt-2 flex flex-wrap gap-2">
         {lanes.map((lane) => (
           <span
             key={lane.id}
-            className="max-w-full rounded-full border border-green-800 bg-zinc-950 px-3 py-1 text-xs font-semibold text-green-200 break-words"
+            className="max-w-full break-words rounded-full border border-[#6b7d3b] bg-zinc-950 px-3 py-1 text-xs font-semibold text-lime-100"
           >
             {lane.name}
           </span>
@@ -1288,7 +1288,7 @@ export default function AdminEventsPage() {
         {canManageEvents && (
           <div className="mb-10 rounded-3xl border border-zinc-800 bg-zinc-900/90 p-4 shadow-2xl shadow-black/20 sm:p-6">
             <div className="mb-6">
-              <p className="text-xs font-bold uppercase tracking-[0.2em] text-green-400">
+              <p className="text-xs font-bold uppercase tracking-[0.2em] text-amber-300">
                 Nowe wydarzenie
               </p>
               <h2 className="mt-2 text-2xl font-bold sm:text-3xl">Dodaj szkolenie / event</h2>
@@ -1315,7 +1315,7 @@ export default function AdminEventsPage() {
                   value={title}
                   onChange={(event) => setTitle(event.target.value)}
                   placeholder="Np. Szkolenie pistolet podstawowy"
-                  className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-white outline-none focus:border-green-600"
+                  className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-white outline-none transition placeholder:text-zinc-600 hover:border-zinc-600 focus:border-[#6b7d3b] focus:ring-1 focus:ring-[#6b7d3b]"
                 />
 
                 <FieldHelp>
@@ -1335,7 +1335,7 @@ export default function AdminEventsPage() {
                   onChange={(event) => setDescription(event.target.value)}
                   rows={5}
                   placeholder="Np. Zakres szkolenia, wymagania, dla kogo jest szkolenie, co zawiera cena..."
-                  className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-white outline-none focus:border-green-600"
+                  className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-white outline-none transition placeholder:text-zinc-600 hover:border-zinc-600 focus:border-[#6b7d3b] focus:ring-1 focus:ring-[#6b7d3b]"
                 />
 
                 <FieldHelp>
@@ -1357,7 +1357,7 @@ export default function AdminEventsPage() {
                     type="date"
                     value={eventDate}
                     onChange={(event) => setEventDate(event.target.value)}
-                    className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-white outline-none focus:border-green-600"
+                    className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-white outline-none transition placeholder:text-zinc-600 hover:border-zinc-600 focus:border-[#6b7d3b] focus:ring-1 focus:ring-[#6b7d3b]"
                   />
 
                   <FieldHelp>
@@ -1374,7 +1374,7 @@ export default function AdminEventsPage() {
                     type="time"
                     value={startTime}
                     onChange={(event) => setStartTime(event.target.value)}
-                    className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-white outline-none focus:border-green-600"
+                    className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-white outline-none transition placeholder:text-zinc-600 hover:border-zinc-600 focus:border-[#6b7d3b] focus:ring-1 focus:ring-[#6b7d3b]"
                   />
 
                   <FieldHelp>Podaj godzinę startu, np. 10:00.</FieldHelp>
@@ -1389,7 +1389,7 @@ export default function AdminEventsPage() {
                     type="time"
                     value={endTime}
                     onChange={(event) => setEndTime(event.target.value)}
-                    className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-white outline-none focus:border-green-600"
+                    className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-white outline-none transition placeholder:text-zinc-600 hover:border-zinc-600 focus:border-[#6b7d3b] focus:ring-1 focus:ring-[#6b7d3b]"
                   />
 
                   <FieldHelp>Podaj godzinę zakończenia, np. 14:00.</FieldHelp>
@@ -1406,7 +1406,7 @@ export default function AdminEventsPage() {
                     value={price}
                     onChange={(event) => setPrice(event.target.value)}
                     placeholder="Np. 250"
-                    className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-white outline-none focus:border-green-600"
+                    className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-white outline-none transition placeholder:text-zinc-600 hover:border-zinc-600 focus:border-[#6b7d3b] focus:ring-1 focus:ring-[#6b7d3b]"
                   />
 
                   <FieldHelp>
@@ -1426,7 +1426,7 @@ export default function AdminEventsPage() {
                     value={maxParticipants}
                     onChange={(event) => setMaxParticipants(event.target.value)}
                     placeholder="Np. 10"
-                    className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-white outline-none focus:border-green-600"
+                    className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-white outline-none transition placeholder:text-zinc-600 hover:border-zinc-600 focus:border-[#6b7d3b] focus:ring-1 focus:ring-[#6b7d3b]"
                   />
 
                   <FieldHelp>
@@ -1449,7 +1449,7 @@ export default function AdminEventsPage() {
                   value={location}
                   onChange={(event) => setLocation(event.target.value)}
                   placeholder="Np. Oś 25 m, sala szkoleniowa, oś 100 m"
-                  className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-white outline-none focus:border-green-600"
+                  className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-white outline-none transition placeholder:text-zinc-600 hover:border-zinc-600 focus:border-[#6b7d3b] focus:ring-1 focus:ring-[#6b7d3b]"
                 />
 
                 <FieldHelp>
@@ -1488,7 +1488,7 @@ export default function AdminEventsPage() {
                         key={lane.id}
                         className={`flex min-h-11 max-w-full cursor-pointer items-center gap-2 rounded-xl border px-3 py-2 text-sm font-semibold transition ${
                           createLaneIds.includes(lane.id)
-                            ? "border-green-700 bg-green-950/50 text-green-100"
+                            ? "border-[#6b7d3b] bg-[#29321c] text-lime-100"
                             : "border-zinc-700 bg-zinc-900 text-zinc-200 hover:border-zinc-500"
                         }`}
                       >
@@ -1497,7 +1497,7 @@ export default function AdminEventsPage() {
                           checked={createLaneIds.includes(lane.id)}
                           onChange={() => toggleCreateLane(lane.id)}
                           disabled={createSubmitting}
-                          className="h-4 w-4 shrink-0 accent-green-600 disabled:cursor-not-allowed"
+                          className="h-4 w-4 shrink-0 accent-[#556b2f] disabled:cursor-not-allowed"
                         />
                         <span className="break-words">{lane.name}</span>
                       </label>
@@ -1506,9 +1506,9 @@ export default function AdminEventsPage() {
                 )}
               </div>
 
-              <div className="rounded-xl border border-green-900 bg-green-950/40 p-4 text-sm text-green-200">
-                <p className="font-semibold">Informacja o wolnych miejscach</p>
-                <p className="mt-1 text-green-300">
+              <div className="rounded-xl border border-[#59663a] bg-[#252b1e] p-4 text-sm text-zinc-200">
+                <p className="font-semibold text-amber-200">Informacja o wolnych miejscach</p>
+                <p className="mt-1 text-zinc-400">
                   Tego pola nie uzupełniasz ręcznie. System liczy wolne miejsca:
                   liczba miejsc minus zapisani uczestnicy.
                 </p>
@@ -1551,7 +1551,7 @@ export default function AdminEventsPage() {
                   !activeLanesLoaded ||
                   activeLanesError !== null
                 }
-                className="rounded-xl bg-green-700 px-4 py-3 font-semibold transition hover:bg-green-600 disabled:cursor-not-allowed disabled:opacity-50"
+                className="rounded-xl border border-amber-700/70 bg-[#556b2f] px-4 py-3 font-semibold text-white transition hover:bg-[#657d3d] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {createSubmitting ? "Dodawanie…" : "Dodaj szkolenie"}
               </button>
@@ -1606,10 +1606,10 @@ export default function AdminEventsPage() {
               >
                 {editingEventId === event.id && canManageEvents ? (
                   <div className="grid gap-6">
-                    <p className="text-xs font-bold uppercase tracking-[0.2em] text-green-400">
+                    <p className="text-xs font-bold uppercase tracking-[0.2em] text-amber-300">
                       Tryb edycji
                     </p>
-                    <h2 className="text-2xl font-bold text-green-400">
+                    <h2 className="text-2xl font-bold text-lime-100">
                       Edycja szkolenia
                     </h2>
 
@@ -1626,7 +1626,7 @@ export default function AdminEventsPage() {
                         value={editTitle}
                         onChange={(e) => setEditTitle(e.target.value)}
                         placeholder="Np. Szkolenie pistolet podstawowy"
-                        className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-white outline-none focus:border-green-600"
+                        className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-white outline-none transition placeholder:text-zinc-600 hover:border-zinc-600 focus:border-[#6b7d3b] focus:ring-1 focus:ring-[#6b7d3b]"
                       />
 
                       <FieldHelp>
@@ -1644,7 +1644,7 @@ export default function AdminEventsPage() {
                         onChange={(e) => setEditDescription(e.target.value)}
                         rows={5}
                         placeholder="Opis szkolenia, wymagania, zakres, informacje organizacyjne..."
-                        className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-white outline-none focus:border-green-600"
+                        className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-white outline-none transition placeholder:text-zinc-600 hover:border-zinc-600 focus:border-[#6b7d3b] focus:ring-1 focus:ring-[#6b7d3b]"
                       />
 
                       <FieldHelp>
@@ -1667,7 +1667,7 @@ export default function AdminEventsPage() {
                           type="date"
                           value={editEventDate}
                           onChange={(e) => setEditEventDate(e.target.value)}
-                          className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-white outline-none focus:border-green-600"
+                          className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-white outline-none transition placeholder:text-zinc-600 hover:border-zinc-600 focus:border-[#6b7d3b] focus:ring-1 focus:ring-[#6b7d3b]"
                         />
 
                         <FieldHelp>Dzień, w którym odbędzie się szkolenie.</FieldHelp>
@@ -1682,7 +1682,7 @@ export default function AdminEventsPage() {
                           type="time"
                           value={editStartTime}
                           onChange={(e) => setEditStartTime(e.target.value)}
-                          className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-white outline-none focus:border-green-600"
+                          className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-white outline-none transition placeholder:text-zinc-600 hover:border-zinc-600 focus:border-[#6b7d3b] focus:ring-1 focus:ring-[#6b7d3b]"
                         />
 
                         <FieldHelp>Godzina startu szkolenia.</FieldHelp>
@@ -1697,7 +1697,7 @@ export default function AdminEventsPage() {
                           type="time"
                           value={editEndTime}
                           onChange={(e) => setEditEndTime(e.target.value)}
-                          className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-white outline-none focus:border-green-600"
+                          className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-white outline-none transition placeholder:text-zinc-600 hover:border-zinc-600 focus:border-[#6b7d3b] focus:ring-1 focus:ring-[#6b7d3b]"
                         />
 
                         <FieldHelp>Godzina zakończenia szkolenia.</FieldHelp>
@@ -1714,7 +1714,7 @@ export default function AdminEventsPage() {
                           value={editPrice}
                           onChange={(e) => setEditPrice(e.target.value)}
                           placeholder="Np. 250"
-                          className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-white outline-none focus:border-green-600"
+                          className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-white outline-none transition placeholder:text-zinc-600 hover:border-zinc-600 focus:border-[#6b7d3b] focus:ring-1 focus:ring-[#6b7d3b]"
                         />
 
                         <FieldHelp>Cena za jednego uczestnika.</FieldHelp>
@@ -1733,7 +1733,7 @@ export default function AdminEventsPage() {
                             setEditMaxParticipants(e.target.value)
                           }
                           placeholder="Np. 10"
-                          className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-white outline-none focus:border-green-600"
+                          className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-white outline-none transition placeholder:text-zinc-600 hover:border-zinc-600 focus:border-[#6b7d3b] focus:ring-1 focus:ring-[#6b7d3b]"
                         />
 
                         <FieldHelp>
@@ -1756,7 +1756,7 @@ export default function AdminEventsPage() {
                         value={editLocation}
                         onChange={(e) => setEditLocation(e.target.value)}
                         placeholder="Np. Oś 25 m, sala szkoleniowa, oś 100 m"
-                        className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-white outline-none focus:border-green-600"
+                        className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-white outline-none transition placeholder:text-zinc-600 hover:border-zinc-600 focus:border-[#6b7d3b] focus:ring-1 focus:ring-[#6b7d3b]"
                       />
 
                       <FieldHelp>
@@ -1801,7 +1801,7 @@ export default function AdminEventsPage() {
                                 key={lane.id}
                                 className={`flex min-h-11 max-w-full items-center gap-2 rounded-xl border px-3 py-2 text-sm font-semibold transition ${
                                   isSelected
-                                    ? "border-green-700 bg-green-950/50 text-green-100"
+                                    ? "border-[#6b7d3b] bg-[#29321c] text-lime-100"
                                     : "border-zinc-700 bg-zinc-900 text-zinc-200"
                                 } ${isDisabled ? "cursor-not-allowed opacity-60" : "cursor-pointer hover:border-zinc-500"}`}
                               >
@@ -1830,11 +1830,11 @@ export default function AdminEventsPage() {
                       )}
                     </div>
 
-                    <div className="rounded-xl border border-green-900 bg-green-950/40 p-4 text-sm text-green-200">
+                    <div className="rounded-xl border border-[#59663a] bg-[#252b1e] p-4 text-sm text-zinc-200">
                       <p className="font-semibold">
                         Wolnych miejsc nie edytujesz ręcznie
                       </p>
-                      <p className="mt-1 text-green-300">
+                      <p className="mt-1 text-zinc-400">
                         System wylicza je automatycznie z liczby miejsc i liczby
                         zapisanych uczestników.
                       </p>
@@ -1845,7 +1845,7 @@ export default function AdminEventsPage() {
                         type="button"
                         onClick={() => saveEditedEvent(event.id)}
                         disabled={editSubmitting}
-                        className="rounded-xl bg-green-700 px-5 py-3 text-sm font-semibold transition hover:bg-green-600 disabled:cursor-not-allowed disabled:opacity-60"
+                        className="rounded-xl border border-amber-700/70 bg-[#556b2f] px-5 py-3 text-sm font-semibold text-white transition hover:bg-[#657d3d] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 disabled:cursor-not-allowed disabled:opacity-60"
                       >
                         {editSubmitting ? "Zapisywanie…" : "Zapisz zmiany"}
                       </button>
@@ -1867,8 +1867,8 @@ export default function AdminEventsPage() {
                         <span
                           className={
                             event.is_active
-                              ? "mb-3 inline-block rounded-full bg-green-950 px-3 py-1 text-xs font-semibold text-green-400"
-                              : "mb-3 inline-block rounded-full bg-red-950 px-3 py-1 text-xs font-semibold text-red-400"
+                              ? "mb-3 inline-block rounded-full border border-[#6b7d3b] bg-[#29321c] px-3 py-1 text-xs font-semibold text-lime-100"
+                              : "mb-3 inline-block rounded-full border border-zinc-700 bg-zinc-800 px-3 py-1 text-xs font-semibold text-zinc-300"
                           }
                         >
                           {event.is_active ? "Aktywny" : "Ukryty"}
@@ -2288,7 +2288,7 @@ export default function AdminEventsPage() {
               aria-labelledby="create-event-confirmation-title"
               className="max-h-[calc(100vh-2rem)] w-full max-w-2xl overflow-y-auto rounded-3xl border border-zinc-700 bg-zinc-900 p-5 shadow-2xl sm:p-6"
             >
-              <p className="text-xs font-bold uppercase tracking-[0.2em] text-green-400">
+              <p className="text-xs font-bold uppercase tracking-[0.2em] text-amber-300">
                 Nowe wydarzenie
               </p>
               <h2
@@ -2369,7 +2369,7 @@ export default function AdminEventsPage() {
                   type="button"
                   onClick={confirmCreateEvent}
                   disabled={createSubmitting}
-                  className="rounded-xl bg-green-700 px-4 py-3 text-sm font-semibold text-white transition hover:bg-green-600 disabled:cursor-not-allowed disabled:opacity-60"
+                  className="rounded-xl border border-amber-700/70 bg-[#556b2f] px-4 py-3 text-sm font-semibold text-white transition hover:bg-[#657d3d] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   {createSubmitting ? "Dodawanie…" : "Potwierdź i dodaj"}
                 </button>
