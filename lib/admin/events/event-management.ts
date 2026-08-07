@@ -22,7 +22,8 @@ export type AdminEvent = {
   lanes: AdminEventLane[];
 };
 
-export type EventSortOrder = "newest" | "oldest";
+export type EventSortOrder = "nearest" | "latest";
+export type EventStatusFilter = "all" | "active" | "hidden";
 
 export type EventFormInput = {
   title: string;
@@ -221,7 +222,7 @@ export function sortAdminEvents(
   events: AdminEvent[],
   order: EventSortOrder
 ): AdminEvent[] {
-  const direction = order === "newest" ? -1 : 1;
+  const direction = order === "latest" ? -1 : 1;
 
   return [...events].sort((first, second) => {
     for (const key of ["event_date", "start_time", "created_at", "id"] as const) {
@@ -234,6 +235,21 @@ export function sortAdminEvents(
 
     return 0;
   });
+}
+
+export function filterAdminEvents(
+  events: AdminEvent[],
+  filter: EventStatusFilter
+): AdminEvent[] {
+  if (filter === "active") {
+    return events.filter((event) => event.is_active);
+  }
+
+  if (filter === "hidden") {
+    return events.filter((event) => !event.is_active);
+  }
+
+  return [...events];
 }
 
 export function normalizeActiveEventLanes(

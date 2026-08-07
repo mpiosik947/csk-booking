@@ -5,6 +5,7 @@ import {
   buildCreateEventPayload,
   buildSetEventActivePayload,
   buildUpdateEventPayload,
+  filterAdminEvents,
   getEditableEventLanes,
   getEventManagementMessage,
   normalizeActiveEventLanes,
@@ -14,6 +15,7 @@ import {
   type AdminEventLane,
   type CreateEventRpcPayload,
   type EventManagementMessage,
+  type EventStatusFilter,
   type EventSortOrder,
   validateEventForm,
   validateEventRpcResult,
@@ -251,7 +253,9 @@ export default function AdminEventsPage() {
   const [loading, setLoading] = useState(true);
   const [events, setEvents] = useState<AdminEvent[]>([]);
   const [eventSortOrder, setEventSortOrder] =
-    useState<EventSortOrder>("newest");
+    useState<EventSortOrder>("nearest");
+  const [eventStatusFilter, setEventStatusFilter] =
+    useState<EventStatusFilter>("all");
   const [selectedEventId, setSelectedEventId] = useState("");
   const [registrations, setRegistrations] = useState<Registration[]>([]);
   const [message, setMessage] = useState("");
@@ -1247,7 +1251,10 @@ export default function AdminEventsPage() {
   const selectedCreateLanes = activeLanes.filter((lane) =>
     createLaneIds.includes(lane.id)
   );
-  const sortedEvents = sortAdminEvents(events, eventSortOrder);
+  const visibleEvents = sortAdminEvents(
+    filterAdminEvents(events, eventStatusFilter),
+    eventSortOrder
+  );
 
   return (
     <main className="min-h-screen bg-[#141814] text-[#f2efe4]">
@@ -1578,27 +1585,57 @@ export default function AdminEventsPage() {
             </p>
           </div>
 
-          <label
-            htmlFor="event-sort-order"
-            className="flex w-full flex-col gap-2 text-sm font-semibold text-[#a9ada4] sm:w-auto"
-          >
-            Sortuj według daty
-            <select
-              id="event-sort-order"
-              value={eventSortOrder}
-              onChange={(event) =>
-                setEventSortOrder(event.target.value as EventSortOrder)
-              }
-              className="min-h-11 w-full rounded-xl border border-[#30372c] bg-[#191e19] px-4 py-2 text-[#f2efe4] outline-none transition hover:border-[#536143] focus-visible:border-[#536143] focus-visible:ring-2 focus-visible:ring-[#d7c895] sm:w-56"
+          <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
+            <label
+              htmlFor="event-sort-order"
+              className="flex w-full flex-col gap-2 text-sm font-semibold text-[#a9ada4] sm:w-56"
             >
-              <option value="newest">Najnowsze najpierw</option>
-              <option value="oldest">Najstarsze najpierw</option>
-            </select>
-          </label>
+              Kolejność szkoleń
+              <select
+                id="event-sort-order"
+                value={eventSortOrder}
+                onChange={(event) =>
+                  setEventSortOrder(event.target.value as EventSortOrder)
+                }
+                className="min-h-11 w-full rounded-xl border border-[#30372c] bg-[#191e19] px-4 py-2 text-[#f2efe4] outline-none transition hover:border-[#536143] focus-visible:border-[#536143] focus-visible:ring-2 focus-visible:ring-[#d7c895]"
+              >
+                <option value="nearest">Najbliższe terminy</option>
+                <option value="latest">Najpóźniejsze terminy</option>
+              </select>
+            </label>
+
+            <label
+              htmlFor="event-status-filter"
+              className="flex w-full flex-col gap-2 text-sm font-semibold text-[#a9ada4] sm:w-48"
+            >
+              Status
+              <select
+                id="event-status-filter"
+                value={eventStatusFilter}
+                onChange={(event) =>
+                  setEventStatusFilter(event.target.value as EventStatusFilter)
+                }
+                className="min-h-11 w-full rounded-xl border border-[#30372c] bg-[#191e19] px-4 py-2 text-[#f2efe4] outline-none transition hover:border-[#536143] focus-visible:border-[#536143] focus-visible:ring-2 focus-visible:ring-[#d7c895]"
+              >
+                <option value="all">Wszystkie</option>
+                <option value="active">Aktywne</option>
+                <option value="hidden">Ukryte</option>
+              </select>
+            </label>
+          </div>
         </div>
 
-        <div className="grid gap-6">
-          {sortedEvents.map((event) => {
+        {visibleEvents.length === 0 && !loading ? (
+          <div className="rounded-xl border border-[#30372c] bg-[#191e19] p-6 text-[#a9ada4]">
+            {eventStatusFilter === "active"
+              ? "Brak aktywnych szkoleń."
+              : eventStatusFilter === "hidden"
+                ? "Brak ukrytych szkoleń."
+                : "Brak szkoleń."}
+          </div>
+        ) : (
+          <div className="grid gap-6">
+            {visibleEvents.map((event) => {
             const selectedRegistrations =
               selectedEventId === event.id ? registrations : [];
 
@@ -2286,8 +2323,9 @@ export default function AdminEventsPage() {
                 )}
               </div>
             );
-          })}
-        </div>
+            })}
+          </div>
+        )}
 
         <div className="mt-8 flex flex-col gap-3 sm:flex-row">
           <a

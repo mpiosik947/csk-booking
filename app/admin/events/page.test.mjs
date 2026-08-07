@@ -95,7 +95,7 @@ test("event loading ignores stale responses and clears only its own old error", 
   assert.doesNotMatch(loadEvents, /setMessage\(""\)/);
 });
 
-test("event list sorting is local, accessible, and keeps event loading unchanged", async () => {
+test("event list controls are local, accessible, and keep event loading unchanged", async () => {
   const source = await readAdminPage();
   const loadEvents = functionSource(
     source,
@@ -103,16 +103,34 @@ test("event list sorting is local, accessible, and keeps event loading unchanged
     "async function loadRegistrations("
   );
 
-  assert.match(source, /useState<EventSortOrder>\("newest"\)/);
-  assert.match(source, /Sortuj według daty/);
-  assert.match(source, /<option value="newest">Najnowsze najpierw<\/option>/);
-  assert.match(source, /<option value="oldest">Najstarsze najpierw<\/option>/);
+  assert.match(source, /useState<EventSortOrder>\("nearest"\)/);
+  assert.match(source, /Kolejność szkoleń/);
+  assert.match(source, /<option value="nearest">Najbliższe terminy<\/option>/);
+  assert.match(source, /<option value="latest">Najpóźniejsze terminy<\/option>/);
   assert.match(source, /htmlFor="event-sort-order"/);
   assert.match(source, /id="event-sort-order"/);
-  assert.match(source, /const sortedEvents = sortAdminEvents\(events, eventSortOrder\)/);
-  assert.match(source, /sortedEvents\.map\(\(event\) =>/);
-  assert.doesNotMatch(loadEvents, /eventSortOrder|sortAdminEvents/);
+  assert.match(source, /useState<EventStatusFilter>\("all"\)/);
+  assert.match(source, /Status/);
+  assert.match(source, /<option value="all">Wszystkie<\/option>/);
+  assert.match(source, /<option value="active">Aktywne<\/option>/);
+  assert.match(source, /<option value="hidden">Ukryte<\/option>/);
+  assert.match(source, /htmlFor="event-status-filter"/);
+  assert.match(source, /id="event-status-filter"/);
+  assert.match(source, /const visibleEvents = sortAdminEvents\([\s\S]*filterAdminEvents\(events, eventStatusFilter\)/);
+  assert.match(source, /visibleEvents\.map\(\(event\) =>/);
+  assert.doesNotMatch(loadEvents, /eventSortOrder|eventStatusFilter|sortAdminEvents|filterAdminEvents/);
   assert.doesNotMatch(source, /onChange=\{[^}]*loadEvents/);
+});
+
+test("event status filter has safe empty states and does not alter management RPCs", async () => {
+  const source = await readAdminPage();
+
+  assert.match(source, /Brak aktywnych szkoleń\./);
+  assert.match(source, /Brak ukrytych szkoleń\./);
+  assert.match(source, /Brak szkoleń\./);
+  assert.match(source, /\.rpc\("admin_create_event", payload\)/);
+  assert.match(source, /\.rpc\("admin_update_event", payload\.value\)/);
+  assert.match(source, /\.rpc\(\s*"admin_set_event_active",\s*payload\.value\s*\)/);
 });
 
 test("event card actions use the dashboard palette without a blue edit accent", async () => {
