@@ -9,10 +9,12 @@ import {
   getEventManagementMessage,
   normalizeActiveEventLanes,
   normalizeAdminEvent,
+  sortAdminEvents,
   type AdminEvent,
   type AdminEventLane,
   type CreateEventRpcPayload,
   type EventManagementMessage,
+  type EventSortOrder,
   validateEventForm,
   validateEventRpcResult,
 } from "../../../lib/admin/events/event-management";
@@ -158,13 +160,13 @@ function getCancelledRegistrations(registrations: Registration[]) {
 
 function EventLanesSummary({ lanes }: { lanes: AdminEvent["lanes"] }) {
   return (
-    <div className="mt-4 rounded-xl border border-zinc-800 bg-zinc-950 p-4">
-      <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
+    <div className="mt-4 rounded-xl border border-[#30372c] bg-[#141814] p-4">
+      <p className="text-xs font-semibold uppercase tracking-wide text-[#858c7f]">
         Zajmowane osie
       </p>
 
       {lanes.length === 0 ? (
-        <p className="mt-2 text-sm text-zinc-400">
+        <p className="mt-2 text-sm text-[#a9ada4]">
           Event globalny — nie blokuje osi
         </p>
       ) : (
@@ -172,7 +174,7 @@ function EventLanesSummary({ lanes }: { lanes: AdminEvent["lanes"] }) {
           {lanes.map((lane) => (
             <span
               key={lane.id}
-              className="inline-flex max-w-full flex-wrap items-center gap-2 rounded-full border border-zinc-700 bg-zinc-900 px-3 py-1.5 text-sm font-semibold text-zinc-200"
+              className="inline-flex max-w-full flex-wrap items-center gap-2 rounded-full border border-[#536143] bg-[#191e19] px-3 py-1.5 text-sm font-semibold text-[#f2efe4]"
             >
               <span className="break-words">{lane.name}</span>
               {!lane.is_active && (
@@ -248,6 +250,8 @@ function LaneSelectionSummary({ lanes }: { lanes: AdminEventLane[] }) {
 export default function AdminEventsPage() {
   const [loading, setLoading] = useState(true);
   const [events, setEvents] = useState<AdminEvent[]>([]);
+  const [eventSortOrder, setEventSortOrder] =
+    useState<EventSortOrder>("newest");
   const [selectedEventId, setSelectedEventId] = useState("");
   const [registrations, setRegistrations] = useState<Registration[]>([]);
   const [message, setMessage] = useState("");
@@ -1243,6 +1247,7 @@ export default function AdminEventsPage() {
   const selectedCreateLanes = activeLanes.filter((lane) =>
     createLaneIds.includes(lane.id)
   );
+  const sortedEvents = sortAdminEvents(events, eventSortOrder);
 
   return (
     <main className="min-h-screen bg-[#141814] text-[#f2efe4]">
@@ -1560,13 +1565,40 @@ export default function AdminEventsPage() {
         )}
 
         {loading && (
-          <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-6 text-zinc-400">
+          <div className="rounded-xl border border-[#30372c] bg-[#191e19] p-6 text-[#a9ada4]">
             Ładowanie szkoleń...
           </div>
         )}
 
+        <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <h2 className="text-xl font-bold text-[#f2efe4]">Lista szkoleń</h2>
+            <p className="mt-1 text-sm text-[#858c7f]">
+              Kolejność dotyczy wyłącznie daty i godziny wydarzenia.
+            </p>
+          </div>
+
+          <label
+            htmlFor="event-sort-order"
+            className="flex w-full flex-col gap-2 text-sm font-semibold text-[#a9ada4] sm:w-auto"
+          >
+            Sortuj według daty
+            <select
+              id="event-sort-order"
+              value={eventSortOrder}
+              onChange={(event) =>
+                setEventSortOrder(event.target.value as EventSortOrder)
+              }
+              className="min-h-11 w-full rounded-xl border border-[#30372c] bg-[#191e19] px-4 py-2 text-[#f2efe4] outline-none transition hover:border-[#536143] focus-visible:border-[#536143] focus-visible:ring-2 focus-visible:ring-[#d7c895] sm:w-56"
+            >
+              <option value="newest">Najnowsze najpierw</option>
+              <option value="oldest">Najstarsze najpierw</option>
+            </select>
+          </label>
+        </div>
+
         <div className="grid gap-6">
-          {events.map((event) => {
+          {sortedEvents.map((event) => {
             const selectedRegistrations =
               selectedEventId === event.id ? registrations : [];
 
@@ -1867,64 +1899,64 @@ export default function AdminEventsPage() {
                         <span
                           className={
                             event.is_active
-                              ? "mb-3 inline-block rounded-full border border-[#3f6848] bg-[#1b2a1d] px-3 py-1 text-xs font-semibold text-[#a9d4ad]"
-                              : "mb-3 inline-block rounded-full border border-[#343a31] bg-[#171a17] px-3 py-1 text-xs font-semibold text-[#a9ada4]"
+                              ? "mb-3 inline-block rounded-full border border-[#536143] bg-[#191e19] px-3 py-1 text-xs font-semibold text-[#d7c895]"
+                              : "mb-3 inline-block rounded-full border border-[#30372c] bg-[#141814] px-3 py-1 text-xs font-semibold text-[#a9ada4]"
                           }
                         >
                           {event.is_active ? "Aktywny" : "Ukryty"}
                         </span>
 
-                        <h2 className="mb-3 break-words text-2xl font-bold sm:text-3xl">
+                        <h2 className="mb-3 break-words text-2xl font-bold text-[#f2efe4] sm:text-3xl">
                           {event.title}
                         </h2>
 
-                        <p className="mb-5 whitespace-pre-line text-zinc-300">
+                        <p className="mb-5 whitespace-pre-line text-[#a9ada4]">
                           {event.description}
                         </p>
 
-                        <div className="grid gap-3 text-sm text-zinc-400 sm:grid-cols-2 xl:grid-cols-5">
-                          <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-3">
-                            <p className="mb-1 text-zinc-500">Data</p>
-                            <p className="font-semibold text-white">
+                        <div className="grid gap-3 text-sm text-[#a9ada4] sm:grid-cols-2 xl:grid-cols-5">
+                          <div className="rounded-xl border border-[#30372c] bg-[#141814] p-3">
+                            <p className="mb-1 text-[#858c7f]">Data</p>
+                            <p className="font-semibold text-[#f2efe4]">
                               {event.event_date}
                             </p>
                           </div>
 
-                          <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-3">
-                            <p className="mb-1 text-zinc-500">Godzina</p>
-                            <p className="font-semibold text-white">
+                          <div className="rounded-xl border border-[#30372c] bg-[#141814] p-3">
+                            <p className="mb-1 text-[#858c7f]">Godzina</p>
+                            <p className="font-semibold text-[#f2efe4]">
                               {event.start_time.slice(0, 5)} -{" "}
                               {event.end_time.slice(0, 5)}
                             </p>
                           </div>
 
-                          <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-3">
-                            <p className="mb-1 text-zinc-500">Miejsce</p>
-                            <p className="font-semibold text-white">
+                          <div className="rounded-xl border border-[#30372c] bg-[#141814] p-3">
+                            <p className="mb-1 text-[#858c7f]">Miejsce</p>
+                            <p className="font-semibold text-[#f2efe4]">
                               {event.location}
                             </p>
                           </div>
 
-                          <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-3">
-                            <p className="mb-1 text-zinc-500">Cena</p>
-                            <p className="font-semibold text-green-500">
+                          <div className="rounded-xl border border-[#30372c] bg-[#141814] p-3">
+                            <p className="mb-1 text-[#858c7f]">Cena</p>
+                            <p className="font-semibold text-[#d7c895]">
                               {Number(event.price).toFixed(0)} zł
                             </p>
                           </div>
 
-                          <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-3">
-                            <p className="mb-1 text-zinc-500">Miejsca</p>
-                            <p className="font-semibold text-white">
+                          <div className="rounded-xl border border-[#30372c] bg-[#141814] p-3">
+                            <p className="mb-1 text-[#858c7f]">Miejsca</p>
+                            <p className="font-semibold text-[#f2efe4]">
                               Limit: {event.max_participants}
                             </p>
                             {freePlaces !== null && (
-                              <p className="mt-1 text-xs font-semibold text-green-400">
+                              <p className="mt-1 text-xs font-semibold text-[#d7c895]">
                                 Wolne: {freePlaces}
                               </p>
                             )}
 
                             {selectedEventId === event.id && (
-                              <div className="mt-3 space-y-1 border-t border-zinc-800 pt-3 text-xs">
+                              <div className="mt-3 space-y-1 border-t border-[#30372c] pt-3 text-xs">
                                 <p className="font-semibold text-green-400">
                                   Uczestnicy: {activeRegistrationsCount} / {event.max_participants}
                                 </p>
@@ -1948,7 +1980,7 @@ export default function AdminEventsPage() {
                             type="button"
                             onClick={() => startEditing(event)}
                             disabled={editSubmitting || isTogglePending}
-                            className="rounded-xl border border-blue-800 px-4 py-3 text-sm font-semibold text-blue-300 transition hover:bg-blue-950 disabled:cursor-not-allowed disabled:opacity-60"
+                            className="rounded-xl border border-[#30372c] bg-[#141814] px-4 py-3 text-sm font-semibold text-[#f2efe4] transition hover:border-[#536143] hover:bg-[#191e19] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d7c895] focus-visible:ring-offset-2 focus-visible:ring-offset-[#141814] disabled:cursor-not-allowed disabled:opacity-60"
                           >
                             Edytuj szkolenie
                           </button>
@@ -1957,7 +1989,7 @@ export default function AdminEventsPage() {
                         <button
                           type="button"
                           onClick={() => loadRegistrations(event.id)}
-                          className="rounded-xl border border-zinc-700 px-4 py-3 text-sm font-semibold transition hover:bg-zinc-800"
+                          className="rounded-xl border border-[#30372c] bg-[#141814] px-4 py-3 text-sm font-semibold text-[#a9ada4] transition hover:border-[#536143] hover:text-[#f2efe4] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d7c895] focus-visible:ring-offset-2 focus-visible:ring-offset-[#141814]"
                         >
                           Pokaż zapisanych
                         </button>
@@ -1971,8 +2003,8 @@ export default function AdminEventsPage() {
                             disabled={isTogglePending || editingEventId === event.id}
                             className={
                               event.is_active
-                                ? "rounded-xl border border-red-800 px-4 py-3 text-sm font-semibold text-red-400 transition hover:bg-red-950 disabled:cursor-not-allowed disabled:opacity-60"
-                                : "rounded-xl border border-green-800 px-4 py-3 text-sm font-semibold text-green-400 transition hover:bg-green-950 disabled:cursor-not-allowed disabled:opacity-60"
+                                ? "rounded-xl border border-[#30372c] bg-[#141814] px-4 py-3 text-sm font-semibold text-[#a9ada4] transition hover:border-[#536143] hover:text-[#f2efe4] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d7c895] focus-visible:ring-offset-2 focus-visible:ring-offset-[#141814] disabled:cursor-not-allowed disabled:opacity-60"
+                                : "rounded-xl border border-[#536143] bg-[#536143] px-4 py-3 text-sm font-semibold text-[#f2efe4] transition hover:border-[#78865f] hover:bg-[#78865f] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d7c895] focus-visible:ring-offset-2 focus-visible:ring-offset-[#141814] disabled:cursor-not-allowed disabled:opacity-60"
                             }
                           >
                             {isTogglePending
@@ -2260,14 +2292,14 @@ export default function AdminEventsPage() {
         <div className="mt-8 flex flex-col gap-3 sm:flex-row">
           <a
             href="/admin"
-            className="rounded-xl border border-zinc-700 px-5 py-3 text-center text-sm font-semibold text-zinc-300 transition hover:bg-zinc-900"
+            className="rounded-xl border border-[#30372c] bg-[#141814] px-5 py-3 text-center text-sm font-semibold text-[#a9ada4] transition hover:border-[#536143] hover:text-[#f2efe4] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d7c895] focus-visible:ring-offset-2 focus-visible:ring-offset-[#141814]"
           >
             ← Panel administratora
           </a>
 
           <a
             href="/events"
-            className="rounded-xl bg-green-700 px-5 py-3 text-center text-sm font-semibold text-white transition hover:bg-green-600"
+            className="rounded-xl border border-[#536143] bg-[#536143] px-5 py-3 text-center text-sm font-semibold text-[#f2efe4] transition hover:border-[#78865f] hover:bg-[#78865f] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d7c895] focus-visible:ring-offset-2 focus-visible:ring-offset-[#141814]"
           >
             Zobacz stronę szkoleń
           </a>

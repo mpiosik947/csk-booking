@@ -22,6 +22,8 @@ export type AdminEvent = {
   lanes: AdminEventLane[];
 };
 
+export type EventSortOrder = "newest" | "oldest";
+
 export type EventFormInput = {
   title: string;
   description: string;
@@ -213,6 +215,25 @@ function compareLaneCandidates(first: AdminEventLane, second: AdminEventLane) {
   return typeComparison !== 0
     ? typeComparison
     : Number(second.is_active) - Number(first.is_active);
+}
+
+export function sortAdminEvents(
+  events: AdminEvent[],
+  order: EventSortOrder
+): AdminEvent[] {
+  const direction = order === "newest" ? -1 : 1;
+
+  return [...events].sort((first, second) => {
+    for (const key of ["event_date", "start_time", "created_at", "id"] as const) {
+      const comparison = first[key].localeCompare(second[key]);
+
+      if (comparison !== 0) {
+        return comparison * direction;
+      }
+    }
+
+    return 0;
+  });
 }
 
 export function normalizeActiveEventLanes(

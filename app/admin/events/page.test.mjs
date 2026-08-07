@@ -67,7 +67,12 @@ test("event loading fails closed without replacing a valid list", async () => {
   assert.match(loadEvents, /if \(!Array\.isArray\(data\)\)[\s\S]*return;/);
   assert.match(loadEvents, /if \(!normalized\.ok\)[\s\S]*setMessage\(EVENTS_LOAD_ERROR_MESSAGE\);[\s\S]*return;/);
   assert.ok(loadEvents.indexOf("normalizeAdminEvent(record)") < loadEvents.indexOf("setEvents(normalizedEvents)"));
-  assert.equal(source.includes(`const EVENTS_LOAD_ERROR_MESSAGE =\n  "${safeMessage}";`), true);
+  assert.match(
+    source,
+    new RegExp(
+      `const EVENTS_LOAD_ERROR_MESSAGE =\\r?\\n  "${safeMessage}";`
+    )
+  );
   assert.doesNotMatch(loadEvents, /error\.message|console\.(?:log|error|warn)/);
 });
 
@@ -88,6 +93,42 @@ test("event loading ignores stale responses and clears only its own old error", 
     /setMessage\(\(current\) =>\s*current === EVENTS_LOAD_ERROR_MESSAGE \? "" : current\s*\)/
   );
   assert.doesNotMatch(loadEvents, /setMessage\(""\)/);
+});
+
+test("event list sorting is local, accessible, and keeps event loading unchanged", async () => {
+  const source = await readAdminPage();
+  const loadEvents = functionSource(
+    source,
+    "async function loadEvents()",
+    "async function loadRegistrations("
+  );
+
+  assert.match(source, /useState<EventSortOrder>\("newest"\)/);
+  assert.match(source, /Sortuj według daty/);
+  assert.match(source, /<option value="newest">Najnowsze najpierw<\/option>/);
+  assert.match(source, /<option value="oldest">Najstarsze najpierw<\/option>/);
+  assert.match(source, /htmlFor="event-sort-order"/);
+  assert.match(source, /id="event-sort-order"/);
+  assert.match(source, /const sortedEvents = sortAdminEvents\(events, eventSortOrder\)/);
+  assert.match(source, /sortedEvents\.map\(\(event\) =>/);
+  assert.doesNotMatch(loadEvents, /eventSortOrder|sortAdminEvents/);
+  assert.doesNotMatch(source, /onChange=\{[^}]*loadEvents/);
+});
+
+test("event card actions use the dashboard palette without a blue edit accent", async () => {
+  const source = await readAdminPage();
+  const actions = functionSource(
+    source,
+    '<div className="flex w-full flex-col gap-3 lg:w-56 lg:shrink-0">',
+    "{selectedEventId === event.id && ("
+  );
+
+  assert.doesNotMatch(actions, /border-blue-800|text-blue-300|hover:bg-blue-950/);
+  assert.match(actions, /Edytuj szkolenie/);
+  assert.match(actions, /Pokaż zapisanych/);
+  assert.match(actions, /bg-\[#536143\][\s\S]*hover:bg-\[#78865f\]/);
+  assert.match(source, /Zobacz stronę szkoleń/);
+  assert.match(actions, /border-\[#30372c\][\s\S]*focus-visible:ring-\[#d7c895\]/);
 });
 
 test("startEditing safely maps nullable values and PostgreSQL times", async () => {
