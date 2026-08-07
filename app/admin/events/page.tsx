@@ -11,6 +11,7 @@ import {
   normalizeAdminEvent,
   type AdminEvent,
   type AdminEventLane,
+  type CreateEventRpcPayload,
   type EventManagementMessage,
   validateEventForm,
   validateEventRpcResult,
@@ -24,6 +25,26 @@ const EVENTS_LOAD_ERROR_MESSAGE =
 const ACTIVE_LANES_LOAD_ERROR_MESSAGE = "Nie udało się wczytać listy osi.";
 
 type CreateFormMessage = Pick<EventManagementMessage, "message" | "kind">;
+
+type CreateConfirmationSnapshot = {
+  payload: CreateEventRpcPayload;
+  lanes: AdminEventLane[];
+};
+
+function formatConfirmationDate(value: string) {
+  return new Intl.DateTimeFormat("pl-PL", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  }).format(new Date(`${value}T12:00:00`));
+}
+
+function formatConfirmationPrice(value: number) {
+  return new Intl.NumberFormat("pl-PL", {
+    style: "currency",
+    currency: "PLN",
+  }).format(value);
+}
 
 type ApproveRegistrationResult = {
   ok: boolean;
@@ -242,6 +263,8 @@ export default function AdminEventsPage() {
   const [createMessage, setCreateMessage] = useState<CreateFormMessage | null>(
     null
   );
+  const [createConfirmation, setCreateConfirmation] =
+    useState<CreateConfirmationSnapshot | null>(null);
   const [editMessage, setEditMessage] = useState<CreateFormMessage | null>(
     null
   );
@@ -259,6 +282,7 @@ export default function AdminEventsPage() {
   const activeLanesRequestRef = useRef(0);
   const componentMountedRef = useRef(true);
   const createSubmittingRef = useRef(false);
+  const createConfirmationButtonRef = useRef<HTMLButtonElement>(null);
   const editSubmittingRef = useRef(false);
   const eventToggleLocksRef = useRef(new Set<string>());
   const editInitialInactiveLaneIdsRef = useRef<string[]>([]);
@@ -288,6 +312,29 @@ export default function AdminEventsPage() {
   const [editSubmitting, setEditSubmitting] = useState(false);
 
   const canManageEvents = userRole === "admin" || userRole === "pracownik";
+
+  useEffect(() => {
+    if (!createConfirmation || createSubmitting) {
+      return;
+    }
+
+    createConfirmationButtonRef.current?.focus();
+  }, [createConfirmation, createSubmitting]);
+
+  useEffect(() => {
+    if (!createConfirmation) {
+      return;
+    }
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape" && !createSubmittingRef.current) {
+        setCreateConfirmation(null);
+      }
+    }
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [createConfirmation]);
 
   useEffect(() => {
     componentMountedRef.current = true;
@@ -450,7 +497,7 @@ export default function AdminEventsPage() {
     setRegistrations((data ?? []) as Registration[]);
   }
 
-  async function createEvent() {
+  function openCreateConfirmation() {
     if (!canManageEvents || createSubmittingRef.current) {
       return;
     }
@@ -481,7 +528,33 @@ export default function AdminEventsPage() {
     }
 
     const payload = buildCreateEventPayload(form.value);
-    const laneNames = new Map(activeLanes.map((lane) => [lane.id, lane.name]));
+    const selectedLanes = activeLanes.filter((lane) =>
+      payload.p_lane_ids.includes(lane.id)
+    );
+
+    setCreateMessage(null);
+    setCreateConfirmation({ payload, lanes: selectedLanes });
+  }
+
+  function closeCreateConfirmation() {
+    if (createSubmittingRef.current) {
+      return;
+    }
+
+    setCreateConfirmation(null);
+  }
+
+  async function confirmCreateEvent() {
+    if (
+      !canManageEvents ||
+      createSubmittingRef.current ||
+      !createConfirmation
+    ) {
+      return;
+    }
+
+    const { payload, lanes } = createConfirmation;
+    const laneNames = new Map(lanes.map((lane) => [lane.id, lane.name]));
     createSubmittingRef.current = true;
     setCreateSubmitting(true);
     setCreateMessage(null);
@@ -516,6 +589,7 @@ export default function AdminEventsPage() {
       setPrice("");
       setMaxParticipants("10");
       setCreateLaneIds([]);
+      setCreateConfirmation(null);
       void loadEvents();
     } catch {
       setCreateMessage(
@@ -1470,7 +1544,7 @@ export default function AdminEventsPage() {
 
               <button
                 type="button"
-                onClick={createEvent}
+                onClick={openCreateConfirmation}
                 disabled={
                   createSubmitting ||
                   activeLanesLoading ||
@@ -2198,6 +2272,111 @@ export default function AdminEventsPage() {
             Zobacz stronę szkoleń
           </a>
         </div>
+
+        {createConfirmation && (
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
+            onMouseDown={(event) => {
+              if (event.target === event.currentTarget) {
+                closeCreateConfirmation();
+              }
+            }}
+          >
+            <div
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="create-event-confirmation-title"
+              className="max-h-[calc(100vh-2rem)] w-full max-w-2xl overflow-y-auto rounded-3xl border border-zinc-700 bg-zinc-900 p-5 shadow-2xl sm:p-6"
+            >
+              <p className="text-xs font-bold uppercase tracking-[0.2em] text-green-400">
+                Nowe wydarzenie
+              </p>
+              <h2
+                id="create-event-confirmation-title"
+                className="mt-2 text-2xl font-bold text-white"
+              >
+                Potwierdź dodanie szkolenia
+              </h2>
+              <p className="mt-2 text-sm text-zinc-400">
+                Sprawdź dane przed utworzeniem wydarzenia.
+              </p>
+
+              <div className="mt-6 grid gap-3 text-sm sm:grid-cols-2">
+                <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-3 sm:col-span-2">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
+                    Nazwa szkolenia
+                  </p>
+                  <p className="mt-1 break-words font-semibold text-white">
+                    {createConfirmation.payload.p_title}
+                  </p>
+                </div>
+                <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-3">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">Data</p>
+                  <p className="mt-1 font-semibold text-white">
+                    {formatConfirmationDate(createConfirmation.payload.p_event_date)}
+                  </p>
+                </div>
+                <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-3">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">Godzina</p>
+                  <p className="mt-1 font-semibold text-white">
+                    {createConfirmation.payload.p_start_time}–{createConfirmation.payload.p_end_time}
+                  </p>
+                </div>
+                <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-3">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">Lokalizacja</p>
+                  <p className="mt-1 break-words font-semibold text-white">
+                    {createConfirmation.payload.p_location || "Nie podano"}
+                  </p>
+                </div>
+                <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-3">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">Cena i limit</p>
+                  <p className="mt-1 font-semibold text-white">
+                    {formatConfirmationPrice(createConfirmation.payload.p_price)} · {createConfirmation.payload.p_max_participants} osób
+                  </p>
+                </div>
+              </div>
+
+              {createConfirmation.payload.p_description && (
+                <div className="mt-3 rounded-xl border border-zinc-800 bg-zinc-950 p-3 text-sm">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">Opis</p>
+                  <p className="mt-1 line-clamp-3 break-words text-zinc-300">
+                    {createConfirmation.payload.p_description}
+                  </p>
+                </div>
+              )}
+
+              <div className="mt-3">
+                <LaneSelectionSummary lanes={createConfirmation.lanes} />
+              </div>
+
+              {createMessage?.kind === "error" && (
+                <div className="mt-3 rounded-xl border border-red-800 bg-red-950 p-3 text-sm font-semibold text-red-300">
+                  {createMessage.message}
+                </div>
+              )}
+
+              <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+                <button
+                  ref={createConfirmationButtonRef}
+                  type="button"
+                  onClick={closeCreateConfirmation}
+                  disabled={createSubmitting}
+                  className="rounded-xl border border-zinc-700 px-4 py-3 text-sm font-semibold text-zinc-200 transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  Wróć do edycji
+                </button>
+                <button
+                  type="button"
+                  onClick={confirmCreateEvent}
+                  disabled={createSubmitting}
+                  className="rounded-xl bg-green-700 px-4 py-3 text-sm font-semibold text-white transition hover:bg-green-600 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {createSubmitting ? "Dodawanie…" : "Potwierdź i dodaj"}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </section>
     </main>
   );

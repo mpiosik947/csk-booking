@@ -110,9 +110,14 @@ test("startEditing safely maps nullable values and PostgreSQL times", async () =
 test("create, edit, and toggle use their atomic RPCs while public events remain separate", async () => {
   const adminSource = await readAdminPage();
   const publicSource = await readFile(publicPageUrl, "utf8");
-  const createEvent = functionSource(
+  const openCreateConfirmation = functionSource(
     adminSource,
-    "async function createEvent()",
+    "function openCreateConfirmation()",
+    "function closeCreateConfirmation()"
+  );
+  const confirmCreateEvent = functionSource(
+    adminSource,
+    "async function confirmCreateEvent()",
     "function toggleCreateLane("
   );
   const saveEditedEvent = functionSource(
@@ -126,9 +131,10 @@ test("create, edit, and toggle use their atomic RPCs while public events remain 
     "function beginRegistrationAction("
   );
 
-  assert.match(createEvent, /buildCreateEventPayload\(form\.value\)/);
-  assert.match(createEvent, /\.rpc\("admin_create_event", payload\)/);
-  assert.doesNotMatch(createEvent, /\.from\("events"\)\.insert\(/);
+  assert.match(openCreateConfirmation, /buildCreateEventPayload\(form\.value\)/);
+  assert.doesNotMatch(openCreateConfirmation, /\.rpc\("admin_create_event", payload\)/);
+  assert.match(confirmCreateEvent, /\.rpc\("admin_create_event", payload\)/);
+  assert.doesNotMatch(confirmCreateEvent, /\.from\("events"\)\.insert\(/);
   assert.match(saveEditedEvent, /buildUpdateEventPayload\(eventId, form\.value\)/);
   assert.match(saveEditedEvent, /\.rpc\("admin_update_event", payload\.value\)/);
   assert.doesNotMatch(saveEditedEvent, /\.from\("events"\)[\s\S]*\.update\(/);
@@ -375,30 +381,61 @@ test("edit form preserves assigned inactive lanes and saves only through admin_u
   assert.match(source, /onClick=\{\(\) => startEditing\(event\)\}[\s\S]*disabled=\{editSubmitting \|\| isTogglePending\}/);
 });
 
-test("create validates and maps only safe RPC results before its success-only reset", async () => {
+test("create confirmation validates once and executes only the approved snapshot", async () => {
   const source = await readAdminPage();
-  const createEvent = functionSource(
+  const openCreateConfirmation = functionSource(
     source,
-    "async function createEvent()",
+    "function openCreateConfirmation()",
+    "function closeCreateConfirmation()"
+  );
+  const confirmCreateEvent = functionSource(
+    source,
+    "async function confirmCreateEvent()",
     "function toggleCreateLane("
   );
 
   assert.match(source, /const createSubmittingRef = useRef\(false\)/);
-  assert.match(createEvent, /createSubmittingRef\.current/);
-  assert.match(createEvent, /validateEventForm\(\{/);
-  assert.match(createEvent, /laneIds: createLaneIds/);
-  assert.match(createEvent, /validateEventRpcResult\(data\)/);
-  assert.match(createEvent, /getEventManagementMessage\(/);
+  assert.match(source, /const \[createConfirmation, setCreateConfirmation\] =/);
+  assert.match(openCreateConfirmation, /validateEventForm\(\{/);
+  assert.match(openCreateConfirmation, /laneIds: createLaneIds/);
+  assert.match(openCreateConfirmation, /setCreateConfirmation\(\{ payload, lanes: selectedLanes \}\)/);
+  assert.doesNotMatch(confirmCreateEvent, /validateEventForm\(/);
+  assert.doesNotMatch(confirmCreateEvent, /buildCreateEventPayload\(/);
+  assert.match(confirmCreateEvent, /const \{ payload, lanes \} = createConfirmation/);
+  assert.match(confirmCreateEvent, /createSubmittingRef\.current/);
+  assert.match(confirmCreateEvent, /validateEventRpcResult\(data\)/);
+  assert.match(confirmCreateEvent, /getEventManagementMessage\(/);
   assert.match(
-    createEvent,
-    /new Map\(activeLanes\.map\(\(lane\) => \[lane\.id, lane\.name\]\)\)/
+    confirmCreateEvent,
+    /new Map\(lanes\.map\(\(lane\) => \[lane\.id, lane\.name\]\)\)/
   );
-  assert.match(createEvent, /result\.value\.code !== "created"/);
-  assert.match(createEvent, /setCreateLaneIds\(\[\]\)/);
-  assert.match(createEvent, /void loadEvents\(\)/);
-  assert.match(createEvent, /finally \{[\s\S]*createSubmittingRef\.current = false[\s\S]*setCreateSubmitting\(false\)/);
-  assert.doesNotMatch(createEvent, /error\.message|event_id|conflict_lane_id/);
-  assert.ok(createEvent.indexOf('result.value.code !== "created"') < createEvent.indexOf("setTitle(\"\")"));
+  assert.match(confirmCreateEvent, /result\.value\.code !== "created"/);
+  assert.match(confirmCreateEvent, /setCreateLaneIds\(\[\]\)/);
+  assert.match(confirmCreateEvent, /setCreateConfirmation\(null\)/);
+  assert.match(confirmCreateEvent, /void loadEvents\(\)/);
+  assert.match(confirmCreateEvent, /finally \{[\s\S]*createSubmittingRef\.current = false[\s\S]*setCreateSubmitting\(false\)/);
+  assert.doesNotMatch(confirmCreateEvent, /error\.message|event_id|conflict_lane_id/);
+  assert.ok(confirmCreateEvent.indexOf('result.value.code !== "created"') < confirmCreateEvent.indexOf("setTitle(\"\")"));
+});
+
+test("create confirmation modal is accessible, preserves form state, and blocks unsafe closing during submission", async () => {
+  const source = await readAdminPage();
+
+  assert.match(source, /role="dialog"/);
+  assert.match(source, /aria-modal="true"/);
+  assert.match(source, /aria-labelledby="create-event-confirmation-title"/);
+  assert.match(source, /Potwierdź dodanie szkolenia/);
+  assert.match(source, /Sprawdź dane przed utworzeniem wydarzenia/);
+  assert.match(source, /formatConfirmationDate\(/);
+  assert.match(source, /formatConfirmationPrice\(/);
+  assert.match(source, /Nie podano/);
+  assert.match(source, /<LaneSelectionSummary lanes=\{createConfirmation\.lanes\} \/>/);
+  assert.match(source, /Wróć do edycji/);
+  assert.match(source, /Potwierdź i dodaj/);
+  assert.match(source, /if \(event\.key === "Escape" && !createSubmittingRef\.current\)/);
+  assert.match(source, /if \(event\.target === event\.currentTarget\) \{[\s\S]*closeCreateConfirmation\(\)/);
+  assert.match(source, /disabled=\{createSubmitting\}/);
+  assert.doesNotMatch(source, /p_lane_ids\}/);
 });
 
 test("create button fails closed while lanes are unknown, loading, or unavailable", async () => {
@@ -415,7 +452,8 @@ test("public events remain unchanged while lane selection does not alter existin
 
   assert.doesNotMatch(publicSource, /EventLanesSummary|Zajmowane osie/);
   assert.doesNotMatch(publicSource, /createLaneIds|admin_create_event/);
-  assert.match(adminSource, /async function createEvent\(\)/);
+  assert.match(adminSource, /function openCreateConfirmation\(\)/);
+  assert.match(adminSource, /async function confirmCreateEvent\(\)/);
   assert.match(adminSource, /function startEditing\(event: AdminEvent\)/);
   assert.match(adminSource, /async function saveEditedEvent\(eventId: string\)/);
   assert.match(adminSource, /async function toggleEvent\(/);
