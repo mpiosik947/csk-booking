@@ -3,6 +3,20 @@ export type BookingTimeRange = {
   endTime: string;
 };
 
+export type BookingBusyType = "reservation" | "lane_block" | "event";
+
+export type BookingBusyRangeRow = {
+  start_time: unknown;
+  end_time: unknown;
+  busy_type: unknown;
+};
+
+const BOOKING_BUSY_TYPES = new Set<BookingBusyType>([
+  "reservation",
+  "lane_block",
+  "event",
+]);
+
 export type BookingSlotState =
   | "available"
   | "selected_start"
@@ -27,6 +41,77 @@ type ClassifyBookingSlotInput = {
 
 export function normalizeBookingTime(value: string) {
   return value.slice(0, 5);
+}
+
+function parseBookingRpcTime(value: unknown) {
+  if (typeof value !== "string") {
+    throw new Error("Invalid booking availability time.");
+  }
+
+  const match = /^(\d{2}):([0-5]\d)(?::([0-5]\d)(\.\d{1,6})?)?$/.exec(
+    value
+  );
+  if (!match) {
+    throw new Error("Invalid booking availability time.");
+  }
+
+  const hours = Number(match[1]);
+  const minutes = Number(match[2]);
+  const seconds = Number(match[3] ?? "0");
+  const fractionalSeconds = Number(match[4] ?? "0");
+  if (
+    hours > 24 ||
+    seconds !== 0 ||
+    fractionalSeconds !== 0 ||
+    (hours === 24 && minutes !== 0)
+  ) {
+    throw new Error("Invalid booking availability time.");
+  }
+
+  return `${match[1]}:${match[2]}`;
+}
+
+export function parseBookingBusyRanges(rows: unknown) {
+  if (!Array.isArray(rows)) {
+    throw new Error("Invalid booking availability response.");
+  }
+
+  const typedRanges = Array.from(rows, (row) => {
+    if (!row || typeof row !== "object") {
+      throw new Error("Invalid booking availability response.");
+    }
+
+    const candidate = row as BookingBusyRangeRow;
+    if (
+      typeof candidate.busy_type !== "string" ||
+      !BOOKING_BUSY_TYPES.has(candidate.busy_type as BookingBusyType)
+    ) {
+      throw new Error("Invalid booking availability type.");
+    }
+
+    const range = {
+      startTime: parseBookingRpcTime(candidate.start_time),
+      endTime: parseBookingRpcTime(candidate.end_time),
+    };
+    if (timeToMinutes(range.startTime) >= timeToMinutes(range.endTime)) {
+      throw new Error("Invalid booking availability range.");
+    }
+
+    return {
+      ...range,
+      busyType: candidate.busy_type as BookingBusyType,
+    };
+  });
+
+  return {
+    busyRanges: typedRanges.map(({ startTime, endTime }) => ({
+      startTime,
+      endTime,
+    })),
+    blockedRanges: typedRanges
+      .filter(({ busyType }) => busyType === "lane_block")
+      .map(({ startTime, endTime }) => ({ startTime, endTime })),
+  };
 }
 
 export function timeToMinutes(value: string) {

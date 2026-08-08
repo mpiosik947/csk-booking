@@ -15,6 +15,7 @@ import {
   getBookingSlotVisualClass,
   getOccupiedSlotStarts,
   normalizeBookingTime,
+  parseBookingBusyRanges,
   type BookingSlotState,
   type BookingTimeRange,
 } from "../../lib/booking-time-range";
@@ -52,10 +53,6 @@ type BookingFormProps = {
   pricingRules: BookingPricingRule[];
 };
 
-type BusyRangeRow = {
-  start_time: string;
-  end_time: string;
-};
 
 type Profile = {
   email: string | null;
@@ -323,21 +320,13 @@ export default function BookingForm({
 
     const requestNumber = ++availabilityRequestRef.current;
 
-    const [busyResult, blockResult] = await Promise.all([
-      supabase.rpc(
-        "get_lane_booking_busy_ranges",
-        {
-          p_lane_id: targetLaneId,
-          p_reservation_date: targetDate,
-        }
-      ),
-      supabase
-        .from("lane_blocks")
-        .select("start_time,end_time")
-        .eq("lane_id", targetLaneId)
-        .eq("block_date", targetDate)
-        .eq("is_active", true),
-    ]);
+    const busyResult = await supabase.rpc(
+      "get_lane_booking_busy_ranges_v2",
+      {
+        p_lane_id: targetLaneId,
+        p_reservation_date: targetDate,
+      }
+    );
 
     if (requestNumber !== availabilityRequestRef.current) {
       return false;
@@ -345,22 +334,27 @@ export default function BookingForm({
 
     setCheckingAvailability(false);
 
-    if (busyResult.error || blockResult.error) {
+    if (busyResult.error) {
+      setBusyRanges([]);
+      setBlockedRanges([]);
       setAvailabilityReady(false);
       setMessage("Nie udało się pobrać podglądu dostępności.");
       return false;
     }
 
-    const normalizeRanges = (rows: BusyRangeRow[]): BookingTimeRange[] =>
-      rows.map((range) => ({
-        startTime: normalizeBookingTime(range.start_time),
-        endTime: normalizeBookingTime(range.end_time),
-      }));
+    let availabilityRanges;
+    try {
+      availabilityRanges = parseBookingBusyRanges(busyResult.data);
+    } catch {
+      setBusyRanges([]);
+      setBlockedRanges([]);
+      setAvailabilityReady(false);
+      setMessage("Nie uda\u0142o si\u0119 pobra\u0107 podgl\u0105du dost\u0119pno\u015bci.");
+      return false;
+    }
 
-    setBusyRanges(normalizeRanges((busyResult.data ?? []) as BusyRangeRow[]));
-    setBlockedRanges(
-      normalizeRanges((blockResult.data ?? []) as BusyRangeRow[])
-    );
+    setBusyRanges(availabilityRanges.busyRanges);
+    setBlockedRanges(availabilityRanges.blockedRanges);
     setAvailabilityReady(true);
     return true;
   }, []);
