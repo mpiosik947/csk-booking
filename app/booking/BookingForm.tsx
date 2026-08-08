@@ -8,6 +8,11 @@ import {
   getBookingDayGroup,
   type BookingDayGroup,
 } from "../../lib/booking-day-group";
+import type {
+  BookingDuration,
+  BookingLane,
+  BookingPricingRule,
+} from "../../lib/public-booking-configuration";
 import {
   addMinutesToTime,
   bookingSlotIsAvailable,
@@ -19,33 +24,6 @@ import {
   type BookingSlotState,
   type BookingTimeRange,
 } from "../../lib/booking-time-range";
-
-export type BookingLane = {
-  id: string;
-  name: string;
-  max_shooters: number;
-  booking_step_minutes: number;
-  display_order: number;
-  currency_code: string;
-};
-
-export type BookingDuration = {
-  id: string;
-  lane_id: string;
-  duration_minutes: number;
-  display_order: number;
-};
-
-export type BookingPricingRule = {
-  id: string;
-  lane_id: string;
-  day_group: BookingDayGroup;
-  min_shooters: number;
-  max_shooters: number;
-  label: string;
-  hourly_price: number;
-  display_order: number;
-};
 
 type BookingFormProps = {
   lanes: BookingLane[];
@@ -722,7 +700,7 @@ export default function BookingForm({
               <option value="">Wybierz oś</option>
               {lanes.map((lane) => (
                 <option key={lane.id} value={lane.id}>
-                  {lane.name} · maks. {lane.max_shooters}
+                  {lane.name} · maks. {lane.max_people_online}
                 </option>
               ))}
             </select>
@@ -765,7 +743,7 @@ export default function BookingForm({
               className="min-h-12 rounded-xl border border-[#30372c] bg-[#141814] px-4 text-[#f2efe4]"
             >
               {Array.from(
-                { length: selectedLane?.max_shooters ?? 1 },
+                { length: selectedLane?.max_people_online ?? 1 },
                 (_, index) => index + 1
               ).map((count) => (
                 <option key={count} value={count}>
@@ -802,7 +780,10 @@ export default function BookingForm({
                 <option value={0}>Brak konfiguracji</option>
               )}
               {laneDurations.map((duration) => (
-                <option key={duration.id} value={duration.duration_minutes}>
+                <option
+                  key={`${duration.lane_id}:${duration.duration_minutes}`}
+                  value={duration.duration_minutes}
+                >
                   {formatDuration(duration.duration_minutes)}
                 </option>
               ))}

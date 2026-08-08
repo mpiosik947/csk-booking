@@ -3,11 +3,14 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { supabase } from "../../lib/supabase";
-import BookingForm, {
+import {
+  adaptPublicBookingConfiguration,
+  parsePublicBookingConfiguration,
   type BookingDuration,
   type BookingLane,
   type BookingPricingRule,
-} from "./BookingForm";
+} from "../../lib/public-booking-configuration";
+import BookingForm from "./BookingForm";
 
 export default function BookingPage() {
   const [lanes, setLanes] = useState<BookingLane[]>([]);
@@ -21,32 +24,11 @@ export default function BookingPage() {
       setLoading(true);
       setMessage("");
 
-      const [lanesResult, durationsResult, pricingResult] = await Promise.all([
-        supabase
-          .from("shooting_lanes")
-          .select(
-            "id,name,max_shooters,booking_step_minutes,display_order,currency_code"
-          )
-          .eq("is_active", true)
-          .order("display_order")
-          .order("name"),
-        supabase
-          .from("lane_booking_durations")
-          .select("id,lane_id,duration_minutes,display_order")
-          .eq("is_active", true)
-          .order("display_order")
-          .order("duration_minutes"),
-        supabase
-          .from("lane_pricing_rules")
-          .select(
-            "id,lane_id,day_group,min_shooters,max_shooters,label,hourly_price,display_order"
-          )
-          .eq("is_active", true)
-          .order("display_order")
-          .order("min_shooters"),
-      ]);
+      const configurationResult = await supabase.rpc(
+        "get_public_booking_configuration_v1"
+      );
 
-      if (lanesResult.error || durationsResult.error || pricingResult.error) {
+      if (configurationResult.error) {
         setMessage(
           "Nie udało się pobrać aktualnej konfiguracji rezerwacji. Spróbuj ponownie."
         );
@@ -54,9 +36,20 @@ export default function BookingPage() {
         return;
       }
 
-      setLanes((lanesResult.data ?? []) as BookingLane[]);
-      setDurations((durationsResult.data ?? []) as BookingDuration[]);
-      setPricingRules((pricingResult.data ?? []) as BookingPricingRule[]);
+      const resources = parsePublicBookingConfiguration(configurationResult.data);
+
+      if (!resources) {
+        setMessage(
+          "Nie udało się pobrać aktualnej konfiguracji rezerwacji. Spróbuj ponownie."
+        );
+        setLoading(false);
+        return;
+      }
+
+      const configuration = adaptPublicBookingConfiguration(resources);
+      setLanes(configuration.lanes);
+      setDurations(configuration.durations);
+      setPricingRules(configuration.pricingRules);
       setLoading(false);
     }
 
