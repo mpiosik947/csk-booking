@@ -130,6 +130,12 @@ function requireDate(value: unknown) {
   return date;
 }
 
+function normalizeOptionalString(value: unknown, label: string) {
+  if (value === null) return null;
+  if (typeof value !== "string") throw new Error(`Invalid ${label}.`);
+  return value.trim() || null;
+}
+
 function getPeopleLabel(count: number) {
   if (count === 1) return "1 osoba";
   const lastTwo = count % 100;
@@ -424,7 +430,7 @@ export function buildCalendarFeed(
         date,
         ...range,
         status: "active" as const,
-        location: requireString(row.location, "event location"),
+        location: normalizeOptionalString(row.location, "event location"),
         maxParticipants: requireNonNegativeInteger(row.max_participants, "event limit"),
         label: requireString(row.title, "event title"),
         isHistorical: false,

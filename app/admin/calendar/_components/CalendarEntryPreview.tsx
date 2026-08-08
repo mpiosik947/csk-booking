@@ -85,8 +85,10 @@ export default function CalendarEntryPreview({
           {entry.type === "lane_block" && entry.reason && (
             <p className="break-words">{entry.reason}</p>
           )}
-          {entry.type === "event" && entry.location && (
-            <p className="break-words">{entry.location}</p>
+          {entry.type === "event" && (
+            <p className="break-words">
+              {entry.location ?? "Lokalizacja niepodana"}
+            </p>
           )}
           {entry.type === "event" && entry.laneName && <p>{entry.laneName}</p>}
           {entry.type === "event" && <p>Limit uczestnikĂłw: {entry.maxParticipants}</p>}

@@ -87,7 +87,7 @@ export type CalendarEntryPreviewData =
       date: string;
       time: string;
       label: string;
-      location: string;
+      location: string | null;
       laneName: string | null;
       maxParticipants: number;
     };

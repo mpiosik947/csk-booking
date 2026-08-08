@@ -74,7 +74,7 @@ export type CalendarLaneBlockEntry = CalendarEntryBase & {
 type CalendarEventDetails = CalendarEntryBase & {
   type: "event";
   status: "active";
-  location: string;
+  location: string | null;
   maxParticipants: number;
   sourceEventId: string;
   laneIds: string[];

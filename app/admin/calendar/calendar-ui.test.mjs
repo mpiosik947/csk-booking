@@ -757,3 +757,20 @@ test("calendar always renders one admin return link outside the preview modal", 
   assert.ok(linkIndex < modalIndex);
   assert.doesNotMatch(previewSource, /← Wróć do panelu administracyjnego|href="\/admin"/);
 });
+
+test("event preview preserves null location and renders a safe fallback", async () => {
+  const preview = getCalendarEntryPreviewData(
+    event("event-id", { location: null })
+  );
+  const previewSource = await readFile(
+    new URL("./_components/CalendarEntryPreview.tsx", import.meta.url),
+    "utf8"
+  );
+
+  assert.equal(preview.type, "event");
+  assert.equal(preview.location, null);
+  assert.match(previewSource, /entry\.location \?\? "Lokalizacja niepodana"/);
+  assert.doesNotMatch(previewSource, />null</i);
+  assert.equal("id" in preview, false);
+  assert.equal("laneIds" in preview, false);
+});

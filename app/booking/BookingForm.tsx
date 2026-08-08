@@ -479,7 +479,10 @@ export default function BookingForm({
       }
 
       if (!response.ok || !result.ok) {
-        if (result.code === "slot_unavailable") {
+        if (
+          result.code === "slot_unavailable" ||
+          result.code === "lane_blocked"
+        ) {
           setSelectedHour("");
           creationRequestIdRef.current = "";
           setAvailabilityReady(false);
@@ -487,7 +490,9 @@ export default function BookingForm({
           await loadAvailability(laneId, reservationDate);
           setMessageSuccess(false);
           setMessage(
-            "Ten przedział został właśnie zajęty. Wybierz inną godzinę."
+            result.code === "lane_blocked"
+              ? CODE_MESSAGES.lane_blocked
+              : "Ten przedział został właśnie zajęty. Wybierz inną godzinę."
           );
           return;
         }
