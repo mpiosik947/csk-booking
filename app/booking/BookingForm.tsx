@@ -299,7 +299,7 @@ export default function BookingForm({
     const requestNumber = ++availabilityRequestRef.current;
 
     const busyResult = await supabase.rpc(
-      "get_lane_booking_busy_ranges_v2",
+      "get_lane_booking_busy_ranges_v3",
       {
         p_lane_id: targetLaneId,
         p_reservation_date: targetDate,
