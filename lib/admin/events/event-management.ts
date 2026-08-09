@@ -39,10 +39,29 @@ export type EventFormInput = {
 
 export type EventRpcConflictType = "reservation" | "lane_block" | "event";
 
+export type EventRpcCode =
+  | "created"
+  | "updated"
+  | "activated"
+  | "deactivated"
+  | "no_change"
+  | "not_allowed"
+  | "invalid_input"
+  | "invalid_time_range"
+  | "outside_booking_hours"
+  | "invalid_lane"
+  | "inactive_lane"
+  | "invalid_hierarchy"
+  | "event_not_found"
+  | "reservation_conflict"
+  | "lane_block_conflict"
+  | "event_conflict"
+  | "internal_error";
+
 export type EventRpcResult = {
   ok: boolean;
   changed: boolean;
-  code: string;
+  code: EventRpcCode;
   event_id: string | null;
   conflict_type?: EventRpcConflictType;
   conflict_lane_id?: string | null;
@@ -563,10 +582,18 @@ const ERROR_CODES = new Set([
   "outside_booking_hours",
   "invalid_lane",
   "inactive_lane",
+  "invalid_hierarchy",
   "reservation_conflict",
   "lane_block_conflict",
   "event_conflict",
   "event_not_found",
+  "internal_error",
+]);
+
+const KNOWN_CODES = new Set([
+  ...SUCCESS_CODES,
+  "no_change",
+  ...ERROR_CODES,
 ]);
 
 export function validateEventRpcResult(
@@ -577,11 +604,13 @@ export function validateEventRpcResult(
     typeof value.ok !== "boolean" ||
     typeof value.changed !== "boolean" ||
     !isNonEmptyString(value.code) ||
+    !KNOWN_CODES.has(value.code) ||
     (value.event_id !== null && !isUuid(value.event_id))
   ) {
     return invalidRpcResponse();
   }
 
+  const code = value.code as EventRpcCode;
   const conflictType = value.conflict_type;
   if (
     conflictType !== undefined &&
@@ -606,7 +635,7 @@ export function validateEventRpcResult(
     lane_block_conflict: "lane_block",
     event_conflict: "event",
   };
-  const expectedConflictType = expectedConflictTypes[value.code];
+  const expectedConflictType = expectedConflictTypes[code];
 
   if (
     expectedConflictType !== undefined &&
@@ -618,7 +647,7 @@ export function validateEventRpcResult(
   if (
     expectedConflictType === undefined &&
     (conflictType !== undefined ||
-      ((value.code === "invalid_lane" || value.code === "inactive_lane")
+      ((code === "invalid_lane" || code === "inactive_lane")
         ? !isUuid(conflictLaneId)
         : conflictLaneId !== undefined && conflictLaneId !== null))
   ) {
@@ -626,19 +655,16 @@ export function validateEventRpcResult(
   }
 
   if (
-    (value.code === "created" ||
-      value.code === "updated" ||
-      value.code === "activated" ||
-      value.code === "deactivated") &&
+    (SUCCESS_CODES.has(code) || code === "no_change") &&
     !isUuid(value.event_id)
   ) {
     return invalidRpcResponse();
   }
 
   if (
-    (SUCCESS_CODES.has(value.code) && (!value.ok || !value.changed)) ||
-    (value.code === "no_change" && (!value.ok || value.changed)) ||
-    (ERROR_CODES.has(value.code) && (value.ok || value.changed))
+    (SUCCESS_CODES.has(code) && (!value.ok || !value.changed)) ||
+    (code === "no_change" && (!value.ok || value.changed)) ||
+    (ERROR_CODES.has(code) && (value.ok || value.changed))
   ) {
     return invalidRpcResponse();
   }
@@ -648,7 +674,7 @@ export function validateEventRpcResult(
     value: {
       ok: value.ok,
       changed: value.changed,
-      code: value.code,
+      code,
       event_id: value.event_id,
       ...(conflictType === undefined ? {} : { conflict_type: conflictType }),
       ...(conflictLaneId === undefined
@@ -664,18 +690,23 @@ const CODE_MESSAGES: Readonly<Record<string, string>> = {
   activated: "Szkolenie zostało aktywowane.",
   deactivated: "Szkolenie zostało ukryte.",
   no_change: "Nie wprowadzono żadnych zmian.",
-  not_allowed: "Nie masz uprawnień do zarządzania szkoleniami.",
-  invalid_input: "Sprawdź poprawność danych szkolenia.",
-  invalid_time_range:
-    "Godzina zakończenia musi być późniejsza niż rozpoczęcia.",
+  not_allowed: "Nie masz uprawnień do wykonania tej operacji.",
+  invalid_input: "Sprawdź wprowadzone dane.",
+  invalid_time_range: "Sprawdź godzinę rozpoczęcia i zakończenia wydarzenia.",
   outside_booking_hours:
-    "Event zajmujący oś musi mieścić się w godzinach 08:00–20:00.",
-  invalid_lane: "Wybrana oś nie istnieje.",
-  inactive_lane: "Wybrana oś jest nieaktywna.",
-  reservation_conflict: "Termin koliduje z istniejącą rezerwacją",
-  lane_block_conflict: "Termin koliduje z blokadą osi",
-  event_conflict: "Termin koliduje z innym szkoleniem",
-  event_not_found: "Nie znaleziono szkolenia. Odśwież listę.",
+    "Godziny wydarzenia wykraczają poza dostępny zakres dla wybranej osi.",
+  invalid_lane: "Wybrana oś jest niedostępna.",
+  inactive_lane: "Wybrana oś nie jest obecnie aktywna.",
+  invalid_hierarchy:
+    "Nie można wykonać operacji z powodu nieprawidłowej konfiguracji osi.",
+  reservation_conflict:
+    "Nie można zapisać wydarzenia, ponieważ w tym czasie istnieje rezerwacja",
+  lane_block_conflict:
+    "Nie można zapisać wydarzenia, ponieważ wybrana oś jest w tym czasie zablokowana",
+  event_conflict:
+    "Nie można zapisać wydarzenia, ponieważ w tym czasie istnieje inne wydarzenie",
+  event_not_found: "Nie znaleziono tego wydarzenia.",
+  internal_error: "Nie udało się wykonać operacji. Spróbuj ponownie.",
   invalid_rpc_response: "Nie udało się wykonać operacji. Spróbuj ponownie.",
 };
 

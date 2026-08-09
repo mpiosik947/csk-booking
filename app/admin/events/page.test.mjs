@@ -122,15 +122,15 @@ test("event list controls are local, accessible, and keep event loading unchange
   assert.doesNotMatch(source, /onChange=\{[^}]*loadEvents/);
 });
 
-test("event status filter has safe empty states and does not alter management RPCs", async () => {
+test("event status filter has safe empty states and preserves V2 management RPCs", async () => {
   const source = await readAdminPage();
 
   assert.match(source, /Brak aktywnych szkoleń\./);
   assert.match(source, /Brak ukrytych szkoleń\./);
   assert.match(source, /Brak szkoleń\./);
-  assert.match(source, /\.rpc\("admin_create_event", payload\)/);
-  assert.match(source, /\.rpc\("admin_update_event", payload\.value\)/);
-  assert.match(source, /\.rpc\(\s*"admin_set_event_active",\s*payload\.value\s*\)/);
+  assert.match(source, /\.rpc\(\s*"admin_create_event_v2",\s*payload\s*\)/);
+  assert.match(source, /\.rpc\(\s*"admin_update_event_v2",\s*payload\.value\s*\)/);
+  assert.match(source, /\.rpc\(\s*"admin_set_event_active_v2",\s*payload\.value\s*\)/);
 });
 
 test("event card actions use the dashboard palette without a blue edit accent", async () => {
@@ -166,7 +166,7 @@ test("startEditing safely maps nullable values and PostgreSQL times", async () =
   assert.equal("12:30:00".slice(0, 5), "12:30");
 });
 
-test("create, edit, and toggle use their atomic RPCs while public events remain separate", async () => {
+test("create, edit, and toggle use only hierarchy-aware V2 RPCs while public events remain separate", async () => {
   const adminSource = await readAdminPage();
   const publicSource = await readFile(publicPageUrl, "utf8");
   const openCreateConfirmation = functionSource(
@@ -191,15 +191,28 @@ test("create, edit, and toggle use their atomic RPCs while public events remain 
   );
 
   assert.match(openCreateConfirmation, /buildCreateEventPayload\(form\.value\)/);
-  assert.doesNotMatch(openCreateConfirmation, /\.rpc\("admin_create_event", payload\)/);
-  assert.match(confirmCreateEvent, /\.rpc\("admin_create_event", payload\)/);
+  assert.doesNotMatch(openCreateConfirmation, /\.rpc\("admin_create_event_v2", payload\)/);
+  assert.match(confirmCreateEvent, /\.rpc\(\s*"admin_create_event_v2",\s*payload\s*\)/);
   assert.doesNotMatch(confirmCreateEvent, /\.from\("events"\)\.insert\(/);
+  assert.doesNotMatch(confirmCreateEvent, /error\.message/);
   assert.match(saveEditedEvent, /buildUpdateEventPayload\(eventId, form\.value\)/);
-  assert.match(saveEditedEvent, /\.rpc\("admin_update_event", payload\.value\)/);
+  assert.match(saveEditedEvent, /\.rpc\(\s*"admin_update_event_v2",\s*payload\.value\s*\)/);
   assert.doesNotMatch(saveEditedEvent, /\.from\("events"\)[\s\S]*\.update\(/);
+  assert.doesNotMatch(saveEditedEvent, /error\.message/);
   assert.match(toggleEvent, /buildSetEventActivePayload\(eventId, targetStatus\)/);
-  assert.match(toggleEvent, /\.rpc\(\s*"admin_set_event_active",\s*payload\.value\s*\)/);
+  assert.match(toggleEvent, /\.rpc\(\s*"admin_set_event_active_v2",\s*payload\.value\s*\)/);
   assert.doesNotMatch(toggleEvent, /\.from\("events"\)[\s\S]*\.update\(/);
+  assert.doesNotMatch(toggleEvent, /error\.message/);
+  assert.doesNotMatch(adminSource, /["']admin_create_event["']/);
+  assert.doesNotMatch(adminSource, /["']admin_update_event["']/);
+  assert.doesNotMatch(adminSource, /["']admin_set_event_active["']/);
+  assert.equal((adminSource.match(/admin_create_event_v2/g) ?? []).length, 1);
+  assert.equal((adminSource.match(/admin_update_event_v2/g) ?? []).length, 1);
+  assert.equal((adminSource.match(/admin_set_event_active_v2/g) ?? []).length, 1);
+  assert.match(
+    adminSource,
+    /const canManageEvents = userRole === "admin" \|\| userRole === "pracownik"/
+  );
   assert.doesNotMatch(publicSource, /event-management|normalizeAdminEvent/);
 });
 
@@ -224,7 +237,7 @@ test("event activation uses an isolated lock, validates the RPC result, and pres
   assert.match(toggleEvent, /result\.value\.code === "deactivated" && targetStatus/);
   assert.match(toggleEvent, /getEventManagementMessage\(/);
   assert.match(toggleEvent, /getEditableEventLanes\(activeLanes, event\?\.lanes \?\? \[\]\)/);
-  assert.match(toggleEvent, /result\.value\.code === "activated"[\s\S]*result\.value\.code === "deactivated"[\s\S]*void loadEvents\(\)/);
+  assert.match(toggleEvent, /result\.value\.code === "activated"[\s\S]*result\.value\.code === "deactivated"[\s\S]*result\.value\.code === "no_change"[\s\S]*void loadEvents\(\)/);
   assert.doesNotMatch(toggleEvent, /setEvents\(/);
   assert.doesNotMatch(toggleEvent, /error\.message|conflict_lane_id/);
   assert.match(toggleEvent, /finally \{[\s\S]*eventToggleLocksRef\.current\.delete\(eventId\)[\s\S]*delete next\[eventId\]/);
@@ -432,7 +445,7 @@ test("edit form preserves assigned inactive lanes and saves only through admin_u
   assert.match(saveEditedEvent, /validateEventRpcResult\(data\)/);
   assert.match(saveEditedEvent, /result\.ok && result\.value\.event_id !== eventId/);
   assert.match(saveEditedEvent, /getEventManagementMessage\(/);
-  assert.match(saveEditedEvent, /\.rpc\("admin_update_event", payload\.value\)/);
+  assert.match(saveEditedEvent, /\.rpc\(\s*"admin_update_event_v2",\s*payload\.value\s*\)/);
   assert.doesNotMatch(saveEditedEvent, /\.from\("events"\)[\s\S]*\.update\(/);
   assert.match(saveEditedEvent, /result\.value\.code === "updated"[\s\S]*void loadEvents\(\)[\s\S]*resetEditingState\(\)/);
   assert.match(saveEditedEvent, /result\.value\.code === "no_change"[\s\S]*resetEditingState\(\)/);

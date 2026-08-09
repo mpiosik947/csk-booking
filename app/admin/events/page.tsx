@@ -568,7 +568,10 @@ export default function AdminEventsPage() {
     setCreateMessage(null);
 
     try {
-      const { data, error } = await supabase.rpc("admin_create_event", payload);
+      const { data, error } = await supabase.rpc(
+        "admin_create_event_v2",
+        payload
+      );
 
       if (error) {
         setCreateMessage(
@@ -739,7 +742,10 @@ export default function AdminEventsPage() {
     setEditMessage(null);
 
     try {
-      const { data, error } = await supabase.rpc("admin_update_event", payload.value);
+      const { data, error } = await supabase.rpc(
+        "admin_update_event_v2",
+        payload.value
+      );
 
       if (error) {
         setEditMessage(
@@ -853,7 +859,7 @@ export default function AdminEventsPage() {
 
     try {
       const { data, error } = await supabase.rpc(
-        "admin_set_event_active",
+        "admin_set_event_active_v2",
         payload.value
       );
 
@@ -896,7 +902,8 @@ export default function AdminEventsPage() {
       if (
         result.ok &&
         (result.value.code === "activated" ||
-          result.value.code === "deactivated")
+          result.value.code === "deactivated" ||
+          result.value.code === "no_change")
       ) {
         void loadEvents();
       }
