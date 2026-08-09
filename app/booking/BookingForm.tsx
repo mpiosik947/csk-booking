@@ -89,8 +89,12 @@ const CODE_MESSAGES: Record<string, string> = {
   invalid_duration: "Wybrana długość nie jest już dostępna.",
   invalid_shooters_count: "Wybierz prawidłową liczbę strzelców.",
   capacity_exceeded: "Liczba strzelców przekracza pojemność osi.",
+  contact_required:
+    "Dla większej liczby osób wymagany jest kontakt z obsługą CSK.",
   lane_not_found: "Nie znaleziono wybranej osi.",
   lane_inactive: "Wybrana oś nie jest już aktywna.",
+  lane_not_bookable:
+    "Ten zasób nie jest obecnie dostępny do rezerwacji online.",
   pricing_not_configured: "Cennik osi nie jest skonfigurowany.",
   lane_blocked: "Oś jest zablokowana w wybranym terminie.",
   slot_unavailable: "Termin został właśnie zajęty. Wybierz inną godzinę.",
@@ -466,6 +470,19 @@ export default function BookingForm({
               ? CODE_MESSAGES.lane_blocked
               : "Ten przedział został właśnie zajęty. Wybierz inną godzinę."
           );
+          return;
+        }
+
+        if (
+          result.code === "contact_required" ||
+          result.code === "lane_not_bookable"
+        ) {
+          if (result.code === "lane_not_bookable") {
+            setSelectedHour("");
+          }
+
+          setMessageSuccess(false);
+          setMessage(CODE_MESSAGES[result.code]);
           return;
         }
 

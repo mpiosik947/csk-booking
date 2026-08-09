@@ -22,8 +22,10 @@ export const CREATE_RESERVATION_CODES = [
   "invalid_duration",
   "invalid_shooters_count",
   "capacity_exceeded",
+  "contact_required",
   "lane_not_found",
   "lane_inactive",
+  "lane_not_bookable",
   "pricing_not_configured",
   "lane_blocked",
   "slot_unavailable",
@@ -218,6 +220,7 @@ export function getCreateReservationHttpStatus(code: CreateReservationCode) {
   if (
     code === "verification_limit_reached" ||
     code === "lane_blocked" ||
+    code === "lane_not_bookable" ||
     code === "slot_unavailable" ||
     code === "idempotency_conflict"
   ) {
@@ -227,6 +230,7 @@ export function getCreateReservationHttpStatus(code: CreateReservationCode) {
   if (
     code === "profile_not_found" ||
     code === "profile_incomplete" ||
+    code === "contact_required" ||
     code === "lane_inactive" ||
     code === "pricing_not_configured"
   ) {
@@ -262,8 +266,12 @@ export const CREATE_RESERVATION_MESSAGES: Record<
   invalid_duration: "Wybrana długość rezerwacji nie jest już dostępna.",
   invalid_shooters_count: "Wybierz prawidłową liczbę strzelców.",
   capacity_exceeded: "Liczba strzelców przekracza pojemność osi.",
+  contact_required:
+    "Dla większej liczby osób wymagany jest kontakt z obsługą CSK.",
   lane_not_found: "Nie znaleziono wybranej osi.",
   lane_inactive: "Wybrana oś nie jest obecnie aktywna.",
+  lane_not_bookable:
+    "Ten zasób nie jest obecnie dostępny do rezerwacji online.",
   pricing_not_configured: "Cennik osi nie jest skonfigurowany.",
   lane_blocked: "Oś jest zablokowana w wybranym terminie.",
   slot_unavailable: "Termin został właśnie zajęty. Wybierz inną godzinę.",
