@@ -1,6 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import {
+  getLaneBlockErrorMessage,
+  LANE_BLOCK_GENERIC_ERROR,
+  validateLaneBlockRpcResult,
+} from "../../../lib/admin/lane-block-management";
 import { supabase } from "../../../lib/supabase";
 
 type ShootingLane = {
@@ -74,17 +79,27 @@ export default function LaneBlocksPage() {
       return;
     }
 
-    const { error } = await supabase.from("lane_blocks").insert({
-      lane_id: laneId,
-      block_date: blockDate,
-      start_time: startTime,
-      end_time: endTime,
-      reason,
-      is_active: true,
+    const { data, error } = await supabase.rpc("admin_create_lane_block", {
+      p_lane_id: laneId,
+      p_block_date: blockDate,
+      p_start_time: startTime,
+      p_end_time: endTime,
+      p_reason: reason,
     });
 
     if (error) {
-      setMessage(`Błąd blokady: ${error.message}`);
+      setMessage(LANE_BLOCK_GENERIC_ERROR);
+      return;
+    }
+
+    const result = validateLaneBlockRpcResult(data);
+
+    if (!result.ok || result.value.code !== "created") {
+      setMessage(
+        result.ok
+          ? getLaneBlockErrorMessage(result.value.code)
+          : LANE_BLOCK_GENERIC_ERROR
+      );
       return;
     }
 
@@ -96,23 +111,41 @@ export default function LaneBlocksPage() {
     setEndTime("");
     setReason("");
 
-    loadData();
+    void loadData();
   }
 
   async function toggleBlock(blockId: string, currentStatus: boolean) {
-    const { error } = await supabase
-      .from("lane_blocks")
-      .update({
-        is_active: !currentStatus,
-      })
-      .eq("id", blockId);
+    const targetStatus = !currentStatus;
+    const { data, error } = await supabase.rpc(
+      "admin_set_lane_block_active",
+      {
+        p_block_id: blockId,
+        p_is_active: targetStatus,
+      }
+    );
 
     if (error) {
-      setMessage(`Błąd zmiany statusu blokady: ${error.message}`);
+      setMessage(LANE_BLOCK_GENERIC_ERROR);
       return;
     }
 
-    loadData();
+    const result = validateLaneBlockRpcResult(data);
+    const expectedCode = targetStatus ? "activated" : "deactivated";
+
+    if (
+      !result.ok ||
+      result.value.lane_block_id !== blockId ||
+      (result.value.code !== expectedCode && result.value.code !== "no_change")
+    ) {
+      setMessage(
+        result.ok
+          ? getLaneBlockErrorMessage(result.value.code)
+          : LANE_BLOCK_GENERIC_ERROR
+      );
+      return;
+    }
+
+    void loadData();
   }
 
   function getMessageClass(message: string) {
