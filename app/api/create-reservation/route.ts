@@ -74,7 +74,7 @@ export async function POST(request: Request) {
       return jsonError("invalid_request", 400);
     }
 
-    const { data, error } = await supabase.rpc("create_reservation", {
+    const { data, error } = await supabase.rpc("create_reservation_v2", {
       p_lane_id: body.laneId,
       p_reservation_date: body.reservationDate,
       p_start_time: body.startTime,
