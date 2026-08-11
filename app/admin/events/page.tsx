@@ -178,7 +178,7 @@ function EventLanesSummary({ lanes }: { lanes: AdminEvent["lanes"] }) {
               key={lane.id}
               className="inline-flex max-w-full flex-wrap items-center gap-2 rounded-full border border-[#536143] bg-[#191e19] px-3 py-1.5 text-sm font-semibold text-[#f2efe4]"
             >
-              <span className="break-words">{lane.name}</span>
+              <span className="break-words">{lane.displayName}</span>
               {!lane.is_active && (
                 <span className="rounded-full bg-yellow-950 px-2 py-0.5 text-xs font-semibold text-yellow-300">
                   Nieaktywna
@@ -241,7 +241,7 @@ function LaneSelectionSummary({ lanes }: { lanes: AdminEventLane[] }) {
             key={lane.id}
             className="max-w-full break-words rounded-full border border-[#536143] bg-[#141814] px-3 py-1 text-xs font-semibold text-[#a9d4ad]"
           >
-            {lane.name}
+            {lane.displayName}
           </span>
         ))}
       </div>
@@ -382,7 +382,9 @@ export default function AdminEventsPage() {
 
     const { data, error } = await supabase
       .from("shooting_lanes")
-      .select("id,name,type,is_active,display_order")
+      .select(
+        "id,name,type,is_active,display_order,resource_kind,parent_lane_id"
+      )
       .eq("is_active", true)
       .order("display_order", { ascending: true })
       .order("name", { ascending: true })
@@ -443,7 +445,18 @@ export default function AdminEventsPage() {
             name,
             type,
             is_active,
-            display_order
+            display_order,
+            resource_kind,
+            parent_lane_id,
+            parent_lane:shooting_lanes!shooting_lanes_parent_lane_id_fkey (
+              id,
+              name,
+              type,
+              is_active,
+              display_order,
+              resource_kind,
+              parent_lane_id
+            )
           )
         )
       `)
@@ -562,7 +575,9 @@ export default function AdminEventsPage() {
     }
 
     const { payload, lanes } = createConfirmation;
-    const laneNames = new Map(lanes.map((lane) => [lane.id, lane.name]));
+    const laneNames = new Map(
+      lanes.map((lane) => [lane.id, lane.displayName])
+    );
     createSubmittingRef.current = true;
     setCreateSubmitting(true);
     setCreateMessage(null);
@@ -734,7 +749,7 @@ export default function AdminEventsPage() {
     const editingEvent = events.find((event) => event.id === eventId);
     const laneNames = new Map(
       getEditableEventLanes(activeLanes, editingEvent?.lanes ?? []).map(
-        (lane) => [lane.id, lane.name]
+        (lane) => [lane.id, lane.displayName]
       )
     );
     editSubmittingRef.current = true;
@@ -847,7 +862,7 @@ export default function AdminEventsPage() {
     const laneNames = new Map(
       getEditableEventLanes(activeLanes, event?.lanes ?? []).map((lane) => [
         lane.id,
-        lane.name,
+        lane.displayName,
       ])
     );
     eventToggleLocksRef.current.add(eventId);
@@ -1518,7 +1533,7 @@ export default function AdminEventsPage() {
                           disabled={createSubmitting}
                           className="h-4 w-4 shrink-0 accent-[#536143] disabled:cursor-not-allowed"
                         />
-                        <span className="break-words">{lane.name}</span>
+                        <span className="break-words">{lane.displayName}</span>
                       </label>
                     ))}
                   </div>
@@ -1893,7 +1908,7 @@ export default function AdminEventsPage() {
                                     )
                                   }
                                 />
-                                <span className="break-words">{lane.name}</span>
+                                <span className="break-words">{lane.displayName}</span>
                                 {!lane.is_active ? (
                                   <span className="rounded-full bg-amber-950 px-2 py-0.5 text-xs text-amber-200">
                                     Nieaktywna

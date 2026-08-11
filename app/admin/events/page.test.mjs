@@ -269,7 +269,7 @@ test("every admin event card renders its normalized lane assignment", async () =
   assert.match(summary, /lanes\.length === 0/);
   assert.match(summary, /Event globalny — nie blokuje osi/);
   assert.match(summary, /lanes\.map\(\(lane\) =>/);
-  assert.match(summary, /\{lane\.name\}/);
+  assert.match(summary, /\{lane\.displayName\}/);
   assert.match(summary, /!lane\.is_active/);
   assert.match(summary, /Nieaktywna/);
 });
@@ -313,7 +313,10 @@ test("active lanes load only for management roles with a fail-closed stable cont
   assert.match(loadRole, /void loadActiveLanes\(\)/);
   assert.doesNotMatch(loadRole, /instruktor[\s\S]*loadActiveLanes/);
   assert.match(loadActiveLanes, /\.from\("shooting_lanes"\)/);
-  assert.match(loadActiveLanes, /\.select\("id,name,type,is_active,display_order"\)/);
+  assert.match(
+    loadActiveLanes,
+    /id,name,type,is_active,display_order,resource_kind,parent_lane_id/
+  );
   assert.doesNotMatch(loadActiveLanes, /\.select\(\s*["'`]\*["'`]\s*\)/);
   assert.match(loadActiveLanes, /\.eq\("is_active", true\)/);
   assert.match(loadActiveLanes, /\.order\("display_order", \{ ascending: true \}\)/);
@@ -341,7 +344,7 @@ test("create form exposes safe lane selection states and never displays lane UUI
   assert.match(source, /type="checkbox"/);
   assert.match(source, /checked=\{createLaneIds\.includes\(lane\.id\)\}/);
   assert.match(source, /disabled=\{createSubmitting\}/);
-  assert.match(source, /\{lane\.name\}/);
+  assert.match(source, /\{lane\.displayName\}/);
   assert.doesNotMatch(source, />\s*\{lane\.id\}\s*</);
   assert.match(source, /grid gap-2 sm:grid-cols-2 xl:grid-cols-3/);
 });
@@ -479,7 +482,7 @@ test("create confirmation validates once and executes only the approved snapshot
   assert.match(confirmCreateEvent, /getEventManagementMessage\(/);
   assert.match(
     confirmCreateEvent,
-    /new Map\(lanes\.map\(\(lane\) => \[lane\.id, lane\.name\]\)\)/
+    /lanes\.map\(\(lane\) => \[lane\.id, lane\.displayName\]\)/
   );
   assert.match(confirmCreateEvent, /result\.value\.code !== "created"/);
   assert.match(confirmCreateEvent, /setCreateLaneIds\(\[\]\)/);
@@ -529,4 +532,28 @@ test("public events remain unchanged while lane selection does not alter existin
   assert.match(adminSource, /function startEditing\(event: AdminEvent\)/);
   assert.match(adminSource, /async function saveEditedEvent\(eventId: string\)/);
   assert.match(adminSource, /async function toggleEvent\(/);
+});
+
+test("event hierarchy presentation keeps dormant resources out and prepares active positions", async () => {
+  const source = await readAdminPage();
+  const loadActiveLanes = functionSource(
+    source,
+    "async function loadActiveLanes()",
+    "async function loadEvents()"
+  );
+  const loadEvents = functionSource(
+    source,
+    "async function loadEvents()",
+    "async function loadRegistrations("
+  );
+
+  assert.match(source, /normalizeActiveEventLanes/);
+  assert.match(loadActiveLanes, /resource_kind,parent_lane_id/);
+  assert.match(loadActiveLanes, /\.eq\("is_active", true\)/);
+  assert.match(loadEvents, /parent_lane:shooting_lanes!shooting_lanes_parent_lane_id_fkey/);
+  assert.match(source, /lane\.displayName/);
+  assert.doesNotMatch(source, /Oś 100 m — Stanowisko 1/);
+  assert.equal((source.match(/admin_create_event_v2/g) ?? []).length, 1);
+  assert.equal((source.match(/admin_update_event_v2/g) ?? []).length, 1);
+  assert.equal((source.match(/admin_set_event_active_v2/g) ?? []).length, 1);
 });

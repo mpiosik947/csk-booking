@@ -1,10 +1,28 @@
+import {
+  buildLaneHierarchyDisplayModel,
+  type LaneHierarchyDisplayItem,
+  type LaneResourceKind,
+} from "../lane-hierarchy.js";
+
 export type AdminEventLane = {
   id: string;
   name: string;
   type: string;
   is_active: boolean;
   display_order: number;
+  resource_kind: LaneResourceKind;
+  parent_lane_id: string | null;
+  displayName: string;
+  parentName: string | null;
+  depth: 0 | 1;
+  isParent: boolean;
+  isPosition: boolean;
 };
+
+type NormalizedEventLaneResource = Omit<
+  AdminEventLane,
+  "displayName" | "parentName" | "depth" | "isParent" | "isPosition"
+>;
 
 export type AdminEvent = {
   id: string;
@@ -191,7 +209,7 @@ function normalizeFiniteNumber(value: unknown): number | null {
   return Number.isFinite(normalized) ? normalized : null;
 }
 
-function normalizeLane(value: unknown): AdminEventLane | null {
+function normalizeLane(value: unknown): NormalizedEventLaneResource | null {
   if (!isRecord(value)) {
     return null;
   }
@@ -202,7 +220,9 @@ function normalizeLane(value: unknown): AdminEventLane | null {
     !isNonEmptyString(value.type) ||
     typeof value.is_active !== "boolean" ||
     typeof value.display_order !== "number" ||
-    !Number.isInteger(value.display_order)
+    !Number.isInteger(value.display_order) ||
+    (value.resource_kind !== "lane" && value.resource_kind !== "position") ||
+    (value.parent_lane_id !== null && !isUuid(value.parent_lane_id))
   ) {
     return null;
   }
@@ -213,6 +233,8 @@ function normalizeLane(value: unknown): AdminEventLane | null {
     type: value.type,
     is_active: value.is_active,
     display_order: value.display_order,
+    resource_kind: value.resource_kind,
+    parent_lane_id: value.parent_lane_id,
   };
 }
 
@@ -225,16 +247,37 @@ function compareLanes(first: AdminEventLane, second: AdminEventLane) {
   return nameComparison !== 0 ? nameComparison : first.id.localeCompare(second.id);
 }
 
-function compareLaneCandidates(first: AdminEventLane, second: AdminEventLane) {
-  const displayComparison = compareLanes(first, second);
-  if (displayComparison !== 0) {
-    return displayComparison;
+function applyLaneHierarchy(
+  lanes: readonly NormalizedEventLaneResource[]
+): AdminEventLane[] | null {
+  const hierarchy = buildLaneHierarchyDisplayModel(
+    lanes.map((lane) => ({
+      id: lane.id,
+      name: lane.name,
+      resource_kind: lane.resource_kind,
+      parent_lane_id: lane.parent_lane_id,
+      display_order: lane.display_order,
+      is_active: lane.is_active,
+    }))
+  );
+
+  if (!hierarchy.ok) {
+    return null;
   }
 
-  const typeComparison = first.type.localeCompare(second.type, "pl");
-  return typeComparison !== 0
-    ? typeComparison
-    : Number(second.is_active) - Number(first.is_active);
+  const laneById = new Map(lanes.map((lane) => [lane.id, lane]));
+
+  return hierarchy.value.map((item: LaneHierarchyDisplayItem) => {
+    const lane = laneById.get(item.id)!;
+    return {
+      ...lane,
+      displayName: item.displayName,
+      parentName: item.parentName,
+      depth: item.depth,
+      isParent: item.isParent,
+      isPosition: item.isPosition,
+    };
+  });
 }
 
 export function sortAdminEvents(
@@ -278,7 +321,7 @@ export function normalizeActiveEventLanes(
     return null;
   }
 
-  const lanes: AdminEventLane[] = [];
+  const lanes: NormalizedEventLaneResource[] = [];
   const laneIds = new Set<string>();
 
   for (const candidate of value) {
@@ -292,7 +335,31 @@ export function normalizeActiveEventLanes(
     lanes.push(lane);
   }
 
-  return lanes.sort(compareLanes);
+  return applyLaneHierarchy(lanes);
+}
+
+function compareNormalizedLaneCandidates(
+  first: NormalizedEventLaneResource,
+  second: NormalizedEventLaneResource
+) {
+  if (first.display_order !== second.display_order) {
+    return first.display_order - second.display_order;
+  }
+
+  const nameComparison = first.name.localeCompare(second.name, "pl");
+  if (nameComparison !== 0) {
+    return nameComparison;
+  }
+
+  const idComparison = first.id.localeCompare(second.id);
+  if (idComparison !== 0) {
+    return idComparison;
+  }
+
+  const typeComparison = first.type.localeCompare(second.type, "pl");
+  return typeComparison !== 0
+    ? typeComparison
+    : Number(second.is_active) - Number(first.is_active);
 }
 
 export function getEditableEventLanes(
@@ -311,7 +378,19 @@ export function getEditableEventLanes(
     }
   }
 
-  return [...lanesById.values()].sort(compareLanes);
+  const hierarchyLanes = applyLaneHierarchy(
+    [...lanesById.values()].map((lane) => ({
+      id: lane.id,
+      name: lane.name,
+      type: lane.type,
+      is_active: lane.is_active,
+      display_order: lane.display_order,
+      resource_kind: lane.resource_kind,
+      parent_lane_id: lane.parent_lane_id,
+    }))
+  );
+
+  return hierarchyLanes ?? [...lanesById.values()].sort(compareLanes);
 }
 
 export function normalizeAdminEvent(value: unknown): NormalizationResult {
@@ -350,7 +429,8 @@ export function normalizeAdminEvent(value: unknown): NormalizationResult {
   }
 
   const relations = Array.isArray(value.event_lanes) ? value.event_lanes : [];
-  const laneCandidates: AdminEventLane[] = [];
+  const laneCandidates: NormalizedEventLaneResource[] = [];
+  const selectedLaneIds = new Set<string>();
 
   for (const relation of relations) {
     if (!isRecord(relation) || !isUuid(relation.lane_id)) {
@@ -369,18 +449,53 @@ export function normalizeAdminEvent(value: unknown): NormalizationResult {
     }
 
     laneCandidates.push(lane);
+    selectedLaneIds.add(lane.id);
+
+    if (lane.resource_kind === "position") {
+      const parentRelation = isRecord(relatedLane)
+        ? Array.isArray(relatedLane.parent_lane)
+          ? relatedLane.parent_lane.length === 1
+            ? relatedLane.parent_lane[0]
+            : null
+          : relatedLane.parent_lane
+        : null;
+      const parentLane = normalizeLane(parentRelation);
+
+      if (!parentLane || parentLane.id !== lane.parent_lane_id) {
+        return {
+          ok: false,
+          code: "invalid_event",
+          message: "Nieprawidłowa hierarchia osi szkolenia.",
+        };
+      }
+
+      laneCandidates.push(parentLane);
+    }
   }
 
-  laneCandidates.sort(compareLaneCandidates);
-  const seenLaneIds = new Set<string>();
-  const lanes = laneCandidates.filter((lane) => {
-    if (seenLaneIds.has(lane.id)) {
+  laneCandidates.sort(compareNormalizedLaneCandidates);
+  const seenHierarchyLaneIds = new Set<string>();
+  const uniqueLaneCandidates = laneCandidates.filter((lane) => {
+    if (seenHierarchyLaneIds.has(lane.id)) {
       return false;
     }
 
-    seenLaneIds.add(lane.id);
+    seenHierarchyLaneIds.add(lane.id);
     return true;
   });
+  const hierarchyLanes = applyLaneHierarchy(uniqueLaneCandidates);
+
+  if (hierarchyLanes === null) {
+    return {
+      ok: false,
+      code: "invalid_event",
+      message: "Nieprawidłowa hierarchia osi szkolenia.",
+    };
+  }
+
+  const selectedLaneCandidates = hierarchyLanes.filter((lane) =>
+    selectedLaneIds.has(lane.id)
+  );
 
   return {
     ok: true,
@@ -396,8 +511,8 @@ export function normalizeAdminEvent(value: unknown): NormalizationResult {
       max_participants: value.max_participants,
       is_active: value.is_active,
       created_at: value.created_at,
-      laneIds: lanes.map((lane) => lane.id),
-      lanes,
+      laneIds: selectedLaneCandidates.map((lane) => lane.id),
+      lanes: selectedLaneCandidates,
     },
   };
 }
