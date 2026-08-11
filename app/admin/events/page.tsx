@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { HierarchyResourceLabel } from "../_components/HierarchyResourcePresentation";
 import {
   buildCreateEventPayload,
   buildSetEventActivePayload,
@@ -172,19 +173,24 @@ function EventLanesSummary({ lanes }: { lanes: AdminEvent["lanes"] }) {
           Event globalny — nie blokuje osi
         </p>
       ) : (
-        <div className="mt-2 flex flex-wrap gap-2">
+        <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
           {lanes.map((lane) => (
-            <span
+            <div
               key={lane.id}
-              className="inline-flex max-w-full flex-wrap items-center gap-2 rounded-full border border-[#536143] bg-[#191e19] px-3 py-1.5 text-sm font-semibold text-[#f2efe4]"
+              className="min-w-0 rounded-xl border border-[#3d4638] bg-[#191e19] px-3 py-2.5"
             >
-              <span className="break-words">{lane.displayName}</span>
-              {!lane.is_active && (
-                <span className="rounded-full bg-yellow-950 px-2 py-0.5 text-xs font-semibold text-yellow-300">
-                  Nieaktywna
-                </span>
-              )}
-            </span>
+              <HierarchyResourceLabel
+                resource={{
+                  displayName: lane.displayName,
+                  depth: lane.depth,
+                  isActive: lane.is_active,
+                  isPosition: lane.isPosition,
+                }}
+                compact
+                showStatus
+                tree
+              />
+            </div>
           ))}
         </div>
       )}
@@ -235,14 +241,23 @@ function LaneSelectionSummary({ lanes }: { lanes: AdminEventLane[] }) {
       <p className="font-semibold text-[#a9d4ad]">
         {laneCountLabel}
       </p>
-      <div className="mt-2 flex flex-wrap gap-2">
+      <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
         {lanes.map((lane) => (
-          <span
+          <div
             key={lane.id}
-            className="max-w-full break-words rounded-full border border-[#536143] bg-[#141814] px-3 py-1 text-xs font-semibold text-[#a9d4ad]"
+            className="min-w-0 rounded-xl border border-[#536143] bg-[#141814] px-3 py-2"
           >
-            {lane.displayName}
-          </span>
+            <HierarchyResourceLabel
+              resource={{
+                displayName: lane.displayName,
+                depth: lane.depth,
+                isActive: lane.is_active,
+                isPosition: lane.isPosition,
+              }}
+              compact
+              tree
+            />
+          </div>
         ))}
       </div>
     </div>
@@ -1280,7 +1295,7 @@ export default function AdminEventsPage() {
 
   return (
     <main className="min-h-screen bg-[#141814] text-[#f2efe4]">
-      <section className="mx-auto max-w-7xl px-6 py-12">
+      <section className="mx-auto max-w-7xl px-4 py-8 sm:px-6 sm:py-12">
         <div className="mb-10">
           <p className="mb-4 text-sm uppercase tracking-[0.35em] text-[#d7c895]">
             ADMIN PANEL
@@ -1482,7 +1497,7 @@ export default function AdminEventsPage() {
                   type="text"
                   value={location}
                   onChange={(event) => setLocation(event.target.value)}
-                  placeholder="Np. Oś 25 m, sala szkoleniowa, oś 100 m"
+                  placeholder="Np. oś strzelecka, sala szkoleniowa lub teren zewnętrzny"
                   className="w-full rounded-xl border border-[#30372c] bg-[#141814] px-4 py-3 text-[#f2efe4] outline-none transition placeholder:text-[#858c7f] hover:border-[#536143] focus:border-[#536143] focus:ring-1 focus:ring-[#d7c895]"
                 />
 
@@ -1533,7 +1548,16 @@ export default function AdminEventsPage() {
                           disabled={createSubmitting}
                           className="h-4 w-4 shrink-0 accent-[#536143] disabled:cursor-not-allowed"
                         />
-                        <span className="break-words">{lane.displayName}</span>
+                        <HierarchyResourceLabel
+                          resource={{
+                            displayName: lane.displayName,
+                            depth: lane.depth,
+                            isActive: lane.is_active,
+                            isPosition: lane.isPosition,
+                          }}
+                          compact
+                          tree
+                        />
                       </label>
                     ))}
                   </div>
@@ -1846,7 +1870,7 @@ export default function AdminEventsPage() {
                         type="text"
                         value={editLocation}
                         onChange={(e) => setEditLocation(e.target.value)}
-                        placeholder="Np. Oś 25 m, sala szkoleniowa, oś 100 m"
+                        placeholder="Np. oś strzelecka, sala szkoleniowa lub teren zewnętrzny"
                         className="w-full rounded-xl border border-[#30372c] bg-[#141814] px-4 py-3 text-[#f2efe4] outline-none transition placeholder:text-[#858c7f] hover:border-[#536143] focus:border-[#536143] focus:ring-1 focus:ring-[#d7c895]"
                       />
 
@@ -1908,12 +1932,17 @@ export default function AdminEventsPage() {
                                     )
                                   }
                                 />
-                                <span className="break-words">{lane.displayName}</span>
-                                {!lane.is_active ? (
-                                  <span className="rounded-full bg-amber-950 px-2 py-0.5 text-xs text-amber-200">
-                                    Nieaktywna
-                                  </span>
-                                ) : null}
+                                <HierarchyResourceLabel
+                                  resource={{
+                                    displayName: lane.displayName,
+                                    depth: lane.depth,
+                                    isActive: lane.is_active,
+                                    isPosition: lane.isPosition,
+                                  }}
+                                  compact
+                                  showStatus
+                                  tree
+                                />
                               </label>
                             );
                           })}

@@ -269,9 +269,11 @@ test("every admin event card renders its normalized lane assignment", async () =
   assert.match(summary, /lanes\.length === 0/);
   assert.match(summary, /Event globalny — nie blokuje osi/);
   assert.match(summary, /lanes\.map\(\(lane\) =>/);
-  assert.match(summary, /\{lane\.displayName\}/);
-  assert.match(summary, /!lane\.is_active/);
-  assert.match(summary, /Nieaktywna/);
+  assert.match(summary, /HierarchyResourceLabel/);
+  assert.match(summary, /displayName: lane\.displayName/);
+  assert.match(summary, /isActive: lane\.is_active/);
+  assert.match(summary, /showStatus/);
+  assert.match(summary, /tree/);
 });
 
 test("lane summary preserves helper order and is read-only for every admin role", async () => {
@@ -284,9 +286,8 @@ test("lane summary preserves helper order and is read-only for every admin role"
   assert.doesNotMatch(summary, /\.sort\(|canManageEvents|userRole/);
   assert.doesNotMatch(summary, /lane\.(?:type|display_order)/);
   assert.doesNotMatch(summary, />\s*\{lane\.id\}\s*</);
-  assert.match(summary, /flex flex-wrap gap-2/);
-  assert.match(summary, /inline-flex max-w-full flex-wrap/);
-  assert.match(summary, /break-words/);
+  assert.match(summary, /grid gap-2 sm:grid-cols-2 xl:grid-cols-3/);
+  assert.match(summary, /min-w-0 rounded-xl/);
 });
 
 test("active lanes load only for management roles with a fail-closed stable contract", async () => {
@@ -344,7 +345,8 @@ test("create form exposes safe lane selection states and never displays lane UUI
   assert.match(source, /type="checkbox"/);
   assert.match(source, /checked=\{createLaneIds\.includes\(lane\.id\)\}/);
   assert.match(source, /disabled=\{createSubmitting\}/);
-  assert.match(source, /\{lane\.displayName\}/);
+  assert.match(source, /displayName: lane\.displayName/);
+  assert.match(source, /HierarchyResourceLabel/);
   assert.doesNotMatch(source, />\s*\{lane\.id\}\s*</);
   assert.match(source, /grid gap-2 sm:grid-cols-2 xl:grid-cols-3/);
 });
@@ -434,7 +436,7 @@ test("edit form preserves assigned inactive lanes and saves only through admin_u
   assert.match(source, /const editableLanes = getEditableEventLanes\(activeLanes, event\.lanes\)/);
   assert.match(source, /const isSelected = editLaneIds\.includes\(lane\.id\)/);
   assert.match(source, /checked=\{isSelected\}/);
-  assert.match(source, /Nieaktywna/);
+  assert.match(source, /showStatus/);
   assert.match(source, /disabled=\{isDisabled\}/);
   assert.match(source, /disabled=\{editSubmitting\}/);
   assert.match(toggleEditLane, /if \(editSubmittingRef\.current\) \{\s*return;\s*\}/);
@@ -552,6 +554,8 @@ test("event hierarchy presentation keeps dormant resources out and prepares acti
   assert.match(loadActiveLanes, /\.eq\("is_active", true\)/);
   assert.match(loadEvents, /parent_lane:shooting_lanes!shooting_lanes_parent_lane_id_fkey/);
   assert.match(source, /lane\.displayName/);
+  assert.match(source, /HierarchyResourceLabel/);
+  assert.match(source, /isPosition: lane\.isPosition/);
   assert.doesNotMatch(source, /Oś 100 m — Stanowisko 1/);
   assert.equal((source.match(/admin_create_event_v2/g) ?? []).length, 1);
   assert.equal((source.match(/admin_update_event_v2/g) ?? []).length, 1);

@@ -3,6 +3,11 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import {
+  HierarchyResourceLabel,
+  ResourceStatusBadge,
+  ResourceTypeBadge,
+} from "../_components/HierarchyResourcePresentation";
+import {
   getLaneBlockErrorMessage,
   LANE_BLOCK_GENERIC_ERROR,
   validateLaneBlockRpcResult,
@@ -161,10 +166,10 @@ export default function LaneBlocksPage() {
 
   function getMessageClass(value: string) {
     if (value.includes("dodana")) {
-      return "mb-6 rounded-xl border border-green-800 bg-green-950 p-4 text-sm font-semibold text-green-300";
+      return "mb-6 rounded-xl border border-[#3f6848] bg-[#1b2a1d] p-4 text-sm font-semibold text-[#a9d4ad]";
     }
 
-    return "mb-6 rounded-xl border border-red-800 bg-red-950 p-4 text-sm font-semibold text-red-300";
+    return "mb-6 rounded-xl border border-[#744545] bg-[#2a1b1b] p-4 text-sm font-semibold text-[#e0a0a0]";
   }
 
   const lanesById = new Map(lanes.map((lane) => [lane.id, lane]));
@@ -176,165 +181,240 @@ export default function LaneBlocksPage() {
   const selectedLaneIsActive = lanes.some(
     (lane) => lane.id === laneId && lane.isActive
   );
+  const selectedLane = lanesById.get(laneId);
+  const selectedLaneScopeMessage = selectedLane?.isActive
+    ? selectedLane.isPosition
+      ? "Blokada stanowiska uwzględnia również oś nadrzędną."
+      : "Blokada całej osi obejmuje również jej stanowiska."
+    : null;
 
   return (
-    <main className="min-h-screen bg-zinc-950 text-white">
-      <section className="mx-auto max-w-6xl px-4 py-10 sm:px-6 sm:py-12">
-        <header className="mb-10">
-          <p className="mb-4 text-sm uppercase tracking-[0.35em] text-green-500">
+    <main className="min-h-screen bg-[#090b09] text-[#f2efe4]">
+      <section className="mx-auto max-w-6xl px-4 py-8 sm:px-6 sm:py-12">
+        <header className="mb-8 sm:mb-10">
+          <p className="mb-3 text-xs font-bold uppercase tracking-[0.3em] text-[#d7c895] sm:text-sm">
             ADMIN PANEL
           </p>
           <h1 className="text-3xl font-bold sm:text-4xl">Blokady osi</h1>
-          <p className="mt-3 max-w-3xl text-zinc-400">
-            Zarządzanie blokadami osi strzeleckich, serwisem, zawodami i
-            szkoleniami zamkniętymi.
+          <p className="mt-3 max-w-3xl text-sm leading-relaxed text-[#a9ada4] sm:text-base">
+            Zarządzaj wyłączeniami całych osi i pojedynczych stanowisk bez
+            zmiany konfiguracji rezerwacji.
           </p>
         </header>
 
-        {message && (
+        {message ? (
           <div role="status" className={getMessageClass(message)}>
             {message}
           </div>
-        )}
+        ) : null}
 
-        {loadError && (
+        {loadError ? (
           <div
             role="alert"
-            className="mb-6 rounded-xl border border-red-800 bg-red-950 p-4 text-sm font-semibold text-red-300"
+            className="mb-6 rounded-xl border border-[#744545] bg-[#2a1b1b] p-4 text-sm font-semibold text-[#e0a0a0]"
           >
             {LANE_DATA_LOAD_ERROR}
           </div>
-        )}
+        ) : null}
 
-        <section className="mb-10 rounded-2xl border border-zinc-800 bg-zinc-900 p-4 sm:p-6">
-          <h2 className="mb-6 text-2xl font-bold">Dodaj blokadę</h2>
+        <section className="mb-10 overflow-hidden rounded-[2rem] border border-[#30372c] bg-[#141814] shadow-[0_24px_70px_rgba(0,0,0,0.24)]">
+          <div className="border-b border-[#30372c] px-4 py-5 sm:px-6">
+            <p className="text-xs font-bold uppercase tracking-[0.2em] text-[#d7c895]">
+              Nowa blokada
+            </p>
+            <h2 className="mt-2 text-2xl font-bold">Dodaj blokadę</h2>
+            <p className="mt-2 text-sm text-[#a9ada4]">
+              Wybierz zasób, określ termin i opcjonalnie opisz przyczynę.
+            </p>
+          </div>
 
-          <div className="grid gap-5">
-            <label
-              htmlFor="lane-block-resource"
-              className="grid gap-2 text-sm font-semibold text-zinc-200"
-            >
-              Oś lub stanowisko
-              <select
-                id="lane-block-resource"
-                value={laneId}
-                onChange={(event) => setLaneId(event.target.value)}
-                disabled={loading || loadError}
-                className="min-h-11 w-full rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-white outline-none transition focus-visible:border-green-600 focus-visible:ring-2 focus-visible:ring-green-600 disabled:cursor-not-allowed disabled:opacity-60"
+          <div className="grid gap-0 lg:grid-cols-2">
+            <fieldset className="min-w-0 border-b border-[#30372c] p-4 sm:p-6 lg:border-r">
+              <legend className="sr-only">Zasób</legend>
+              <p className="text-xs font-bold uppercase tracking-[0.18em] text-[#d7c895]">
+                1. Zasób
+              </p>
+              <label
+                htmlFor="lane-block-resource"
+                className="mt-4 grid gap-2 text-sm font-semibold text-[#f2efe4]"
               >
-                <option value="">Wybierz zasób</option>
-                {lanes.map((lane) => (
-                  <option
-                    key={lane.id}
-                    value={lane.id}
-                    disabled={!lane.isActive}
-                  >
-                    {lane.depth === 1 ? "↳ " : ""}
-                    {lane.displayName}
-                    {!lane.isActive ? " · Nieaktywne" : ""}
-                  </option>
-                ))}
-              </select>
-            </label>
-
-            <div className="grid gap-5 md:grid-cols-3">
-              <label className="grid gap-2 text-sm font-semibold text-zinc-200">
-                Data blokady
-                <input
-                  type="date"
-                  value={blockDate}
-                  onChange={(event) => setBlockDate(event.target.value)}
-                  className="min-h-11 w-full rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-white outline-none focus-visible:border-green-600 focus-visible:ring-2 focus-visible:ring-green-600"
-                />
+                Oś lub stanowisko
+                <select
+                  id="lane-block-resource"
+                  value={laneId}
+                  onChange={(event) => setLaneId(event.target.value)}
+                  disabled={loading || loadError}
+                  className="min-h-11 w-full max-w-full rounded-xl border border-[#3d4638] bg-[#0f120f] px-4 py-3 text-[#f2efe4] outline-none transition hover:border-[#536143] focus-visible:border-[#78865f] focus-visible:ring-2 focus-visible:ring-[#d7c895] disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  <option value="">Wybierz zasób</option>
+                  {lanes.map((lane) => (
+                    <option
+                      key={lane.id}
+                      value={lane.id}
+                      disabled={!lane.isActive}
+                    >
+                      {lane.depth === 1 ? "↳ " : ""}
+                      {lane.displayName}
+                      {!lane.isActive ? " · Nieaktywne" : ""}
+                    </option>
+                  ))}
+                </select>
               </label>
 
-              <label className="grid gap-2 text-sm font-semibold text-zinc-200">
-                Początek
-                <input
-                  type="time"
-                  value={startTime}
-                  onChange={(event) => setStartTime(event.target.value)}
-                  className="min-h-11 w-full rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-white outline-none focus-visible:border-green-600 focus-visible:ring-2 focus-visible:ring-green-600"
-                />
-              </label>
+              {selectedLaneScopeMessage && selectedLane ? (
+                <div className="mt-4 rounded-xl border border-[#536143] bg-[#20271e] p-3">
+                  <HierarchyResourceLabel
+                    resource={selectedLane}
+                    compact
+                    showStatus
+                  />
+                  <p className="mt-2 text-xs leading-relaxed text-[#c7cbbf]">
+                    {selectedLaneScopeMessage}
+                  </p>
+                </div>
+              ) : null}
+            </fieldset>
 
-              <label className="grid gap-2 text-sm font-semibold text-zinc-200">
-                Koniec
-                <input
-                  type="time"
-                  value={endTime}
-                  onChange={(event) => setEndTime(event.target.value)}
-                  className="min-h-11 w-full rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-white outline-none focus-visible:border-green-600 focus-visible:ring-2 focus-visible:ring-green-600"
+            <fieldset className="min-w-0 border-b border-[#30372c] p-4 sm:p-6">
+              <legend className="sr-only">Termin</legend>
+              <p className="text-xs font-bold uppercase tracking-[0.18em] text-[#d7c895]">
+                2. Termin
+              </p>
+              <div className="mt-4 grid gap-4 sm:grid-cols-3 lg:grid-cols-1 xl:grid-cols-3">
+                <label className="grid gap-2 text-sm font-semibold text-[#f2efe4]">
+                  Data
+                  <input
+                    type="date"
+                    value={blockDate}
+                    onChange={(event) => setBlockDate(event.target.value)}
+                    className="min-h-11 w-full min-w-0 rounded-xl border border-[#3d4638] bg-[#0f120f] px-4 py-3 text-[#f2efe4] outline-none transition hover:border-[#536143] focus-visible:border-[#78865f] focus-visible:ring-2 focus-visible:ring-[#d7c895]"
+                  />
+                </label>
+                <label className="grid gap-2 text-sm font-semibold text-[#f2efe4]">
+                  Od
+                  <input
+                    type="time"
+                    value={startTime}
+                    onChange={(event) => setStartTime(event.target.value)}
+                    className="min-h-11 w-full min-w-0 rounded-xl border border-[#3d4638] bg-[#0f120f] px-4 py-3 text-[#f2efe4] outline-none transition hover:border-[#536143] focus-visible:border-[#78865f] focus-visible:ring-2 focus-visible:ring-[#d7c895]"
+                  />
+                </label>
+                <label className="grid gap-2 text-sm font-semibold text-[#f2efe4]">
+                  Do
+                  <input
+                    type="time"
+                    value={endTime}
+                    onChange={(event) => setEndTime(event.target.value)}
+                    className="min-h-11 w-full min-w-0 rounded-xl border border-[#3d4638] bg-[#0f120f] px-4 py-3 text-[#f2efe4] outline-none transition hover:border-[#536143] focus-visible:border-[#78865f] focus-visible:ring-2 focus-visible:ring-[#d7c895]"
+                  />
+                </label>
+              </div>
+            </fieldset>
+
+            <fieldset className="min-w-0 border-b border-[#30372c] p-4 sm:p-6 lg:border-r lg:border-b-0">
+              <legend className="sr-only">Szczegóły</legend>
+              <p className="text-xs font-bold uppercase tracking-[0.18em] text-[#d7c895]">
+                3. Szczegóły
+              </p>
+              <label className="mt-4 grid gap-2 text-sm font-semibold text-[#f2efe4]">
+                Powód blokady
+                <textarea
+                  value={reason}
+                  onChange={(event) => setReason(event.target.value)}
+                  rows={4}
+                  placeholder="Np. zawody, serwis lub szkolenie zamknięte"
+                  className="w-full min-w-0 resize-y rounded-xl border border-[#3d4638] bg-[#0f120f] px-4 py-3 text-[#f2efe4] outline-none transition placeholder:text-[#858c7f] hover:border-[#536143] focus-visible:border-[#78865f] focus-visible:ring-2 focus-visible:ring-[#d7c895]"
                 />
               </label>
+              <p className="mt-2 text-xs text-[#858c7f]">
+                Opis jest widoczny wyłącznie w panelu administracyjnym.
+              </p>
+            </fieldset>
+
+            <div className="flex min-w-0 flex-col justify-between gap-4 p-4 sm:p-6">
+              <div>
+                <p className="text-xs font-bold uppercase tracking-[0.18em] text-[#d7c895]">
+                  4. Akcja
+                </p>
+                <p className="mt-3 text-sm leading-relaxed text-[#a9ada4]">
+                  Aktywną blokadę możesz później bezpiecznie dezaktywować z
+                  listy poniżej.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={createBlock}
+                disabled={loading || loadError || !selectedLaneIsActive}
+                className="min-h-11 w-full rounded-xl border border-[#536143] bg-[#536143] px-5 py-3 text-sm font-semibold text-[#f2efe4] transition hover:border-[#78865f] hover:bg-[#78865f] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d7c895] focus-visible:ring-offset-2 focus-visible:ring-offset-[#141814] disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto sm:self-start"
+              >
+                Dodaj blokadę
+              </button>
             </div>
-
-            <label className="grid gap-2 text-sm font-semibold text-zinc-200">
-              Powód blokady
-              <textarea
-                value={reason}
-                onChange={(event) => setReason(event.target.value)}
-                rows={4}
-                placeholder="Powód blokady (np. zawody, serwis, szkolenie zamknięte)"
-                className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-white outline-none focus-visible:border-green-600 focus-visible:ring-2 focus-visible:ring-green-600"
-              />
-            </label>
-
-            <button
-              type="button"
-              onClick={createBlock}
-              disabled={loading || loadError || !selectedLaneIsActive}
-              className="min-h-11 rounded-xl bg-green-700 px-4 py-3 font-semibold transition hover:bg-green-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-400 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-900 disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              Dodaj blokadę
-            </button>
           </div>
         </section>
 
-        {loading && (
-          <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-6 text-zinc-400">
-            Ładowanie blokad...
+        {loading ? (
+          <div
+            role="status"
+            className="animate-pulse rounded-2xl border border-[#30372c] bg-[#151915] p-6 text-sm text-[#a9ada4]"
+          >
+            Ładowanie blokad…
           </div>
-        )}
+        ) : null}
 
-        {!loading && !loadError && (
-          <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-            <div>
-              <h2 className="text-2xl font-bold">Zaplanowane blokady</h2>
-              <p className="mt-1 text-sm text-zinc-400">
-                Zasoby są opisane pełną nazwą osi i stanowiska.
+        {!loading && !loadError ? (
+          <div className="mb-5 flex min-w-0 flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+            <div className="min-w-0">
+              <p className="text-xs font-bold uppercase tracking-[0.2em] text-[#d7c895]">
+                Harmonogram wyłączeń
+              </p>
+              <h2 className="mt-2 text-2xl font-bold">Zaplanowane blokady</h2>
+              <p className="mt-1 text-sm text-[#a9ada4]">
+                Pełna nazwa zawsze wskazuje oś i ewentualne stanowisko.
               </p>
             </div>
 
-            <label
-              htmlFor="lane-block-status-filter"
-              className="grid gap-2 text-sm font-semibold text-zinc-300 sm:w-52"
+            <div
+              role="group"
+              aria-label="Filtr statusu blokad"
+              className="grid w-full grid-cols-3 gap-1 rounded-xl border border-[#30372c] bg-[#141814] p-1 sm:w-auto"
             >
-              Status blokady
-              <select
-                id="lane-block-status-filter"
-                value={blockFilter}
-                onChange={(event) =>
-                  setBlockFilter(event.target.value as LaneBlockFilter)
-                }
-                className="min-h-11 w-full rounded-xl border border-zinc-700 bg-zinc-900 px-4 py-2 text-white outline-none focus-visible:border-green-600 focus-visible:ring-2 focus-visible:ring-green-600"
-              >
-                <option value="all">Wszystkie</option>
-                <option value="active">Aktywne</option>
-                <option value="inactive">Nieaktywne</option>
-              </select>
-            </label>
+              {(
+                [
+                  ["all", "Wszystkie"],
+                  ["active", "Aktywne"],
+                  ["inactive", "Nieaktywne"],
+                ] as const
+              ).map(([value, label]) => (
+                <button
+                  key={value}
+                  type="button"
+                  aria-pressed={blockFilter === value}
+                  onClick={() => setBlockFilter(value)}
+                  className={`min-h-11 rounded-lg px-3 py-2 text-xs font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d7c895] sm:text-sm ${
+                    blockFilter === value
+                      ? "bg-[#536143] text-[#f2efe4] shadow-sm"
+                      : "text-[#a9ada4] hover:bg-[#20271e] hover:text-[#f2efe4]"
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
           </div>
-        )}
+        ) : null}
 
-        {!loading && !loadError && visibleBlocks.length === 0 && (
-          <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-6 text-zinc-400">
-            Brak blokad dla wybranego filtra.
+        {!loading && !loadError && visibleBlocks.length === 0 ? (
+          <div className="rounded-2xl border border-[#30372c] bg-[#151915] p-6 text-center">
+            <p className="font-semibold text-[#f2efe4]">Brak blokad</p>
+            <p className="mt-2 text-sm text-[#a9ada4]">
+              Dla wybranego filtra nie ma zaplanowanych wyłączeń.
+            </p>
           </div>
-        )}
+        ) : null}
 
-        {!loading && !loadError && visibleBlocks.length > 0 && (
-          <div className="grid gap-5">
+        {!loading && !loadError && visibleBlocks.length > 0 ? (
+          <div className="grid gap-4">
             {visibleBlocks.map((block) => {
               const lane = lanesById.get(block.lane_id);
               const activationDisabled =
@@ -343,44 +423,63 @@ export default function LaneBlocksPage() {
               return (
                 <article
                   key={block.id}
-                  className="min-w-0 rounded-2xl border border-zinc-800 bg-zinc-900 p-4 sm:p-6"
+                  className="min-w-0 rounded-2xl border border-[#30372c] bg-[#151915] p-4 transition hover:border-[#536143] sm:p-6"
                 >
-                  <div className="flex min-w-0 flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
-                    <div className="min-w-0">
-                      <div className="mb-3 flex flex-wrap items-center gap-2">
+                  <div className="flex min-w-0 flex-col gap-5 md:flex-row md:items-center md:justify-between">
+                    <div className="min-w-0 flex-1">
+                      <h3 className="break-words text-xl font-bold text-[#f2efe4] sm:text-2xl">
+                        {lane?.displayName ?? "Nieznany zasób"}
+                      </h3>
+                      <div className="mt-3 flex flex-wrap items-center gap-2">
+                        {lane ? (
+                          <>
+                            <ResourceTypeBadge isPosition={lane.isPosition} />
+                            <ResourceStatusBadge isActive={lane.isActive} />
+                          </>
+                        ) : null}
                         <span
                           className={
                             block.is_active
-                              ? "inline-flex rounded-full bg-red-950 px-3 py-1 text-xs font-semibold text-red-300"
-                              : "inline-flex rounded-full bg-zinc-800 px-3 py-1 text-xs font-semibold text-zinc-300"
+                              ? "inline-flex rounded-full border border-[#806a32] bg-[#2b2618] px-2.5 py-1 text-[0.68rem] font-bold uppercase tracking-[0.1em] text-[#e1c477]"
+                              : "inline-flex rounded-full border border-[#343a31] bg-[#171a17] px-2.5 py-1 text-[0.68rem] font-bold uppercase tracking-[0.1em] text-[#858c7f]"
                           }
                         >
-                          {block.is_active ? "Aktywna blokada" : "Nieaktywna"}
+                          {block.is_active
+                            ? "Blokada aktywna"
+                            : "Blokada nieaktywna"}
                         </span>
-
-                        {lane && !lane.isActive && (
-                          <span className="inline-flex rounded-full border border-amber-800 bg-amber-950 px-3 py-1 text-xs font-semibold text-amber-200">
-                            Zasób nieaktywny
-                          </span>
-                        )}
                       </div>
 
-                      <h3 className="break-words text-xl font-bold sm:text-2xl">
-                        {lane?.displayName ?? "Nieznany zasób"}
-                      </h3>
-                      <p className="mt-2 text-zinc-400">
-                        {block.block_date} · {block.start_time.slice(0, 5)}–
-                        {block.end_time.slice(0, 5)}
-                      </p>
+                      <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                        <div className="rounded-xl border border-[#30372c] bg-[#0f120f] p-3">
+                          <p className="text-xs uppercase tracking-[0.12em] text-[#858c7f]">
+                            Data
+                          </p>
+                          <p className="mt-1 font-semibold text-[#f2efe4]">
+                            {block.block_date}
+                          </p>
+                        </div>
+                        <div className="rounded-xl border border-[#30372c] bg-[#0f120f] p-3">
+                          <p className="text-xs uppercase tracking-[0.12em] text-[#858c7f]">
+                            Godziny
+                          </p>
+                          <p className="mt-1 font-semibold text-[#f2efe4]">
+                            {block.start_time.slice(0, 5)}–
+                            {block.end_time.slice(0, 5)}
+                          </p>
+                        </div>
+                      </div>
 
-                      {block.reason && (
-                        <p className="mt-3 break-words text-sm leading-relaxed text-zinc-300">
-                          <span className="font-semibold text-zinc-200">
-                            Powód:
-                          </span>{" "}
-                          {block.reason}
-                        </p>
-                      )}
+                      {block.reason ? (
+                        <div className="mt-3 rounded-xl border border-[#30372c] bg-[#141814] p-3">
+                          <p className="text-xs uppercase tracking-[0.12em] text-[#858c7f]">
+                            Powód
+                          </p>
+                          <p className="mt-1 break-words text-sm leading-relaxed text-[#c7cbbf]">
+                            {block.reason}
+                          </p>
+                        </div>
+                      ) : null}
                     </div>
 
                     <button
@@ -390,8 +489,8 @@ export default function LaneBlocksPage() {
                       aria-label={`${block.is_active ? "Dezaktywuj" : "Aktywuj"} blokadę dla ${lane?.displayName ?? "nieznanego zasobu"}`}
                       className={
                         block.is_active
-                          ? "min-h-11 w-full rounded-xl border border-green-800 px-5 py-3 text-sm font-semibold text-green-300 transition hover:bg-green-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-400 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
-                          : "min-h-11 w-full rounded-xl border border-red-800 px-5 py-3 text-sm font-semibold text-red-300 transition hover:bg-red-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
+                          ? "min-h-11 w-full rounded-xl border border-[#806a32] px-5 py-3 text-sm font-semibold text-[#e1c477] transition hover:bg-[#2b2618] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d7c895] disabled:cursor-not-allowed disabled:opacity-60 md:w-auto"
+                          : "min-h-11 w-full rounded-xl border border-[#536143] bg-[#20271e] px-5 py-3 text-sm font-semibold text-[#a9d4ad] transition hover:border-[#78865f] hover:bg-[#293126] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d7c895] disabled:cursor-not-allowed disabled:opacity-60 md:w-auto"
                       }
                     >
                       {activationDisabled
@@ -405,12 +504,12 @@ export default function LaneBlocksPage() {
               );
             })}
           </div>
-        )}
+        ) : null}
 
         <div className="mt-8">
           <Link
             href="/admin"
-            className="inline-flex min-h-11 max-w-full items-center rounded-xl border border-zinc-700 px-5 py-3 text-sm font-semibold text-zinc-300 transition hover:bg-zinc-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500"
+            className="inline-flex min-h-11 max-w-full items-center rounded-xl border border-[#3d4638] px-5 py-3 text-sm font-semibold text-[#c7cbbf] transition hover:border-[#536143] hover:bg-[#20271e] hover:text-[#f2efe4] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d7c895]"
           >
             ← Panel administratora
           </Link>
