@@ -410,7 +410,7 @@ function AdminCalendarContent() {
           </div>
           <p className="text-sm text-[#858c7f]">{view === "week" ? "Poniedziałek–niedziela" : view === "month" ? "Podsumowanie miesiąca · poniedziałek–niedziela" : `Godziny działania: ${feed?.openingStart ?? "08:00"}–${feed?.openingEnd ?? "20:00"}`}</p>
         </div>
-        <CalendarLegend />
+        {view !== "month" && <CalendarLegend />}
       </div>
 
       <div aria-live="polite" aria-atomic="true">

@@ -150,11 +150,23 @@ export default function MonthCalendar({
                 />
               </div>
               {hasActivityCounts && (
-                <p className="mt-1 flex flex-wrap gap-x-2 gap-y-0.5 text-[8px] font-bold leading-tight text-[#c7cbbf] sm:text-[10px]">
-                  {summary.reservationCount > 0 && <span>R {summary.reservationCount}</span>}
-                  {summary.blockCount > 0 && <span>B {summary.blockCount}</span>}
-                  {summary.eventCount > 0 && <span>E {summary.eventCount}</span>}
-                </p>
+                <div className="mt-1 flex min-w-0 flex-col gap-0.5 text-[8px] font-medium leading-tight text-[#c7cbbf] sm:text-[10px]">
+                  {summary.reservationCount > 0 && (
+                    <span className="min-w-0 break-words">
+                      Rezerwacje: <strong className="font-bold">{summary.reservationCount}</strong>
+                    </span>
+                  )}
+                  {summary.blockCount > 0 && (
+                    <span className="min-w-0 break-words">
+                      Blokady: <strong className="font-bold">{summary.blockCount}</strong>
+                    </span>
+                  )}
+                  {summary.eventCount > 0 && (
+                    <span className="min-w-0 break-words">
+                      Eventy: <strong className="font-bold">{summary.eventCount}</strong>
+                    </span>
+                  )}
+                </div>
               )}
 
               {summary.isFull && (

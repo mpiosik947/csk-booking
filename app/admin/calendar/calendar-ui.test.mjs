@@ -506,7 +506,7 @@ test("month view uses summaries without entry labels or customer data", async ()
   assert.match(source, /grid-cols-7/);
 });
 
-test("month tiles emphasize the date and render only non-zero activity counters", async () => {
+test("month tiles emphasize the date and render full labels only for non-zero activity counters", async () => {
   const source = await readFile(
     new URL("./_components/MonthCalendar.tsx", import.meta.url),
     "utf8"
@@ -514,11 +514,15 @@ test("month tiles emphasize the date and render only non-zero activity counters"
 
   assert.match(source, /text-base font-black leading-none tabular-nums sm:text-lg/);
   assert.match(source, /Number\(day\.date\.slice\(8, 10\)\)/);
-  assert.match(source, /summary\.reservationCount > 0 && <span>R \{summary\.reservationCount\}<\/span>/);
-  assert.match(source, /summary\.blockCount > 0 && <span>B \{summary\.blockCount\}<\/span>/);
-  assert.match(source, /summary\.eventCount > 0 && <span>E \{summary\.eventCount\}<\/span>/);
+  assert.match(source, /summary\.reservationCount > 0 &&/);
+  assert.match(source, /Rezerwacje: <strong[^>]*>\{summary\.reservationCount\}<\/strong>/);
+  assert.match(source, /summary\.blockCount > 0 &&/);
+  assert.match(source, /Blokady: <strong[^>]*>\{summary\.blockCount\}<\/strong>/);
+  assert.match(source, /summary\.eventCount > 0 &&/);
+  assert.match(source, /Eventy: <strong[^>]*>\{summary\.eventCount\}<\/strong>/);
   assert.match(source, /hasActivityCounts &&/);
-  assert.doesNotMatch(source, /occupiedMinutes|availableMinutes|R\{summary|B\{summary|E\{summary/);
+  assert.doesNotMatch(source, /occupiedMinutes|availableMinutes|>R \{|>B \{|>E \{/);
+  assert.match(source, /flex min-w-0 flex-col gap-0\.5/);
 });
 
 test("month tiles retain occupancy percentage, progress, today and responsive wrapping", async () => {
@@ -531,8 +535,20 @@ test("month tiles retain occupancy percentage, progress, today and responsive wr
   assert.match(source, /style=\{\{ width: `\$\{percent \?\? 0\}%` \}\}/);
   assert.match(source, /isToday &&/);
   assert.match(source, />\s*Dzisiaj\s*</);
-  assert.match(source, /flex flex-wrap gap-x-2 gap-y-0\.5/);
+  assert.match(source, /min-w-0 break-words/);
   assert.doesNotMatch(source, /min-w-\[[^\]]+\]/);
+});
+
+test("month hides the redundant R B E legend without changing day or week", async () => {
+  const [pageSource, legendSource] = await Promise.all([
+    readFile(new URL("./page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("./_components/CalendarLegend.tsx", import.meta.url), "utf8"),
+  ]);
+
+  assert.match(pageSource, /view !== "month" && <CalendarLegend \/>/);
+  assert.match(legendSource, /Rezerwacja/);
+  assert.match(legendSource, /Blokada/);
+  assert.match(legendSource, /Event/);
 });
 
 test("week grouping always returns Monday through Sunday", () => {
