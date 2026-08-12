@@ -463,7 +463,7 @@ export default function AdminEventsPage() {
             display_order,
             resource_kind,
             parent_lane_id,
-            parent_lane:shooting_lanes!shooting_lanes_parent_lane_id_fkey (
+            parent_lane:shooting_lanes!parent_lane_id (
               id,
               name,
               type,

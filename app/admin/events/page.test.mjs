@@ -52,6 +52,26 @@ test("admin events uses the normalized relational event contract", async () => {
   assert.match(loadEvents, /normalizeAdminEvent\(record\)/);
 });
 
+test("event list uses the PostgREST column hint for the self-referencing parent lane", async () => {
+  const source = await readAdminPage();
+  const loadEvents = functionSource(
+    source,
+    "async function loadEvents()",
+    "async function loadRegistrations("
+  );
+
+  assert.match(
+    loadEvents,
+    /parent_lane:shooting_lanes!parent_lane_id\s*\(\s*id,\s*name,\s*type,\s*is_active,\s*display_order,\s*resource_kind,\s*parent_lane_id\s*\)/
+  );
+  assert.doesNotMatch(
+    loadEvents,
+    /parent_lane:shooting_lanes!shooting_lanes_parent_lane_id_fkey/
+  );
+  assert.match(loadEvents, /event_lanes\s*\([\s\S]*shooting_lanes\s*\(/);
+  assert.match(loadEvents, /if \(error\)[\s\S]*EVENTS_LOAD_ERROR_MESSAGE/);
+});
+
 test("event loading fails closed without replacing a valid list", async () => {
   const source = await readAdminPage();
   const loadEvents = functionSource(
@@ -552,7 +572,8 @@ test("event hierarchy presentation keeps dormant resources out and prepares acti
   assert.match(source, /normalizeActiveEventLanes/);
   assert.match(loadActiveLanes, /resource_kind,parent_lane_id/);
   assert.match(loadActiveLanes, /\.eq\("is_active", true\)/);
-  assert.match(loadEvents, /parent_lane:shooting_lanes!shooting_lanes_parent_lane_id_fkey/);
+  assert.match(loadEvents, /parent_lane:shooting_lanes!parent_lane_id/);
+  assert.doesNotMatch(loadEvents, /shooting_lanes_parent_lane_id_fkey/);
   assert.match(source, /lane\.displayName/);
   assert.match(source, /HierarchyResourceLabel/);
   assert.match(source, /isPosition: lane\.isPosition/);
