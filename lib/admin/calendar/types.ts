@@ -34,11 +34,23 @@ export type CalendarEntryLinks = {
 export type CalendarLane = {
   id: string;
   name: string;
+  displayName: string;
+  parentName: string | null;
   isActive: boolean;
   isHistoricalOnly: boolean;
   displayOrder: number;
   bookingStepMinutes: number;
+  resourceKind: "lane" | "position";
+  parentLaneId: string | null;
+  depth: 0 | 1;
+  isParent: boolean;
+  isPosition: boolean;
 };
+
+export type CalendarEntryResource = Pick<
+  CalendarLane,
+  "id" | "displayName" | "depth" | "isActive" | "isPosition"
+>;
 
 type CalendarEntryBase = {
   id: string;
@@ -57,6 +69,7 @@ export type CalendarReservationEntry = CalendarEntryBase & {
   laneId: string;
   laneName: string;
   laneMetadataAvailable: boolean;
+  laneResource: CalendarEntryResource | null;
   status: CalendarReservationStatus;
   shootersCount: number;
 };
@@ -66,6 +79,7 @@ export type CalendarLaneBlockEntry = CalendarEntryBase & {
   laneId: string;
   laneName: string;
   laneMetadataAvailable: boolean;
+  laneResource: CalendarEntryResource | null;
   status: "active" | "inactive";
   reason: string | null;
   isActive: boolean;
@@ -78,13 +92,14 @@ type CalendarEventDetails = CalendarEntryBase & {
   maxParticipants: number;
   sourceEventId: string;
   laneIds: string[];
-  lanes: Array<{ id: string; name: string }>;
+  resources: CalendarEntryResource[];
 };
 
 export type CalendarGlobalEventEntry = CalendarEventDetails & {
   laneId: null;
   laneName: null;
   laneMetadataAvailable: false;
+  laneResource: null;
   occupiesLane: false;
   isLaneProjection: false;
 };
@@ -93,6 +108,7 @@ export type CalendarLaneEventEntry = CalendarEventDetails & {
   laneId: string;
   laneName: string;
   laneMetadataAvailable: true;
+  laneResource: CalendarEntryResource;
   occupiesLane: true;
   isLaneProjection: true;
 };

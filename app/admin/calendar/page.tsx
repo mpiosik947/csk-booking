@@ -4,6 +4,7 @@ import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "rea
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import AdminShell from "@/app/admin/_components/AdminShell";
+import { ResourceTypeBadge } from "@/app/admin/_components/HierarchyResourcePresentation";
 import type {
   CalendarEntryType,
   CalendarEntry,
@@ -34,6 +35,7 @@ import {
   formatCalendarWeekRange,
   formatCalendarMonth,
   getCalendarLaneLabel,
+  getCalendarResourceScopeLabel,
   getCalendarEntryPreviewData,
   getCalendarEntryPreviewNavigation,
   getCalendarMonthDates,
@@ -278,6 +280,10 @@ function AdminCalendarContent() {
         ? formatCalendarMonth(date) ?? date
         : formatSelectedDate(date);
   const calendarLaneLabel = getCalendarLaneLabel(requestLaneId, knownLanes);
+  const selectedCalendarLane =
+    requestLaneId === "all"
+      ? null
+      : knownLanes.find((lane) => lane.id === requestLaneId) ?? null;
 
   const openEntryPreview = useCallback(
     (entry: CalendarEntry, activator: HTMLButtonElement) => {
@@ -387,8 +393,18 @@ function AdminCalendarContent() {
           <div className="flex min-w-0 flex-wrap items-center gap-2">
             <p className="text-lg font-bold text-[#f2efe4]">{periodLabel}</p>
             {(view === "week" || view === "month") && (
-              <span className="max-w-full break-words rounded-full border border-[#536143] bg-[#20271e] px-2.5 py-1 text-xs font-semibold text-[#d7c895]">
-                {calendarLaneLabel}
+              <span className="inline-flex max-w-full flex-wrap items-center gap-2 rounded-xl border border-[#536143] bg-[#20271e] px-2.5 py-1 text-xs font-semibold text-[#d7c895]">
+                <span className="min-w-0 break-words">{calendarLaneLabel}</span>
+                {selectedCalendarLane ? (
+                  <>
+                    <ResourceTypeBadge
+                      isPosition={selectedCalendarLane.isPosition}
+                    />
+                    <span className="text-[#a9ada4]">
+                      {getCalendarResourceScopeLabel(selectedCalendarLane)}
+                    </span>
+                  </>
+                ) : null}
               </span>
             )}
           </div>

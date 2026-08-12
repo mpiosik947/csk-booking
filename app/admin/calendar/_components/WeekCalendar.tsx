@@ -59,6 +59,16 @@ function WeekEvents({
                 <p className="text-xs font-bold text-[#f2efe4]">E · {event.startTime}–{event.endTime}</p>
                 <p className="truncate text-sm text-[#c7cbbf]">{event.label}</p>
                 <p className="truncate text-xs text-[#a9ada4]">{event.location || "Lokalizacja niepodana"} · limit {event.maxParticipants}</p>
+                <p className="mt-1 line-clamp-2 text-xs text-[#d7c895]">
+                  {event.resources.length === 0
+                    ? "Event globalny — nie blokuje osi"
+                    : event.resources
+                        .map(
+                          (resource) =>
+                            `${resource.displayName} · ${resource.isPosition ? "Stanowisko" : "Cała oś"}`
+                        )
+                        .join("; ")}
+                </p>
               </button>
             ))}
           </div>

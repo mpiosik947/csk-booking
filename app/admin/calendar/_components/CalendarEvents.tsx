@@ -26,6 +26,16 @@ export default function CalendarEvents({
             <h3 className="mt-1 font-semibold text-[#f2efe4]">{event.label}</h3>
             <p className="mt-2 text-sm text-[#c7cbbf]">{event.location || "Lokalizacja niepodana"}</p>
             <p className="mt-1 text-xs text-[#a9ada4]">Limit uczestników: {event.maxParticipants}</p>
+            <p className="mt-2 break-words text-xs font-semibold text-[#d7c895]">
+              {event.resources.length === 0
+                ? "Event globalny — nie blokuje osi"
+                : event.resources
+                    .map(
+                      (resource) =>
+                        `${resource.displayName} · ${resource.isPosition ? "Stanowisko" : "Cała oś"}`
+                    )
+                    .join("; ")}
+            </p>
           </button>
         ))}
       </div>

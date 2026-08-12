@@ -2,10 +2,34 @@
 
 import Link from "next/link";
 import { useEffect, useRef } from "react";
-import type {
-  CalendarEntryPreviewData,
-  CalendarEntryPreviewNavigation,
+import type { CalendarEntryResource } from "@/lib/admin/calendar/types";
+import {
+  getCalendarResourceScopeLabel,
+  type CalendarEntryPreviewData,
+  type CalendarEntryPreviewNavigation,
 } from "../calendar-ui";
+import { HierarchyResourceLabel } from "../../_components/HierarchyResourcePresentation";
+
+function ResourcePreview({
+  resource,
+  fallback,
+}: {
+  resource: CalendarEntryResource | null;
+  fallback?: string | null;
+}) {
+  if (!resource) {
+    return fallback ? <p className="break-words">{fallback}</p> : null;
+  }
+
+  return (
+    <div className="rounded-xl border border-[#30372c] bg-[#111511] p-3">
+      <HierarchyResourceLabel resource={resource} compact />
+      <p className="mt-1 text-xs font-semibold text-[#a9ada4]">
+        {getCalendarResourceScopeLabel(resource)}
+      </p>
+    </div>
+  );
+}
 
 export default function CalendarEntryPreview({
   entry,
@@ -78,7 +102,12 @@ export default function CalendarEntryPreview({
           )}
           {entry.type === "event" && <p>Data: {entry.date}</p>}
           <p className="font-bold tabular-nums text-[#f2efe4]">{entry.time}</p>
-          {entry.type !== "event" && <p>{entry.laneName}</p>}
+          {entry.type !== "event" && (
+            <ResourcePreview
+              resource={entry.resource}
+              fallback={entry.laneName}
+            />
+          )}
           {entry.type === "reservation" && (
             <p className="break-words">{entry.label}</p>
           )}
@@ -90,7 +119,17 @@ export default function CalendarEntryPreview({
               {entry.location ?? "Lokalizacja niepodana"}
             </p>
           )}
-          {entry.type === "event" && entry.laneName && <p>{entry.laneName}</p>}
+          {entry.type === "event" && entry.resources.length > 0 ? (
+            <div className="space-y-2" aria-label="Zasoby wydarzenia">
+              {entry.resources.map((resource) => (
+                <ResourcePreview key={resource.id} resource={resource} />
+              ))}
+            </div>
+          ) : entry.type === "event" ? (
+            <p className="text-sm text-[#a9ada4]">
+              Event globalny — nie blokuje osi
+            </p>
+          ) : null}
           {entry.type === "event" && <p>Limit uczestnikĂłw: {entry.maxParticipants}</p>}
         </div>
 

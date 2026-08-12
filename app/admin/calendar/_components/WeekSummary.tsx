@@ -81,6 +81,9 @@ export default function WeekSummary({
                   <div key={entry.id} className="min-w-0 text-xs text-[#c7cbbf]">
                     <p className="font-bold">{entry.startTime}–{entry.endTime} · {entry.type === "reservation" ? "Rezerwacja" : entry.type === "event" ? "Event" : "Blokada"}</p>
                     <p className="truncate text-[#a9ada4]">{entry.label}{entry.isHistorical ? " · historyczny" : ""}</p>
+                    <p className="mt-0.5 break-words text-[#858c7f]">
+                      {entry.laneName} · {entry.laneResource?.isPosition ? "Stanowisko" : "Cała oś"}
+                    </p>
                   </div>
                 ))}
                 {hiddenCount > 0 && <p className="text-xs font-semibold text-[#d7c895]">+ {hiddenCount} kolejnych</p>}

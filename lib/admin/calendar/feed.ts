@@ -10,6 +10,7 @@ import {
   type CalendarLane,
   type CalendarReservationStatus,
 } from "./types";
+import { buildLaneHierarchyDisplayModel } from "../lane-hierarchy.js";
 import {
   CALENDAR_OPENING_END,
   CALENDAR_OPENING_START,
@@ -31,6 +32,8 @@ export type CalendarLaneRow = {
   is_active: unknown;
   display_order: unknown;
   booking_step_minutes: unknown;
+  resource_kind: unknown;
+  parent_lane_id: unknown;
 };
 
 export type CalendarReservationRow = {
@@ -311,22 +314,47 @@ export function buildCalendarFeed(
 ): CalendarFeed {
   if (!isValidCalendarDate(today)) throw new Error("Invalid current date.");
 
-  const laneMap = new Map<string, CalendarLane>();
+  const bookingStepByLaneId = new Map<string, number>();
   for (const row of rows.lanes) {
-    const lane: CalendarLane = {
-      id: requireString(row.id, "lane id"),
-      name: requireString(row.name, "lane name"),
-      isActive: requireBoolean(row.is_active, "lane status"),
-      isHistoricalOnly: false,
-      displayOrder: requireNonNegativeInteger(row.display_order, "lane display order"),
-      bookingStepMinutes: requireNonNegativeInteger(
-        row.booking_step_minutes,
-        "lane booking step"
-      ),
-    };
-    if (lane.bookingStepMinutes < 1) throw new Error("Invalid lane booking step.");
-    laneMap.set(lane.id, lane);
+    const laneId = requireString(row.id, "lane id");
+    const bookingStepMinutes = requireNonNegativeInteger(
+      row.booking_step_minutes,
+      "lane booking step"
+    );
+    if (bookingStepMinutes < 1) throw new Error("Invalid lane booking step.");
+    bookingStepByLaneId.set(laneId, bookingStepMinutes);
   }
+
+  const hierarchy = buildLaneHierarchyDisplayModel(rows.lanes);
+  if (!hierarchy.ok) throw new Error("Invalid calendar lane hierarchy.");
+
+  const laneMap = new Map<string, CalendarLane>(
+    hierarchy.value.map((lane) => [
+      lane.id,
+      {
+        id: lane.id,
+        name: lane.name,
+        displayName: lane.displayName,
+        parentName: lane.parentName,
+        isActive: lane.isActive,
+        isHistoricalOnly: false,
+        displayOrder: lane.displayOrder,
+        bookingStepMinutes: bookingStepByLaneId.get(lane.id)!,
+        resourceKind: lane.resourceKind,
+        parentLaneId: lane.parentLaneId,
+        depth: lane.depth,
+        isParent: lane.isParent,
+        isPosition: lane.isPosition,
+      },
+    ])
+  );
+  const toEntryResource = (lane: CalendarLane) => ({
+    id: lane.id,
+    displayName: lane.displayName,
+    depth: lane.depth,
+    isActive: lane.isActive,
+    isPosition: lane.isPosition,
+  });
 
   const referencedLaneIds = new Set<string>();
   const entries: CalendarEntry[] = [];
@@ -358,8 +386,9 @@ export function buildCalendarFeed(
         date,
         ...range,
         laneId,
-        laneName: lane?.name ?? (snapshot || "Nieznana oś"),
+        laneName: lane?.displayName ?? (snapshot || "Nieznana oś"),
         laneMetadataAvailable: Boolean(lane),
+        laneResource: lane ? toEntryResource(lane) : null,
         status: state.status,
         shootersCount,
         label: buildCalendarReservationLabel(row.customer_name, shootersCount, role),
@@ -386,8 +415,9 @@ export function buildCalendarFeed(
         date,
         ...requireTimeRange(row.start_time, row.end_time),
         laneId,
-        laneName: lane?.name ?? "Nieznana oś",
+        laneName: lane?.displayName ?? "Nieznana oś",
         laneMetadataAvailable: Boolean(lane),
+        laneResource: lane ? toEntryResource(lane) : null,
         status: isActive ? "active" : "inactive",
         reason: typeof row.reason === "string" && row.reason.trim() ? row.reason.trim() : null,
         isActive,
@@ -403,7 +433,7 @@ export function buildCalendarFeed(
     for (const row of rows.events) {
       if (!requireBoolean(row.is_active, "event status")) continue;
       const eventId = requireString(row.id, "event id");
-      const eventLanes = new Map<string, { id: string; name: string }>();
+      const eventLaneIds = new Set<string>();
       if (Array.isArray(row.event_lanes)) {
         for (const relation of row.event_lanes) {
           if (!relation || typeof relation !== "object") continue;
@@ -414,19 +444,19 @@ export function buildCalendarFeed(
           if (!laneRow || typeof laneRow !== "object") continue;
           const rawLaneName = (laneRow as { name?: unknown }).name;
           if (typeof rawLaneName !== "string" || !rawLaneName.trim()) continue;
-          const laneName = rawLaneName.trim();
-          eventLanes.set(laneId, { id: laneId, name: laneName });
+          eventLaneIds.add(laneId);
         }
       }
-      const lanes = [...eventLanes.values()].sort((first, second) =>
-        first.id.localeCompare(second.id)
-      );
+      const resources = [...eventLaneIds]
+        .map((laneId) => laneMap.get(laneId))
+        .filter((lane): lane is CalendarLane => lane !== undefined)
+        .map(toEntryResource);
       const date = requireDate(row.event_date);
       const range = requireTimeRange(row.start_time, row.end_time);
       const sharedEvent = {
         sourceEventId: eventId,
-        laneIds: lanes.map((lane) => lane.id),
-        lanes,
+        laneIds: resources.map((resource) => resource.id),
+        resources,
         date,
         ...range,
         status: "active" as const,
@@ -442,21 +472,22 @@ export function buildCalendarFeed(
         laneId: null,
         laneName: null,
         laneMetadataAvailable: false,
+        laneResource: null,
         occupiesLane: false,
         isLaneProjection: false,
         ...sharedEvent,
       });
-      for (const eventLane of lanes) {
-        if (query.laneId !== "all" && eventLane.id !== query.laneId) continue;
-        const lane = laneMap.get(eventLane.id);
-        if (!lane) continue;
-        referencedLaneIds.add(eventLane.id);
+      for (const resource of resources) {
+        if (query.laneId !== "all" && resource.id !== query.laneId) continue;
+        const lane = laneMap.get(resource.id)!;
+        referencedLaneIds.add(resource.id);
         entries.push({
-          id: `${eventId}:${eventLane.id}`,
+          id: `${eventId}:${resource.id}`,
           type: "event",
-          laneId: eventLane.id,
-          laneName: lane.name,
+          laneId: resource.id,
+          laneName: lane.displayName,
           laneMetadataAvailable: true,
+          laneResource: resource,
           occupiesLane: true,
           isLaneProjection: true,
           ...sharedEvent,
@@ -465,13 +496,13 @@ export function buildCalendarFeed(
     }
   }
 
-  const lanes = [...laneMap.values()]
+  const lanes = hierarchy.value
+    .map((lane) => laneMap.get(lane.id)!)
     .filter((lane) => {
       if (query.laneId !== "all" && lane.id !== query.laneId) return false;
       return lane.isActive || referencedLaneIds.has(lane.id);
     })
-    .map((lane) => ({ ...lane, isHistoricalOnly: !lane.isActive }))
-    .sort((first, second) => first.displayOrder - second.displayOrder || first.name.localeCompare(second.name, "pl"));
+    .map((lane) => ({ ...lane, isHistoricalOnly: !lane.isActive }));
 
   entries.sort(
     (first, second) =>

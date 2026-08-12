@@ -27,7 +27,7 @@ export default function CalendarEntryBlock({
   return (
     <button
       type="button"
-      aria-label={`${isReservation ? "Rezerwacja" : isEvent ? "Event" : "Blokada"}: ${entry.startTime}–${entry.endTime}, ${entry.label}`}
+      aria-label={`${isReservation ? "Rezerwacja" : isEvent ? "Event" : "Blokada"}: ${entry.startTime}–${entry.endTime}, ${entry.label}, ${entry.laneName}`}
       onClick={(event) => onSelectEntry(entry, event.currentTarget)}
       className={`absolute cursor-pointer overflow-hidden rounded-lg border px-2 py-1.5 text-left shadow-lg focus-visible:z-20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#f2efe4] ${
         entry.isHistorical

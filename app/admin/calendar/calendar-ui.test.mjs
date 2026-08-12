@@ -40,7 +40,9 @@ const {
   getCalendarEntryPreviewData,
   getCalendarEntryPreviewNavigation,
   getCalendarEntryGeometry,
+  getCalendarLaneFamilies,
   getCalendarLaneLabel,
+  getCalendarResourceScopeLabel,
   getCalendarMonthDates,
   getCalendarMonthRange,
   getVisibleCalendarLanes,
@@ -69,6 +71,7 @@ function reservation(id, startTime, endTime, overrides = {}) {
     laneId: "lane-1",
     laneName: "Oś 1",
     laneMetadataAvailable: true,
+    laneResource: null,
     status: "confirmed",
     shootersCount: 1,
     ...overrides,
@@ -100,9 +103,34 @@ function event(id, overrides = {}) {
     links: { primary: "/admin/events", checkIn: null },
     laneId: null,
     laneName: null,
+    laneMetadataAvailable: false,
+    laneResource: null,
+    isLaneProjection: false,
+    sourceEventId: id,
+    laneIds: [],
+    resources: [],
     status: "active",
     location: "Obiekt testowy",
     maxParticipants: 10,
+    ...overrides,
+  };
+}
+
+function calendarLane(overrides = {}) {
+  return {
+    id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+    name: "Oś rodzic",
+    displayName: "Oś rodzic",
+    parentName: null,
+    isActive: true,
+    isHistoricalOnly: false,
+    displayOrder: 10,
+    bookingStepMinutes: 60,
+    resourceKind: "lane",
+    parentLaneId: null,
+    depth: 0,
+    isParent: true,
+    isPosition: false,
     ...overrides,
   };
 }
@@ -211,6 +239,52 @@ test("lane filtering supports all five lanes and one concrete lane", () => {
   );
 });
 
+test("day hierarchy groups a whole lane with its positions without flattening labels", () => {
+  const parent = calendarLane();
+  const child = calendarLane({
+    id: "11111111-1111-4111-8111-111111111111",
+    name: "Stanowisko 1",
+    displayName: "Oś rodzic — Stanowisko 1",
+    parentName: "Oś rodzic",
+    displayOrder: 1,
+    resourceKind: "position",
+    parentLaneId: parent.id,
+    depth: 1,
+    isParent: false,
+    isPosition: true,
+  });
+
+  assert.deepEqual(getCalendarLaneFamilies([parent, child]), [
+    { id: parent.id, displayName: "Oś rodzic", resources: [parent, child] },
+  ]);
+  assert.equal(getCalendarResourceScopeLabel(parent), "Cała oś");
+  assert.equal(getCalendarResourceScopeLabel(child), "Stanowisko");
+});
+
+test("calendar family grouping fails closed for an orphaned position", () => {
+  const orphan = calendarLane({
+    resourceKind: "position",
+    parentLaneId: null,
+    parentName: null,
+    depth: 1,
+    isParent: false,
+    isPosition: true,
+  });
+  assert.equal(getCalendarLaneFamilies([orphan]), null);
+});
+
+test("day view renders a family header and distinct whole-lane and position labels", async () => {
+  const source = await readFile(
+    new URL("./_components/DayCalendar.tsx", import.meta.url),
+    "utf8"
+  );
+  assert.match(source, /getCalendarLaneFamilies\(lanes\)/);
+  assert.match(source, /family\.displayName/);
+  assert.match(source, /lane\.isPosition \? lane\.name : "Cała oś"/);
+  assert.match(source, /ResourceTypeBadge isPosition=\{lane\.isPosition\}/);
+  assert.doesNotMatch(source, /flatMap|children\.map\([^)]*entry/i);
+});
+
 test("calendar page keeps explicit screen states and consumes only the feed DTO", async () => {
   const pageSource = await readFile(new URL("./page.tsx", import.meta.url), "utf8");
   const entrySource = await readFile(
@@ -294,19 +368,33 @@ test("month lane label identifies all lanes and exact selected lane names", () =
   const lanes = [
     {
       id: "11111111-1111-4111-8111-111111111111",
+      displayName: "Oś 50 m — stanowisko 1",
       name: "Oś 50 m — stanowisko 1",
       isActive: true,
       isHistoricalOnly: false,
       displayOrder: 10,
       bookingStepMinutes: 60,
+      resourceKind: "position",
+      parentLaneId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      parentName: "Oś 50 m",
+      depth: 1,
+      isParent: false,
+      isPosition: true,
     },
     {
       id: "22222222-2222-4222-8222-222222222222",
+      displayName: "Oś 100 m",
       name: "Oś 100 m",
       isActive: true,
       isHistoricalOnly: false,
       displayOrder: 30,
       bookingStepMinutes: 60,
+      resourceKind: "lane",
+      parentLaneId: null,
+      parentName: null,
+      depth: 0,
+      isParent: true,
+      isPosition: false,
     },
   ];
   assert.equal(getCalendarLaneLabel("all", lanes), "Wszystkie osie");
@@ -323,7 +411,7 @@ test("month lane label identifies all lanes and exact selected lane names", () =
 test("month heading lane badge wraps without forcing horizontal scrolling", async () => {
   const pageSource = await readFile(new URL("./page.tsx", import.meta.url), "utf8");
   assert.match(pageSource, /flex min-w-0 flex-wrap items-center gap-2/);
-  assert.match(pageSource, /max-w-full break-words rounded-full/);
+  assert.match(pageSource, /inline-flex max-w-full flex-wrap items-center gap-2 rounded-xl/);
   assert.match(pageSource, /\{calendarLaneLabel\}/);
 });
 
@@ -546,6 +634,7 @@ test("preview DTO exposes only the approved reservation fields", () => {
   assert.deepEqual(preview, {
     type: "reservation",
     title: "Rezerwacja",
+    resource: null,
     time: "08:00–12:00",
     laneName: "Oś 50 m",
     label: "Neutralna etykieta",
@@ -571,6 +660,7 @@ test("preview DTO exposes optional block reason and no technical fields", () => 
     {
       type: "lane_block",
       title: "Blokada osi",
+      resource: null,
       time: "10:00–13:00",
       laneName: "Oś 100 m",
       reason: null,
@@ -586,6 +676,7 @@ test("preview DTO exposes event details without technical fields or PII", () => 
   assert.deepEqual(preview, {
     type: "event",
     title: "Wydarzenie",
+    resources: [],
     date: "2026-08-05",
     time: "10:00–11:00",
     label: "Szkolenie",
@@ -595,6 +686,77 @@ test("preview DTO exposes event details without technical fields or PII", () => 
   });
   assert.equal("id" in preview, false);
   assert.equal("laneIds" in preview, false);
+});
+
+test("calendar read model requests hierarchy metadata without adding database writes", async () => {
+  const routeSource = await readFile(
+    new URL("../../api/admin/calendar-feed/route.ts", import.meta.url),
+    "utf8"
+  );
+  assert.match(
+    routeSource,
+    /id,name,is_active,display_order,booking_step_minutes,resource_kind,parent_lane_id/
+  );
+  assert.doesNotMatch(routeSource, /\.insert\(|\.update\(|\.delete\(|\.upsert\(/);
+});
+
+test("preview distinguishes whole-lane and child resources with full labels", async () => {
+  const parentResource = {
+    id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+    displayName: "Oś rodzic",
+    depth: 0,
+    isActive: true,
+    isPosition: false,
+  };
+  const childResource = {
+    id: "11111111-1111-4111-8111-111111111111",
+    displayName: "Oś rodzic — Stanowisko 1",
+    depth: 1,
+    isActive: true,
+    isPosition: true,
+  };
+  const parentPreview = getCalendarEntryPreviewData(
+    reservation("parent", "10:00", "11:00", {
+      laneName: parentResource.displayName,
+      laneResource: parentResource,
+    })
+  );
+  const childPreview = getCalendarEntryPreviewData(
+    reservation("child", "11:00", "12:00", {
+      laneName: childResource.displayName,
+      laneResource: childResource,
+    })
+  );
+  assert.equal(parentPreview.resource.displayName, "Oś rodzic");
+  assert.equal(getCalendarResourceScopeLabel(parentPreview.resource), "Cała oś");
+  assert.equal(childPreview.resource.displayName, "Oś rodzic — Stanowisko 1");
+  assert.equal(getCalendarResourceScopeLabel(childPreview.resource), "Stanowisko");
+
+  const source = await readFile(
+    new URL("./_components/CalendarEntryPreview.tsx", import.meta.url),
+    "utf8"
+  );
+  assert.match(source, /HierarchyResourceLabel resource=\{resource\} compact/);
+  assert.match(source, /getCalendarResourceScopeLabel\(resource\)/);
+});
+
+test("week uses hierarchy labels while month remains summary-only", async () => {
+  const weekSummarySource = await readFile(
+    new URL("./_components/WeekSummary.tsx", import.meta.url),
+    "utf8"
+  );
+  const weekCalendarSource = await readFile(
+    new URL("./_components/WeekCalendar.tsx", import.meta.url),
+    "utf8"
+  );
+  const monthSource = await readFile(
+    new URL("./_components/MonthCalendar.tsx", import.meta.url),
+    "utf8"
+  );
+  assert.match(weekSummarySource, /entry\.laneName/);
+  assert.match(weekSummarySource, /entry\.laneResource\?\.isPosition/);
+  assert.match(weekCalendarSource, /resource\.displayName/);
+  assert.doesNotMatch(monthSource, /laneResource|resources\.map|displayName/);
 });
 
 test("preview navigation uses a strict local allowlist", () => {

@@ -5,8 +5,10 @@ import type {
 import { calendarTimeToMinutes } from "@/lib/admin/calendar/time";
 import {
   CALENDAR_HOUR_HEIGHT,
+  getCalendarLaneFamilies,
   layoutCalendarLaneEntries,
 } from "../calendar-ui";
+import { ResourceTypeBadge } from "../../_components/HierarchyResourcePresentation";
 import CalendarEntryBlock from "./CalendarEntryBlock";
 
 type DayCalendarProps = {
@@ -45,6 +47,15 @@ function CalendarGrid({
   const hourLabels = getHourLabels(openingStart, openingEnd);
   const laneMinWidth = 220;
   const template = `72px repeat(${lanes.length}, minmax(${laneMinWidth}px, 1fr))`;
+  const families = getCalendarLaneFamilies(lanes);
+
+  if (!families) {
+    return (
+      <div className="rounded-2xl border border-[#744545] bg-[#2a1b1b] p-5 text-sm text-[#e0a0a0]">
+        Nie udało się poprawnie wyświetlić hierarchii zasobów.
+      </div>
+    );
+  }
 
   return (
     <div className="max-h-[72vh] overflow-auto rounded-2xl border border-[#30372c] bg-[#111511]">
@@ -57,12 +68,43 @@ function CalendarGrid({
             : `max(100%, ${72 + lanes.length * laneMinWidth}px)`,
         }}
       >
-        <div className="sticky left-0 top-0 z-30 h-16 border-b border-r border-[#30372c] bg-[#191e19]" />
+        <div
+          className="sticky left-0 top-0 z-40 h-28 border-b border-r border-[#30372c] bg-[#191e19]"
+          style={{ gridRow: "1 / span 2" }}
+        />
+        {families.map((family) => (
+          <header
+            key={family.id}
+            className="sticky top-0 z-30 flex h-11 min-w-0 items-center border-b border-r border-[#3d4638] bg-[#202620] px-3"
+            style={{ gridColumn: `span ${family.resources.length}` }}
+          >
+            <h2 className="min-w-0 break-words text-sm font-black text-[#d7c895]">
+              {family.displayName}
+            </h2>
+          </header>
+        ))}
         {lanes.map((lane) => (
-          <header key={lane.id} className="sticky top-0 z-20 flex h-16 items-center border-b border-r border-[#30372c] bg-[#191e19] px-3">
-            <div>
-              <h2 className="text-sm font-bold text-[#f2efe4]">{lane.name}</h2>
-              <p className="text-xs text-[#858c7f]">{lane.isActive ? "Aktywna" : "Oś historyczna"}</p>
+          <header
+            key={lane.id}
+            aria-label={lane.displayName}
+            className="sticky top-11 z-20 flex h-17 min-w-0 items-center border-b border-r border-[#30372c] bg-[#191e19] px-3"
+          >
+            <div className="min-w-0">
+              <div className="flex min-w-0 flex-wrap items-center gap-2">
+                {lane.isPosition ? (
+                  <span aria-hidden="true" className="shrink-0 text-[#78865f]">
+                    ↳
+                  </span>
+                ) : null}
+                <p className="min-w-0 break-words text-sm font-bold text-[#f2efe4]">
+                  {lane.isPosition ? lane.name : "Cała oś"}
+                </p>
+                <ResourceTypeBadge isPosition={lane.isPosition} />
+              </div>
+              <p className="mt-1 text-xs text-[#858c7f]">
+                {lane.isActive ? "Aktywne" : "Zasób historyczny"}
+              </p>
+              <span className="sr-only">{lane.displayName}</span>
             </div>
           </header>
         ))}
@@ -101,7 +143,7 @@ function CalendarGrid({
           return (
             <section
               key={lane.id}
-              aria-label={`Harmonogram: ${lane.name}`}
+              aria-label={`Harmonogram: ${lane.displayName}`}
               className="relative border-r border-[#30372c]"
               style={{
                 height,

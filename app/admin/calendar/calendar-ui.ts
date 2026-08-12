@@ -1,6 +1,7 @@
 import type {
   CalendarDaySummary,
   CalendarEntry,
+  CalendarEntryResource,
   CalendarEntryType,
   CalendarLane,
   CalendarLaneOccupyingEntry,
@@ -48,6 +49,12 @@ export type CalendarPositionedEntry = {
   columnCount: number;
 };
 
+export type CalendarLaneFamily = {
+  id: string;
+  displayName: string;
+  resources: CalendarLane[];
+};
+
 function isCalendarLaneEntry(
   entry: CalendarEntry
 ): entry is CalendarLaneOccupyingEntry {
@@ -69,6 +76,7 @@ export type CalendarEntryPreviewData =
       title: "Rezerwacja";
       time: string;
       laneName: string;
+      resource: CalendarEntryResource | null;
       label: string;
       shootersCount: number;
       isHistorical: boolean;
@@ -78,6 +86,7 @@ export type CalendarEntryPreviewData =
       title: "Blokada osi";
       time: string;
       laneName: string;
+      resource: CalendarEntryResource | null;
       reason: string | null;
       isHistorical: boolean;
     }
@@ -89,6 +98,7 @@ export type CalendarEntryPreviewData =
       label: string;
       location: string | null;
       laneName: string | null;
+      resources: CalendarEntryResource[];
       maxParticipants: number;
     };
 
@@ -115,6 +125,7 @@ export function getCalendarEntryPreviewData(
       title: "Rezerwacja",
       time,
       laneName: entry.laneName,
+      resource: entry.laneResource,
       label: entry.label,
       shootersCount: entry.shootersCount,
       isHistorical: entry.isHistorical,
@@ -126,6 +137,7 @@ export function getCalendarEntryPreviewData(
       title: "Blokada osi",
       time,
       laneName: entry.laneName,
+      resource: entry.laneResource,
       reason: entry.reason,
       isHistorical: entry.isHistorical,
     };
@@ -138,6 +150,7 @@ export function getCalendarEntryPreviewData(
     label: entry.label,
     location: entry.location,
     laneName: entry.laneName,
+    resources: entry.resources,
     maxParticipants: entry.maxParticipants,
   };
 }
@@ -456,12 +469,49 @@ export function getVisibleCalendarLanes(
   return laneId === "all" ? lanes : lanes.filter((lane) => lane.id === laneId);
 }
 
+export function getCalendarLaneFamilies(
+  lanes: CalendarLane[]
+): CalendarLaneFamily[] | null {
+  const families = new Map<string, CalendarLaneFamily>();
+
+  for (const lane of lanes) {
+    if (
+      lane.isPosition &&
+      (!lane.parentLaneId || !lane.parentName || lane.depth !== 1)
+    ) {
+      return null;
+    }
+    if (!lane.isPosition && (lane.parentLaneId !== null || lane.depth !== 0)) {
+      return null;
+    }
+
+    const familyId = lane.parentLaneId ?? lane.id;
+    const displayName = lane.parentName ?? lane.displayName;
+    const family = families.get(familyId) ?? {
+      id: familyId,
+      displayName,
+      resources: [],
+    };
+    if (family.displayName !== displayName) return null;
+    family.resources.push(lane);
+    families.set(familyId, family);
+  }
+
+  return [...families.values()];
+}
+
+export function getCalendarResourceScopeLabel(
+  resource: Pick<CalendarEntryResource, "isPosition">
+) {
+  return resource.isPosition ? "Stanowisko" : "Cała oś";
+}
+
 export function getCalendarLaneLabel(
   laneId: string | "all",
   lanes: CalendarLane[]
 ) {
   if (laneId === "all") return "Wszystkie osie";
-  return lanes.find((lane) => lane.id === laneId)?.name ?? "Wybrana oś";
+  return lanes.find((lane) => lane.id === laneId)?.displayName ?? "Wybrana oś";
 }
 
 export function layoutCalendarLaneEntries(

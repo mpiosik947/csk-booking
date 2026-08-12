@@ -74,10 +74,11 @@ export async function GET(request: Request) {
     }
 
     const query = parsedQuery.value;
-    let laneRequest = supabase
+    const laneRequest = supabase
       .from("shooting_lanes")
-      .select("id,name,is_active,display_order,booking_step_minutes");
-    if (query.laneId !== "all") laneRequest = laneRequest.eq("id", query.laneId);
+      .select(
+        "id,name,is_active,display_order,booking_step_minutes,resource_kind,parent_lane_id"
+      );
     const { data: laneData, error: laneError } = await laneRequest;
 
     if (laneError) {

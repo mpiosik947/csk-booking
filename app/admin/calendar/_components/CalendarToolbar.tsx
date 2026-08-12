@@ -127,7 +127,8 @@ export default function CalendarToolbar({
             <option value="all">Wszystkie osie</option>
             {lanes.map((lane) => (
               <option key={lane.id} value={lane.id}>
-                {lane.name}{lane.isActive ? "" : " (historyczna)"}
+                {lane.isPosition ? "↳ " : ""}{lane.displayName}
+                {lane.isActive ? "" : " (historyczna)"}
               </option>
             ))}
           </select>
