@@ -1,6 +1,7 @@
 "use client";
 
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { supabase } from "../../../lib/supabase";
 import { markPaid as markPaidAction } from "../../../lib/reservation-actions";
@@ -16,6 +17,7 @@ import {
   RESERVATION_STATUS,
 } from "../../../lib/reservation-status";
 import { getLaneRelationDisplay } from "../../../lib/admin/lane-relation-display";
+import AdminShell from "../_components/AdminShell";
 
 type UserRole = "admin" | "pracownik" | "instruktor" | "user";
 
@@ -1223,54 +1225,39 @@ function CheckInContent() {
     token && selectedReservation ? [selectedReservation] : filteredReservations;
 
   return (
-    <div className="mx-auto max-w-7xl">
-      <div className="mb-8 flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
-        <div>
-          <p className="mb-4 text-sm uppercase tracking-[0.35em] text-green-500">
-            CSK Booking
-          </p>
-
-          <h1 className="text-4xl font-bold">Check-in i obsługa wizyt</h1>
-
-          <p className="mt-3 max-w-2xl text-zinc-400">
-            Obsługa dzisiejszych rezerwacji, obecności, no-show, płatności i
-            weryfikacji klienta podczas pierwszej wizyty.
-          </p>
-        </div>
-
-        <a
-          href="/admin"
-          className="rounded-xl border border-zinc-700 px-5 py-3 text-sm font-semibold text-zinc-300 transition hover:bg-zinc-900"
-        >
-          ← Panel admina
-        </a>
-      </div>
-
+    <>
       {!token && (
-        <div className="mb-6 grid gap-4 rounded-2xl border border-zinc-800 bg-zinc-900 p-5 md:grid-cols-[auto_1fr_auto] md:items-end">
+        <section aria-labelledby="check-in-filters-heading" className="mb-8 rounded-[1.5rem] border border-[#30372c] bg-[#101310] p-4 sm:p-6">
+          <div className="mb-5">
+            <p className="text-xs font-bold uppercase tracking-[0.25em] text-[#d7c895]">Lista operacyjna</p>
+            <h2 id="check-in-filters-heading" className="mt-2 text-xl font-bold">Wizyty do obsługi</h2>
+          </div>
+          <div className="grid gap-4 md:grid-cols-[auto_minmax(16rem,1fr)_auto] md:items-end">
           <div>
-            <label className="mb-2 block text-sm font-semibold text-zinc-300">
+            <label htmlFor="check-in-date" className="mb-2 block text-sm font-semibold text-[#d8dbd3]">
               Data wizyt
             </label>
 
             <input
+              id="check-in-date"
               type="date"
               value={dateFilter}
               onChange={(event) => setDateFilter(event.target.value)}
-              className="rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-white outline-none focus:border-green-600"
+              className="min-h-11 w-full rounded-xl border border-[#3b4237] bg-[#090b09] px-4 py-3 text-white outline-none focus:border-[#8b986f] focus-visible:ring-2 focus-visible:ring-[#8b986f]/30"
             />
           </div>
 
           <div>
-            <label className="mb-2 block text-sm font-semibold text-zinc-300">
+            <label htmlFor="check-in-search" className="mb-2 block text-sm font-semibold text-[#d8dbd3]">
               Szukaj
             </label>
 
             <input
+              id="check-in-search"
               value={search}
               onChange={(event) => setSearch(event.target.value)}
               placeholder="Imię, e-mail, telefon, oś, status, uprawnienia..."
-              className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-white outline-none focus:border-green-600"
+              className="min-h-11 w-full rounded-xl border border-[#3b4237] bg-[#090b09] px-4 py-3 text-white outline-none placeholder:text-[#70766d] focus:border-[#8b986f] focus-visible:ring-2 focus-visible:ring-[#8b986f]/30"
             />
           </div>
 
@@ -1278,29 +1265,31 @@ function CheckInContent() {
             type="button"
             onClick={loadReservations}
             disabled={loading}
-            className="rounded-xl bg-green-700 px-5 py-3 font-semibold transition hover:bg-green-600 disabled:cursor-not-allowed disabled:opacity-60"
+            className="min-h-11 w-full rounded-xl bg-[#66724f] px-5 py-3 font-semibold text-white transition hover:bg-[#78865d] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d7c895] disabled:cursor-not-allowed disabled:opacity-60 md:w-auto"
           >
             {loading ? "Odświeżanie..." : "Odśwież"}
           </button>
-        </div>
+          </div>
+        </section>
       )}
 
       {message && (
-        <div className="mb-6 rounded-xl border border-zinc-700 bg-zinc-900 p-4 text-sm font-semibold text-zinc-200">
+        <div role="status" className="mb-6 rounded-xl border border-[#495044] bg-[#1b211b] p-4 text-sm font-semibold text-[#d8dbd3]">
           {message}
         </div>
       )}
 
       {loading ? (
-        <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-8 text-zinc-400">
+        <div className="rounded-[1.5rem] border border-[#30372c] bg-[#101310] p-8 text-center text-[#a9ada4]">
           Ładowanie check-in...
         </div>
       ) : mainList.length === 0 ? (
-        <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-8 text-zinc-400">
-          Brak rezerwacji do obsługi dla wybranego dnia.
+        <div className="rounded-[1.5rem] border border-[#30372c] bg-[#101310] p-8 text-center">
+          <p className="font-semibold text-[#d8dbd3]">Brak rezerwacji do obsługi dla wybranego dnia.</p>
+          <p className="mt-2 text-sm text-[#858b82]">Zmień datę lub kryteria wyszukiwania.</p>
         </div>
       ) : (
-        <div className="grid gap-4">
+        <section aria-label="Lista wizyt" className="grid gap-4">
           {mainList.map((reservation) => {
             const isSaving = savingId === reservation.id;
             const isCancelling = cancellingReservationIds.has(reservation.id);
@@ -1339,10 +1328,10 @@ function CheckInContent() {
             return (
               <article
                 key={reservation.id}
-                className="rounded-2xl border border-zinc-800 bg-zinc-900 p-5"
+                className="rounded-[1.5rem] border border-[#30372c] bg-[#101310] p-4 shadow-[0_18px_44px_rgba(0,0,0,0.16)] transition hover:border-[#485043] sm:p-5"
               >
-                <div className="grid gap-5 xl:grid-cols-[1.1fr_0.8fr_0.9fr_1fr_auto] xl:items-start">
-                  <div>
+                <div className="grid gap-6 lg:grid-cols-2 xl:grid-cols-[1.15fr_0.75fr_0.9fr_1fr] xl:items-start">
+                  <div className="min-w-0 lg:col-span-2 xl:col-span-1">
                     <div className="mb-3 flex flex-wrap gap-2">
                       <span
                         className={`rounded-full border px-3 py-1 text-xs font-bold ${getReservationStatusBadgeClass(
@@ -1393,13 +1382,13 @@ function CheckInContent() {
                       Klient
                     </p>
 
-                    <h2 className="mt-2 text-xl font-bold">
+                    <h3 className="mt-2 break-words text-xl font-bold">
                       {reservation.customer_name ||
                         profile?.full_name ||
                         "Brak danych"}
-                    </h2>
+                    </h3>
 
-                    <p className="mt-1 text-sm text-zinc-400">
+                    <p className="mt-1 break-all text-sm text-[#b7bbb2]">
                       {reservation.customer_email ||
                         profile?.email ||
                         "Brak e-maila"}
@@ -1411,7 +1400,7 @@ function CheckInContent() {
                     </p>
 
                     {!isInstructor && (
-                      <div className="mt-4 rounded-xl border border-zinc-800 bg-zinc-950 p-3 text-xs text-zinc-400">
+                      <div className="mt-4 rounded-xl border border-[#30372c] bg-[#090b09] p-3 text-xs text-[#a9ada4]">
                         <p className="font-semibold text-zinc-300">
                           Deklarowane uprawnienia:
                         </p>
@@ -1425,7 +1414,7 @@ function CheckInContent() {
                     )}
                   </div>
 
-                  <div>
+                  <div className="min-w-0">
                     <p className="text-xs uppercase tracking-[0.25em] text-zinc-500">
                       Termin
                     </p>
@@ -1440,12 +1429,12 @@ function CheckInContent() {
                     </p>
                   </div>
 
-                  <div>
+                  <div className="min-w-0">
                     <p className="text-xs uppercase tracking-[0.25em] text-zinc-500">
                       Oś
                     </p>
 
-                    <p className="mt-2 text-lg font-bold">
+                    <p className="mt-2 break-words text-lg font-bold">
                       {getLaneName(reservation)}
                     </p>
 
@@ -1467,7 +1456,7 @@ function CheckInContent() {
                   </div>
 
                   {!isInstructor && (
-                    <div className="grid gap-3">
+                    <div className="grid gap-3 rounded-xl border border-[#30372c] bg-[#090b09] p-4">
                     <div>
                       <label className="mb-2 block text-xs uppercase tracking-[0.25em] text-zinc-500">
                         Płatność
@@ -1549,7 +1538,7 @@ function CheckInContent() {
                     </div>
                   )}
 
-                  <div className="grid gap-2">
+                  <div className="grid gap-2 lg:col-span-2 xl:col-span-4 xl:grid-cols-[repeat(3,minmax(0,1fr))] xl:border-t xl:border-[#30372c] xl:pt-5">
                     {shouldVerifyAtReception && canVerifyProfiles ? (
                       <>
                         <button
@@ -1559,7 +1548,7 @@ function CheckInContent() {
                           onClick={() =>
                             verifyAccountAndStartVisit(reservation)
                           }
-                          className="rounded-xl border border-orange-700 px-4 py-3 text-sm font-bold text-orange-300 transition hover:bg-orange-950 disabled:cursor-not-allowed disabled:opacity-60"
+                        className="min-h-11 rounded-xl bg-[#66724f] px-4 py-3 text-sm font-bold text-white transition hover:bg-[#78865d] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d7c895] disabled:cursor-not-allowed disabled:opacity-60"
                         >
                           Zweryfikuj konto i uprawnienia
                         </button>
@@ -1571,7 +1560,7 @@ function CheckInContent() {
                           onClick={() =>
                             markVerificationIncomplete(reservation)
                           }
-                          className="rounded-xl border border-yellow-700 px-4 py-3 text-sm font-bold text-yellow-300 transition hover:bg-yellow-950 disabled:cursor-not-allowed disabled:opacity-60"
+                          className="min-h-11 rounded-xl border border-[#71663d] px-4 py-3 text-sm font-bold text-[#d7c895] transition hover:bg-[#211e12] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d7c895] disabled:cursor-not-allowed disabled:opacity-60"
                         >
                           Weryfikacja niepełna
                         </button>
@@ -1587,7 +1576,7 @@ function CheckInContent() {
                         type="button"
                         disabled={isSaving}
                         onClick={() => markCompleted(reservation)}
-                        className="rounded-xl border border-green-700 px-4 py-3 text-sm font-bold text-green-300 transition hover:bg-green-950 disabled:cursor-not-allowed disabled:opacity-60"
+                        className="min-h-11 rounded-xl bg-[#66724f] px-4 py-3 text-sm font-bold text-white transition hover:bg-[#78865d] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d7c895] disabled:cursor-not-allowed disabled:opacity-60"
                       >
                         Klient był / zakończ
                       </button>
@@ -1597,7 +1586,7 @@ function CheckInContent() {
                       type="button"
                       disabled={isSaving}
                       onClick={() => markNoShow(reservation)}
-                      className="rounded-xl border border-yellow-700 px-4 py-3 text-sm font-bold text-yellow-300 transition hover:bg-yellow-950 disabled:cursor-not-allowed disabled:opacity-60"
+                      className="min-h-11 rounded-xl border border-[#71663d] px-4 py-3 text-sm font-bold text-[#d7c895] transition hover:bg-[#211e12] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d7c895] disabled:cursor-not-allowed disabled:opacity-60"
                     >
                       No-show
                     </button>
@@ -1607,7 +1596,7 @@ function CheckInContent() {
                         type="button"
                         disabled={isSaving || isCancelling}
                         onClick={() => handleCancelReservation(reservation)}
-                        className="rounded-xl border border-red-700 px-4 py-3 text-sm font-bold text-red-300 transition hover:bg-red-950 disabled:cursor-not-allowed disabled:opacity-60"
+                        className="min-h-11 rounded-xl border border-[#744545] px-4 py-3 text-sm font-bold text-[#e0a0a0] transition hover:bg-[#2a1b1b] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#e0a0a0] disabled:cursor-not-allowed disabled:opacity-60"
                       >
                         {isCancelling ? "Anulowanie…" : "Anuluj"}
                       </button>
@@ -1856,24 +1845,33 @@ function CheckInContent() {
               </article>
             );
           })}
-        </div>
+        </section>
       )}
-    </div>
+    </>
   );
 }
 
 export default function CheckInPage() {
   return (
-    <main className="min-h-screen bg-zinc-950 p-8 text-white">
+    <AdminShell
+      eyebrow="CSK Booking"
+      title="Check-in i obsługa wizyt"
+      description="Obsługa dzisiejszych rezerwacji, obecności, no-show, płatności i weryfikacji klienta podczas pierwszej wizyty."
+      actions={
+        <Link href="/admin" className="inline-flex min-h-11 w-full items-center justify-center rounded-xl border border-[#495044] px-5 py-3 text-sm font-semibold text-[#d8dbd3] transition hover:border-[#8b986f] hover:bg-[#1b211b] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d7c895] sm:w-auto">
+          ← Wróć do panelu
+        </Link>
+      }
+    >
       <Suspense
         fallback={
-          <div className="mx-auto max-w-xl rounded-xl border border-zinc-800 bg-zinc-900 p-6 text-zinc-400">
+          <div className="mx-auto max-w-xl rounded-xl border border-[#30372c] bg-[#101310] p-6 text-[#a9ada4]">
             Ładowanie check-in...
           </div>
         }
       >
         <CheckInContent />
       </Suspense>
-    </main>
+    </AdminShell>
   );
 }

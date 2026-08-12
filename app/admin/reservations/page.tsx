@@ -20,6 +20,7 @@ import {
   markPaid,
 } from "../../../lib/reservation-actions";
 import { getLaneRelationDisplay } from "../../../lib/admin/lane-relation-display";
+import AdminShell from "../_components/AdminShell";
 
 type ReservationSort = "newest" | "oldest" | "lane" | "status" | "payment";
 
@@ -707,68 +708,73 @@ export default function AdminReservationsPage() {
   }
 
   return (
-    <main className="min-h-screen bg-zinc-950 px-6 py-10 text-white">
-      <section className="mx-auto max-w-7xl">
-        <div className="mb-8 flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
-          <div>
-            <p className="mb-3 text-sm uppercase tracking-[0.35em] text-green-500">
-              CSK Booking
+    <AdminShell
+      eyebrow="CSK Booking"
+      title="Rezerwacje"
+      description="Podgląd rezerwacji klientów, statusów płatności i obsługa wizyt."
+      actions={
+        <Link
+          href="/admin"
+          className="inline-flex min-h-11 w-full items-center justify-center rounded-xl border border-[#495044] px-5 py-3 text-sm font-semibold text-[#d8dbd3] transition hover:border-[#8b986f] hover:bg-[#1b211b] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d7c895] sm:w-auto"
+        >
+          ← Wróć do panelu
+        </Link>
+      }
+    >
+        <section
+          aria-labelledby="reservation-filters-heading"
+          className="mb-8 rounded-[1.5rem] border border-[#30372c] bg-[#101310] p-4 sm:p-6"
+        >
+          <div className="mb-5">
+            <p className="text-xs font-bold uppercase tracking-[0.25em] text-[#d7c895]">
+              Widok operacyjny
             </p>
-
-            <h1 className="text-4xl font-bold">Rezerwacje</h1>
-
-            <p className="mt-3 max-w-2xl text-zinc-400">
-              Podgląd rezerwacji klientów, statusów płatności i obsługa wizyt.
-            </p>
+            <h2 id="reservation-filters-heading" className="mt-2 text-xl font-bold text-[#f2efe4]">
+              Filtry rezerwacji
+            </h2>
           </div>
 
-          <Link
-            href="/admin"
-            className="rounded-xl border border-zinc-700 px-4 py-3 text-sm font-semibold text-zinc-300 transition hover:border-green-600 hover:text-white"
-          >
-            Wróć do panelu
-          </Link>
-        </div>
-
-        <div className="mb-6 grid gap-4 rounded-2xl border border-zinc-800 bg-zinc-900 p-5">
-          <div className="grid gap-4 md:grid-cols-[1fr_auto_auto_auto_auto] md:items-end">
+          <div className="grid gap-4 lg:grid-cols-[minmax(16rem,1fr)_auto_auto_auto_auto] lg:items-end">
             <div>
-              <label className="mb-2 block text-sm font-semibold text-zinc-300">
+              <label htmlFor="reservation-search" className="mb-2 block text-sm font-semibold text-[#d8dbd3]">
                 Szukaj rezerwacji
               </label>
 
               <input
+                id="reservation-search"
                 value={search}
                 onChange={(event) => setSearch(event.target.value)}
                 placeholder="Imię, e-mail, telefon, oś, płatność, status..."
-                className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-white outline-none transition focus:border-green-600"
+                className="min-h-11 w-full rounded-xl border border-[#3b4237] bg-[#090b09] px-4 py-3 text-[#f2efe4] outline-none transition placeholder:text-[#70766d] focus:border-[#8b986f] focus-visible:ring-2 focus-visible:ring-[#8b986f]/30"
               />
             </div>
 
             <div>
-              <label className="mb-2 block text-sm font-semibold text-zinc-300">
+              <label htmlFor="reservation-date" className="mb-2 block text-sm font-semibold text-[#d8dbd3]">
                 Data
               </label>
 
               <input
+                id="reservation-date"
                 type="date"
                 value={dateFilter}
                 onChange={(event) => setDateFilter(event.target.value)}
-                className="rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-white outline-none transition focus:border-green-600"
+                className="min-h-11 w-full rounded-xl border border-[#3b4237] bg-[#090b09] px-4 py-3 text-[#f2efe4] outline-none transition focus:border-[#8b986f] focus-visible:ring-2 focus-visible:ring-[#8b986f]/30"
               />
             </div>
 
             <div>
-              <label className="mb-2 block text-sm font-semibold text-zinc-300">
+              <label htmlFor="reservation-sort" className="mb-2 block text-sm font-semibold text-[#d8dbd3]">
                 Sortowanie
               </label>
 
               <select
+                id="reservation-sort"
                 value={sort}
                 onChange={(event) =>
                   setSort(event.target.value as ReservationSort)
                 }
-                className="rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-white outline-none transition focus:border-green-600"
+                className="min-h-11 w-full rounded-xl border border-[#3b4237] bg-[#090b09] px-4 py-3 text-[#f2efe4] outline-none transition focus:border-[#8b986f] focus-visible:ring-2 focus-visible:ring-[#8b986f]/30"
               >
                 {sortOptions.map((option) => (
                   <option key={option.value} value={option.value}>
@@ -782,7 +788,7 @@ export default function AdminReservationsPage() {
               type="button"
               onClick={loadReservations}
               disabled={loading || !urlParamsLoaded}
-              className="rounded-xl bg-green-700 px-5 py-3 font-semibold transition hover:bg-green-600 disabled:cursor-not-allowed disabled:opacity-60"
+              className="min-h-11 w-full rounded-xl bg-[#66724f] px-5 py-3 font-semibold text-white transition hover:bg-[#78865d] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d7c895] disabled:cursor-not-allowed disabled:opacity-60 lg:w-auto"
             >
               {loading ? "Odświeżanie..." : "Odśwież"}
             </button>
@@ -790,27 +796,28 @@ export default function AdminReservationsPage() {
             <button
               type="button"
               onClick={resetFilters}
-              className="rounded-xl border border-zinc-700 px-5 py-3 font-semibold text-zinc-300 transition hover:border-green-600 hover:text-white"
+              className="min-h-11 w-full rounded-xl border border-[#495044] px-5 py-3 font-semibold text-[#d8dbd3] transition hover:border-[#8b986f] hover:bg-[#1b211b] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d7c895] lg:w-auto"
             >
               Wyczyść filtry
             </button>
           </div>
 
-          <div>
-            <p className="mb-3 text-sm font-semibold text-zinc-300">
+          <div className="mt-6 border-t border-[#30372c] pt-5">
+            <p id="reservation-status-filter-label" className="mb-3 text-sm font-semibold text-[#d8dbd3]">
               Status rezerwacji
             </p>
 
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-wrap gap-2" aria-labelledby="reservation-status-filter-label">
               {statusOptions.map((status) => (
                 <button
                   key={status.value}
                   type="button"
                   onClick={() => setStatusFilter(status.value)}
+                  aria-pressed={statusFilter === status.value}
                   className={
                     statusFilter === status.value
-                      ? "rounded-xl border border-green-600 bg-green-900 px-4 py-2 text-sm font-semibold text-white"
-                      : "rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-2 text-sm font-semibold text-zinc-400 transition hover:border-green-700 hover:text-white"
+                      ? "min-h-11 rounded-full border border-[#8b986f] bg-[#313a29] px-4 py-2 text-sm font-semibold text-[#f2efe4] shadow-[inset_0_0_0_1px_rgba(215,200,149,0.12)]"
+                      : "min-h-11 rounded-full border border-[#3b4237] bg-[#090b09] px-4 py-2 text-sm font-semibold text-[#a9ada4] transition hover:border-[#66724f] hover:text-[#f2efe4] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d7c895]"
                   }
                 >
                   {status.label}
@@ -819,58 +826,60 @@ export default function AdminReservationsPage() {
             </div>
           </div>
 
-          <div className="rounded-xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-sm text-zinc-400">
+          <div className="mt-5 rounded-xl border border-[#30372c] bg-[#090b09] px-4 py-3 text-sm text-[#a9ada4]">
             Aktywne sortowanie:{" "}
-            <span className="font-bold text-white">{activeSortLabel}</span>
+            <span className="font-bold text-[#f2efe4]">{activeSortLabel}</span>
           </div>
-        </div>
+        </section>
 
         {message && (
-          <div className="mb-6 rounded-xl border border-zinc-700 bg-zinc-900 p-4 text-sm font-semibold text-zinc-200">
+          <div role="status" className="mb-6 rounded-xl border border-[#495044] bg-[#1b211b] p-4 text-sm font-semibold text-[#d8dbd3]">
             {message}
           </div>
         )}
 
-        <div className="overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-900">
-          <div className="flex flex-col gap-3 border-b border-zinc-800 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
-            <p className="text-sm text-zinc-400">
+        <section aria-labelledby="reservation-list-heading" className="overflow-hidden rounded-[1.5rem] border border-[#30372c] bg-[#101310]">
+          <div className="flex flex-col gap-4 border-b border-[#30372c] px-4 py-5 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+            <div>
+              <h2 id="reservation-list-heading" className="text-xl font-bold text-[#f2efe4]">Lista rezerwacji</h2>
+              <p className="mt-1 text-sm text-[#a9ada4]">
               Liczba rezerwacji w widoku:{" "}
-              <span className="font-bold text-white">
+              <span className="font-bold text-[#f2efe4]">
                 {reservations.length}
               </span>
-            </p>
+              </p>
+            </div>
 
             <button
               type="button"
               onClick={downloadReservationsCsv}
               disabled={!urlParamsLoaded || loading || reservations.length === 0}
-              className="rounded-xl border border-green-700 bg-green-950 px-4 py-2 text-sm font-semibold text-green-300 transition hover:bg-green-900 disabled:cursor-not-allowed disabled:opacity-50"
+              className="min-h-11 w-full rounded-xl border border-[#66724f] bg-[#20281c] px-4 py-2 text-sm font-semibold text-[#c7d6b2] transition hover:bg-[#2b3525] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d7c895] disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
             >
               Eksport CSV
             </button>
           </div>
 
           {!urlParamsLoaded || loading ? (
-            <div className="p-8 text-zinc-400">Ładowanie rezerwacji...</div>
+            <div className="p-8 text-center text-[#a9ada4]">Ładowanie rezerwacji...</div>
           ) : reservations.length === 0 ? (
-            <div className="p-8 text-zinc-400">
-              Brak rezerwacji do wyświetlenia.
+            <div className="p-8 text-center">
+              <p className="font-semibold text-[#d8dbd3]">Brak rezerwacji do wyświetlenia.</p>
+              <p className="mt-2 text-sm text-[#858b82]">Zmień filtry albo wybierz inną datę.</p>
             </div>
           ) : (
-            <div className="grid gap-4 p-4">
+            <div className="grid gap-4 p-3 sm:p-5">
               {reservations.map((reservation, index) => {
                 const isSaving = savingReservationId === reservation.id;
 
                 return (
                   <article
                     key={reservation.id}
-                    className={`rounded-2xl border border-zinc-800 p-5 ${
-                      index % 2 === 0 ? "bg-zinc-950" : "bg-zinc-900/70"
+                    className={`rounded-[1.25rem] border border-[#30372c] p-4 transition hover:border-[#485043] sm:p-5 ${
+                      index % 2 === 0 ? "bg-[#090b09]" : "bg-[#141814]"
                     }`}
                   >
-                    <div className="grid gap-5 xl:grid-cols-[1.1fr_0.8fr_0.8fr_1fr_auto] xl:items-start">
-                      <div>
-                        <div className="mb-3 flex flex-wrap gap-2">
+                    <div className="mb-5 flex flex-wrap gap-2 border-b border-[#30372c] pb-4">
                           <span
                             className={`rounded-full border px-3 py-1 text-xs font-bold ${getReservationStatusBadgeClass(
                               reservation.reservation_status
@@ -880,7 +889,6 @@ export default function AdminReservationsPage() {
                               reservation.reservation_status
                             )}
                           </span>
-
                           <span
                             className={`rounded-full border px-3 py-1 text-xs font-bold ${getPaymentStatusBadgeClass(
                               reservation.payment_status
@@ -888,61 +896,64 @@ export default function AdminReservationsPage() {
                           >
                             {getPaymentStatusLabel(reservation.payment_status)}
                           </span>
-                        </div>
+                    </div>
 
-                        <p className="text-xs uppercase tracking-[0.25em] text-zinc-500">
+                    <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-[1.15fr_0.8fr_0.9fr_1.05fr] xl:items-start">
+                      <div className="min-w-0">
+
+                        <p className="text-xs font-bold uppercase tracking-[0.25em] text-[#858b82]">
                           Klient
                         </p>
 
-                        <h2 className="mt-2 text-lg font-bold">
+                        <h3 className="mt-2 break-words text-lg font-bold text-[#f2efe4]">
                           {reservation.customer_name || "Brak danych"}
-                        </h2>
+                        </h3>
 
-                        <p className="mt-1 text-sm text-zinc-400">
+                        <p className="mt-1 break-all text-sm text-[#b7bbb2]">
                           {reservation.customer_email || "Brak e-maila"}
                         </p>
 
-                        <p className="mt-1 text-sm text-zinc-500">
+                        <p className="mt-1 text-sm text-[#858b82]">
                           Tel.: {reservation.customer_phone || "brak"}
                         </p>
                       </div>
 
                       <div>
-                        <p className="text-xs uppercase tracking-[0.25em] text-zinc-500">
+                        <p className="text-xs font-bold uppercase tracking-[0.25em] text-[#858b82]">
                           Termin
                         </p>
 
-                        <p className="mt-2 text-lg font-bold">
+                        <p className="mt-2 text-lg font-bold text-[#f2efe4]">
                           {reservation.reservation_date || "Brak daty"}
                         </p>
 
-                        <p className="mt-1 text-sm text-zinc-400">
+                        <p className="mt-1 text-sm text-[#b7bbb2]">
                           {normalizeTime(reservation.start_time)}–
                           {normalizeTime(reservation.end_time)}
                         </p>
 
-                        <p className="mt-1 text-sm text-zinc-500">
+                        <p className="mt-1 text-sm text-[#858b82]">
                           {reservation.duration_minutes ?? 0} min
                         </p>
                       </div>
 
-                      <div>
-                        <p className="text-xs uppercase tracking-[0.25em] text-zinc-500">
+                      <div className="min-w-0">
+                        <p className="text-xs font-bold uppercase tracking-[0.25em] text-[#858b82]">
                           Oś
                         </p>
 
-                        <p className="mt-2 text-lg font-bold">
+                        <p className="mt-2 break-words text-lg font-bold text-[#f2efe4]">
                           {getLaneName(reservation)}
                         </p>
 
-                        <p className="mt-1 text-sm text-green-400">
+                        <p className="mt-1 text-sm font-semibold text-[#a9c58f]">
                           {Number(reservation.price ?? 0).toFixed(0)} zł
                         </p>
                       </div>
 
-                      <div className="grid gap-4">
+                      <div className="grid gap-4 rounded-xl border border-[#30372c] bg-[#101310] p-4 md:col-span-2 xl:col-span-1">
                         <div>
-                          <label className="mb-2 block text-xs uppercase tracking-[0.25em] text-zinc-500">
+                          <label className="mb-2 block text-xs font-bold uppercase tracking-[0.2em] text-[#858b82]">
                             Status rezerwacji
                           </label>
 
@@ -956,7 +967,7 @@ export default function AdminReservationsPage() {
                                 reservation_status: event.target.value,
                               })
                             }
-                            className="w-full rounded-xl border border-zinc-700 bg-zinc-900 px-4 py-3 text-sm text-white outline-none transition focus:border-green-600 disabled:opacity-60"
+                            className="min-h-11 w-full rounded-xl border border-[#3b4237] bg-[#090b09] px-4 py-3 text-sm text-[#f2efe4] outline-none transition focus:border-[#8b986f] focus-visible:ring-2 focus-visible:ring-[#8b986f]/30 disabled:opacity-60"
                           >
                             <option value={RESERVATION_STATUS.CONFIRMED}>Potwierdzona</option>
                             <option value={RESERVATION_STATUS.COMPLETED}>Zakończona</option>
@@ -968,7 +979,7 @@ export default function AdminReservationsPage() {
                         </div>
 
                         <div>
-                          <label className="mb-2 block text-xs uppercase tracking-[0.25em] text-zinc-500">
+                          <label className="mb-2 block text-xs font-bold uppercase tracking-[0.2em] text-[#858b82]">
                             Status płatności
                           </label>
 
@@ -982,7 +993,7 @@ export default function AdminReservationsPage() {
                                 payment_status: event.target.value,
                               })
                             }
-                            className="w-full rounded-xl border border-zinc-700 bg-zinc-900 px-4 py-3 text-sm text-white outline-none transition focus:border-green-600 disabled:opacity-60"
+                            className="min-h-11 w-full rounded-xl border border-[#3b4237] bg-[#090b09] px-4 py-3 text-sm text-[#f2efe4] outline-none transition focus:border-[#8b986f] focus-visible:ring-2 focus-visible:ring-[#8b986f]/30 disabled:opacity-60"
                           >
                             <option value={PAYMENT_STATUS.PAY_ON_SITE}>
                               Płatność na miejscu
@@ -995,19 +1006,20 @@ export default function AdminReservationsPage() {
                         </div>
                       </div>
 
-                      <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-4 text-sm">
-                        <p className="text-zinc-500">Utworzono</p>
-
-                        <p className="mt-1 text-xs text-zinc-300">
+                      <div className="md:col-span-2 xl:col-span-4 xl:flex xl:items-center xl:justify-between xl:border-t xl:border-[#30372c] xl:pt-4">
+                        <p className="text-xs text-[#858b82]">
+                          Utworzono:{" "}
+                          <span className="text-[#b7bbb2]">
                           {reservation.created_at
                             ? new Date(reservation.created_at).toLocaleString(
                                 "pl-PL"
                               )
                             : "brak danych"}
+                          </span>
                         </p>
 
                         {isSaving && (
-                          <p className="mt-4 text-xs font-semibold text-yellow-400">
+                          <p className="mt-2 text-xs font-semibold text-[#d7c895] xl:mt-0">
                             Zapisywanie...
                           </p>
                         )}
@@ -1018,8 +1030,7 @@ export default function AdminReservationsPage() {
               })}
             </div>
           )}
-        </div>
-      </section>
-    </main>
+        </section>
+    </AdminShell>
   );
 }

@@ -1,6 +1,8 @@
 ﻿"use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
+import AdminShell from "../_components/AdminShell";
 import {
   getPaymentStatusBadgeClass,
   getPaymentStatusLabel,
@@ -305,32 +307,35 @@ export default function AdminReportsPage() {
   ).sort((a, b) => b[1] - a[1])[0];
 
   return (
-    <main className="min-h-screen bg-zinc-950 text-white">
-      <section className="mx-auto max-w-7xl px-6 py-12">
-        <div className="mb-8">
-          <p className="mb-4 text-sm uppercase tracking-[0.35em] text-green-500">
-            ADMIN PANEL
-          </p>
+    <AdminShell
+      eyebrow="CSK Booking"
+      title="Raport"
+      description="Rezerwacje, przychód i szacowane obłożenie osi."
+      actions={
+        <Link href="/admin" className="inline-flex min-h-11 w-full items-center justify-center rounded-xl border border-[#495044] px-5 py-3 text-sm font-semibold text-[#d8dbd3] transition hover:border-[#8b986f] hover:bg-[#1b211b] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d7c895] sm:w-auto">
+          ← Wróć do panelu
+        </Link>
+      }
+    >
 
-          <h1 className="text-4xl font-bold">Raport</h1>
-
-          <p className="mt-3 text-zinc-400">
-            Rezerwacje, przychód i szacowane obłożenie osi.
-          </p>
-        </div>
-
-        <div className="mb-8 grid gap-5 rounded-2xl border border-zinc-800 bg-zinc-900 p-6 md:grid-cols-2">
+        <section aria-labelledby="report-range-heading" className="mb-8 rounded-[1.5rem] border border-[#30372c] bg-[#101310] p-4 sm:p-6">
+          <div className="mb-5">
+            <p className="text-xs font-bold uppercase tracking-[0.25em] text-[#d7c895]">Parametry raportu</p>
+            <h2 id="report-range-heading" className="mt-2 text-xl font-bold">Zakres raportu</h2>
+          </div>
+          <div className="grid gap-5 md:grid-cols-2">
           <div>
-            <label className="mb-2 block text-sm text-zinc-300">
+            <label htmlFor="report-mode" className="mb-2 block text-sm font-semibold text-[#d8dbd3]">
               Zakres raportu
             </label>
 
             <select
+              id="report-mode"
               value={reportMode}
               onChange={(event) =>
                 setReportMode(event.target.value as ReportMode)
               }
-              className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-white outline-none focus:border-green-600"
+              className="min-h-11 w-full rounded-xl border border-[#3b4237] bg-[#090b09] px-4 py-3 text-[#f2efe4] outline-none focus:border-[#8b986f] focus-visible:ring-2 focus-visible:ring-[#8b986f]/30"
             >
               <option value="day">Dzień</option>
               <option value="week">Tydzień</option>
@@ -340,132 +345,136 @@ export default function AdminReportsPage() {
           </div>
 
           <div>
-            <label className="mb-2 block text-sm text-zinc-300">
+            <label htmlFor="report-date" className="mb-2 block text-sm font-semibold text-[#d8dbd3]">
               Data odniesienia
             </label>
 
             <input
+              id="report-date"
               type="date"
               value={selectedDate}
               onChange={(event) => setSelectedDate(event.target.value)}
-              className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-white outline-none focus:border-green-600"
+              className="min-h-11 w-full rounded-xl border border-[#3b4237] bg-[#090b09] px-4 py-3 text-[#f2efe4] outline-none focus:border-[#8b986f] focus-visible:ring-2 focus-visible:ring-[#8b986f]/30"
             />
           </div>
 
-          <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-4 text-sm text-zinc-300">
-            Zakres:{" "}
-            <span className="font-semibold text-green-500">
+          <div className="rounded-xl border border-[#30372c] bg-[#090b09] p-4 text-sm text-[#a9ada4] md:col-span-2">
+            Wybrany zakres:{" "}
+            <span className="font-semibold text-[#c7d6b2]">
               {range.startDate} - {range.endDate}
             </span>
           </div>
-        </div>
+          </div>
+        </section>
 
         {loading && (
-          <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-6 text-zinc-400">
+          <div className="rounded-xl border border-[#30372c] bg-[#101310] p-6 text-[#a9ada4]">
             Ładowanie raportu...
           </div>
         )}
 
         {!loading && message && (
-          <div className="rounded-xl border border-red-800 bg-red-950 p-4 text-sm font-semibold text-red-300">
+          <div role="alert" className="rounded-xl border border-[#744545] bg-[#2a1b1b] p-4 text-sm font-semibold text-[#e0a0a0]">
             {message}
           </div>
         )}
 
         {!loading && hasAccess && (
           <>
-            <div className="mb-8 grid gap-4 md:grid-cols-4">
-              <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-5">
-                <p className="text-sm text-zinc-400">Rezerwacje aktywne</p>
-                <p className="mt-2 text-3xl font-bold">
+            <section aria-labelledby="report-kpi-heading" className="mb-8">
+              <p className="text-xs font-bold uppercase tracking-[0.25em] text-[#d7c895]">Podsumowanie</p>
+              <h2 id="report-kpi-heading" className="mb-4 mt-2 text-xl font-bold">Kluczowe wskaźniki</h2>
+              <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+              <div className="rounded-[1.25rem] border border-[#30372c] bg-[#101310] p-5">
+                <p className="text-sm text-[#a9ada4]">Rezerwacje aktywne</p>
+                <p className="mt-3 text-3xl font-bold">
                   {activeReservations.length}
                 </p>
               </div>
 
-              <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-5">
-                <p className="text-sm text-zinc-400">Przychód planowany</p>
-                <p className="mt-2 text-3xl font-bold text-green-500">
+              <div className="rounded-[1.25rem] border border-[#36523a] bg-[#111b13] p-5">
+                <p className="text-sm text-[#a9ada4]">Przychód planowany</p>
+                <p className="mt-3 text-3xl font-bold text-[#a9c58f]">
                   {totalRevenue.toFixed(0)} zł
                 </p>
               </div>
 
-              <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-5">
-                <p className="text-sm text-zinc-400">Przychód opłacony</p>
-                <p className="mt-2 text-3xl font-bold text-green-500">
+              <div className="rounded-[1.25rem] border border-[#36523a] bg-[#111b13] p-5">
+                <p className="text-sm text-[#a9ada4]">Przychód opłacony</p>
+                <p className="mt-3 text-3xl font-bold text-[#a9c58f]">
                   {paidRevenue.toFixed(0)} zł
                 </p>
               </div>
 
-              <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-5">
-                <p className="text-sm text-zinc-400">Obłożenie osi</p>
-                <p className="mt-2 text-3xl font-bold text-yellow-300">
+              <div className="rounded-[1.25rem] border border-[#5b5335] bg-[#1d1a10] p-5">
+                <p className="text-sm text-[#a9ada4]">Obłożenie osi</p>
+                <p className="mt-3 text-3xl font-bold text-[#d7c895]">
                   {occupancy}%
                 </p>
               </div>
-            </div>
-
-            <div className="mb-8 grid gap-4 md:grid-cols-4">
-              <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-5">
-                <p className="text-sm text-zinc-400">Nieopłacone / na miejscu</p>
-                <p className="mt-2 text-3xl font-bold text-yellow-300">
+              <div className="rounded-[1.25rem] border border-[#5b5335] bg-[#1d1a10] p-5">
+                <p className="text-sm text-[#a9ada4]">Nieopłacone / na miejscu</p>
+                <p className="mt-3 text-3xl font-bold text-[#d7c895]">
                   {unpaidRevenue.toFixed(0)} zł
                 </p>
               </div>
 
-              <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-5">
-                <p className="text-sm text-zinc-400">Anulowane</p>
-                <p className="mt-2 text-3xl font-bold text-red-300">
+              <div className="rounded-[1.25rem] border border-[#603d3d] bg-[#211515] p-5">
+                <p className="text-sm text-[#a9ada4]">Anulowane</p>
+                <p className="mt-3 text-3xl font-bold text-[#d99b9b]">
                   {cancelledReservations.length}
                 </p>
               </div>
 
-              <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-5">
-                <p className="text-sm text-zinc-400">Nieobecności</p>
-                <p className="mt-2 text-3xl font-bold text-yellow-300">
+              <div className="rounded-[1.25rem] border border-[#5b5335] bg-[#1d1a10] p-5">
+                <p className="text-sm text-[#a9ada4]">Nieobecności</p>
+                <p className="mt-3 text-3xl font-bold text-[#d7c895]">
                   {noShowReservations.length}
                 </p>
               </div>
 
-              <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-5">
-                <p className="text-sm text-zinc-400">Najczęściej używana oś</p>
-                <p className="mt-2 text-xl font-bold">
-                  {topLane ? `${topLane[0]} / ${topLane[1]} rez.` : "Brak"}
-                </p>
+              <div className="min-w-0 rounded-[1.25rem] border border-[#30372c] bg-[#101310] p-5">
+                <p className="text-sm text-[#a9ada4]">Najczęściej używana oś</p>
+                <p className="mt-3 break-words text-xl font-bold">{topLane ? topLane[0] : "Brak"}</p>
+                {topLane ? <p className="mt-2 text-sm text-[#858b82]">{topLane[1]} rez.</p> : null}
               </div>
-            </div>
+              </div>
+            </section>
 
             <div className="mb-8 grid gap-4 md:grid-cols-2">
-              <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-5">
-                <p className="text-sm text-zinc-400">Najlepszy dzień</p>
-                <p className="mt-2 text-xl font-bold">
+              <div className="rounded-[1.25rem] border border-[#30372c] bg-[#101310] p-5">
+                <p className="text-sm text-[#a9ada4]">Najlepszy dzień</p>
+                <p className="mt-3 text-xl font-bold">
                   {bestDay
                     ? `${bestDay[0]} / ${bestDay[1].toFixed(0)} zł`
                     : "Brak"}
                 </p>
               </div>
 
-              <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-5">
-                <p className="text-sm text-zinc-400">Założenie obłożenia</p>
-                <p className="mt-2 text-xl font-bold">
+              <div className="rounded-[1.25rem] border border-[#30372c] bg-[#101310] p-5">
+                <p className="text-sm text-[#a9ada4]">Założenie obłożenia</p>
+                <p className="mt-3 text-xl font-bold">
                   {lanesCount} osi x 16h dziennie x {daysInRange} dni
                 </p>
               </div>
             </div>
 
-            <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-6">
-              <div className="mb-5 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                <h2 className="text-2xl font-bold">Rezerwacje w okresie</h2>
+            <section aria-labelledby="report-table-heading" className="rounded-[1.5rem] border border-[#30372c] bg-[#101310] p-4 sm:p-6">
+              <div className="mb-5 border-b border-[#30372c] pb-5">
+                <p className="text-xs font-bold uppercase tracking-[0.25em] text-[#d7c895]">Szczegóły</p>
+                <h2 id="report-table-heading" className="mt-2 text-2xl font-bold">Rezerwacje w okresie</h2>
               </div>
 
               {reservations.length === 0 ? (
-                <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-6 text-zinc-400">
-                  Brak rezerwacji w wybranym okresie.
+                <div className="rounded-xl border border-[#30372c] bg-[#090b09] p-6 text-center">
+                  <p className="font-semibold text-[#d8dbd3]">Brak rezerwacji w wybranym okresie.</p>
+                  <p className="mt-2 text-sm text-[#858b82]">Wybierz inny zakres raportu albo datę odniesienia.</p>
                 </div>
               ) : (
-                <div className="overflow-x-auto">
+                <div className="max-w-full overflow-x-auto overscroll-x-contain rounded-xl border border-[#30372c]" tabIndex={0} aria-label="Tabela rezerwacji w okresie">
                   <table className="w-full min-w-[1100px] text-left text-sm">
-                    <thead>
-                      <tr className="border-b border-zinc-800 text-zinc-400">
+                    <thead className="bg-[#090b09]">
+                      <tr className="border-b border-[#30372c] text-[#a9ada4]">
                         <th className="py-3 pr-4">Data</th>
                         <th className="py-3 pr-4">Godzina</th>
                         <th className="py-3 pr-4">Oś</th>
@@ -482,9 +491,9 @@ export default function AdminReportsPage() {
                       {reservations.map((reservation) => (
                         <tr
                           key={reservation.id}
-                          className="border-b border-zinc-800"
+                          className="border-b border-[#30372c] text-[#d8dbd3] transition last:border-0 hover:bg-[#181d18]"
                         >
-                          <td className="py-4 pr-4">
+                          <td className="py-4 pr-4 font-medium text-[#f2efe4]">
                             {reservation.reservation_date}
                           </td>
 
@@ -511,7 +520,7 @@ export default function AdminReportsPage() {
                             {reservation.customer_phone ?? "-"}
                           </td>
 
-                          <td className="py-4 pr-4 text-green-500">
+                          <td className="py-4 pr-4 text-right font-semibold text-[#a9c58f]">
                             {Number(reservation.price ?? 0).toFixed(0)} zł
                           </td>
 
@@ -548,20 +557,10 @@ export default function AdminReportsPage() {
                   </table>
                 </div>
               )}
-            </div>
-
-            <div className="mt-8">
-              <a
-                href="/admin"
-                className="rounded-xl border border-zinc-700 px-5 py-3 text-sm font-semibold text-zinc-300 transition hover:bg-zinc-900"
-              >
-                ← Panel administratora
-              </a>
-            </div>
+            </section>
           </>
         )}
-      </section>
-    </main>
+    </AdminShell>
   );
 }
 
