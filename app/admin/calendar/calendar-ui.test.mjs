@@ -501,10 +501,38 @@ test("month view uses summaries without entry labels or customer data", async ()
   );
   assert.doesNotMatch(source, /entry\.label|customer_name|customer_email|customer_phone|profiles|service_role/i);
   assert.match(source, /summary\.eventCount/);
-  assert.match(source, /summary\.occupiedMinutes/);
   assert.match(source, /summary\.isFull/);
   assert.match(source, /summary\.flags/);
   assert.match(source, /grid-cols-7/);
+});
+
+test("month tiles emphasize the date and render only non-zero activity counters", async () => {
+  const source = await readFile(
+    new URL("./_components/MonthCalendar.tsx", import.meta.url),
+    "utf8"
+  );
+
+  assert.match(source, /text-base font-black leading-none tabular-nums sm:text-lg/);
+  assert.match(source, /Number\(day\.date\.slice\(8, 10\)\)/);
+  assert.match(source, /summary\.reservationCount > 0 && <span>R \{summary\.reservationCount\}<\/span>/);
+  assert.match(source, /summary\.blockCount > 0 && <span>B \{summary\.blockCount\}<\/span>/);
+  assert.match(source, /summary\.eventCount > 0 && <span>E \{summary\.eventCount\}<\/span>/);
+  assert.match(source, /hasActivityCounts &&/);
+  assert.doesNotMatch(source, /occupiedMinutes|availableMinutes|R\{summary|B\{summary|E\{summary/);
+});
+
+test("month tiles retain occupancy percentage, progress, today and responsive wrapping", async () => {
+  const source = await readFile(
+    new URL("./_components/MonthCalendar.tsx", import.meta.url),
+    "utf8"
+  );
+
+  assert.match(source, /summary\.occupancyPercent/);
+  assert.match(source, /style=\{\{ width: `\$\{percent \?\? 0\}%` \}\}/);
+  assert.match(source, /isToday &&/);
+  assert.match(source, />\s*Dzisiaj\s*</);
+  assert.match(source, /flex flex-wrap gap-x-2 gap-y-0\.5/);
+  assert.doesNotMatch(source, /min-w-\[[^\]]+\]/);
 });
 
 test("week grouping always returns Monday through Sunday", () => {

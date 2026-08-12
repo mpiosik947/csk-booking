@@ -47,7 +47,12 @@ function buildDayLabel(day: CalendarMonthDay, today: string) {
       ? `Uwagi: ${summary.flags.map((flag) => FLAG_LABELS[flag]).join(", ")}`
       : null,
   ].filter(Boolean);
-  return `${formatFullDate(day.date)}. ${percent}. ${summary.occupiedMinutes} z ${summary.availableMinutes} dostępnych minut. ${summary.reservationCount} rezerwacji, ${summary.blockCount} blokad, ${summary.eventCount} wydarzeń.${special.length > 0 ? ` ${special.join(". ")}.` : ""}`;
+  const activity = [
+    summary.reservationCount > 0 ? `${summary.reservationCount} rezerwacji` : null,
+    summary.blockCount > 0 ? `${summary.blockCount} blokad` : null,
+    summary.eventCount > 0 ? `${summary.eventCount} wydarzeń` : null,
+  ].filter(Boolean);
+  return `${formatFullDate(day.date)}. ${percent}.${activity.length > 0 ? ` ${activity.join(", ")}.` : ""}${special.length > 0 ? ` ${special.join(". ")}.` : ""}`;
 }
 
 export function MonthCalendarSkeleton({ dayCount }: { dayCount: 35 | 42 }) {
@@ -105,6 +110,10 @@ export default function MonthCalendar({
           const isCurrentMonth = day.date.startsWith(currentMonth);
           const isToday = day.date === today;
           const percent = summary.occupancyPercent;
+          const hasActivityCounts =
+            summary.reservationCount > 0 ||
+            summary.blockCount > 0 ||
+            summary.eventCount > 0;
           return (
             <button
               key={day.date}
@@ -119,8 +128,8 @@ export default function MonthCalendar({
                     : "border-[#252b24] bg-[#121612] text-[#6f756b] opacity-65 hover:opacity-90"
               }`}
             >
-              <div className="flex flex-col gap-0.5 sm:flex-row sm:items-start sm:justify-between sm:gap-1">
-                <span className={`text-xs font-black tabular-nums sm:text-sm ${isToday ? "text-[#d7c895]" : "text-[#f2efe4]"}`}>
+              <div className="flex items-start justify-between gap-1">
+                <span className={`text-base font-black leading-none tabular-nums sm:text-lg ${isToday ? "text-[#d7c895]" : "text-[#f2efe4]"}`}>
                   {Number(day.date.slice(8, 10))}
                 </span>
                 <span className="text-[10px] font-black tabular-nums text-[#d7c895] sm:text-sm">
@@ -134,20 +143,19 @@ export default function MonthCalendar({
                 </span>
               )}
 
-              <div className="mt-1 hidden h-1.5 overflow-hidden rounded-full bg-[#0d100d] sm:block">
+              <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-[#0d100d]">
                 <div
                   className="h-full rounded-full bg-[#78865f]"
                   style={{ width: `${percent ?? 0}%` }}
                 />
               </div>
-              <p className="mt-1 hidden text-[10px] text-[#a9ada4] md:block">
-                {summary.occupiedMinutes} / {summary.availableMinutes} min
-              </p>
-              <p className="mt-1 grid grid-cols-3 gap-px text-[8px] font-bold leading-tight text-[#c7cbbf] sm:text-[10px]">
-                <span className="min-w-0">R{summary.reservationCount}</span>
-                <span className="min-w-0">B{summary.blockCount}</span>
-                <span className="min-w-0">E{summary.eventCount}</span>
-              </p>
+              {hasActivityCounts && (
+                <p className="mt-1 flex flex-wrap gap-x-2 gap-y-0.5 text-[8px] font-bold leading-tight text-[#c7cbbf] sm:text-[10px]">
+                  {summary.reservationCount > 0 && <span>R {summary.reservationCount}</span>}
+                  {summary.blockCount > 0 && <span>B {summary.blockCount}</span>}
+                  {summary.eventCount > 0 && <span>E {summary.eventCount}</span>}
+                </p>
+              )}
 
               {summary.isFull && (
                 <span className="mt-1 block text-[8px] font-black uppercase leading-tight text-[#e0a0a0] sm:text-[10px]">
