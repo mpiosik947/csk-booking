@@ -13,6 +13,7 @@ import {
   RESERVATION_STATUS,
 } from "../../../lib/reservation-status";
 import { supabase } from "../../../lib/supabase";
+import { getLaneRelationDisplay } from "../../../lib/admin/lane-relation-display";
 
 type ReportMode = "day" | "week" | "month" | "year";
 
@@ -29,9 +30,21 @@ type Reservation = {
   reservation_status: string;
   payment_status: string;
   shooting_lanes: {
+    id: string;
     name: string;
+    resource_kind: string;
+    parent_lane_id: string | null;
+    display_order: number;
+    is_active: boolean;
+    parent_lane?: unknown;
   } | null;
 };
+
+function getLaneName(reservation: Reservation) {
+  return (
+    getLaneRelationDisplay(reservation.shooting_lanes)?.displayName ?? "Brak osi"
+  );
+}
 
 function addDays(date: Date, days: number) {
   const copy = new Date(date);
@@ -188,7 +201,20 @@ export default function AdminReportsPage() {
         reservation_status,
         payment_status,
         shooting_lanes (
-          name
+          id,
+          name,
+          resource_kind,
+          parent_lane_id,
+          display_order,
+          is_active,
+          parent_lane:shooting_lanes!parent_lane_id (
+            id,
+            name,
+            resource_kind,
+            parent_lane_id,
+            display_order,
+            is_active
+          )
         )
       `,
       )
@@ -272,7 +298,7 @@ export default function AdminReportsPage() {
 
   const topLane = Object.entries(
     activeReservations.reduce<Record<string, number>>((acc, reservation) => {
-      const laneName = reservation.shooting_lanes?.name ?? "Brak osi";
+      const laneName = getLaneName(reservation);
       acc[laneName] = (acc[laneName] ?? 0) + 1;
       return acc;
     }, {}),
@@ -470,7 +496,7 @@ export default function AdminReportsPage() {
                           </td>
 
                           <td className="py-4 pr-4">
-                            {reservation.shooting_lanes?.name ?? "Brak osi"}
+                            {getLaneName(reservation)}
                           </td>
 
                           <td className="py-4 pr-4 font-semibold">

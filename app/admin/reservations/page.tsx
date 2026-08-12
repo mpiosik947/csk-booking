@@ -19,6 +19,7 @@ import {
   markNoShow,
   markPaid,
 } from "../../../lib/reservation-actions";
+import { getLaneRelationDisplay } from "../../../lib/admin/lane-relation-display";
 
 type ReservationSort = "newest" | "oldest" | "lane" | "status" | "payment";
 
@@ -39,10 +40,22 @@ type Reservation = {
   created_at: string | null;
   shooting_lanes?:
     | {
+        id: string;
         name: string | null;
+        resource_kind: string | null;
+        parent_lane_id: string | null;
+        display_order: number | null;
+        is_active: boolean | null;
+        parent_lane?: unknown;
       }
     | {
+        id: string;
         name: string | null;
+        resource_kind: string | null;
+        parent_lane_id: string | null;
+        display_order: number | null;
+        is_active: boolean | null;
+        parent_lane?: unknown;
       }[]
     | null;
 };
@@ -76,13 +89,10 @@ function normalizeTime(time: string | null) {
 }
 
 function getLaneName(reservation: Reservation) {
-  const lanes = reservation.shooting_lanes;
-
-  if (Array.isArray(lanes)) {
-    return lanes[0]?.name || "Nieznana oś";
-  }
-
-  return lanes?.name || "Nieznana oś";
+  return (
+    getLaneRelationDisplay(reservation.shooting_lanes)?.displayName ??
+    "Nieznana oś"
+  );
 }
 
 function isReservationSort(value: string | null): value is ReservationSort {
@@ -280,11 +290,30 @@ export default function AdminReservationsPage() {
     if (phrase) {
       const { data: laneData, error: laneError } = await supabase
         .from("shooting_lanes")
-        .select("id")
-        .ilike("name", `%${phrase}%`);
+        .select(`
+          id,
+          name,
+          resource_kind,
+          parent_lane_id,
+          display_order,
+          is_active,
+          parent_lane:shooting_lanes!parent_lane_id (
+            id,
+            name,
+            resource_kind,
+            parent_lane_id,
+            display_order,
+            is_active
+          )
+        `);
 
       if (!laneError && laneData) {
         matchingLaneIds = laneData
+          .filter((lane) =>
+            getLaneRelationDisplay(lane)
+              ?.displayName.toLocaleLowerCase("pl")
+              .includes(phrase.toLocaleLowerCase("pl"))
+          )
           .map((lane) => String(lane.id))
           .filter(Boolean);
       }
@@ -307,7 +336,20 @@ export default function AdminReservationsPage() {
         payment_status,
         created_at,
         shooting_lanes (
-          name
+          id,
+          name,
+          resource_kind,
+          parent_lane_id,
+          display_order,
+          is_active,
+          parent_lane:shooting_lanes!parent_lane_id (
+            id,
+            name,
+            resource_kind,
+            parent_lane_id,
+            display_order,
+            is_active
+          )
         )
       `
     );

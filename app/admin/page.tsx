@@ -12,6 +12,7 @@ import {
   isPaidPaymentStatus,
 } from "../../lib/payment-status";
 import AdminShell from "./_components/AdminShell";
+import { getLaneRelationDisplay } from "../../lib/admin/lane-relation-display";
 
 type Role = "admin" | "pracownik" | "instruktor" | "user";
 
@@ -30,8 +31,24 @@ type Reservation = {
   payment_status: string | null;
   attendance_status: string | null;
   shooting_lanes:
-    | { name: string | null }
-    | { name: string | null }[]
+    | {
+        id: string;
+        name: string | null;
+        resource_kind: string | null;
+        parent_lane_id: string | null;
+        display_order: number | null;
+        is_active: boolean | null;
+        parent_lane?: unknown;
+      }
+    | {
+        id: string;
+        name: string | null;
+        resource_kind: string | null;
+        parent_lane_id: string | null;
+        display_order: number | null;
+        is_active: boolean | null;
+        parent_lane?: unknown;
+      }[]
     | null;
 };
 
@@ -139,13 +156,9 @@ function getCurrentTimeHHMM() {
 
 
 function getLaneName(reservation: Reservation) {
-  const lanes = reservation.shooting_lanes;
-
-  if (Array.isArray(lanes)) {
-    return lanes[0]?.name || "Brak osi";
-  }
-
-  return lanes?.name || "Brak osi";
+  return (
+    getLaneRelationDisplay(reservation.shooting_lanes)?.displayName ?? "Brak osi"
+  );
 }
 
 function getRoleLabel(role: string | null) {
@@ -382,7 +395,10 @@ export default function AdminPage() {
           payment_status,
           attendance_status,
           shooting_lanes (
-            name
+            id, name, resource_kind, parent_lane_id, display_order, is_active,
+            parent_lane:shooting_lanes!parent_lane_id (
+              id, name, resource_kind, parent_lane_id, display_order, is_active
+            )
           )
         `
         )
@@ -407,7 +423,10 @@ export default function AdminPage() {
           payment_status,
           attendance_status,
           shooting_lanes (
-            name
+            id, name, resource_kind, parent_lane_id, display_order, is_active,
+            parent_lane:shooting_lanes!parent_lane_id (
+              id, name, resource_kind, parent_lane_id, display_order, is_active
+            )
           )
         `
         )

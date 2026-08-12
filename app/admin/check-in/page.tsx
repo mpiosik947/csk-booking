@@ -15,6 +15,7 @@ import {
   isCancelledReservationStatus,
   RESERVATION_STATUS,
 } from "../../../lib/reservation-status";
+import { getLaneRelationDisplay } from "../../../lib/admin/lane-relation-display";
 
 type UserRole = "admin" | "pracownik" | "instruktor" | "user";
 
@@ -36,7 +37,13 @@ type Reservation = {
   checked_in_at: string | null;
   price: number | null;
   shooting_lanes?: {
+    id: string;
     name: string | null;
+    resource_kind: string | null;
+    parent_lane_id: string | null;
+    display_order: number | null;
+    is_active: boolean | null;
+    parent_lane?: unknown;
   }[] | null;
 };
 
@@ -119,7 +126,10 @@ function normalizeTime(time: string | null) {
 }
 
 function getLaneName(reservation: Reservation) {
-  return reservation.shooting_lanes?.[0]?.name || "Nieznana oś";
+  return (
+    getLaneRelationDisplay(reservation.shooting_lanes)?.displayName ??
+    "Nieznana oś"
+  );
 }
 
 function getVerificationStatusLabel(status: string | null) {
@@ -558,7 +568,10 @@ function CheckInContent() {
         checked_in_at,
         price,
         shooting_lanes (
-          name
+          id, name, resource_kind, parent_lane_id, display_order, is_active,
+          parent_lane:shooting_lanes!parent_lane_id (
+            id, name, resource_kind, parent_lane_id, display_order, is_active
+          )
         )
       `
       )
@@ -608,7 +621,10 @@ function CheckInContent() {
         checked_in_at,
         price,
         shooting_lanes (
-          name
+          id, name, resource_kind, parent_lane_id, display_order, is_active,
+          parent_lane:shooting_lanes!parent_lane_id (
+            id, name, resource_kind, parent_lane_id, display_order, is_active
+          )
         )
       `
       )
@@ -695,7 +711,10 @@ function CheckInContent() {
         checked_in_at,
         price,
         shooting_lanes (
-          name
+          id, name, resource_kind, parent_lane_id, display_order, is_active,
+          parent_lane:shooting_lanes!parent_lane_id (
+            id, name, resource_kind, parent_lane_id, display_order, is_active
+          )
         )
       `
       )

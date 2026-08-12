@@ -21,6 +21,7 @@ import {
   RESERVATION_STATUS,
 } from "../../lib/reservation-status";
 import { supabase } from "../../lib/supabase";
+import { getLaneRelationDisplay } from "../../lib/admin/lane-relation-display";
 
 type Reservation = {
   id: string;
@@ -39,9 +40,21 @@ type Reservation = {
   checked_in_at?: string | null;
   completed_at?: string | null;
   shooting_lanes: {
+    id: string;
     name: string;
+    resource_kind: string;
+    parent_lane_id: string | null;
+    display_order: number;
+    is_active: boolean;
+    parent_lane?: unknown;
   } | null;
 };
+
+function getLaneName(reservation: Reservation) {
+  return (
+    getLaneRelationDisplay(reservation.shooting_lanes)?.displayName ?? "Brak osi"
+  );
+}
 
 type AdminReservationsTableProps = {
   reservations: Reservation[];
@@ -376,7 +389,7 @@ export default function AdminReservationsTable({
                       </td>
 
                       <td className="py-4 pr-4">
-                        {reservation.shooting_lanes?.name ?? "Brak osi"}
+                        {getLaneName(reservation)}
                       </td>
 
                       <td className="py-4 pr-4">
