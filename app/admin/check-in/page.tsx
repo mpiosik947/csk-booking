@@ -4,7 +4,7 @@ import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { supabase } from "../../../lib/supabase";
-import { markPaid as markPaidAction } from "../../../lib/reservation-actions";
+import { updateReservationPayment } from "../../../lib/reservation-actions";
 import {
   getPaymentStatusBadgeClass,
   getPaymentStatusLabel,
@@ -104,12 +104,14 @@ type CancelReservationRpcResult = {
   new_status?: string | null;
 };
 
-type AttendanceAction = "complete" | "no_show";
+type AttendanceAction = "start" | "complete" | "no_show";
 
 type AttendanceRpcResult = {
+  ok: boolean;
   reservation_id: string;
   changed: boolean;
   action: AttendanceAction;
+  code: string;
 };
 
 const VERIFIED_NOTE =
@@ -327,18 +329,41 @@ function parseAttendanceRpcResult(data: unknown): AttendanceRpcResult | null {
   const result = data as Record<string, unknown>;
 
   if (
+    typeof result.ok !== "boolean" ||
     typeof result.reservation_id !== "string" ||
     typeof result.changed !== "boolean" ||
-    (result.action !== "complete" && result.action !== "no_show")
+    (result.action !== "start" &&
+      result.action !== "complete" &&
+      result.action !== "no_show") ||
+    typeof result.code !== "string"
   ) {
     return null;
   }
 
   return {
+    ok: result.ok,
     reservation_id: result.reservation_id,
     changed: result.changed,
     action: result.action,
+    code: result.code,
   };
+}
+
+function getAttendanceResultMessage(code: string) {
+  switch (code) {
+    case "not_allowed":
+      return "Nie masz uprawnień do wykonania tej operacji.";
+    case "reservation_not_found":
+      return "Nie znaleziono rezerwacji.";
+    case "invalid_input":
+      return "Nieprawidłowa operacja rezerwacji.";
+    case "invalid_state":
+      return "Rezerwacja ma niespójny stan i wymaga kontroli administratora.";
+    case "invalid_transition":
+      return "Rezerwacji w tym statusie nie można zmienić.";
+    default:
+      return "Nie udało się zaktualizować rezerwacji. Spróbuj ponownie.";
+  }
 }
 
 function getAttendanceErrorMessage(error: {
@@ -401,7 +426,6 @@ function CheckInContent() {
   >({});
 
   const [currentUserId, setCurrentUserId] = useState("");
-  const [currentUserName, setCurrentUserName] = useState("");
   const [currentUserRole, setCurrentUserRole] = useState<UserRole | "">("");
 
   const [dateFilter, setDateFilter] = useState(todayISODate());
@@ -439,9 +463,6 @@ function CheckInContent() {
 
     if (profile?.role) {
       setCurrentUserRole(String(profile.role) as UserRole);
-      setCurrentUserName(
-        profile.full_name || profile.email || "Nieznany użytkownik"
-      );
     }
   }
 
@@ -512,37 +533,6 @@ function CheckInContent() {
     }
 
     setProfilesByUserId(map);
-  }
-
-  async function createAuditLog({
-    action,
-    reservation,
-    profile,
-    details,
-  }: {
-    action: string;
-    reservation?: Reservation;
-    profile?: Profile | null;
-    details?: Record<string, unknown>;
-  }) {
-    if (!currentUserId) return null;
-
-    const { error } = await supabase.from("audit_logs").insert({
-      actor_user_id: currentUserId,
-      actor_name: currentUserName || "Nieznany użytkownik",
-      actor_role: currentUserRole || "unknown",
-      action,
-      target_type: reservation ? "reservation" : "profile",
-      target_id: reservation?.id || profile?.user_id || null,
-      target_name:
-        reservation?.customer_name ||
-        profile?.full_name ||
-        profile?.email ||
-        "Nieznany cel",
-      details: details ?? {},
-    });
-
-    return error?.message ?? null;
   }
 
   async function loadReservations() {
@@ -784,6 +774,11 @@ function CheckInContent() {
         return false;
       }
 
+      if (!result.ok) {
+        setMessage(getAttendanceResultMessage(result.code));
+        return false;
+      }
+
       const refreshed = await refreshReservationAfterAttendance(reservationId);
 
       if (!refreshed) {
@@ -807,75 +802,50 @@ function CheckInContent() {
     }
   }
 
-  async function updateReservation(
+  async function updatePaymentStatus(
     reservation: Reservation,
-    changes: Partial<
-      Pick<
-        Reservation,
-        | "reservation_status"
-        | "attendance_status"
-        | "payment_status"
-        | "checked_in_at"
-      >
-    >,
-    auditAction = "RESERVATION_UPDATED"
+    paymentStatus: string
   ) {
     setSavingId(reservation.id);
     setMessage("");
 
-    const { error } = await supabase
-      .from("reservations")
-      .update(changes)
-      .eq("id", reservation.id);
+    const result = await updateReservationPayment(supabase, {
+      reservationId: reservation.id,
+      paymentStatus,
+    });
 
-    if (error) {
+    if (result.error) {
       setSavingId(null);
-      setMessage(`Błąd zapisu: ${error.message}`);
+      setMessage(result.error);
       return;
     }
 
+    const nextPaymentStatus = result.data?.payment_status ?? paymentStatus;
     setReservations((current) =>
       current.map((item) =>
-        item.id === reservation.id ? { ...item, ...changes } : item
+        item.id === reservation.id
+          ? { ...item, payment_status: nextPaymentStatus }
+          : item
       )
     );
 
     if (selectedReservation?.id === reservation.id) {
       setSelectedReservation({
         ...selectedReservation,
-        ...changes,
+        payment_status: nextPaymentStatus,
       });
     }
 
-    const profile = reservation.user_id
-      ? profilesByUserId[reservation.user_id]
-      : null;
-
-    const auditError = await createAuditLog({
-      action: auditAction,
-      reservation,
-      profile,
-      details: {
-        before: {
-          reservation_status: reservation.reservation_status,
-          attendance_status: reservation.attendance_status,
-          payment_status: reservation.payment_status,
-          checked_in_at: reservation.checked_in_at,
-        },
-        after: changes,
-      },
-    });
-
     setSavingId(null);
-
-    if (auditError) {
-      setMessage(
-        `Zapisano zmianę, ale nie udało się dodać wpisu audit log: ${auditError}`
-      );
-      return;
-    }
-
     setMessage("Zapisano zmianę.");
+  }
+
+  async function markStarted(reservation: Reservation) {
+    await runAttendanceAction(
+      reservation.id,
+      "start",
+      "Wizyta rozpoczęta."
+    );
   }
 
   async function markCompleted(reservation: Reservation) {
@@ -1009,7 +979,7 @@ function CheckInContent() {
 
     await runAttendanceAction(
       reservation.id,
-      "complete",
+      "start",
       "Konto i uprawnienia zweryfikowane. Wizyta rozpoczęta."
     );
   }
@@ -1160,65 +1130,6 @@ function CheckInContent() {
       });
       setSavingId(null);
     }
-  }
-
-  async function markPaymentAsPaid(reservation: Reservation) {
-    setSavingId(reservation.id);
-    setMessage("");
-
-    const result = await markPaidAction(supabase, {
-      reservationId: reservation.id,
-    });
-
-    if (result.error) {
-      setSavingId(null);
-      setMessage(`Błąd zapisu: ${result.error}`);
-      return;
-    }
-
-    const updatedReservation: Reservation = {
-      ...reservation,
-      payment_status: result.data?.payment_status ?? PAYMENT_STATUS.PAID,
-    };
-
-    setReservations((current) =>
-      current.map((item) =>
-        item.id === reservation.id ? updatedReservation : item
-      )
-    );
-
-    if (selectedReservation?.id === reservation.id) {
-      setSelectedReservation(updatedReservation);
-    }
-
-    const profile = reservation.user_id
-      ? profilesByUserId[reservation.user_id]
-      : null;
-
-    const auditError = await createAuditLog({
-      action: "RESERVATION_PAYMENT_PAID",
-      reservation,
-      profile,
-      details: {
-        before: {
-          payment_status: reservation.payment_status,
-        },
-        after: {
-          payment_status: updatedReservation.payment_status,
-        },
-      },
-    });
-
-    setSavingId(null);
-
-    if (auditError) {
-      setMessage(
-        `Oznaczono płatność, ale nie udało się dodać wpisu audit log: ${auditError}`
-      );
-      return;
-    }
-
-    setMessage("Płatność oznaczona jako opłacona.");
   }
 
   const mainList =
@@ -1465,20 +1376,9 @@ function CheckInContent() {
                       <select
                         value={reservation.payment_status || PAYMENT_STATUS.PAY_ON_SITE}
                         disabled={isSaving}
-                        onChange={(event) => {
-                          if (event.target.value === PAYMENT_STATUS.PAID) {
-                            markPaymentAsPaid(reservation);
-                            return;
-                          }
-
-                          updateReservation(
-                            reservation,
-                            {
-                              payment_status: event.target.value,
-                            },
-                            "RESERVATION_PAYMENT_CHANGED"
-                          );
-                        }}
+                        onChange={(event) =>
+                          updatePaymentStatus(reservation, event.target.value)
+                        }
                         className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-sm text-white outline-none focus:border-green-600 disabled:opacity-60"
                       >
                         <option value={PAYMENT_STATUS.PAY_ON_SITE}>Płatność na miejscu</option>
@@ -1515,12 +1415,8 @@ function CheckInContent() {
                             return;
                           }
 
-                          updateReservation(
-                            reservation,
-                            {
-                              reservation_status: nextStatus,
-                            },
-                            "RESERVATION_STATUS_CHANGED"
+                          setMessage(
+                            "Ta zmiana statusu nie jest dostępna w bieżącym stanie rezerwacji."
                           );
                         }}
                         className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-sm text-white outline-none focus:border-green-600 disabled:opacity-60"
@@ -1575,10 +1471,16 @@ function CheckInContent() {
                       <button
                         type="button"
                         disabled={isSaving}
-                        onClick={() => markCompleted(reservation)}
+                        onClick={() =>
+                          reservation.attendance_status === "present"
+                            ? markCompleted(reservation)
+                            : markStarted(reservation)
+                        }
                         className="min-h-11 rounded-xl bg-[#66724f] px-4 py-3 text-sm font-bold text-white transition hover:bg-[#78865d] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d7c895] disabled:cursor-not-allowed disabled:opacity-60"
                       >
-                        Klient był / zakończ
+                        {reservation.attendance_status === "present"
+                          ? "Zakończ wizytę"
+                          : "Rozpocznij wizytę"}
                       </button>
                     )}
 

@@ -41,7 +41,7 @@ test("reservations keep exports, actions and cancellation RPC while using full l
   assert.match(content, /cancel_reservation/);
   assert.match(content, /completeReservation/);
   assert.match(content, /markNoShow/);
-  assert.match(content, /markPaid/);
+  assert.match(content, /updateReservationPayment/);
   assert.match(content, /downloadReservationsCsv/);
   assert.doesNotMatch(content, /shooting_lanes\?\.name/);
   assert.match(legacyTable, /getLaneRelationDisplay/);
@@ -60,11 +60,11 @@ test("reports change only the grouping label and retain totals without extra row
   assert.doesNotMatch(content, /flatMap|buildLaneHierarchyDisplayModel/);
 });
 
-test("check-in token lookup and operational actions remain unchanged", async () => {
+test("check-in token lookup and controlled operational actions remain available", async () => {
   const content = await source("./check-in/page.tsx");
 
   assert.match(content, /\.eq\("check_in_token", checkInToken\)/);
-  assert.match(content, /markPaidAction/);
+  assert.match(content, /updateReservationPayment/);
   assert.match(content, /update_reservation_attendance/);
   assert.match(content, /p_action: action/);
   assert.match(content, /cancel_reservation/);

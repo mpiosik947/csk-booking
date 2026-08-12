@@ -17,7 +17,7 @@ import {
 import {
   completeReservation,
   markNoShow,
-  markPaid,
+  updateReservationPayment,
 } from "../../../lib/reservation-actions";
 import { getLaneRelationDisplay } from "../../../lib/admin/lane-relation-display";
 import AdminShell from "../_components/AdminShell";
@@ -599,24 +599,19 @@ export default function AdminReservationsPage() {
       result = await markNoShow(supabase, {
         reservationId: reservation.id,
       });
-    } else if (changes.payment_status === PAYMENT_STATUS.PAID) {
-      result = await markPaid(supabase, {
+    } else if (typeof changes.payment_status === "string") {
+      result = await updateReservationPayment(supabase, {
         reservationId: reservation.id,
+        paymentStatus: changes.payment_status,
       });
     }
 
     if (!result) {
-      const { data, error } = await supabase
-        .from("reservations")
-        .update(changes)
-        .eq("id", reservation.id)
-        .select("reservation_status, payment_status")
-        .single();
-
-      result = {
-        data,
-        error: error ? error.message : null,
-      };
+      setSavingReservationId(null);
+      setMessage(
+        "Ta zmiana statusu nie jest dostępna w bieżącym stanie rezerwacji."
+      );
+      return;
     }
 
     setSavingReservationId(null);
