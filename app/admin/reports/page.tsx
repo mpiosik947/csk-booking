@@ -1,7 +1,7 @@
 ﻿"use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import AdminShell from "../_components/AdminShell";
 import {
   getPaymentStatusBadgeClass,
@@ -16,6 +16,12 @@ import {
 } from "../../../lib/reservation-status";
 import { supabase } from "../../../lib/supabase";
 import { getLaneRelationDisplay } from "../../../lib/admin/lane-relation-display";
+import {
+  calculateHierarchyUtilization,
+  fetchCompleteReportDataset,
+  REPORT_PAGE_SIZE,
+  type ReportLane,
+} from "../../../lib/admin/reports";
 
 type ReportMode = "day" | "week" | "month" | "year";
 
@@ -31,6 +37,7 @@ type Reservation = {
   price: number | null;
   reservation_status: string;
   payment_status: string;
+  lane_id: string | null;
   shooting_lanes: {
     id: string;
     name: string;
@@ -107,21 +114,6 @@ function getBadgeClass(baseClass: string) {
   return `rounded-full border px-3 py-1 text-xs font-semibold ${baseClass}`;
 }
 
-function getReportModeLabel(mode: ReportMode) {
-  switch (mode) {
-    case "day":
-      return "dzień";
-    case "week":
-      return "tydzień";
-    case "month":
-      return "miesiąc";
-    case "year":
-      return "rok";
-    default:
-      return mode;
-  }
-}
-
 function formatTimeRange(startTime: string, endTime: string) {
   return `${startTime.slice(0, 5)}-${endTime.slice(0, 5)}`;
 }
@@ -132,25 +124,27 @@ export default function AdminReportsPage() {
   const [reportMode, setReportMode] = useState<ReportMode>("day");
   const [selectedDate, setSelectedDate] = useState(today);
   const [reservations, setReservations] = useState<Reservation[]>([]);
-  const [lanesCount, setLanesCount] = useState(0);
+  const [reportLanes, setReportLanes] = useState<ReportLane[]>([]);
   const [loading, setLoading] = useState(true);
   const [hasAccess, setHasAccess] = useState(false);
+  const [reportReady, setReportReady] = useState(false);
   const [message, setMessage] = useState("");
+  const reportRequestRef = useRef(0);
 
   const range = getDateRange(reportMode, selectedDate);
 
-  useEffect(() => {
-    loadReport();
-  }, [selectedDate, reportMode]);
-
-  async function loadReport() {
+  const loadReport = useCallback(async () => {
+    const requestId = ++reportRequestRef.current;
     setLoading(true);
     setMessage("");
     setHasAccess(false);
+    setReportReady(false);
 
     const {
       data: { user },
     } = await supabase.auth.getUser();
+
+    if (requestId !== reportRequestRef.current) return;
 
     if (!user) {
       setMessage("Musisz być zalogowany jako administrator.");
@@ -161,6 +155,8 @@ export default function AdminReportsPage() {
     const { data: roleData, error: roleError } = await supabase.rpc(
       "get_my_role",
     );
+
+    if (requestId !== reportRequestRef.current) return;
 
     if (roleError) {
       setMessage(`Błąd sprawdzania roli: ${roleError.message}`);
@@ -176,22 +172,46 @@ export default function AdminReportsPage() {
 
     setHasAccess(true);
 
-    const { data: lanesData, error: lanesError } = await supabase
+    const { count: expectedLanesCount, error: lanesCountError } = await supabase
       .from("shooting_lanes")
-      .select("id")
-      .eq("is_active", true);
+      .select("id", { count: "exact", head: true });
 
-    if (lanesError) {
-      setMessage(`Błąd pobierania osi: ${lanesError.message}`);
+    if (requestId !== reportRequestRef.current) return;
+
+    if (lanesCountError || expectedLanesCount === null) {
+      setMessage("Nie udało się pobrać kompletnego zestawu danych raportu.");
       setLoading(false);
       return;
     }
 
-    const { data, error } = await supabase
-      .from("reservations")
-      .select(
-        `
+    const completeLanes = await fetchCompleteReportDataset<ReportLane>(
+      expectedLanesCount,
+      async (from, to) => {
+        const { data, error } = await supabase
+          .from("shooting_lanes")
+          .select(
+            "id,name,resource_kind,parent_lane_id,display_order,is_active,whole_lane_bookable,positions_bookable,lane_booking_rules(online_bookable)",
+          )
+          .order("display_order", { ascending: true })
+          .order("id", { ascending: true })
+          .range(from, to);
+
+        return error ? null : ((data as unknown as ReportLane[]) ?? []);
+      },
+      REPORT_PAGE_SIZE,
+    );
+
+    if (requestId !== reportRequestRef.current) return;
+
+    if (!completeLanes.ok) {
+      setMessage("Nie udało się pobrać kompletnego zestawu danych raportu.");
+      setLoading(false);
+      return;
+    }
+
+    const reservationSelect = `
         id,
+        lane_id,
         customer_name,
         customer_email,
         customer_phone,
@@ -218,23 +238,59 @@ export default function AdminReportsPage() {
             is_active
           )
         )
-      `,
-      )
-      .gte("reservation_date", range.startDate)
-      .lte("reservation_date", range.endDate)
-      .order("reservation_date", { ascending: true })
-      .order("start_time", { ascending: true });
+      `;
 
-    if (error) {
-      setMessage(`Błąd pobierania raportu: ${error.message}`);
+    const { count: expectedCount, error: countError } = await supabase
+      .from("reservations")
+      .select("id", { count: "exact", head: true })
+      .gte("reservation_date", range.startDate)
+      .lte("reservation_date", range.endDate);
+
+    if (requestId !== reportRequestRef.current) return;
+
+    if (countError || expectedCount === null) {
+      setMessage("Nie udało się pobrać kompletnego zestawu danych raportu.");
       setLoading(false);
       return;
     }
 
-    setLanesCount((lanesData ?? []).length);
-    setReservations((data as unknown as Reservation[]) ?? []);
+    const completeDataset = await fetchCompleteReportDataset<Reservation>(
+      expectedCount,
+      async (from, to) => {
+        const { data, error } = await supabase
+          .from("reservations")
+          .select(reservationSelect)
+          .gte("reservation_date", range.startDate)
+          .lte("reservation_date", range.endDate)
+          .order("reservation_date", { ascending: true })
+          .order("start_time", { ascending: true })
+          .order("id", { ascending: true })
+          .range(from, to);
+
+        return error ? null : ((data as unknown as Reservation[]) ?? []);
+      },
+      REPORT_PAGE_SIZE,
+    );
+
+    if (requestId !== reportRequestRef.current) return;
+
+    if (!completeDataset.ok) {
+      setMessage("Nie udało się pobrać kompletnego zestawu danych raportu.");
+      setLoading(false);
+      return;
+    }
+
+    setReportLanes(completeLanes.rows);
+    setReservations(completeDataset.rows);
+    setReportReady(true);
     setLoading(false);
-  }
+  }, [range.endDate, range.startDate]);
+
+  useEffect(() => {
+    // Report data is an external Supabase resource synchronized to the selected range.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void loadReport();
+  }, [loadReport]);
 
 
   const activeReservations = reservations.filter(
@@ -269,25 +325,18 @@ export default function AdminReportsPage() {
     .filter((reservation) => !isPaidPaymentStatus(reservation.payment_status))
     .reduce((sum, reservation) => sum + Number(reservation.price ?? 0), 0);
 
-  const totalReservedMinutes = activeReservations.reduce(
-    (sum, reservation) => sum + Number(reservation.duration_minutes ?? 0),
-    0,
-  );
-
   const daysInRange =
     (new Date(`${range.endDate}T12:00:00`).getTime() -
       new Date(`${range.startDate}T12:00:00`).getTime()) /
       (1000 * 60 * 60 * 24) +
     1;
 
-  const openMinutesPerLanePerDay = 16 * 60;
-  const totalAvailableMinutes =
-    lanesCount * openMinutesPerLanePerDay * daysInRange;
-
-  const occupancy =
-    totalAvailableMinutes > 0
-      ? Math.round((totalReservedMinutes / totalAvailableMinutes) * 100)
-      : 0;
+  const utilization = calculateHierarchyUtilization(
+    reportLanes,
+    activeReservations,
+    daysInRange,
+  );
+  const occupancy = utilization.ok ? utilization.utilizationPercent : 0;
 
   const bestDay = Object.entries(
     activeReservations.reduce<Record<string, number>>((acc, reservation) => {
@@ -379,7 +428,13 @@ export default function AdminReportsPage() {
           </div>
         )}
 
-        {!loading && hasAccess && (
+        {!loading && hasAccess && reportReady && !utilization.ok && (
+          <div role="alert" className="rounded-xl border border-[#744545] bg-[#2a1b1b] p-4 text-sm font-semibold text-[#e0a0a0]">
+            Nie udało się pobrać kompletnego zestawu danych raportu.
+          </div>
+        )}
+
+        {!loading && hasAccess && reportReady && utilization.ok && (
           <>
             <section aria-labelledby="report-kpi-heading" className="mb-8">
               <p className="text-xs font-bold uppercase tracking-[0.25em] text-[#d7c895]">Podsumowanie</p>
@@ -454,7 +509,7 @@ export default function AdminReportsPage() {
               <div className="rounded-[1.25rem] border border-[#30372c] bg-[#101310] p-5">
                 <p className="text-sm text-[#a9ada4]">Założenie obłożenia</p>
                 <p className="mt-3 text-xl font-bold">
-                  {lanesCount} osi x 16h dziennie x {daysInRange} dni
+                  {utilization.ok ? utilization.effectiveCapacity : 0} efektywnych jednostek zasobu x 16h dziennie x {daysInRange} dni
                 </p>
               </div>
             </div>
