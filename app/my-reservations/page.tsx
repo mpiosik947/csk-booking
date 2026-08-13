@@ -8,22 +8,11 @@ import {
   getReservationStatusLabel,
 } from "../../lib/reservation-status";
 import { supabase } from "../../lib/supabase";
-
-type Reservation = {
-  id: string;
-  reservation_date: string;
-  start_time: string;
-  end_time: string;
-  price: number;
-  reservation_status: string;
-  payment_status: string;
-  check_in_token: string | null;
-  attendance_status?: string | null;
-  checked_in_at?: string | null;
-  shooting_lanes: {
-    name: string;
-  } | null;
-};
+import {
+  getMyReservationLaneDisplayName,
+  loadAllMyReservations,
+  type MyReservation as Reservation,
+} from "../../lib/my-reservations";
 
 type CancelReservationRpcResult = {
   changed: boolean;
@@ -318,12 +307,18 @@ export default function MyReservationsPage() {
   const cancellationInProgressRef = useRef(false);
 
   useEffect(() => {
-    if (!CONFIGURED_SITE_URL) {
-      setSiteUrl(window.location.origin.replace(/\/+$/, ""));
-    }
+    const siteUrlTimer = window.setTimeout(() => {
+      if (!CONFIGURED_SITE_URL) {
+        setSiteUrl(window.location.origin.replace(/\/+$/, ""));
+      }
+    }, 0);
+
+    return () => window.clearTimeout(siteUrlTimer);
   }, []);
 
   const loadReservations = useCallback(async () => {
+    setLoading(true);
+
     const {
       data: { user },
     } = await supabase.auth.getUser();
@@ -336,41 +331,33 @@ export default function MyReservationsPage() {
 
     setIsLoggedIn(true);
 
-    const { data, error } = await supabase
-      .from("reservations")
-      .select(
-        `
-          id,
-          reservation_date,
-          start_time,
-          end_time,
-          price,
-          reservation_status,
-          payment_status,
-          check_in_token,
-          attendance_status,
-          checked_in_at,
-          shooting_lanes (
-            name
-          )
-        `
-      )
-      .eq("user_id", user.id)
-      .order("reservation_date", { ascending: false })
-      .order("start_time", { ascending: false });
+    const result = await loadAllMyReservations(async (from, to) => {
+      const { data, error } = await supabase
+        .rpc("get_my_reservations_v2")
+        .range(from, to);
 
-    if (error) {
-      setMessage(`Błąd pobierania rezerwacji: ${error.message}`);
+      return { data, error };
+    });
+
+    if (!result.ok) {
+      setReservations([]);
+      setMessage(
+        "Nie udało się pobrać pełnej historii rezerwacji. Spróbuj ponownie."
+      );
       setLoading(false);
       return;
     }
 
-    setReservations((data as any) ?? []);
+    setReservations(result.value);
     setLoading(false);
   }, []);
 
   useEffect(() => {
-    loadReservations();
+    const reservationsTimer = window.setTimeout(() => {
+      void loadReservations();
+    }, 0);
+
+    return () => window.clearTimeout(reservationsTimer);
   }, [loadReservations]);
 
   async function cancelReservation(reservation: Reservation) {
@@ -592,8 +579,8 @@ export default function MyReservationsPage() {
                     >
                       <div className="grid gap-6 md:grid-cols-[minmax(0,1fr)_220px] md:items-start">
                         <div className="min-w-0">
-                          <span className="inline-flex rounded-full border border-[#536143] bg-[#20251d] px-3 py-1 text-xs font-semibold text-[#d7c895]">
-                            {reservation.shooting_lanes?.name ?? "Brak osi"}
+                          <span className="inline-flex max-w-full whitespace-normal break-words rounded-full border border-[#536143] bg-[#20251d] px-3 py-1 text-xs font-semibold text-[#d7c895]">
+                            {getMyReservationLaneDisplayName(reservation)}
                           </span>
 
                           <h3 className="mt-3 break-words text-xl font-semibold text-[#f2efe4]">
@@ -739,7 +726,7 @@ export default function MyReservationsPage() {
                           </p>
 
                           <p className="mt-1 break-words text-sm text-[#858c7f]">
-                            {reservation.shooting_lanes?.name ?? "Brak osi"}
+                            {getMyReservationLaneDisplayName(reservation)}
                           </p>
                         </div>
 

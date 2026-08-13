@@ -408,6 +408,7 @@ export default function BookingForm({
     if (
       !reservationDate ||
       !laneId ||
+      !selectedLane ||
       !selectedHour ||
       durationMinutes <= 0 ||
       shootersCount <= 0 ||
@@ -519,7 +520,7 @@ export default function BookingForm({
         date: reservationDate,
         startTime: selectedHour,
         endTime,
-        laneName: result.laneName,
+        laneName: selectedLane.name,
         shootersCount: result.shootersCount,
         durationMinutes: result.durationMinutes,
         pricingDayGroup: result.pricingDayGroup,
@@ -612,7 +613,7 @@ export default function BookingForm({
               <p>
                 {confirmationData.startTime}–{confirmationData.endTime}
               </p>
-              <p>{confirmationData.laneName}</p>
+              <p className="break-words">{confirmationData.laneName}</p>
               <p>
                 {confirmationData.shootersCount} strzelców ·{" "}
                 {formatDuration(confirmationData.durationMinutes)}
@@ -712,7 +713,7 @@ export default function BookingForm({
                 }
                 resetAttempt();
               }}
-              className="min-h-12 rounded-xl border border-[#30372c] bg-[#141814] px-4 text-[#f2efe4]"
+              className="min-h-12 w-full min-w-0 rounded-xl border border-[#30372c] bg-[#141814] px-4 text-[#f2efe4]"
             >
               <option value="">Wybierz oś</option>
               {lanes.map((lane) => (

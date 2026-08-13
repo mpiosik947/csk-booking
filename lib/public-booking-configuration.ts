@@ -18,7 +18,7 @@ export type PublicBookingConfigurationRow = {
   effective_online_bookable: boolean;
   whole_lane_bookable: boolean;
   positions_bookable: boolean;
-  max_people_online: number;
+  max_people_online: number | null;
   booking_step_minutes: number;
   currency_code: string;
   durations_minutes: number[];
@@ -196,21 +196,32 @@ function parseResource(value: unknown): PublicBookingConfigurationRow | null {
     typeof value.effective_online_bookable !== "boolean" ||
     typeof value.whole_lane_bookable !== "boolean" ||
     typeof value.positions_bookable !== "boolean" ||
-    !isPositiveInteger(value.max_people_online) ||
+    (value.max_people_online !== null &&
+      !isPositiveInteger(value.max_people_online)) ||
     !isPositiveInteger(value.booking_step_minutes) ||
     typeof value.currency_code !== "string" ||
     !/^[A-Z]{3}$/.test(value.currency_code) ||
     !Array.isArray(value.durations_minutes) ||
-    value.durations_minutes.length === 0 ||
     !value.durations_minutes.every(isPositiveInteger) ||
     new Set(value.durations_minutes).size !== value.durations_minutes.length
   ) {
     return null;
   }
 
-  const pricing = parsePricing(value.pricing, value.max_people_online);
+  const pricing =
+    value.max_people_online === null
+      ? Array.isArray(value.pricing) && value.pricing.length === 0
+        ? []
+        : null
+      : parsePricing(value.pricing, value.max_people_online);
 
-  if (!pricing) {
+  if (
+    !pricing ||
+    (value.effective_online_bookable &&
+      (value.max_people_online === null ||
+        value.durations_minutes.length === 0 ||
+        pricing.length === 0))
+  ) {
     return null;
   }
 
@@ -253,36 +264,115 @@ export function parsePublicBookingConfiguration(
     resources.push(resource);
   }
 
+  const resourcesById = new Map(
+    resources.map((resource) => [resource.lane_id, resource])
+  );
+
+  for (const resource of resources) {
+    if (resource.resource_kind === "position") {
+      const parent = resourcesById.get(resource.parent_lane_id ?? "");
+
+      if (
+        !parent ||
+        parent.resource_kind !== "lane" ||
+        parent.parent_lane_id !== null ||
+        !parent.positions_bookable ||
+        !resource.effective_online_bookable ||
+        resource.whole_lane_bookable ||
+        resource.positions_bookable
+      ) {
+        return null;
+      }
+    } else {
+      const hasSelectableChildren = resources.some(
+        (candidate) =>
+          candidate.resource_kind === "position" &&
+          candidate.parent_lane_id === resource.lane_id &&
+          candidate.effective_online_bookable
+      );
+
+      if (
+        resource.effective_online_bookable !== resource.whole_lane_bookable ||
+        resource.positions_bookable !== hasSelectableChildren
+      ) {
+        return null;
+      }
+    }
+  }
+
   return resources;
 }
 
 export function adaptPublicBookingConfiguration(
   resources: PublicBookingConfigurationRow[]
 ): BookingConfiguration {
-  const visibleLanes = resources.filter(
-    (resource) =>
-      resource.resource_kind === "lane" &&
-      resource.parent_lane_id === null &&
-      resource.effective_online_bookable &&
-      resource.whole_lane_bookable
+  const resourcesById = new Map(
+    resources.map((resource) => [resource.lane_id, resource])
   );
+  const selectableResources = resources.filter(
+    (
+      resource
+    ): resource is PublicBookingConfigurationRow & {
+      max_people_online: number;
+    } =>
+      resource.effective_online_bookable &&
+      resource.max_people_online !== null
+  );
+  const selectableChildrenByParent = new Map<string, number>();
+
+  for (const resource of selectableResources) {
+    if (resource.resource_kind === "position" && resource.parent_lane_id) {
+      selectableChildrenByParent.set(
+        resource.parent_lane_id,
+        (selectableChildrenByParent.get(resource.parent_lane_id) ?? 0) + 1
+      );
+    }
+  }
+
+  selectableResources.sort((left, right) => {
+    const leftRoot =
+      left.resource_kind === "position"
+        ? resourcesById.get(left.parent_lane_id ?? "") ?? left
+        : left;
+    const rightRoot =
+      right.resource_kind === "position"
+        ? resourcesById.get(right.parent_lane_id ?? "") ?? right
+        : right;
+
+    return (
+      leftRoot.display_order - rightRoot.display_order ||
+      leftRoot.display_name.localeCompare(rightRoot.display_name, "pl") ||
+      leftRoot.lane_id.localeCompare(rightRoot.lane_id) ||
+      Number(left.resource_kind === "position") -
+        Number(right.resource_kind === "position") ||
+      left.display_order - right.display_order ||
+      left.display_name.localeCompare(right.display_name, "pl") ||
+      left.lane_id.localeCompare(right.lane_id)
+    );
+  });
+
+  const getBookingLabel = (resource: PublicBookingConfigurationRow) =>
+    resource.resource_kind === "lane" &&
+    (selectableChildrenByParent.get(resource.lane_id) ?? 0) > 0
+      ? `${resource.display_name} — Cała oś`
+      : resource.display_name;
 
   return {
-    lanes: visibleLanes.map((resource) => ({
+    lanes: selectableResources.map((resource) => ({
       id: resource.lane_id,
-      name: resource.name,
+      name: getBookingLabel(resource),
       max_people_online: resource.max_people_online,
       booking_step_minutes: resource.booking_step_minutes,
       display_order: resource.display_order,
       currency_code: resource.currency_code,
     })),
-    durations: visibleLanes.flatMap((resource) =>
+    durations: selectableResources.flatMap((resource) =>
       resource.durations_minutes.map((durationMinutes) => ({
         lane_id: resource.lane_id,
         duration_minutes: durationMinutes,
       }))
     ),
-    pricingRules: visibleLanes.flatMap((resource) =>
+    pricingRules: selectableResources.flatMap((resource) =>
       resource.pricing.map((pricingRule) => ({
         lane_id: resource.lane_id,
         ...pricingRule,

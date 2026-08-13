@@ -3,6 +3,7 @@ import Link from "next/link";
 import { createClient } from "@supabase/supabase-js";
 import { getReservationStatusLabel } from "../../../lib/reservation-status";
 import { getPaymentStatusLabel } from "../../../lib/payment-status";
+import { getLaneRelationDisplay } from "../../../lib/admin/lane-relation-display";
 
 type CheckInPageProps = {
   params: Promise<{
@@ -11,7 +12,11 @@ type CheckInPageProps = {
 };
 
 type LaneRelation = {
-  name?: string | null;
+  id: string;
+  name: string;
+  resource_kind: "lane" | "position";
+  parent_lane_id: string | null;
+  parent_lane: LaneRelation | LaneRelation[] | null;
 };
 
 type CheckInReservation = {
@@ -90,8 +95,17 @@ export default async function CheckInPage({ params }: CheckInPageProps) {
           reservation_status,
           payment_status,
           checked_in_at,
-          lanes:shooting_lanes (
-            name
+          lanes:shooting_lanes!reservations_lane_id_fkey (
+            id,
+            name,
+            resource_kind,
+            parent_lane_id,
+            parent_lane:shooting_lanes!shooting_lanes_parent_lane_id_fkey (
+              id,
+              name,
+              resource_kind,
+              parent_lane_id
+            )
           )
         `
       )
@@ -140,9 +154,8 @@ export default async function CheckInPage({ params }: CheckInPageProps) {
     );
   }
 
-  const lanes = reservation.lanes;
-
-  const laneName = Array.isArray(lanes) ? lanes[0]?.name : lanes?.name;
+  const laneName =
+    getLaneRelationDisplay(reservation.lanes)?.displayName ?? "Nieznana oś";
 
   const isCheckedIn = Boolean(reservation.checked_in_at);
 
@@ -201,7 +214,7 @@ export default async function CheckInPage({ params }: CheckInPageProps) {
                 Oś
               </p>
               <p className="mt-1 break-words font-semibold text-[#f2efe4]">
-                {laneName ?? "-"}
+                {laneName}
               </p>
             </div>
 
