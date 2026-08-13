@@ -144,6 +144,7 @@ declare
   v_reservation_ids uuid[];
   v_result jsonb;
   v_result2 jsonb;
+  v_result3 jsonb;
   v_before jsonb;
   v_after jsonb;
   v_direct_update_count integer;
@@ -274,16 +275,21 @@ begin
     (14, 'Pracownik COMPLETE after START', v_result->>'code'='completed' and (select reservation_status='completed' and attendance_status='completed' and checked_in_at is not null and completed_at is not null and completed_at>=checked_in_at from public.reservations where id=v_reservation_ids[1]), 'COMPLETE preserves check-in and sets completion.'),
     (15, 'COMPLETE audit exactly once', (select pg_catalog.count(*) from public.audit_logs where target_id=v_reservation_ids[1] and action='CHECK_IN_COMPLETED')=1, 'Completion audit is singular.');
   v_result2 := pg_temp.call_attendance(v_employee_id, v_reservation_ids[1], 'complete');
+  v_result := pg_temp.call_attendance(v_employee_id, v_reservation_ids[1], 'no_show');
+  v_result3 := pg_temp.call_attendance(v_employee_id, v_reservation_ids[1], 'start');
+  v_before := pg_temp.call_attendance(v_employee_id, v_reservation_ids[1], 'reset');
   insert into pg_temp.test_results values
-    (16, 'COMPLETE idempotent retry', v_result2->>'code'='already_completed' and v_result2->>'changed'='false' and (select pg_catalog.count(*) from public.audit_logs where target_id=v_reservation_ids[1] and action='CHECK_IN_COMPLETED')=1, 'Completion retry is idempotent.');
+    (16, 'COMPLETED terminal transition matrix', v_result2->>'code'='already_completed' and v_result2->>'changed'='false' and v_result->>'code'='invalid_transition' and v_result3->>'code'='invalid_transition' and v_before->>'code'='invalid_transition' and (select reservation_status='completed' and attendance_status='completed' and checked_in_at is not null and completed_at is not null from public.reservations where id=v_reservation_ids[1]) and (select pg_catalog.count(*) from public.audit_logs where target_id=v_reservation_ids[1])=2 and (select pg_catalog.count(*) from public.audit_logs where target_id=v_reservation_ids[1] and action='CHECK_IN_COMPLETED')=1, 'COMPLETE retry is idempotent; completed to no-show, start and reset are denied without timestamps or audits changing.');
 
   v_result := pg_temp.call_attendance(v_employee_id, v_reservation_ids[2], 'no_show');
   insert into pg_temp.test_results values
     (17, 'Pracownik NO-SHOW', v_result->>'code'='no_show' and (select reservation_status='no_show' and attendance_status='no_show' and checked_in_at is null and completed_at is null from public.reservations where id=v_reservation_ids[2]), 'No-show does not fabricate check-in/completion timestamps.'),
     (18, 'NO-SHOW audit exactly once', (select pg_catalog.count(*) from public.audit_logs where target_id=v_reservation_ids[2] and action='RESERVATION_NO_SHOW')=1, 'No-show audit is singular.');
   v_result2 := pg_temp.call_attendance(v_employee_id, v_reservation_ids[2], 'no_show');
+  v_result := pg_temp.call_attendance(v_employee_id, v_reservation_ids[2], 'complete');
+  v_result3 := pg_temp.call_attendance(v_employee_id, v_reservation_ids[2], 'start');
   insert into pg_temp.test_results values
-    (19, 'NO-SHOW idempotent retry', v_result2->>'code'='already_no_show' and v_result2->>'changed'='false' and (select pg_catalog.count(*) from public.audit_logs where target_id=v_reservation_ids[2] and action='RESERVATION_NO_SHOW')=1, 'No-show retry is idempotent.');
+    (19, 'NO-SHOW terminal transition matrix', v_result2->>'code'='already_no_show' and v_result2->>'changed'='false' and v_result->>'code'='invalid_transition' and v_result3->>'code'='invalid_transition' and (select reservation_status='no_show' and attendance_status='no_show' and checked_in_at is null and completed_at is null from public.reservations where id=v_reservation_ids[2]) and (select pg_catalog.count(*) from public.audit_logs where target_id=v_reservation_ids[2])=1 and (select pg_catalog.count(*) from public.audit_logs where target_id=v_reservation_ids[2] and action='RESERVATION_NO_SHOW')=1, 'NO-SHOW retry is idempotent; no-show to complete and start are denied without timestamps or audits changing.');
 
   v_result := pg_temp.call_attendance(v_instructor_id, v_reservation_ids[3], 'complete');
   v_result2 := pg_temp.call_attendance(v_instructor_id, v_reservation_ids[3], 'start');

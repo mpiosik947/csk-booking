@@ -17,8 +17,11 @@ import {
 import {
   completeReservation,
   markNoShow,
+  markPresent,
+  markScheduled,
   updateReservationPayment,
 } from "../../../lib/reservation-actions";
+import { getReservationAttendanceActions } from "../../../lib/reservation-operational-state";
 import { getLaneRelationDisplay } from "../../../lib/admin/lane-relation-display";
 import AdminShell from "../_components/AdminShell";
 
@@ -38,6 +41,9 @@ type Reservation = {
   price: number | null;
   reservation_status: string | null;
   payment_status: string | null;
+  attendance_status: string | null;
+  checked_in_at: string | null;
+  completed_at: string | null;
   created_at: string | null;
   shooting_lanes?:
     | {
@@ -335,6 +341,9 @@ export default function AdminReservationsPage() {
         price,
         reservation_status,
         payment_status,
+        attendance_status,
+        checked_in_at,
+        completed_at,
         created_at,
         shooting_lanes (
           id,
@@ -568,7 +577,8 @@ export default function AdminReservationsPage() {
 
   async function updateReservation(
     reservation: Reservation,
-    changes: Partial<Pick<Reservation, "reservation_status" | "payment_status">>
+    changes: Partial<Pick<Reservation, "reservation_status" | "payment_status">>,
+    attendanceAction?: "start" | "reset" | "complete" | "no_show"
   ) {
     if (
       changes.reservation_status ===
@@ -585,17 +595,28 @@ export default function AdminReservationsPage() {
       | {
           data: {
             reservation_status: string | null;
+            attendance_status?: string | null;
             payment_status: string | null;
+            checked_in_at?: string | null;
+            completed_at?: string | null;
           } | null;
           error: string | null;
         }
       | null = null;
 
-    if (changes.reservation_status === RESERVATION_STATUS.COMPLETED) {
+    if (attendanceAction === "start") {
+      result = await markPresent(supabase, {
+        reservationId: reservation.id,
+      });
+    } else if (attendanceAction === "reset") {
+      result = await markScheduled(supabase, {
+        reservationId: reservation.id,
+      });
+    } else if (attendanceAction === "complete") {
       result = await completeReservation(supabase, {
         reservationId: reservation.id,
       });
-    } else if (changes.reservation_status === RESERVATION_STATUS.NO_SHOW) {
+    } else if (attendanceAction === "no_show") {
       result = await markNoShow(supabase, {
         reservationId: reservation.id,
       });
@@ -625,6 +646,15 @@ export default function AdminReservationsPage() {
       ...changes,
       ...(result.data?.reservation_status !== undefined
         ? { reservation_status: result.data.reservation_status }
+        : {}),
+      ...(result.data?.attendance_status !== undefined
+        ? { attendance_status: result.data.attendance_status }
+        : {}),
+      ...(result.data?.checked_in_at !== undefined
+        ? { checked_in_at: result.data.checked_in_at }
+        : {}),
+      ...(result.data?.completed_at !== undefined
+        ? { completed_at: result.data.completed_at }
         : {}),
       ...(result.data?.payment_status !== undefined
         ? { payment_status: result.data.payment_status }
@@ -866,6 +896,8 @@ export default function AdminReservationsPage() {
             <div className="grid gap-4 p-3 sm:p-5">
               {reservations.map((reservation, index) => {
                 const isSaving = savingReservationId === reservation.id;
+                const attendanceActions =
+                  getReservationAttendanceActions(reservation);
 
                 return (
                   <article
@@ -949,27 +981,40 @@ export default function AdminReservationsPage() {
                       <div className="grid gap-4 rounded-xl border border-[#30372c] bg-[#101310] p-4 md:col-span-2 xl:col-span-1">
                         <div>
                           <label className="mb-2 block text-xs font-bold uppercase tracking-[0.2em] text-[#858b82]">
-                            Status rezerwacji
+                            Akcja wizyty
                           </label>
 
                           <select
-                            value={
-                              reservation.reservation_status || RESERVATION_STATUS.CONFIRMED
-                            }
-                            disabled={isSaving}
-                            onChange={(event) =>
-                              updateReservation(reservation, {
-                                reservation_status: event.target.value,
-                              })
-                            }
+                            value=""
+                            disabled={isSaving || attendanceActions.length === 0}
+                            onChange={(event) => {
+                              const action = event.target.value as
+                                | "start"
+                                | "reset"
+                                | "complete"
+                                | "no_show";
+                              if (!attendanceActions.includes(action)) return;
+                              updateReservation(reservation, {}, action);
+                            }}
                             className="min-h-11 w-full rounded-xl border border-[#3b4237] bg-[#090b09] px-4 py-3 text-sm text-[#f2efe4] outline-none transition focus:border-[#8b986f] focus-visible:ring-2 focus-visible:ring-[#8b986f]/30 disabled:opacity-60"
                           >
-                            <option value={RESERVATION_STATUS.CONFIRMED}>Potwierdzona</option>
-                            <option value={RESERVATION_STATUS.COMPLETED}>Zakończona</option>
-                            <option value={RESERVATION_STATUS.NO_SHOW}>No-show</option>
-                            <option value={RESERVATION_STATUS.CANCELLED_BY_ADMIN}>
-                              Anulowana przez admina
+                            <option value="">
+                              {attendanceActions.length === 0
+                                ? "Brak dostępnych akcji"
+                                : "Wybierz akcję"}
                             </option>
+                            {attendanceActions.includes("start") && (
+                              <option value="start">Rozpocznij wizytę</option>
+                            )}
+                            {attendanceActions.includes("complete") && (
+                              <option value="complete">Zakończ wizytę</option>
+                            )}
+                            {attendanceActions.includes("no_show") && (
+                              <option value="no_show">No-show</option>
+                            )}
+                            {attendanceActions.includes("reset") && (
+                              <option value="reset">Cofnij rozpoczęcie</option>
+                            )}
                           </select>
                         </div>
 
@@ -1013,11 +1058,24 @@ export default function AdminReservationsPage() {
                           </span>
                         </p>
 
-                        {isSaving && (
-                          <p className="mt-2 text-xs font-semibold text-[#d7c895] xl:mt-0">
-                            Zapisywanie...
-                          </p>
-                        )}
+                        <div className="mt-3 flex flex-wrap items-center gap-3 xl:mt-0 xl:justify-end">
+                          {attendanceActions.includes("no_show") && (
+                            <button
+                              type="button"
+                              disabled={isSaving}
+                              onClick={() => cancelReservationWithRpc(reservation)}
+                              className="min-h-11 rounded-xl border border-[#744545] px-4 py-2 text-sm font-bold text-[#e0a0a0] transition hover:bg-[#2a1b1b] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#e0a0a0] disabled:cursor-not-allowed disabled:opacity-60"
+                            >
+                              Anuluj rezerwację
+                            </button>
+                          )}
+
+                          {isSaving && (
+                            <p className="text-xs font-semibold text-[#d7c895]">
+                              Zapisywanie...
+                            </p>
+                          )}
+                        </div>
                       </div>
                     </div>
                   </article>

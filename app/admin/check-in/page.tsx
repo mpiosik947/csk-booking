@@ -13,10 +13,9 @@ import {
 import {
   getReservationStatusBadgeClass,
   getReservationStatusLabel,
-  isCancelledReservationStatus,
-  RESERVATION_STATUS,
 } from "../../../lib/reservation-status";
 import { getLaneRelationDisplay } from "../../../lib/admin/lane-relation-display";
+import { getReservationAttendanceActions } from "../../../lib/reservation-operational-state";
 import AdminShell from "../_components/AdminShell";
 
 type UserRole = "admin" | "pracownik" | "instruktor" | "user";
@@ -37,6 +36,7 @@ type Reservation = {
   attendance_status: string | null;
   payment_status: string | null;
   checked_in_at: string | null;
+  completed_at: string | null;
   price: number | null;
   shooting_lanes?: {
     id: string;
@@ -104,7 +104,7 @@ type CancelReservationRpcResult = {
   new_status?: string | null;
 };
 
-type AttendanceAction = "start" | "complete" | "no_show";
+type AttendanceAction = "start" | "reset" | "complete" | "no_show";
 
 type AttendanceRpcResult = {
   ok: boolean;
@@ -333,6 +333,7 @@ function parseAttendanceRpcResult(data: unknown): AttendanceRpcResult | null {
     typeof result.reservation_id !== "string" ||
     typeof result.changed !== "boolean" ||
     (result.action !== "start" &&
+      result.action !== "reset" &&
       result.action !== "complete" &&
       result.action !== "no_show") ||
     typeof result.code !== "string"
@@ -558,6 +559,7 @@ function CheckInContent() {
         attendance_status,
         payment_status,
         checked_in_at,
+        completed_at,
         price,
         shooting_lanes (
           id, name, resource_kind, parent_lane_id, display_order, is_active,
@@ -611,6 +613,7 @@ function CheckInContent() {
         attendance_status,
         payment_status,
         checked_in_at,
+        completed_at,
         price,
         shooting_lanes (
           id, name, resource_kind, parent_lane_id, display_order, is_active,
@@ -701,6 +704,7 @@ function CheckInContent() {
         attendance_status,
         payment_status,
         checked_in_at,
+        completed_at,
         price,
         shooting_lanes (
           id, name, resource_kind, parent_lane_id, display_order, is_active,
@@ -853,6 +857,14 @@ function CheckInContent() {
       reservation.id,
       "complete",
       "Wizyta zakończona."
+    );
+  }
+
+  async function resetStartedVisit(reservation: Reservation) {
+    await runAttendanceAction(
+      reservation.id,
+      "reset",
+      "Cofnięto rozpoczęcie wizyty."
     );
   }
 
@@ -1204,6 +1216,12 @@ function CheckInContent() {
           {mainList.map((reservation) => {
             const isSaving = savingId === reservation.id;
             const isCancelling = cancellingReservationIds.has(reservation.id);
+            const attendanceActions = getReservationAttendanceActions(
+              reservation
+            ).filter(
+              (action) =>
+                !isInstructor || (action !== "start" && action !== "reset")
+            );
             const profile = reservation.user_id
               ? profilesByUserId[reservation.user_id]
               : null;
@@ -1390,52 +1408,32 @@ function CheckInContent() {
                     </div>
 
                     <div>
-                      <label className="mb-2 block text-xs uppercase tracking-[0.25em] text-zinc-500">
-                        Status wizyty
-                      </label>
-
-                      <select
-                        value={reservation.reservation_status || RESERVATION_STATUS.CONFIRMED}
-                        disabled={isSaving || isCancelling}
-                        onChange={(event) => {
-                          const nextStatus = event.target.value;
-
-                          if (isCancelledReservationStatus(nextStatus)) {
-                            handleCancelReservation(reservation);
-                            return;
-                          }
-
-                          if (nextStatus === RESERVATION_STATUS.COMPLETED) {
-                            markCompleted(reservation);
-                            return;
-                          }
-
-                          if (nextStatus === RESERVATION_STATUS.NO_SHOW) {
-                            markNoShow(reservation);
-                            return;
-                          }
-
-                          setMessage(
-                            "Ta zmiana statusu nie jest dostępna w bieżącym stanie rezerwacji."
-                          );
-                        }}
-                        className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-sm text-white outline-none focus:border-green-600 disabled:opacity-60"
-                      >
-                        <option value={RESERVATION_STATUS.CONFIRMED}>Potwierdzona</option>
-                        <option value={RESERVATION_STATUS.COMPLETED}>Zakończona</option>
-                        <option value={RESERVATION_STATUS.NO_SHOW}>No-show</option>
-                        {canCancelReservations && (
-                          <option value={RESERVATION_STATUS.CANCELLED_BY_ADMIN}>
-                            Anulowana przez admina
-                          </option>
-                        )}
-                      </select>
+                      <p className="mb-2 text-xs uppercase tracking-[0.25em] text-zinc-500">
+                        Dostępne akcje wizyty
+                      </p>
+                      <p className="rounded-xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-sm text-zinc-300">
+                        {attendanceActions.length === 0
+                          ? "Brak dostępnych akcji"
+                          : attendanceActions
+                              .map((action) =>
+                                action === "start"
+                                  ? "Rozpocznij"
+                                  : action === "complete"
+                                    ? "Zakończ"
+                                    : action === "no_show"
+                                      ? "No-show"
+                                      : "Cofnij rozpoczęcie"
+                              )
+                              .join(" · ")}
+                      </p>
                     </div>
                     </div>
                   )}
 
                   <div className="grid gap-2 lg:col-span-2 xl:col-span-4 xl:grid-cols-[repeat(3,minmax(0,1fr))] xl:border-t xl:border-[#30372c] xl:pt-5">
-                    {shouldVerifyAtReception && canVerifyProfiles ? (
+                    {attendanceActions.includes("start") &&
+                    shouldVerifyAtReception &&
+                    canVerifyProfiles ? (
                       <>
                         <button
                           type="button"
@@ -1467,33 +1465,50 @@ function CheckInContent() {
                           </p>
                         )}
                       </>
-                    ) : (
+                    ) : attendanceActions.includes("start") ? (
                       <button
                         type="button"
                         disabled={isSaving}
-                        onClick={() =>
-                          reservation.attendance_status === "present"
-                            ? markCompleted(reservation)
-                            : markStarted(reservation)
-                        }
+                        onClick={() => markStarted(reservation)}
                         className="min-h-11 rounded-xl bg-[#66724f] px-4 py-3 text-sm font-bold text-white transition hover:bg-[#78865d] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d7c895] disabled:cursor-not-allowed disabled:opacity-60"
                       >
-                        {reservation.attendance_status === "present"
-                          ? "Zakończ wizytę"
-                          : "Rozpocznij wizytę"}
+                        Rozpocznij wizytę
+                      </button>
+                    ) : attendanceActions.includes("complete") ? (
+                      <button
+                        type="button"
+                        disabled={isSaving}
+                        onClick={() => markCompleted(reservation)}
+                        className="min-h-11 rounded-xl bg-[#66724f] px-4 py-3 text-sm font-bold text-white transition hover:bg-[#78865d] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d7c895] disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        Zakończ wizytę
+                      </button>
+                    ) : null}
+
+                    {attendanceActions.includes("no_show") && (
+                      <button
+                        type="button"
+                        disabled={isSaving}
+                        onClick={() => markNoShow(reservation)}
+                        className="min-h-11 rounded-xl border border-[#71663d] px-4 py-3 text-sm font-bold text-[#d7c895] transition hover:bg-[#211e12] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d7c895] disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        No-show
                       </button>
                     )}
 
-                    <button
-                      type="button"
-                      disabled={isSaving}
-                      onClick={() => markNoShow(reservation)}
-                      className="min-h-11 rounded-xl border border-[#71663d] px-4 py-3 text-sm font-bold text-[#d7c895] transition hover:bg-[#211e12] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d7c895] disabled:cursor-not-allowed disabled:opacity-60"
-                    >
-                      No-show
-                    </button>
+                    {attendanceActions.includes("reset") && !isInstructor && (
+                      <button
+                        type="button"
+                        disabled={isSaving}
+                        onClick={() => resetStartedVisit(reservation)}
+                        className="min-h-11 rounded-xl border border-[#596155] px-4 py-3 text-sm font-bold text-[#c7d0c2] transition hover:bg-[#1b211b] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d7c895] disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        Cofnij rozpoczęcie
+                      </button>
+                    )}
 
-                    {canCancelReservations && (
+                    {canCancelReservations &&
+                      attendanceActions.includes("no_show") && (
                       <button
                         type="button"
                         disabled={isSaving || isCancelling}
