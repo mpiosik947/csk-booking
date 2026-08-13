@@ -53,7 +53,7 @@ type Reservation = {
 };
 
 type Profile = {
-  id: string;
+  user_id: string;
   verification_status: string | null;
 };
 
@@ -120,7 +120,7 @@ const adminTiles: AdminTile[] = [
     title: "Użytkownicy",
     description: "Weryfikacja kont, role i notatki administratora.",
     href: "/admin/users",
-    roles: ["admin", "pracownik"],
+    roles: ["admin"],
   },
 ];
 
@@ -378,7 +378,6 @@ export default function AdminPage() {
     const [
       todayReservationsResult,
       monthReservationsResult,
-      profilesResult,
       upcomingEventsResult,
     ] = await Promise.all([
       canReadCustomerOperations
@@ -443,10 +442,6 @@ export default function AdminPage() {
             .order("start_time", { ascending: true })
         : Promise.resolve({ data: [], error: null }),
 
-      canReadCustomerOperations
-        ? supabase.from("profiles").select("id, verification_status")
-        : Promise.resolve({ data: [], error: null }),
-
       supabase
         .from("events")
         .select(
@@ -486,12 +481,6 @@ export default function AdminPage() {
       return;
     }
 
-    if (profilesResult.error) {
-      setMessage(`Błąd pobierania użytkowników: ${profilesResult.error.message}`);
-      setLoading(false);
-      return;
-    }
-
     if (upcomingEventsResult.error) {
       setMessage(
         `Błąd pobierania najbliższych szkoleń: ${upcomingEventsResult.error.message}`
@@ -500,13 +489,37 @@ export default function AdminPage() {
       return;
     }
 
-    setTodayReservations(
-      (todayReservationsResult.data ?? []) as unknown as Reservation[]
-    );
+    const loadedTodayReservations =
+      (todayReservationsResult.data ?? []) as unknown as Reservation[];
+    const operationalProfiles: Profile[] = [];
+
+    if (canReadCustomerOperations && loadedTodayReservations.length > 0) {
+      const reservationIds = Array.from(
+        new Set(loadedTodayReservations.map((item) => item.id))
+      );
+
+      for (let index = 0; index < reservationIds.length; index += 100) {
+        const { data: profileData, error: profileError } = await supabase.rpc(
+          "get_reservation_customer_profiles_v1",
+          { p_reservation_ids: reservationIds.slice(index, index + 100) }
+        );
+
+        if (profileError) {
+          console.error("Dashboard operational profile read failed:", profileError);
+          setMessage("Nie udało się pobrać statusów profili dla dzisiejszych rezerwacji.");
+          setLoading(false);
+          return;
+        }
+
+        operationalProfiles.push(...((profileData ?? []) as Profile[]));
+      }
+    }
+
+    setTodayReservations(loadedTodayReservations);
     setMonthReservations(
       (monthReservationsResult.data ?? []) as unknown as Reservation[]
     );
-    setProfiles((profilesResult.data ?? []) as Profile[]);
+    setProfiles(operationalProfiles);
     setUpcomingEvents(
       (upcomingEventsResult.data ?? []) as unknown as EventSummary[]
     );
@@ -591,7 +604,7 @@ export default function AdminPage() {
   );
 
   const unverifiedProfileIds = new Set(
-    unverifiedUsers.map((profile) => profile.id)
+    unverifiedUsers.map((profile) => profile.user_id)
   );
 
   const unverifiedTodayReservations = activeTodayReservations.filter(
@@ -675,7 +688,7 @@ export default function AdminPage() {
                   title="Niezweryfikowani dziś"
                   value={unverifiedTodayReservations.length}
                   description="Klienci z dzisiejszą rezerwacją i niepełną weryfikacją."
-                  href={hasAccess(role, ["admin", "pracownik"]) ? "/admin/users" : "/admin/check-in"}
+                  href={role === "admin" ? "/admin/users" : "/admin/check-in"}
                   tone={unverifiedTodayReservations.length > 0 ? "yellow" : "green"}
                   variant="alert"
                 />

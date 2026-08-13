@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { supabase } from "../../../lib/supabase";
 
@@ -16,7 +16,6 @@ type VerificationStatus =
 type VerificationAction = "verify" | "mark_pending" | "reject";
 
 type Profile = {
-  id: string;
   user_id: string;
   email: string | null;
   first_name: string | null;
@@ -58,7 +57,6 @@ type VerificationRpcResult = {
   verification_status: string | null;
   permissions_verified: boolean | null;
   permissions_verified_at: string | null;
-  permissions_verified_by: string | null;
   permissions_verification_note: string | null;
   verified_at: string | null;
   verified_by: string | null;
@@ -102,9 +100,32 @@ type IdentityRpcResult = {
   changed_fields: string[];
 };
 
-type AdminProfileChanges = Partial<Pick<Profile, "role" | "admin_note">>;
+type AdminUserMutationResult = {
+  ok: boolean;
+  changed: boolean;
+  code: string;
+  target_user_id?: string;
+  role?: string;
+  previous_role?: string;
+  admin_note?: string | null;
+  updated_at?: string | null;
+};
+
+type AdminUserListRow = Profile & {
+  total_count: number | string;
+};
 
 const roleOptions: UserRole[] = ["admin", "pracownik", "instruktor", "user"];
+
+function isAdminUserListRow(value: unknown): value is AdminUserListRow {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const row = value as Partial<AdminUserListRow>;
+  return (
+    typeof row.user_id === "string" &&
+    (row.role === null || typeof row.role === "string") &&
+    (typeof row.total_count === "number" || typeof row.total_count === "string")
+  );
+}
 
 const verificationOptions: VerificationStatus[] = [
   "pending",
@@ -152,18 +173,6 @@ function isFullyVerified(profile: Profile) {
     profile.verification_status === "verified" &&
     profile.permissions_verified === true
   );
-}
-
-function isNotFullyVerified(profile: Profile) {
-  return !isFullyVerified(profile);
-}
-
-function isPendingStatus(profile: Profile) {
-  return profile.verification_status === "pending";
-}
-
-function isRejectedStatus(profile: Profile) {
-  return profile.verification_status === "rejected";
 }
 
 function getVerificationAction(status: string): VerificationAction | null {
@@ -249,18 +258,6 @@ function getDeclaredPermissions(profile: Profile) {
   if (profile.permission_other) permissions.push("inne");
 
   return permissions;
-}
-
-function getDeclaredQualifications(profile: Profile) {
-  const qualifications: string[] = [];
-
-  if (profile.qualification_instructor) qualifications.push("instruktor");
-  if (profile.qualification_range_officer)
-    qualifications.push("prowadzący strzelanie / range officer");
-  if (profile.qualification_pzss_license) qualifications.push("licencja PZSS");
-  if (profile.qualification_hunter) qualifications.push("myśliwy");
-
-  return qualifications;
 }
 
 function getRoleLabel(role: string | null) {
@@ -452,9 +449,12 @@ function BooleanLine({ label, value }: { label: string; value: boolean | null })
 export default function AdminUsersPage() {
   const [currentUserId, setCurrentUserId] = useState("");
   const [currentUserRole, setCurrentUserRole] = useState<UserRole>("user");
-  const [currentUserName, setCurrentUserName] = useState("");
 
   const [profiles, setProfiles] = useState<Profile[]>([]);
+  const [totalCount, setTotalCount] = useState(0);
+  const [page, setPage] = useState(0);
+  const [sort, setSort] = useState("newest");
+  const [roleDrafts, setRoleDrafts] = useState<Record<string, UserRole>>({});
   const [expandedUserId, setExpandedUserId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [savingUserId, setSavingUserId] = useState<string | null>(null);
@@ -480,8 +480,8 @@ export default function AdminUsersPage() {
   const [roleFilter, setRoleFilter] = useState("all");
 
   const isAdmin = currentUserRole === "admin";
-  const isEmployee = currentUserRole === "pracownik";
-  const canManageUsers = isAdmin || isEmployee;
+  const canManageUsers = isAdmin;
+  const pageSize = 25;
 
  async function loadCurrentUser() {
   const {
@@ -494,21 +494,15 @@ export default function AdminUsersPage() {
     return null;
   }
 
-  const { data: profile, error } = await supabase
-    .from("profiles")
-    .select("role, first_name, last_name, full_name, email")
-    .eq("user_id", user.id)
-    .single();
+  const { data: roleData, error: roleError } = await supabase.rpc("get_my_role");
 
-  if (error || !profile) {
+  if (roleError || typeof roleData !== "string") {
     return null;
   }
 
-  const loadedRole = (profile.role as UserRole) || "user";
+  const loadedRole = roleData as UserRole;
 
   setCurrentUserRole(loadedRole);
-  setCurrentUserName(getProfileDisplayName(profile));
-
   return loadedRole;
 }
 
@@ -518,207 +512,59 @@ export default function AdminUsersPage() {
 
   const loadedRole = await loadCurrentUser();
 
-  if (loadedRole !== "admin" && loadedRole !== "pracownik") {
+  if (loadedRole !== "admin") {
     setProfiles([]);
-    setMessage("Brak dostępu. Ten moduł jest dostępny tylko dla administratora i pracownika.");
+    setTotalCount(0);
+    setMessage("Brak dostępu. Ten moduł jest dostępny tylko dla administratora.");
     setLoading(false);
     return;
   }
 
-  const { data, error } = await supabase
-      .from("profiles")
-      .select(
-        `
-        id,
-        user_id,
-        email,
-        first_name,
-        last_name,
-        full_name,
-        phone,
-        role,
-        verification_status,
-        admin_note,
-        created_at,
-        updated_at,
-
-        postal_code,
-        city,
-        street,
-        house_number,
-        apartment_number,
-
-        permission_sport,
-        permission_collector,
-        permission_hunting,
-        permission_training,
-        permission_personal_protection,
-        permission_other,
-
-        qualification_instructor,
-        qualification_range_officer,
-        qualification_pzss_license,
-        qualification_hunter,
-
-        permissions_verified,
-        permissions_verified_at,
-        permissions_verified_by,
-        permissions_verification_note
-      `
-      )
-      .order("created_at", { ascending: false });
+  const { data, error } = await supabase.rpc("admin_list_users_v1", {
+    p_limit: pageSize,
+    p_offset: page * pageSize,
+    p_search: search.trim() || null,
+    p_role: roleFilter === "all" ? null : roleFilter,
+    p_verification_filter: statusFilter === "all" ? null : statusFilter,
+    p_sort: sort,
+  });
 
     setLoading(false);
 
     if (error) {
-      setMessage(`Błąd pobierania użytkowników: ${error.message}`);
+      console.error("Admin users read failed:", error);
+      setMessage("Nie udało się pobrać użytkowników. Spróbuj ponownie.");
       return;
     }
 
-    setProfiles((data ?? []) as Profile[]);
+    const rawRows: unknown[] = Array.isArray(data) ? data : [];
+    const rows = rawRows.filter(isAdminUserListRow);
+    if (rows.length !== rawRows.length) {
+      console.error("Admin users RPC returned malformed data.");
+      setProfiles([]);
+      setTotalCount(0);
+      setMessage("Nie udało się poprawnie odczytać listy użytkowników.");
+      return;
+    }
+    setProfiles(rows);
+    setTotalCount(rows.length > 0 ? Number(rows[0].total_count) : 0);
+    setRoleDrafts(Object.fromEntries(rows.map((profile) => [
+      profile.user_id,
+      (profile.role as UserRole) || "user",
+    ])));
   }
 
   useEffect(() => {
-    loadProfiles();
-  }, []);
-
-  const filteredProfiles = useMemo(() => {
-    const phrase = search.trim().toLowerCase();
-
-    return profiles.filter((profile) => {
-      const email = profile.email?.toLowerCase() ?? "";
-      const firstName = profile.first_name?.toLowerCase() ?? "";
-      const lastName = profile.last_name?.toLowerCase() ?? "";
-      const fullName = profile.full_name?.toLowerCase() ?? "";
-      const phone = profile.phone?.toLowerCase() ?? "";
-      const role = profile.role?.toLowerCase() ?? "";
-      const status = profile.verification_status?.toLowerCase() ?? "";
-      const permissions = getDeclaredPermissions(profile).join(" ").toLowerCase();
-      const qualifications = getDeclaredQualifications(profile)
-        .join(" ")
-        .toLowerCase();
-
-      const matchesSearch =
-        !phrase ||
-        email.includes(phrase) ||
-        firstName.includes(phrase) ||
-        lastName.includes(phrase) ||
-        fullName.includes(phrase) ||
-        phone.includes(phrase) ||
-        role.includes(phrase) ||
-        status.includes(phrase) ||
-        permissions.includes(phrase) ||
-        qualifications.includes(phrase);
-
-      const matchesStatus =
-        statusFilter === "all" ||
-        (statusFilter === "pending" && isPendingStatus(profile)) ||
-        (statusFilter === "unverified" && isNotFullyVerified(profile)) ||
-        (statusFilter === "verified" && isFullyVerified(profile)) ||
-        (statusFilter === "rejected" && isRejectedStatus(profile));
-
-      const matchesRole = roleFilter === "all" || role === roleFilter;
-
-      return matchesSearch && matchesStatus && matchesRole;
-    });
-  }, [profiles, search, statusFilter, roleFilter]);
-
-  const counters = useMemo(() => {
-    return {
-      all: profiles.length,
-      pending: profiles.filter((profile) => isPendingStatus(profile)).length,
-      unverified: profiles.filter((profile) => isNotFullyVerified(profile))
-        .length,
-      verified: profiles.filter((profile) => isFullyVerified(profile)).length,
-      rejected: profiles.filter((profile) => isRejectedStatus(profile)).length,
-      admin: profiles.filter((profile) => profile.role === "admin").length,
-      pracownik: profiles.filter((profile) => profile.role === "pracownik")
-        .length,
-      instruktor: profiles.filter((profile) => profile.role === "instruktor")
-        .length,
-      user: profiles.filter((profile) => profile.role === "user").length,
-    };
-  }, [profiles]);
-
-  function getFilterCount(value: string) {
-    switch (value) {
-      case "pending":
-        return counters.pending;
-      case "unverified":
-        return counters.unverified;
-      case "verified":
-        return counters.verified;
-      case "rejected":
-        return counters.rejected;
-      case "admin":
-        return counters.admin;
-      case "pracownik":
-        return counters.pracownik;
-      case "instruktor":
-        return counters.instruktor;
-      case "user":
-        return counters.user;
-      default:
-        return counters.all;
-    }
-  }
-
-  function getAuditAction(changes: AdminProfileChanges) {
-    if (changes.role) return "PROFILE_ROLE_CHANGED";
-
-    if (Object.prototype.hasOwnProperty.call(changes, "admin_note")) {
-      return "PROFILE_ADMIN_NOTE_UPDATED";
-    }
-
-    return "PROFILE_UPDATED";
-  }
-
-  async function createAuditLog(
-    profile: Profile,
-    changes: AdminProfileChanges
-  ) {
-    if (!currentUserId) return null;
-
-    const { error } = await supabase.from("audit_logs").insert({
-      actor_user_id: currentUserId,
-      actor_name: currentUserName || "Nieznany użytkownik",
-      actor_role: currentUserRole,
-      action: getAuditAction(changes),
-      target_type: "profile",
-      target_id: profile.user_id,
-      target_name: getProfileDisplayName(profile),
-      details: {
-        before: {
-          role: profile.role,
-          verification_status: profile.verification_status,
-          permissions_verified: profile.permissions_verified,
-          admin_note_exists: Boolean(profile.admin_note),
-          permissions_verification_note_exists: Boolean(
-            profile.permissions_verification_note
-          ),
-        },
-        after: {
-          role: changes.role ?? profile.role,
-          verification_status: profile.verification_status,
-          permissions_verified: profile.permissions_verified,
-          admin_note_changed: Object.prototype.hasOwnProperty.call(
-            changes,
-            "admin_note"
-          ),
-          permissions_note_changed: false,
-        },
-      },
-    });
-
-    return error?.message ?? null;
-  }
+    const timeoutId = window.setTimeout(() => void loadProfiles(), 250);
+    return () => window.clearTimeout(timeoutId);
+    // loadProfiles intentionally reruns from server-side search/filter/page state.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [page, roleFilter, search, sort, statusFilter]);
 
   async function updateAdminProfile(
     profile: Profile,
-    changes: AdminProfileChanges
+    changes: Partial<Pick<Profile, "role" | "admin_note">>
   ) {
-    const isOwnAccount = profile.user_id === currentUserId;
-
     if (!isAdmin) {
       setMessage(
         "Zablokowano zmianę: tylko administrator może zmieniać role i notatki administracyjne."
@@ -726,30 +572,45 @@ export default function AdminUsersPage() {
       return;
     }
 
-    if (isOwnAccount && changes.role && changes.role !== "admin") {
-      setMessage(
-        "Zablokowano zmianę: nie możesz odebrać sam sobie roli administratora."
-      );
-      return;
-    }
-
     setSavingUserId(profile.user_id);
     setMessage("");
 
-    const updatedAt = new Date().toISOString();
-
-    const { error } = await supabase
-      .from("profiles")
-      .update({
-        ...changes,
-        updated_at: updatedAt,
-      })
-      .eq("user_id", profile.user_id);
+    const isRoleChange = Object.prototype.hasOwnProperty.call(changes, "role");
+    const { data, error } = isRoleChange
+      ? await supabase.rpc("admin_set_user_role_v1", {
+          p_target_user_id: profile.user_id,
+          p_new_role: changes.role,
+        })
+      : await supabase.rpc("admin_set_user_note_v1", {
+          p_target_user_id: profile.user_id,
+          p_admin_note: changes.admin_note ?? null,
+        });
 
     setSavingUserId(null);
 
     if (error) {
-      setMessage(`Błąd zapisu: ${error.message}`);
+      console.error("Admin user mutation failed:", error);
+      setMessage("Nie udało się zapisać zmiany. Spróbuj ponownie.");
+      return;
+    }
+
+    const result = data as AdminUserMutationResult | null;
+    if (!result || typeof result.code !== "string") {
+      setMessage("Nie udało się potwierdzić wyniku operacji.");
+      return;
+    }
+
+    if (!result.ok) {
+      const controlledMessages: Record<string, string> = {
+        not_allowed: "Brak uprawnień do tej operacji.",
+        invalid_target: "Nieprawidłowy użytkownik docelowy.",
+        target_not_found: "Nie znaleziono użytkownika.",
+        invalid_role: "Wybrano nieprawidłową rolę.",
+        invalid_current_role: "Aktualna rola użytkownika jest nieprawidłowa.",
+        last_admin: "Nie można odebrać roli ostatniemu administratorowi.",
+        note_too_long: "Notatka może mieć maksymalnie 2000 znaków.",
+      };
+      setMessage(controlledMessages[result.code] ?? "Operacja została odrzucona.");
       return;
     }
 
@@ -758,23 +619,18 @@ export default function AdminUsersPage() {
         item.user_id === profile.user_id
           ? {
               ...item,
-              ...changes,
-              updated_at: updatedAt,
+              ...(isRoleChange
+                ? { role: result.role ?? changes.role ?? item.role }
+                : result.changed
+                  ? { admin_note: result.admin_note ?? null }
+                  : {}),
+              updated_at: result.updated_at ?? item.updated_at,
             }
           : item
       )
     );
 
-    const auditError = await createAuditLog(profile, changes);
-
-    if (auditError) {
-      setMessage(
-        `Zapisano zmiany, ale nie udało się dodać wpisu audit log: ${auditError}`
-      );
-      return;
-    }
-
-    setMessage("Zapisano zmiany i dodano wpis audit log.");
+    setMessage(result.changed ? "Zapisano zmianę i audit." : "Brak zmian do zapisania.");
   }
 
   function startIdentityEditing(profile: Profile) {
@@ -916,32 +772,16 @@ export default function AdminUsersPage() {
     }
   }
 
-  function getContactRestrictionReason(profile: Profile) {
+  function getContactRestrictionReason() {
     if (!canManageUsers) {
       return "Brak uprawnień do edycji danych kontaktowych.";
-    }
-
-    if (!isEmployee) {
-      return undefined;
-    }
-
-    if (profile.user_id === currentUserId) {
-      return "Pracownik nie może edytować danych własnego profilu.";
-    }
-
-    if (profile.role === "admin") {
-      return "Pracownik nie może edytować danych administratora.";
-    }
-
-    if (profile.role !== "user") {
-      return "Pracownik może edytować dane kontaktowe wyłącznie klienta.";
     }
 
     return undefined;
   }
 
   function startContactEditing(profile: Profile) {
-    const restrictionReason = getContactRestrictionReason(profile);
+    const restrictionReason = getContactRestrictionReason();
 
     if (restrictionReason) {
       setMessage(restrictionReason);
@@ -982,7 +822,7 @@ export default function AdminUsersPage() {
   }
 
   async function saveContactDetails(profile: Profile) {
-    const restrictionReason = getContactRestrictionReason(profile);
+    const restrictionReason = getContactRestrictionReason();
 
     if (restrictionReason) {
       setMessage(restrictionReason);
@@ -1088,14 +928,6 @@ export default function AdminUsersPage() {
       return;
     }
 
-    if (
-      isEmployee &&
-      (profile.user_id === currentUserId || profile.role === "admin")
-    ) {
-      setMessage("Ta operacja weryfikacyjna nie jest dostępna dla pracownika.");
-      return;
-    }
-
     setSavingUserId(profile.user_id);
     setMessage("");
 
@@ -1134,7 +966,6 @@ export default function AdminUsersPage() {
                 verification_status: data.verification_status,
                 permissions_verified: data.permissions_verified,
                 permissions_verified_at: data.permissions_verified_at,
-                permissions_verified_by: data.permissions_verified_by,
                 permissions_verification_note:
                   data.permissions_verification_note,
                 updated_at: data.updated_at,
@@ -1192,6 +1023,8 @@ export default function AdminUsersPage() {
     setSearch("");
     setStatusFilter("all");
     setRoleFilter("all");
+    setSort("newest");
+    setPage(0);
   }
 
   return (
@@ -1236,8 +1069,11 @@ export default function AdminUsersPage() {
 
               <input
                 value={search}
-                onChange={(event) => setSearch(event.target.value)}
-                placeholder="E-mail, imię, telefon, rola, status, uprawnienia..."
+                onChange={(event) => {
+                  setSearch(event.target.value);
+                  setPage(0);
+                }}
+                placeholder="E-mail, imię lub telefon..."
                 className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-white outline-none transition focus:border-green-600"
               />
             </div>
@@ -1250,6 +1086,23 @@ export default function AdminUsersPage() {
             >
               {loading ? "Odświeżanie..." : "Odśwież"}
             </button>
+
+            <label className="grid gap-2 text-sm font-semibold text-zinc-300">
+              Sortowanie
+              <select
+                value={sort}
+                onChange={(event) => {
+                  setSort(event.target.value);
+                  setPage(0);
+                }}
+                className="rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-white outline-none transition focus:border-green-600"
+              >
+                <option value="newest">Najnowsze</option>
+                <option value="oldest">Najstarsze</option>
+                <option value="name">Nazwa</option>
+                <option value="role">Rola</option>
+              </select>
+            </label>
 
             <button
               type="button"
@@ -1270,14 +1123,17 @@ export default function AdminUsersPage() {
                 <button
                   key={filter.value}
                   type="button"
-                  onClick={() => setStatusFilter(filter.value)}
+                  onClick={() => {
+                    setStatusFilter(filter.value);
+                    setPage(0);
+                  }}
                   className={
                     statusFilter === filter.value
                       ? "rounded-xl border border-green-600 bg-green-900 px-4 py-2 text-sm font-semibold text-white"
                       : "rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-2 text-sm font-semibold text-zinc-400 transition hover:border-green-700 hover:text-white"
                   }
                 >
-                  {filter.label} ({getFilterCount(filter.value)})
+                  {filter.label}
                 </button>
               ))}
             </div>
@@ -1298,14 +1154,17 @@ export default function AdminUsersPage() {
                 <button
                   key={filter.value}
                   type="button"
-                  onClick={() => setRoleFilter(filter.value)}
+                  onClick={() => {
+                    setRoleFilter(filter.value);
+                    setPage(0);
+                  }}
                   className={
                     roleFilter === filter.value
                       ? "rounded-xl border border-green-600 bg-green-900 px-4 py-2 text-sm font-semibold text-white"
                       : "rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-2 text-sm font-semibold text-zinc-400 transition hover:border-green-700 hover:text-white"
                   }
                 >
-                  {filter.label} ({getFilterCount(filter.value)})
+                  {filter.label}
                 </button>
               ))}
             </div>
@@ -1323,32 +1182,27 @@ export default function AdminUsersPage() {
             <p className="text-sm text-zinc-400">
               Liczba użytkowników w widoku:{" "}
               <span className="font-bold text-white">
-                {filteredProfiles.length}
+                {profiles.length}
               </span>{" "}
-              / {profiles.length}
+              / {totalCount}
             </p>
           </div>
 
           {loading ? (
             <div className="p-8 text-zinc-400">Ładowanie użytkowników...</div>
-          ) : filteredProfiles.length === 0 ? (
+          ) : profiles.length === 0 ? (
             <div className="p-8 text-zinc-400">
               Brak użytkowników do wyświetlenia.
             </div>
           ) : (
             <div className="grid gap-4 p-4">
-              {filteredProfiles.map((profile) => {
+              {profiles.map((profile) => {
                 const isSaving = savingUserId === profile.user_id;
                 const isOwnAccount = profile.user_id === currentUserId;
-                const isVerificationRestricted =
-                  isEmployee && (isOwnAccount || profile.role === "admin");
-                const verificationRestrictionReason = isVerificationRestricted
-                  ? isOwnAccount
-                    ? "Pracownik nie może weryfikować własnego konta."
-                    : "Pracownik nie może zmieniać weryfikacji administratora."
-                  : undefined;
+                const isVerificationRestricted = false;
+                const verificationRestrictionReason: string | undefined = undefined;
                 const contactRestrictionReason =
-                  getContactRestrictionReason(profile);
+                  getContactRestrictionReason();
                 const isEditingContact =
                   editingContactUserId === profile.user_id;
                 const contactDraft =
@@ -1361,8 +1215,6 @@ export default function AdminUsersPage() {
                 const missingFields = getMissingFields(profile);
                 const completion = getCompletionPercent(profile);
                 const declaredPermissions = getDeclaredPermissions(profile);
-                const declaredQualifications =
-                  getDeclaredQualifications(profile);
 
                 return (
                   <article
@@ -1476,31 +1328,41 @@ export default function AdminUsersPage() {
                         </label>
 
                         <select
-                          value={profile.role || "user"}
+                          value={roleDrafts[profile.user_id] ?? profile.role ?? "user"}
                           disabled={isSaving || !isAdmin}
-                          onChange={(event) =>
-                            updateAdminProfile(profile, {
-                              role: event.target.value as UserRole,
-                            })
-                          }
+                          onChange={(event) => setRoleDrafts((drafts) => ({
+                            ...drafts,
+                            [profile.user_id]: event.target.value as UserRole,
+                          }))}
                           className="w-full rounded-xl border border-zinc-700 bg-zinc-900 px-4 py-3 text-sm text-white outline-none transition focus:border-green-600 disabled:opacity-60"
                         >
                           {roleOptions.map((role) => (
                             <option
                               key={role}
                               value={role}
-                              disabled={isOwnAccount && role !== "admin"}
                             >
                               {getRoleLabel(role)}
                             </option>
                           ))}
                         </select>
 
-                        {isOwnAccount && isAdmin && (
-                          <p className="mt-2 text-xs text-green-400">
-                            Nie możesz odebrać sam sobie roli admina.
-                          </p>
-                        )}
+                        <button
+                          type="button"
+                          disabled={
+                            isSaving ||
+                            !isAdmin ||
+                            (roleDrafts[profile.user_id] ?? profile.role) === profile.role
+                          }
+                          onClick={() => {
+                            const nextRole = roleDrafts[profile.user_id] ?? "user";
+                            if (window.confirm(`Zmienić rolę na „${getRoleLabel(nextRole)}”?`)) {
+                              void updateAdminProfile(profile, { role: nextRole });
+                            }
+                          }}
+                          className="mt-2 w-full rounded-xl border border-zinc-700 px-4 py-2 text-sm font-semibold text-zinc-300 transition hover:border-green-600 hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          Zapisz rolę
+                        </button>
 
                         {!isAdmin && (
                           <p className="mt-2 text-xs text-yellow-400">
@@ -2285,6 +2147,30 @@ export default function AdminUsersPage() {
                   </article>
                 );
               })}
+            </div>
+          )}
+
+          {!loading && totalCount > pageSize && (
+            <div className="flex flex-wrap items-center justify-between gap-3 border-t border-zinc-800 px-5 py-4">
+              <button
+                type="button"
+                disabled={page === 0}
+                onClick={() => setPage((current) => Math.max(0, current - 1))}
+                className="rounded-xl border border-zinc-700 px-4 py-2 text-sm font-semibold text-zinc-300 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Poprzednia
+              </button>
+              <span className="text-sm text-zinc-400">
+                Strona {page + 1} z {Math.ceil(totalCount / pageSize)}
+              </span>
+              <button
+                type="button"
+                disabled={(page + 1) * pageSize >= totalCount}
+                onClick={() => setPage((current) => current + 1)}
+                className="rounded-xl border border-zinc-700 px-4 py-2 text-sm font-semibold text-zinc-300 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Następna
+              </button>
             </div>
           )}
         </div>

@@ -225,11 +225,16 @@ export async function POST(request: Request) {
       );
     }
 
-    const { data: ownerProfileData, error: ownerProfileError } = await supabase
-      .from("profiles")
-      .select("first_name, last_name, full_name, email")
-      .eq("user_id", reservation.user_id)
-      .maybeSingle();
+    const ownerProfileResult = isStaff
+      ? await supabase.rpc("get_reservation_customer_profiles_v1", {
+          p_reservation_ids: [reservation.id],
+        })
+      : await supabase
+          .from("profiles")
+          .select("first_name, last_name, full_name, email")
+          .eq("user_id", user.id)
+          .maybeSingle();
+    const ownerProfileError = ownerProfileResult.error;
 
     if (ownerProfileError) {
       return NextResponse.json(
@@ -238,7 +243,9 @@ export async function POST(request: Request) {
       );
     }
 
-    const ownerProfile = ownerProfileData as OwnerProfile | null;
+    const ownerProfile = (isStaff
+      ? ((ownerProfileResult.data ?? [])[0] ?? null)
+      : ownerProfileResult.data) as OwnerProfile | null;
     const customerEmail =
       reservation.customer_email?.trim() ||
       ownerProfile?.email?.trim() ||
@@ -252,9 +259,8 @@ export async function POST(request: Request) {
       );
     }
 
-    const profileDisplayName = ownerProfile
-      ? getProfileDisplayName(ownerProfile, "")
-      : "";
+    const profileDisplayName = ownerProfile?.full_name?.trim() ||
+      (ownerProfile ? getProfileDisplayName(ownerProfile, "") : "");
     const customerName =
       reservation.customer_name?.trim() ||
       profileDisplayName ||

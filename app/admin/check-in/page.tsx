@@ -57,8 +57,6 @@ type Profile = {
   phone: string | null;
   role: UserRole | string | null;
   verification_status: string | null;
-  admin_note: string | null;
-  created_at: string | null;
   updated_at: string | null;
 
   postal_code: string | null;
@@ -81,7 +79,6 @@ type Profile = {
 
   permissions_verified: boolean | null;
   permissions_verified_at: string | null;
-  permissions_verified_by: string | null;
   permissions_verification_note: string | null;
 };
 
@@ -481,68 +478,32 @@ function CheckInContent() {
   }
 
   async function loadProfilesForReservations(items: Reservation[]) {
-    const userIds = Array.from(
-      new Set(
-        items
-          .map((reservation) => reservation.user_id)
-          .filter((id): id is string => Boolean(id))
-      )
-    );
+    const reservationIds = Array.from(new Set(items.map((reservation) => reservation.id)));
 
-    if (userIds.length === 0) {
+    if (reservationIds.length === 0) {
       setProfilesByUserId({});
       return;
     }
 
-    const { data, error } = await supabase
-      .from("profiles")
-      .select(
-        `
-        id,
-        user_id,
-        email,
-        full_name,
-        phone,
-        role,
-        verification_status,
-        admin_note,
-        created_at,
-        updated_at,
+    const loadedProfiles: Profile[] = [];
+    for (let index = 0; index < reservationIds.length; index += 100) {
+      const { data, error } = await supabase.rpc(
+        "get_reservation_customer_profiles_v1",
+        { p_reservation_ids: reservationIds.slice(index, index + 100) }
+      );
 
-        postal_code,
-        city,
-        street,
-        house_number,
-        apartment_number,
+      if (error) {
+        console.error("Operational profile read failed:", error);
+        setMessage("Nie udało się pobrać danych profili dla rezerwacji.");
+        return;
+      }
 
-        permission_sport,
-        permission_collector,
-        permission_hunting,
-        permission_training,
-        permission_personal_protection,
-        permission_other,
-
-        qualification_instructor,
-        qualification_range_officer,
-        qualification_pzss_license,
-        qualification_hunter,
-
-        permissions_verified,
-        permissions_verified_at,
-        permissions_verified_by,
-        permissions_verification_note
-      `
-      )
-      .in("user_id", userIds);
-
-    if (error) {
-      setMessage(`Błąd pobierania profili: ${error.message}`);
-      return;
+      loadedProfiles.push(...((data ?? []) as Profile[]));
     }
 
     const map: Record<string, Profile> = {};
 
-    for (const profile of (data ?? []) as Profile[]) {
+    for (const profile of loadedProfiles) {
       map[profile.user_id] = profile;
     }
 
@@ -1275,7 +1236,6 @@ function CheckInContent() {
             const missingFields = getMissingFields(profile);
             const completion = getCompletionPercent(profile);
             const declaredPermissions = getDeclaredPermissions(profile);
-            const declaredQualifications = getDeclaredQualifications(profile);
 
             return (
               <article
