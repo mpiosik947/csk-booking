@@ -744,6 +744,25 @@ test("calendar read model requests hierarchy metadata without adding database wr
   assert.doesNotMatch(routeSource, /\.insert\(|\.update\(|\.delete\(|\.upsert\(/);
 });
 
+test("instructor calendar remains available without querying or emitting reservations", async () => {
+  const [routeSource, feedSource] = await Promise.all([
+    readFile(new URL("../../api/admin/calendar-feed/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../../../lib/admin/calendar/feed.ts", import.meta.url), "utf8"),
+  ]);
+
+  assert.match(
+    routeSource,
+    /if \(role !== "instruktor" && query\.types\.includes\("reservation"\)\)/
+  );
+  assert.match(
+    feedSource,
+    /if \(role !== "instruktor" && query\.types\.includes\("reservation"\)\)/
+  );
+  assert.match(routeSource, /\.from\("lane_blocks"\)/);
+  assert.match(routeSource, /\.from\("events"\)/);
+  assert.doesNotMatch(routeSource, /service_role|SUPABASE_SERVICE_ROLE_KEY/);
+});
+
 test("preview distinguishes whole-lane and child resources with full labels", async () => {
   const parentResource = {
     id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",

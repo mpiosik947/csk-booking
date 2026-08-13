@@ -31,7 +31,6 @@ const routePermissions: Record<string, UserRole[]> = {
   "/admin/check-in": [
     "admin",
     "pracownik",
-    "instruktor",
   ],
 
   "/admin/events": [

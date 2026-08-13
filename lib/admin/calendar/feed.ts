@@ -359,7 +359,7 @@ export function buildCalendarFeed(
   const referencedLaneIds = new Set<string>();
   const entries: CalendarEntry[] = [];
 
-  if (query.types.includes("reservation")) {
+  if (role !== "instruktor" && query.types.includes("reservation")) {
     for (const row of rows.reservations) {
       const state = getReservationCalendarState(
         row.reservation_status,

@@ -108,7 +108,7 @@ const adminTiles: AdminTile[] = [
     title: "Check-in",
     description: "Obsługa obecności, no-show i zakończonych wizyt.",
     href: "/admin/check-in",
-    roles: ["admin", "pracownik", "instruktor"],
+    roles: ["admin", "pracownik"],
   },
   {
     title: "Raporty",
@@ -370,6 +370,10 @@ export default function AdminPage() {
 
     const currentRole = (roleData as Role) || "user";
     setRole(currentRole);
+    const canReadCustomerOperations = hasAccess(currentRole, [
+      "admin",
+      "pracownik",
+    ]);
 
     const [
       todayReservationsResult,
@@ -377,10 +381,11 @@ export default function AdminPage() {
       profilesResult,
       upcomingEventsResult,
     ] = await Promise.all([
-      supabase
-        .from("reservations")
-        .select(
-          `
+      canReadCustomerOperations
+        ? supabase
+            .from("reservations")
+            .select(
+              `
           id,
           user_id,
           customer_name,
@@ -400,15 +405,17 @@ export default function AdminPage() {
               id, name, resource_kind, parent_lane_id, display_order, is_active
             )
           )
-        `
-        )
-        .eq("reservation_date", today)
-        .order("start_time", { ascending: true }),
+              `
+            )
+            .eq("reservation_date", today)
+            .order("start_time", { ascending: true })
+        : Promise.resolve({ data: [], error: null }),
 
-      supabase
-        .from("reservations")
-        .select(
-          `
+      canReadCustomerOperations
+        ? supabase
+            .from("reservations")
+            .select(
+              `
           id,
           user_id,
           customer_name,
@@ -428,14 +435,17 @@ export default function AdminPage() {
               id, name, resource_kind, parent_lane_id, display_order, is_active
             )
           )
-        `
-        )
-        .gte("reservation_date", monthRange.start)
-        .lte("reservation_date", monthRange.end)
-        .order("reservation_date", { ascending: true })
-        .order("start_time", { ascending: true }),
+              `
+            )
+            .gte("reservation_date", monthRange.start)
+            .lte("reservation_date", monthRange.end)
+            .order("reservation_date", { ascending: true })
+            .order("start_time", { ascending: true })
+        : Promise.resolve({ data: [], error: null }),
 
-      supabase.from("profiles").select("id, verification_status"),
+      canReadCustomerOperations
+        ? supabase.from("profiles").select("id, verification_status")
+        : Promise.resolve({ data: [], error: null }),
 
       supabase
         .from("events")
@@ -650,7 +660,9 @@ export default function AdminPage() {
           </div>
         ) : (
           <>
-            <section>
+            {hasAccess(role, ["admin", "pracownik"]) && (
+              <>
+                <section>
               <h2 className="text-xl font-bold text-[#f2efe4] sm:text-2xl">
                 Wymaga uwagi
               </h2>
@@ -699,9 +711,9 @@ export default function AdminPage() {
                   variant="alert"
                 />
               </div>
-            </section>
+                </section>
 
-            <section className="mt-8">
+                <section className="mt-8">
               <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
                 <div>
                   <h2 className="text-xl font-bold text-[#f2efe4] sm:text-2xl">
@@ -755,9 +767,9 @@ export default function AdminPage() {
                   tone={payOnSiteToday.length > 0 ? "yellow" : "green"}
                 />
               </div>
-            </section>
+                </section>
 
-            <section className="mt-8 rounded-2xl border border-[#30372c] bg-[#191e19] p-5 sm:p-6">
+                <section className="mt-8 rounded-2xl border border-[#30372c] bg-[#191e19] p-5 sm:p-6">
                 <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                   <div>
                     <h2 className="text-xl font-bold text-[#f2efe4] sm:text-2xl">
@@ -837,7 +849,9 @@ export default function AdminPage() {
                     </table>
                   </div>
                 )}
-            </section>
+                </section>
+              </>
+            )}
 
             {hasAccess(role, ["admin", "pracownik", "instruktor"]) && (
               <section className="mt-8 rounded-2xl border border-[#30372c] bg-[#191e19] p-5 sm:p-6">

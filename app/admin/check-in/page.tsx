@@ -2,7 +2,7 @@
 
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "../../../lib/supabase";
 import { updateReservationPayment } from "../../../lib/reservation-actions";
 import {
@@ -416,6 +416,7 @@ function BooleanLine({
 }
 
 function CheckInContent() {
+  const router = useRouter();
   const params = useSearchParams();
   const token = params.get("token");
 
@@ -454,17 +455,29 @@ function CheckInContent() {
 
     setCurrentUserId(user?.id ?? "");
 
-    if (!user) return;
+    if (!user) {
+      router.replace("/login");
+      return false;
+    }
 
-    const { data: profile } = await supabase
+    const { data: profile, error } = await supabase
       .from("profiles")
       .select("role,full_name,email")
       .eq("user_id", user.id)
       .maybeSingle();
 
-    if (profile?.role) {
-      setCurrentUserRole(String(profile.role) as UserRole);
+    const loadedRole = profile?.role
+      ? (String(profile.role) as UserRole)
+      : "";
+
+    if (error || (loadedRole !== "admin" && loadedRole !== "pracownik")) {
+      setCurrentUserRole(loadedRole);
+      router.replace("/admin");
+      return false;
     }
+
+    setCurrentUserRole(loadedRole);
+    return true;
   }
 
   async function loadProfilesForReservations(items: Reservation[]) {
@@ -540,7 +553,10 @@ function CheckInContent() {
     setLoading(true);
     setMessage("");
 
-    await loadCurrentUser();
+    if (!(await loadCurrentUser())) {
+      setLoading(false);
+      return;
+    }
 
     let query = supabase
       .from("reservations")
@@ -594,7 +610,10 @@ function CheckInContent() {
     setLoading(true);
     setMessage("");
 
-    await loadCurrentUser();
+    if (!(await loadCurrentUser())) {
+      setLoading(false);
+      return;
+    }
 
     const { data, error } = await supabase
       .from("reservations")
@@ -640,12 +659,16 @@ function CheckInContent() {
   }
 
   useEffect(() => {
-    if (token) {
-      loadReservationByToken(token);
-      return;
-    }
+    const timeoutId = window.setTimeout(() => {
+      if (token) {
+        void loadReservationByToken(token);
+        return;
+      }
 
-    loadReservations();
+      void loadReservations();
+    }, 0);
+
+    return () => window.clearTimeout(timeoutId);
   }, [token, dateFilter]);
 
   const filteredReservations = useMemo(() => {

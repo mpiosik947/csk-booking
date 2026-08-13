@@ -47,6 +47,54 @@ test("check-in retains token lookup and operational actions with an explicit emp
   assert.match(content, /Brak rezerwacji do obsługi dla wybranego dnia\./);
 });
 
+test("instructor is fail-closed for check-in navigation and customer dashboard reads", async () => {
+  const [middleware, dashboard, checkIn] = await Promise.all([
+    source("../../middleware.ts"),
+    source("./page.tsx"),
+    source("./check-in/page.tsx"),
+  ]);
+
+  assert.match(
+    middleware,
+    /"\/admin\/check-in": \[\s*"admin",\s*"pracownik",\s*\]/
+  );
+  const checkInPermissions = middleware.match(
+    /"\/admin\/check-in": \[([\s\S]*?)\],/
+  )?.[1];
+  assert.ok(checkInPermissions);
+  assert.doesNotMatch(checkInPermissions, /"instruktor"/);
+  assert.match(
+    dashboard,
+    /title: "Check-in",[\s\S]*?roles: \["admin", "pracownik"\]/
+  );
+  assert.match(
+    dashboard,
+    /const canReadCustomerOperations = hasAccess\(currentRole, \[[\s\S]*?"admin",[\s\S]*?"pracownik"/
+  );
+  assert.match(
+    dashboard,
+    /canReadCustomerOperations[\s\S]*?\.from\("reservations"\)/
+  );
+  assert.match(
+    dashboard,
+    /canReadCustomerOperations[\s\S]*?\.from\("profiles"\)/
+  );
+  assert.match(
+    dashboard,
+    /hasAccess\(role, \["admin", "pracownik"\]\) && \([\s\S]*?Najbliższe rezerwacje/
+  );
+  assert.match(checkIn, /useRouter, useSearchParams/);
+  assert.match(
+    checkIn,
+    /loadedRole !== "admin" && loadedRole !== "pracownik"/
+  );
+  assert.match(checkIn, /router\.replace\("\/admin"\)/);
+  assert.match(
+    checkIn,
+    /if \(!\(await loadCurrentUser\(\)\)\) \{[\s\S]*?return;[\s\S]*?\}[\s\S]*?\.from\("reservations"\)/
+  );
+});
+
 test("all three operational pages expose mobile-sized controls and visible focus states", async () => {
   const pages = await Promise.all([
     source("./reservations/page.tsx"),

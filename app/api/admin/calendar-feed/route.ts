@@ -90,7 +90,7 @@ export async function GET(request: Request) {
     }
 
     let reservations: CalendarReservationRow[] = [];
-    if (query.types.includes("reservation")) {
+    if (role !== "instruktor" && query.types.includes("reservation")) {
       let reservationRequest = supabase
         .from("reservations")
         .select(getReservationSelectColumns(role))
