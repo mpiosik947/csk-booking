@@ -72,8 +72,10 @@ test("write adapter sends a complete family with the snapshot version", async ()
   const [page, editor, , , helper] = await sources();
 
   assert.match(helper, /family\.resources[\s\S]*durations_minutes/);
-  assert.match(helper, /resource\.durations[\s\S]*\.filter\(\(duration\) => duration\.is_active\)/);
-  assert.match(helper, /resource\.pricing[\s\S]*\.filter\(\(rule\) => rule\.is_active\)/);
+  assert.match(helper, /durations_minutes: edited\.durationsMinutes/);
+  assert.match(helper, /pricing: edited\.pricing/);
+  assert.match(helper, /\.filter\(\(duration\) => duration\.is_active\)/);
+  assert.match(helper, /\.filter\(\(rule\) => rule\.is_active\)/);
   assert.match(editor, /expectedVersion: family\.configuration_version/);
   assert.match(page, /p_expected_version: expectedVersion/);
   assert.match(page, /p_resources: payload/);
@@ -146,16 +148,59 @@ test("all ten backend result codes and unknown responses have controlled handlin
   assert.doesNotMatch(editor, /error\.message/);
 });
 
-test("active state, position online state, durations and pricing stay read-only", async () => {
+test("active state and position online stay read-only while sales configuration is editable", async () => {
   const [, editor] = await sources();
 
   assert.match(editor, /Status: \{family\.root\.is_active \? "Aktywna" : "Nieaktywna"\} — tylko odczyt/);
   assert.match(editor, /Status i dostępność online stanowisk są w tym etapie tylko do odczytu\./);
-  assert.match(editor, /Czasy i cennik — tylko odczyt/);
+  assert.match(editor, /Dostępne czasy rezerwacji/);
+  assert.match(editor, /\+ Dodaj czas/);
+  assert.match(editor, /Cena za godzinę/);
+  assert.match(editor, /\+ Dodaj próg/);
+  assert.match(editor, /Usuń próg/);
   assert.doesNotMatch(editor, /Aktywuj|Dezaktywuj/);
   assert.doesNotMatch(editor, /child\.online_bookable[^\n]*onChange/);
-  assert.doesNotMatch(editor, /duration_minutes[^\n]*onChange/);
-  assert.doesNotMatch(editor, /hourly_price[^\n]*onChange/);
+});
+
+test("pricing UI uses the existing hourly model, day groups and read-only currency", async () => {
+  const [, editor, , , helper] = await sources();
+
+  assert.match(editor, /"mon_thu", "fri_sun"/);
+  assert.match(editor, /Pon–Czw/);
+  assert.match(editor, /Pt–Nd/);
+  assert.match(editor, /Liczba osób — od/);
+  assert.match(editor, /Liczba osób — do/);
+  assert.match(editor, /Opis \/ nazwa progu/);
+  assert.match(editor, /Cena za godzinę \(\{resource\.currency_code\}\)/);
+  assert.match(editor, /Waluta: \{resource\.currency_code\} — tylko odczyt/);
+  assert.match(editor, /Number\(first\.min_shooters\)/);
+  assert.match(editor, /Number\(first\.max_shooters\)/);
+  assert.match(helper, /hourly_price: hourlyPrice/);
+  assert.doesNotMatch(editor, /valid_from|valid_to|discount|promotion/);
+});
+
+test("duration and pricing editors are mobile-safe, labelled and keyboard accessible", async () => {
+  const [, editor] = await sources();
+
+  assert.match(editor, /lg:grid-cols-2/);
+  assert.match(editor, /min-w-0/);
+  assert.match(editor, /aria-label=\{`Usuń czas/);
+  assert.match(editor, /aria-label=\{`Usuń próg/);
+  assert.match(editor, /htmlFor=\{`new-duration-/);
+  assert.match(editor, /inputMode="decimal"/);
+  assert.match(editor, /min-h-11/);
+  assert.match(editor, /focus-visible:ring-2/);
+});
+
+test("inactive history is diagnostic only and dormant positions remain offline", async () => {
+  const [, editor, , , helper] = await sources();
+
+  assert.match(editor, /Historyczne nieaktywne czasy pozostają zachowane/);
+  assert.match(editor, /Historyczne nieaktywne progi pozostają zachowane/);
+  assert.match(helper, /\.filter\(\(duration\) => duration\.is_active\)/);
+  assert.match(helper, /\.filter\(\(rule\) => rule\.is_active\)/);
+  assert.match(helper, /is_active: resource\.is_active/);
+  assert.match(helper, /online_bookable: isRoot[\s\S]*resource\.online_bookable/);
 });
 
 test("uses business-friendly capacity and reservation labels without changing field mapping", async () => {

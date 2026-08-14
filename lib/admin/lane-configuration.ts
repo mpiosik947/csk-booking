@@ -61,6 +61,17 @@ export type LaneFamilyResourceEdit = {
   lane_id: string;
   max_shooters: string;
   max_people_online: string;
+  durations_minutes: string[];
+  pricing: LaneFamilyPricingEdit[];
+};
+
+export type LaneFamilyPricingEdit = {
+  edit_key: string;
+  day_group: "mon_thu" | "fri_sun";
+  min_shooters: string;
+  max_shooters: string;
+  label: string;
+  hourly_price: string;
 };
 
 export type LaneFamilyEditState = {
@@ -495,6 +506,27 @@ export function createLaneFamilyEditState(
       lane_id: resource.lane_id,
       max_shooters: String(resource.max_shooters),
       max_people_online: String(resource.max_people_online),
+      durations_minutes: resource.durations
+        .filter((duration) => duration.is_active)
+        .map((duration) => String(duration.duration_minutes))
+        .sort((first, second) => Number(first) - Number(second)),
+      pricing: resource.pricing
+        .filter((rule) => rule.is_active)
+        .sort(
+          (first, second) =>
+            first.day_group.localeCompare(second.day_group) ||
+            first.min_shooters - second.min_shooters ||
+            first.max_shooters - second.max_shooters ||
+            first.label.localeCompare(second.label, "pl-PL")
+        )
+        .map((rule, index) => ({
+          edit_key: `${resource.lane_id}:pricing:${index}`,
+          day_group: rule.day_group,
+          min_shooters: String(rule.min_shooters),
+          max_shooters: String(rule.max_shooters),
+          label: rule.label,
+          hourly_price: String(rule.hourly_price),
+        })),
     })),
   };
 }
@@ -505,67 +537,238 @@ function parsePositiveInteger(value: string) {
     : null;
 }
 
-function getEditedLimits(family: LaneConfigurationFamily, state: LaneFamilyEditState) {
+function parseMoney(value: string) {
+  const normalized = value.trim().replace(",", ".");
+  if (!/^[0-9]+(?:\.[0-9]{1,2})?$/.test(normalized)) return null;
+  const parsed = Number(normalized);
+  return Number.isFinite(parsed) && parsed <= 9999999999.99 ? parsed : null;
+}
+
+type ParsedLaneFamilyResourceEdit = {
+  maxShooters: number;
+  maxPeopleOnline: number;
+  durationsMinutes: number[];
+  pricing: LaneFamilyWritePricing[];
+};
+
+type ParsedLaneFamilyEditState = {
+  values: Map<string, ParsedLaneFamilyResourceEdit>;
+  errors: string[];
+};
+
+const DAY_GROUPS = ["mon_thu", "fri_sun"] as const;
+
+function dayGroupLabel(dayGroup: LaneFamilyWritePricing["day_group"]) {
+  return dayGroup === "mon_thu" ? "Pon–Czw" : "Pt–Nd";
+}
+
+function sortPricing(first: LaneFamilyWritePricing, second: LaneFamilyWritePricing) {
+  return (
+    first.day_group.localeCompare(second.day_group) ||
+    first.min_shooters - second.min_shooters ||
+    first.max_shooters - second.max_shooters ||
+    first.label.localeCompare(second.label, "pl-PL")
+  );
+}
+
+function hasCompletePricingCoverage(
+  pricing: LaneFamilyWritePricing[],
+  maxPeopleOnline: number
+) {
+  return DAY_GROUPS.every((dayGroup) => {
+    const rules = pricing
+      .filter((rule) => rule.day_group === dayGroup)
+      .sort(sortPricing);
+    return (
+      rules.length > 0 &&
+      rules[0].min_shooters === 1 &&
+      rules[rules.length - 1].max_shooters === maxPeopleOnline &&
+      rules.every(
+        (rule, index) =>
+          rule.max_shooters <= maxPeopleOnline &&
+          (index === 0 || rule.min_shooters === rules[index - 1].max_shooters + 1)
+      )
+    );
+  });
+}
+
+function pricingCoverageErrors(
+  resourceName: string,
+  pricing: LaneFamilyWritePricing[],
+  maxPeopleOnline: number
+) {
+  const errors: string[] = [];
+  for (const dayGroup of DAY_GROUPS) {
+    const label = dayGroupLabel(dayGroup);
+    const rules = pricing
+      .filter((rule) => rule.day_group === dayGroup)
+      .sort(sortPricing);
+    if (rules.length === 0) {
+      errors.push(`${resourceName}: brak cennika ${label}.`);
+      continue;
+    }
+    let previousMax = 0;
+    for (const rule of rules) {
+      if (rule.min_shooters <= previousMax) {
+        errors.push(`${resourceName}: progi cennika ${label} nakładają się.`);
+      } else if (rule.min_shooters !== previousMax + 1) {
+        errors.push(`${resourceName}: cennik ${label} zawiera lukę w liczbie osób.`);
+      }
+      previousMax = Math.max(previousMax, rule.max_shooters);
+    }
+    if (previousMax !== maxPeopleOnline) {
+      errors.push(
+        `${resourceName}: dostosuj cennik ${label} do nowego maksymalnego limitu osób.`
+      );
+    }
+  }
+  return errors;
+}
+
+function parseLaneFamilyEditState(
+  family: LaneConfigurationFamily,
+  state: LaneFamilyEditState
+): ParsedLaneFamilyEditState {
+  const errors: string[] = [];
+  const values = new Map<string, ParsedLaneFamilyResourceEdit>();
   if (
     state.resources.length !== family.resources.length ||
     new Set(state.resources.map((resource) => resource.lane_id)).size !==
       state.resources.length
   ) {
-    return null;
-  }
-
-  const result = new Map<string, { maxShooters: number; maxPeopleOnline: number }>();
-  for (const resource of family.resources) {
-    const edit = state.resources.find((candidate) => candidate.lane_id === resource.lane_id);
-    if (!edit) return null;
-    const maxShooters = parsePositiveInteger(edit.max_shooters);
-    const maxPeopleOnline = parsePositiveInteger(edit.max_people_online);
-    if (maxShooters === null || maxPeopleOnline === null) return null;
-    result.set(resource.lane_id, { maxShooters, maxPeopleOnline });
-  }
-  return result;
-}
-
-export function validateLaneFamilyEditState(
-  family: LaneConfigurationFamily,
-  state: LaneFamilyEditState
-): LaneFamilyValidation {
-  const errors: string[] = [];
-  const limits = getEditedLimits(family, state);
-  if (!limits) {
     return {
-      valid: false,
-      errors: [
-        "Pojemność i maksymalna liczba osób w jednej rezerwacji muszą być liczbami całkowitymi co najmniej 1.",
-      ],
+      values,
+      errors: ["Nie udało się odtworzyć pełnej konfiguracji rodziny osi."],
     };
   }
 
   for (const resource of family.resources) {
-    const edited = limits.get(resource.lane_id)!;
-    if (edited.maxPeopleOnline > edited.maxShooters) {
+    const edit = state.resources.find((candidate) => candidate.lane_id === resource.lane_id);
+    if (!edit) {
+      errors.push(`${resource.name}: brak ustawień zasobu w formularzu.`);
+      continue;
+    }
+    const maxShooters = parsePositiveInteger(edit.max_shooters);
+    const maxPeopleOnline = parsePositiveInteger(edit.max_people_online);
+    if (maxShooters === null || maxPeopleOnline === null) {
+      errors.push(
+        `${resource.name}: pojemność i maksymalna liczba osób w jednej rezerwacji muszą być liczbami całkowitymi co najmniej 1.`
+      );
+      continue;
+    }
+    if (maxPeopleOnline > maxShooters) {
       const capacityName =
         resource.resource_kind === "position" ? "pojemności stanowiska" : "pojemności osi";
       errors.push(
         `${resource.name}: maks. osób w jednej rezerwacji nie może przekraczać ${capacityName}.`
       );
     }
-    if (
-      resource.pricing.some((rule) => rule.is_active) &&
-      !hasCompleteActiveSalesConfiguration(resource, edited.maxPeopleOnline)
-    ) {
-      errors.push(
-        `${resource.name}: Obecny cennik obejmuje rezerwacje dla innej liczby osób. Aby ustawić ten limit, trzeba również dostosować progi cenowe. Edycja cennika będzie dostępna w kolejnym etapie konfiguracji.`
-      );
+
+    const durationsMinutes: number[] = [];
+    let durationsValid = true;
+    for (const duration of edit.durations_minutes) {
+      const parsed = parsePositiveInteger(duration);
+      if (parsed === null || parsed > 1440) {
+        errors.push(`${resource.name}: czas rezerwacji musi być liczbą od 1 do 1440 minut.`);
+        durationsValid = false;
+        continue;
+      }
+      if (parsed % resource.booking_step_minutes !== 0) {
+        errors.push(
+          `${resource.name}: czas rezerwacji musi być podzielny przez krok ${resource.booking_step_minutes} min.`
+        );
+        durationsValid = false;
+      }
+      durationsMinutes.push(parsed);
+    }
+    if (new Set(durationsMinutes).size !== durationsMinutes.length) {
+      errors.push(`${resource.name}: ten czas rezerwacji został dodany więcej niż raz.`);
+      durationsValid = false;
+    }
+    durationsMinutes.sort((first, second) => first - second);
+
+    const pricing: LaneFamilyWritePricing[] = [];
+    let pricingRowsValid = true;
+    for (const rule of edit.pricing) {
+      const minShooters = parsePositiveInteger(rule.min_shooters);
+      const maxShootersRule = parsePositiveInteger(rule.max_shooters);
+      const hourlyPrice = parseMoney(rule.hourly_price);
+      const trimmedLabel = rule.label.trim();
+      if (minShooters === null || maxShootersRule === null || minShooters > maxShootersRule) {
+        errors.push(`${resource.name}: zakres liczby osób w cenniku jest nieprawidłowy.`);
+        pricingRowsValid = false;
+      }
+      if (trimmedLabel === "") {
+        errors.push(`${resource.name}: opis / nazwa progu cenowego nie może być pusta.`);
+        pricingRowsValid = false;
+      }
+      if (hourlyPrice === null) {
+        errors.push(
+          `${resource.name}: cena za godzinę musi być nieujemną liczbą z maksymalnie 2 miejscami po przecinku.`
+        );
+        pricingRowsValid = false;
+      }
+      if (
+        minShooters !== null &&
+        maxShootersRule !== null &&
+        minShooters <= maxShootersRule &&
+        trimmedLabel !== "" &&
+        hourlyPrice !== null
+      ) {
+        pricing.push({
+          day_group: rule.day_group,
+          min_shooters: minShooters,
+          max_shooters: maxShootersRule,
+          label: trimmedLabel,
+          hourly_price: hourlyPrice,
+        });
+      }
+    }
+    pricing.sort(sortPricing);
+
+    const onlineBookable =
+      resource.lane_id === family.root_lane_id
+        ? state.root_online_bookable
+        : resource.online_bookable;
+    if (onlineBookable && durationsMinutes.length === 0) {
+      errors.push(`${resource.name}: rezerwacja online wymaga co najmniej jednego czasu.`);
+    }
+    if (pricingRowsValid) {
+      if (pricing.length === 0 && onlineBookable) {
+        errors.push(`${resource.name}: brak cennika Pon–Czw.`);
+        errors.push(`${resource.name}: brak cennika Pt–Nd.`);
+      } else if (pricing.length > 0) {
+        errors.push(...pricingCoverageErrors(resource.name, pricing, maxPeopleOnline));
+      }
+    }
+
+    if (durationsValid && pricingRowsValid) {
+      values.set(resource.lane_id, {
+        maxShooters,
+        maxPeopleOnline,
+        durationsMinutes,
+        pricing,
+      });
     }
   }
 
-  const rootLimits = limits.get(family.root_lane_id)!;
+  return { values, errors };
+}
+
+export function validateLaneFamilyEditState(
+  family: LaneConfigurationFamily,
+  state: LaneFamilyEditState
+): LaneFamilyValidation {
+  const parsed = parseLaneFamilyEditState(family, state);
+  const errors = [...parsed.errors];
+  const rootValues = parsed.values.get(family.root_lane_id);
   if (
     state.root_online_bookable &&
     (!family.root.is_active ||
       !state.root_whole_lane_bookable ||
-      !hasCompleteActiveSalesConfiguration(family.root, rootLimits.maxPeopleOnline))
+      !rootValues ||
+      rootValues.durationsMinutes.length === 0 ||
+      !hasCompletePricingCoverage(rootValues.pricing, rootValues.maxPeopleOnline))
   ) {
     errors.push(
       "Rezerwacja online całej osi wymaga aktywnej osi oraz kompletnego cennika i czasów."
@@ -576,9 +779,11 @@ export function validateLaneFamilyEditState(
     (child) =>
       child.is_active &&
       child.online_bookable &&
-      hasCompleteActiveSalesConfiguration(
-        child,
-        limits.get(child.lane_id)!.maxPeopleOnline
+      parsed.values.has(child.lane_id) &&
+      parsed.values.get(child.lane_id)!.durationsMinutes.length > 0 &&
+      hasCompletePricingCoverage(
+        parsed.values.get(child.lane_id)!.pricing,
+        parsed.values.get(child.lane_id)!.maxPeopleOnline
       )
   );
   if (state.root_positions_bookable && usableChildren.length === 0) {
@@ -587,9 +792,9 @@ export function validateLaneFamilyEditState(
   if (
     state.root_positions_bookable &&
     usableChildren.reduce(
-      (total, child) => total + limits.get(child.lane_id)!.maxShooters,
+      (total, child) => total + parsed.values.get(child.lane_id)!.maxShooters,
       0
-    ) > rootLimits.maxShooters
+    ) > (rootValues?.maxShooters ?? 0)
   ) {
     errors.push("Suma pojemności stanowisk online przekracza pojemność osi.");
   }
@@ -602,12 +807,14 @@ export function buildLaneFamilyWritePayload(
   state: LaneFamilyEditState
 ): LaneFamilyWriteResource[] {
   const validation = validateLaneFamilyEditState(family, state);
-  const limits = getEditedLimits(family, state);
-  if (!validation.valid || !limits) throw new Error("invalid_edit_state");
+  const parsed = parseLaneFamilyEditState(family, state);
+  if (!validation.valid || parsed.values.size !== family.resources.length) {
+    throw new Error("invalid_edit_state");
+  }
 
   return family.resources
     .map((resource) => {
-      const edited = limits.get(resource.lane_id)!;
+      const edited = parsed.values.get(resource.lane_id)!;
       const isRoot = resource.lane_id === family.root_lane_id;
       return {
         lane_id: resource.lane_id,
@@ -623,26 +830,8 @@ export function buildLaneFamilyWritePayload(
           ? state.root_online_bookable
           : resource.online_bookable,
         max_people_online: edited.maxPeopleOnline,
-        durations_minutes: resource.durations
-          .filter((duration) => duration.is_active)
-          .map((duration) => duration.duration_minutes)
-          .sort((first, second) => first - second),
-        pricing: resource.pricing
-          .filter((rule) => rule.is_active)
-          .map((rule) => ({
-            day_group: rule.day_group,
-            min_shooters: rule.min_shooters,
-            max_shooters: rule.max_shooters,
-            label: rule.label,
-            hourly_price: rule.hourly_price,
-          }))
-          .sort(
-            (first, second) =>
-              first.day_group.localeCompare(second.day_group) ||
-              first.min_shooters - second.min_shooters ||
-              first.max_shooters - second.max_shooters ||
-              first.label.localeCompare(second.label, "pl-PL")
-          ),
+        durations_minutes: edited.durationsMinutes,
+        pricing: edited.pricing,
       };
     })
     .sort((first, second) => first.lane_id.localeCompare(second.lane_id));
@@ -652,13 +841,38 @@ function yesNo(value: boolean) {
   return value ? "Tak" : "Nie";
 }
 
+function formatDurations(values: number[]) {
+  return values.length > 0 ? values.map((value) => `${value} min`).join(", ") : "Brak";
+}
+
+function formatPeopleRange(minShooters: number, maxShooters: number) {
+  if (minShooters === maxShooters) {
+    return minShooters === 1 ? "1 osoba" : `${minShooters} osób`;
+  }
+  return `${minShooters}–${maxShooters} osób`;
+}
+
+function formatPricing(
+  pricing: LaneFamilyWritePricing[],
+  dayGroup: LaneFamilyWritePricing["day_group"],
+  currencyCode: string
+) {
+  const rules = pricing.filter((rule) => rule.day_group === dayGroup).sort(sortPricing);
+  if (rules.length === 0) return "Brak";
+  return rules
+    .map(
+      (rule) =>
+        `${formatPeopleRange(rule.min_shooters, rule.max_shooters)}: ${rule.hourly_price.toLocaleString("pl-PL", { maximumFractionDigits: 2 })} ${currencyCode}/h — ${rule.label}`
+    )
+    .join("; ");
+}
+
 export function getLaneFamilyChanges(
   family: LaneConfigurationFamily,
   state: LaneFamilyEditState
 ): LaneFamilyChange[] {
   const changes: LaneFamilyChange[] = [];
-  const limits = getEditedLimits(family, state);
-  if (!limits) return changes;
+  const parsed = parseLaneFamilyEditState(family, state);
 
   const rootBooleanChanges = [
     ["Rezerwacja online", family.root.online_bookable, state.root_online_bookable],
@@ -685,7 +899,8 @@ export function getLaneFamilyChanges(
   }
 
   for (const resource of family.resources) {
-    const edited = limits.get(resource.lane_id)!;
+    const edited = parsed.values.get(resource.lane_id);
+    if (!edited) continue;
     if (edited.maxShooters !== resource.max_shooters) {
       changes.push({
         resourceName: resource.name,
@@ -705,8 +920,73 @@ export function getLaneFamilyChanges(
         after: String(edited.maxPeopleOnline),
       });
     }
+    const originalDurations = resource.durations
+      .filter((duration) => duration.is_active)
+      .map((duration) => duration.duration_minutes)
+      .sort((first, second) => first - second);
+    if (JSON.stringify(originalDurations) !== JSON.stringify(edited.durationsMinutes)) {
+      changes.push({
+        resourceName: resource.name,
+        label: "Dostępne czasy rezerwacji",
+        before: formatDurations(originalDurations),
+        after: formatDurations(edited.durationsMinutes),
+      });
+    }
+    const originalPricing = resource.pricing
+      .filter((rule) => rule.is_active)
+      .map((rule) => ({
+        day_group: rule.day_group,
+        min_shooters: rule.min_shooters,
+        max_shooters: rule.max_shooters,
+        label: rule.label,
+        hourly_price: rule.hourly_price,
+      }))
+      .sort(sortPricing);
+    for (const dayGroup of DAY_GROUPS) {
+      const beforeRules = originalPricing.filter((rule) => rule.day_group === dayGroup);
+      const afterRules = edited.pricing.filter((rule) => rule.day_group === dayGroup);
+      if (JSON.stringify(beforeRules) !== JSON.stringify(afterRules)) {
+        changes.push({
+          resourceName: resource.name,
+          label: `Cennik ${dayGroupLabel(dayGroup)}`,
+          before: formatPricing(originalPricing, dayGroup, resource.currency_code),
+          after: formatPricing(edited.pricing, dayGroup, resource.currency_code),
+        });
+      }
+    }
   }
   return changes;
+}
+
+function comparableEditState(state: LaneFamilyEditState) {
+  return {
+    root_online_bookable: state.root_online_bookable,
+    root_whole_lane_bookable: state.root_whole_lane_bookable,
+    root_positions_bookable: state.root_positions_bookable,
+    resources: state.resources
+      .map((resource) => ({
+        lane_id: resource.lane_id,
+        max_shooters: resource.max_shooters,
+        max_people_online: resource.max_people_online,
+        durations_minutes: [...resource.durations_minutes].sort(
+          (first, second) => Number(first) - Number(second)
+        ),
+        pricing: resource.pricing
+          .map((rule) => ({
+            day_group: rule.day_group,
+            min_shooters: rule.min_shooters,
+            max_shooters: rule.max_shooters,
+            label: rule.label,
+            hourly_price: rule.hourly_price,
+          }))
+          .sort((first, second) =>
+            `${first.day_group}:${first.min_shooters}:${first.max_shooters}:${first.label}:${first.hourly_price}`.localeCompare(
+              `${second.day_group}:${second.min_shooters}:${second.max_shooters}:${second.label}:${second.hourly_price}`
+            )
+          ),
+      }))
+      .sort((first, second) => first.lane_id.localeCompare(second.lane_id)),
+  };
 }
 
 export function isLaneFamilyDirty(
@@ -714,23 +994,7 @@ export function isLaneFamilyDirty(
   state: LaneFamilyEditState
 ) {
   const original = createLaneFamilyEditState(family);
-  if (
-    state.root_online_bookable !== original.root_online_bookable ||
-    state.root_whole_lane_bookable !== original.root_whole_lane_bookable ||
-    state.root_positions_bookable !== original.root_positions_bookable ||
-    state.resources.length !== original.resources.length
-  ) {
-    return true;
-  }
-  return state.resources.some((resource, index) => {
-    const originalResource = original.resources[index];
-    return (
-      !originalResource ||
-      resource.lane_id !== originalResource.lane_id ||
-      resource.max_shooters !== originalResource.max_shooters ||
-      resource.max_people_online !== originalResource.max_people_online
-    );
-  });
+  return JSON.stringify(comparableEditState(state)) !== JSON.stringify(comparableEditState(original));
 }
 
 function parseCount(value: unknown) {
