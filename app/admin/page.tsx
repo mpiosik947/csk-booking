@@ -77,6 +77,7 @@ type AdminTile = {
   description: string;
   href: string;
   roles: Role[];
+  hiddenWhenDenied?: boolean;
 };
 
 const adminTiles: AdminTile[] = [
@@ -121,6 +122,13 @@ const adminTiles: AdminTile[] = [
     description: "Weryfikacja kont, role i notatki administratora.",
     href: "/admin/users",
     roles: ["admin"],
+  },
+  {
+    title: "Konfiguracja osi",
+    description: "Status, rezerwacje online, limity, czasy i cennik osi.",
+    href: "/admin/lane-configuration",
+    roles: ["admin"],
+    hiddenWhenDenied: true,
   },
 ];
 
@@ -1024,13 +1032,18 @@ export default function AdminPage() {
               </div>
 
               <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
-                {adminTiles.map((tile) => (
+                {adminTiles
+                  .filter(
+                    (tile) =>
+                      !tile.hiddenWhenDenied || hasAccess(role, tile.roles)
+                  )
+                  .map((tile) => (
                   <AdminModuleTile
                     key={tile.href + tile.title}
                     tile={tile}
                     allowed={hasAccess(role, tile.roles)}
                   />
-                ))}
+                  ))}
               </div>
             </section>
           </>
