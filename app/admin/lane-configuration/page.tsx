@@ -15,12 +15,15 @@ import {
   filterLaneConfigurationHierarchy,
   getLaneConfigurationSummary,
   parseAdminLaneConfigurationSnapshot,
+  parseLaneConfigurationWriteResult,
   type AdminLaneConfigurationSnapshot,
   type LaneConfigurationFamily,
   type LaneConfigurationPricingRule,
   type LaneConfigurationResource,
+  type LaneFamilyWriteResource,
 } from "../../../lib/admin/lane-configuration";
 import AdminShell from "../_components/AdminShell";
+import LaneConfigurationEditor from "./_components/LaneConfigurationEditor";
 
 const CONTROLLED_READ_ERROR =
   "Nie udało się bezpiecznie odczytać konfiguracji osi.";
@@ -75,11 +78,14 @@ function BooleanIndicator({
 }
 
 function ResourceFacts({ resource }: { resource: LaneConfigurationResource }) {
+  const capacityLabel =
+    resource.resource_kind === "position" ? "Pojemność stanowiska" : "Pojemność osi";
+
   return (
     <dl className="grid grid-cols-2 gap-3 sm:grid-cols-4">
       <div>
         <dt className="text-xs uppercase tracking-[0.12em] text-[#7f8679]">
-          Limit fizyczny
+          {capacityLabel}
         </dt>
         <dd className="mt-1 text-sm font-bold text-[#f2efe4]">
           {resource.max_shooters}
@@ -87,7 +93,7 @@ function ResourceFacts({ resource }: { resource: LaneConfigurationResource }) {
       </div>
       <div>
         <dt className="text-xs uppercase tracking-[0.12em] text-[#7f8679]">
-          Limit online
+          Maks. osób w jednej rezerwacji
         </dt>
         <dd className="mt-1 text-sm font-bold text-[#f2efe4]">
           {resource.max_people_online}
@@ -180,9 +186,11 @@ function PositionCard({
 function LaneFamilyCard({
   family,
   onOpenDetails,
+  onEdit,
 }: {
   family: LaneConfigurationFamily;
   onOpenDetails: (resource: LaneConfigurationResource, trigger: HTMLButtonElement) => void;
+  onEdit: (family: LaneConfigurationFamily, trigger: HTMLButtonElement) => void;
 }) {
   const activeChildren = family.children.filter((child) => child.is_active).length;
 
@@ -200,13 +208,22 @@ function LaneFamilyCard({
               : `${family.children.length} stanowisk · ${activeChildren} aktywnych / ${family.children.length}`}
           </p>
         </div>
-        <button
-          type="button"
-          onClick={(event) => onOpenDetails(family.root, event.currentTarget)}
-          className="min-h-11 shrink-0 rounded-xl border border-[#536143] px-4 py-2 text-sm font-semibold text-[#d7c895] transition hover:bg-[#20271e] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d7c895]"
-        >
-          Szczegóły
-        </button>
+        <div className="flex flex-col gap-2 sm:flex-row">
+          <button
+            type="button"
+            onClick={(event) => onOpenDetails(family.root, event.currentTarget)}
+            className="min-h-11 shrink-0 rounded-xl border border-[#536143] px-4 py-2 text-sm font-semibold text-[#d7c895] transition hover:bg-[#20271e] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d7c895]"
+          >
+            Szczegóły
+          </button>
+          <button
+            type="button"
+            onClick={(event) => onEdit(family, event.currentTarget)}
+            className="min-h-11 shrink-0 rounded-xl bg-[#d7c895] px-4 py-2 text-sm font-bold text-[#171a15] transition hover:bg-[#e3d5a7] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#f2efe4]"
+          >
+            Edytuj konfigurację
+          </button>
+        </div>
       </div>
 
       <div className="mt-6">
@@ -463,14 +480,19 @@ export default function AdminLaneConfigurationPage() {
   const [accessDenied, setAccessDenied] = useState(false);
   const [search, setSearch] = useState("");
   const [selectedResourceId, setSelectedResourceId] = useState<string | null>(null);
+  const [selectedFamilyId, setSelectedFamilyId] = useState<string | null>(null);
+  const [editorDirty, setEditorDirty] = useState(false);
+  const [successMessage, setSuccessMessage] = useState("");
   const requestRef = useRef(0);
   const detailsTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const editorTriggerRef = useRef<HTMLButtonElement | null>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
 
   const loadConfiguration = useCallback(async () => {
     const requestId = ++requestRef.current;
     setLoading(true);
     setErrorMessage("");
+    setSuccessMessage("");
     setAccessDenied(false);
 
     const { data: authData, error: authError } = await supabase.auth.getUser();
@@ -492,7 +514,7 @@ export default function AdminLaneConfigurationPage() {
     }
 
     const { data, error } = await supabase.rpc(
-      "admin_get_lane_booking_configuration_v1"
+      "admin_get_lane_booking_configuration_v2"
     );
     if (requestId !== requestRef.current) return;
 
@@ -526,7 +548,7 @@ export default function AdminLaneConfigurationPage() {
   }, [loadConfiguration]);
 
   const families = useMemo(
-    () => (snapshot ? buildLaneConfigurationHierarchy(snapshot.resources) : []),
+    () => (snapshot ? buildLaneConfigurationHierarchy(snapshot) : []),
     [snapshot]
   );
   const visibleFamilies = useMemo(
@@ -545,6 +567,9 @@ export default function AdminLaneConfigurationPage() {
         (resource) => resource.lane_id === selectedResource.parent_lane_id
       )?.name ?? null
     : null;
+  const selectedFamily =
+    snapshot?.families.find((family) => family.root_lane_id === selectedFamilyId) ??
+    null;
 
   const closeDetails = useCallback(() => {
     setSelectedResourceId(null);
@@ -594,17 +619,81 @@ export default function AdminLaneConfigurationPage() {
     setSelectedResourceId(resource.lane_id);
   }
 
+  function openEditor(
+    family: LaneConfigurationFamily,
+    trigger: HTMLButtonElement
+  ) {
+    editorTriggerRef.current = trigger;
+    setSelectedFamilyId(family.root_lane_id);
+    setEditorDirty(false);
+    setSuccessMessage("");
+  }
+
+  const closeEditor = useCallback(() => {
+    setSelectedFamilyId(null);
+    setEditorDirty(false);
+    window.setTimeout(() => editorTriggerRef.current?.focus(), 0);
+  }, []);
+
+  const writeFamilyConfiguration = useCallback(
+    async (
+      rootLaneId: string,
+      expectedVersion: number,
+      payload: LaneFamilyWriteResource[],
+      acknowledgeFutureObligations: boolean
+    ) => {
+      const { data, error } = await supabase.rpc(
+        "admin_set_lane_booking_family_configuration_v2",
+        {
+          p_root_lane_id: rootLaneId,
+          p_expected_version: expectedVersion,
+          p_resources: payload,
+          p_acknowledge_future_obligations: acknowledgeFutureObligations,
+        }
+      );
+      if (error) {
+        console.error("Admin lane configuration write failed:", error.code);
+        throw new Error("controlled_write_error");
+      }
+      return parseLaneConfigurationWriteResult(data);
+    },
+    []
+  );
+
+  const completeEditor = useCallback(
+    async (message: string) => {
+      setSelectedFamilyId(null);
+      setEditorDirty(false);
+      await loadConfiguration();
+      setSuccessMessage(message);
+      window.setTimeout(() => editorTriggerRef.current?.focus(), 0);
+    },
+    [loadConfiguration]
+  );
+
+  const refreshConfiguration = useCallback(async () => {
+    if (
+      editorDirty &&
+      !window.confirm("Masz niezapisane zmiany. Czy na pewno chcesz je odrzucić?")
+    ) {
+      return;
+    }
+    setSelectedFamilyId(null);
+    setEditorDirty(false);
+    await loadConfiguration();
+  }, [editorDirty, loadConfiguration]);
+
   return (
     <AdminShell
       eyebrow="Panel administracyjny"
       title="Konfiguracja osi"
-      description="Podgląd konfiguracji osi i stanowisk dostępnych w systemie rezerwacji."
-      badge={<StatusBadge tone="warning">Tylko odczyt</StatusBadge>}
+      description="Podgląd i kontrolowana edycja podstawowych ustawień osi i stanowisk."
+      badge={<StatusBadge tone="olive">Edycja kontrolowana</StatusBadge>}
       actions={
         <>
           <button
             type="button"
-            onClick={() => void loadConfiguration()}
+            onClick={() => void refreshConfiguration()}
             disabled={loading}
             className="min-h-11 rounded-xl border border-[#536143] bg-[#20271e] px-4 py-2 text-sm font-semibold text-[#d7c895] transition hover:border-[#78865f] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d7c895] disabled:cursor-not-allowed disabled:opacity-50"
           >
@@ -620,6 +709,11 @@ export default function AdminLaneConfigurationPage() {
       }
     >
       <div aria-busy={loading}>
+        {successMessage && (
+          <div role="status" className="mb-5 rounded-2xl border border-[#536143] bg-[#20271e] p-4 text-[#b9c9a5]">
+            {successMessage}
+          </div>
+        )}
         {accessDenied ? (
           <div role="alert" className="rounded-2xl border border-[#806a32] bg-[#2b2618] p-5 text-[#e1c477]">
             Brak dostępu. Ten moduł jest dostępny tylko dla administratora.
@@ -671,7 +765,7 @@ export default function AdminLaneConfigurationPage() {
                     Osie i stanowiska
                   </h2>
                   <p className="mt-1 text-sm text-[#a9ada4]">
-                    Dane diagnostyczne bez możliwości edycji.
+                    Status, czasy i cennik pozostają widoczne; podstawowe ustawienia edytujesz osobno dla każdej rodziny.
                   </p>
                 </div>
                 <p className="text-sm text-[#858c7f]">
@@ -694,6 +788,7 @@ export default function AdminLaneConfigurationPage() {
                       key={family.root.lane_id}
                       family={family}
                       onOpenDetails={openDetails}
+                      onEdit={openEditor}
                     />
                   ))}
                 </div>
@@ -709,6 +804,15 @@ export default function AdminLaneConfigurationPage() {
           parentName={selectedParentName}
           closeButtonRef={closeButtonRef}
           onClose={closeDetails}
+        />
+      )}
+      {selectedFamily && (
+        <LaneConfigurationEditor
+          family={selectedFamily}
+          onClose={closeEditor}
+          onDirtyChange={setEditorDirty}
+          onWrite={writeFamilyConfiguration}
+          onCompleted={completeEditor}
         />
       )}
     </AdminShell>
