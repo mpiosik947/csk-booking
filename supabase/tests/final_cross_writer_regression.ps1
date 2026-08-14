@@ -31,12 +31,14 @@ if (-not $workDirFull.StartsWith($tempRootFull, [StringComparison]::OrdinalIgnor
 }
 New-Item -ItemType Directory -Path $workDirFull | Out-Null
 
-$invariantPath = [System.IO.Path]::GetFullPath(
+$invariantSourcePath = [System.IO.Path]::GetFullPath(
   (Join-Path $PSScriptRoot 'final_cross_writer_invariants.sql')
 )
-if (-not (Test-Path -LiteralPath $invariantPath)) {
-  throw "Invariant suite is missing: $invariantPath"
+if (-not (Test-Path -LiteralPath $invariantSourcePath)) {
+  throw "Invariant suite is missing: $invariantSourcePath"
 }
+$invariantPath = Join-Path $workDirFull 'final-cross-writer-invariants.sql'
+[System.IO.File]::Copy($invariantSourcePath, $invariantPath, $true)
 
 $ids = @{
   Admin = '6b4e0000-0000-4000-8000-000000000001'
@@ -401,14 +403,107 @@ function Get-ConfigSql {
   param(
     [string]$LaneId, [bool]$Active = $true, [int]$MaxShooters = 5,
     [int]$MaxOnline = 5, [int]$Price = 100, [int[]]$Durations = @(60),
-    [bool]$Position = $false, [bool]$PositionsBookable = $true
+    [bool]$Position = $false, [bool]$PositionsBookable = $true,
+    [bool]$AcknowledgeFutureObligations = $false
   )
+  if ($Position) {
+    if ($MaxShooters -eq 5) { $MaxShooters = 2 }
+    if ($MaxOnline -eq 5) { $MaxOnline = 2 }
+  }
   $activeSql = $Active.ToString().ToLowerInvariant()
   $wholeSql = (-not $Position).ToString().ToLowerInvariant()
   $positionsSql = ((-not $Position) -and $PositionsBookable).ToString().ToLowerInvariant()
-  $durationsSql = 'array[' + (($Durations | ForEach-Object { [string]$_ }) -join ',') + ']::integer[]'
+  $deactivateFamilySql = ((-not $Active) -and (-not $Position)).ToString().ToLowerInvariant()
+  $acknowledgeSql = $AcknowledgeFutureObligations.ToString().ToLowerInvariant()
+  $durationsSql = 'pg_catalog.to_jsonb(array[' + (($Durations | ForEach-Object { [string]$_ }) -join ',') + ']::integer[])'
   $pricingSql = Get-PricingSql -MaxOnline $MaxOnline -Price $Price
-  return "public.admin_set_lane_booking_configuration('$LaneId',$activeSql,$wholeSql,$positionsSql,$MaxShooters,true,$MaxOnline,$durationsSql,$pricingSql)"
+  return @"
+(
+  with family as materialized (
+    select family_item.value
+    from pg_catalog.jsonb_array_elements(
+      public.admin_get_lane_booking_configuration_v2()->'families'
+    ) as family_item(value)
+    where exists (
+      select 1
+      from pg_catalog.jsonb_array_elements(family_item.value->'resources') as resource_item(value)
+      where resource_item.value->>'lane_id' = '$LaneId'
+    )
+  ), payload as (
+    select pg_catalog.jsonb_agg(
+      pg_catalog.jsonb_build_object(
+        'lane_id', resource_item.value->'lane_id',
+        'is_active', case
+          when $deactivateFamilySql then 'false'::jsonb
+          when resource_item.value->>'lane_id' = '$LaneId' then pg_catalog.to_jsonb($activeSql)
+          else resource_item.value->'is_active'
+        end,
+        'whole_lane_bookable', case
+          when resource_item.value->>'lane_id' = '$LaneId' then pg_catalog.to_jsonb($wholeSql)
+          else resource_item.value->'whole_lane_bookable'
+        end,
+        'positions_bookable', case
+          when $deactivateFamilySql then 'false'::jsonb
+          when resource_item.value->>'lane_id' = '$LaneId' then pg_catalog.to_jsonb($positionsSql)
+          else resource_item.value->'positions_bookable'
+        end,
+        'max_shooters', case
+          when resource_item.value->>'lane_id' = '$LaneId' then pg_catalog.to_jsonb($MaxShooters)
+          else resource_item.value->'max_shooters'
+        end,
+        'online_bookable', case
+          when $deactivateFamilySql then 'false'::jsonb
+          when resource_item.value->>'lane_id' = '$LaneId' then pg_catalog.to_jsonb($activeSql)
+          else resource_item.value->'online_bookable'
+        end,
+        'max_people_online', case
+          when resource_item.value->>'lane_id' = '$LaneId' then pg_catalog.to_jsonb($MaxOnline)
+          else resource_item.value->'max_people_online'
+        end,
+        'durations_minutes', case
+          when resource_item.value->>'lane_id' = '$LaneId' then $durationsSql
+          else coalesce((
+            select pg_catalog.jsonb_agg(
+              (duration_item.value->>'duration_minutes')::integer
+              order by (duration_item.value->>'duration_minutes')::integer
+            )
+            from pg_catalog.jsonb_array_elements(resource_item.value->'durations') as duration_item(value)
+            where (duration_item.value->>'is_active')::boolean
+          ), '[]'::jsonb)
+        end,
+        'pricing', case
+          when resource_item.value->>'lane_id' = '$LaneId' then $pricingSql
+          else coalesce((
+            select pg_catalog.jsonb_agg(
+              pg_catalog.jsonb_build_object(
+                'day_group', price_item.value->'day_group',
+                'min_shooters', price_item.value->'min_shooters',
+                'max_shooters', price_item.value->'max_shooters',
+                'label', price_item.value->'label',
+                'hourly_price', price_item.value->'hourly_price'
+              ) order by price_item.value->>'day_group',
+                         (price_item.value->>'min_shooters')::integer,
+                         (price_item.value->>'max_shooters')::integer,
+                         price_item.value->>'label'
+            )
+            from pg_catalog.jsonb_array_elements(resource_item.value->'pricing') as price_item(value)
+            where (price_item.value->>'is_active')::boolean
+          ), '[]'::jsonb)
+        end
+      ) order by (resource_item.value->>'lane_id')::uuid
+    ) as resources
+    from family
+    cross join lateral pg_catalog.jsonb_array_elements(family.value->'resources') as resource_item(value)
+  )
+  select public.admin_set_lane_booking_family_configuration_v2(
+    (family.value->>'root_lane_id')::uuid,
+    (family.value->>'configuration_version')::bigint,
+    payload.resources,
+    $acknowledgeSql
+  )
+  from family cross join payload
+)
+"@
 }
 
 $fingerprintSql = @"
@@ -426,7 +521,8 @@ where namespace_record.nspname = 'public'
     'admin_create_event_v2',
     'admin_update_event_v2',
     'admin_set_event_active_v2',
-    'admin_set_lane_booking_configuration',
+    'admin_get_lane_booking_configuration_v2',
+    'admin_set_lane_booking_family_configuration_v2',
     'get_public_booking_configuration_v1'
   )
 order by function_record.proname;
@@ -444,7 +540,8 @@ declare
     'public.admin_create_event_v2(text,text,date,time without time zone,time without time zone,text,numeric,integer,uuid[])',
     'public.admin_update_event_v2(uuid,text,text,date,time without time zone,time without time zone,text,numeric,integer,uuid[])',
     'public.admin_set_event_active_v2(uuid,boolean)',
-    'public.admin_set_lane_booking_configuration(uuid,boolean,boolean,boolean,integer,boolean,integer,integer[],jsonb)',
+    'public.admin_get_lane_booking_configuration_v2()',
+    'public.admin_set_lane_booking_family_configuration_v2(uuid,bigint,jsonb,boolean)',
     'public.get_public_booking_configuration_v1()'
   ];
   v_signature text;
@@ -454,6 +551,10 @@ begin
       raise exception 'Required production-schema function is missing: %', v_signature;
     end if;
   end loop;
+
+  if pg_catalog.to_regclass('public.lane_booking_family_configuration_versions') is null then
+    raise exception 'Required family configuration version table is missing.';
+  end if;
 
   if exists(select 1 from public.shooting_lanes)
      or exists(select 1 from public.reservations)
@@ -494,15 +595,15 @@ insert into public.shooting_lanes(
   parent_lane_id, whole_lane_bookable, positions_bookable
 ) values
   ('$($ids.RootA)','$marker ROOT A','[TEST]','$marker',100,true,5,60,9700,'PLN','lane',null,true,true),
-  ('$($ids.A1)','$marker A1','[TEST]','$marker',100,true,5,60,9701,'PLN','position','$($ids.RootA)',false,false),
-  ('$($ids.A2)','$marker A2','[TEST]','$marker',100,true,5,60,9702,'PLN','position','$($ids.RootA)',false,false),
+  ('$($ids.A1)','$marker A1','[TEST]','$marker',100,true,2,60,9701,'PLN','position','$($ids.RootA)',false,false),
+  ('$($ids.A2)','$marker A2','[TEST]','$marker',100,true,2,60,9702,'PLN','position','$($ids.RootA)',false,false),
   ('$($ids.RootB)','$marker ROOT B','[TEST]','$marker',100,true,5,60,9800,'PLN','lane',null,true,true),
-  ('$($ids.B1)','$marker B1','[TEST]','$marker',100,true,5,60,9801,'PLN','position','$($ids.RootB)',false,false),
-  ('$($ids.B2)','$marker B2','[TEST]','$marker',100,true,5,60,9802,'PLN','position','$($ids.RootB)',false,false),
+  ('$($ids.B1)','$marker B1','[TEST]','$marker',100,true,2,60,9801,'PLN','position','$($ids.RootB)',false,false),
+  ('$($ids.B2)','$marker B2','[TEST]','$marker',100,true,2,60,9802,'PLN','position','$($ids.RootB)',false,false),
   ('$($ids.Standalone)','$marker STANDALONE C','[TEST]','$marker',100,true,8,60,9900,'PLN','lane',null,true,false);
 
 insert into public.lane_booking_rules(lane_id, online_bookable, max_people_online)
-select lane.id, true, 5
+select lane.id, true, case when lane.resource_kind='position' then 2 else 5 end
 from public.shooting_lanes as lane
 where lane.name like '$marker%';
 
@@ -515,10 +616,18 @@ insert into public.lane_pricing_rules(
   lane_id, day_group, min_shooters, max_shooters, label,
   hourly_price, display_order, is_active
 )
-select lane.id, day_group.value, 1, 5, '$marker', 100, 10, true
+select lane.id, day_group.value, 1,
+       case when lane.resource_kind='position' then 2 else 5 end,
+       '$marker', 100, 10, true
 from public.shooting_lanes as lane
 cross join (values ('mon_thu'::text), ('fri_sun'::text)) as day_group(value)
 where lane.name like '$marker%';
+
+insert into public.lane_booking_family_configuration_versions(root_lane_id)
+values
+  ('$($ids.RootA)'),
+  ('$($ids.RootB)'),
+  ('$($ids.Standalone)');
 
 insert into public.events(
   id, title, description, event_date, start_time, end_time,
@@ -556,6 +665,7 @@ delete from public.events;
 delete from public.lane_pricing_rules;
 delete from public.lane_booking_durations;
 delete from public.lane_booking_rules;
+delete from public.lane_booking_family_configuration_versions;
 delete from public.shooting_lanes where parent_lane_id is not null;
 delete from public.shooting_lanes;
 delete from public.profiles;
@@ -676,12 +786,12 @@ try {
   Invoke-ConcurrentScenario -Order '17' -Name 'child config vs sibling reservation' `
     -UserA $ids.Admin -SqlA (Get-ConfigSql $ids.A1 -Position $true -Price 117) -ExpectedA @('updated') `
     -UserB $ids.User1 -SqlB (Get-ReservationSql $ids.A2 9017 17) -ExpectedB @('created') `
-    -Timing parallel -CheckSql "select 'check_passed='||(exists(select 1 from public.reservations where reservation_date=current_date+9017 and lane_id='$($ids.A2)'))::text;"
+    -Timing serialized -CheckSql "select 'check_passed='||(exists(select 1 from public.reservations where reservation_date=current_date+9017 and lane_id='$($ids.A2)'))::text;"
 
   Invoke-ConcurrentScenario -Order '18' -Name 'atomic config snapshot vs reservation' `
     -UserA $ids.Admin -SqlA (Get-ConfigSql $ids.Standalone -Price 170 -Durations @(120) -PositionsBookable $false -MaxShooters 8) -ExpectedA @('updated') `
     -UserB $ids.User1 -SqlB (Get-ReservationSql $ids.Standalone 9018 18 -Duration 120) -ExpectedB @('created') `
-    -Timing serialized -CheckSql "select 'check_passed='||(select duration_minutes=120 and price_per_hour_snapshot=170 and pricing_label_snapshot='$marker' and total_price=340 from public.reservations where reservation_date=current_date+9018 and lane_id='$($ids.Standalone)')::text;"
+    -Timing serialized -CheckSql "select 'check_passed='||(select duration_minutes=120 and pricing_label_snapshot='$marker' and ((pricing_day_group_snapshot='mon_thu' and price_per_hour_snapshot=170 and total_price=340) or (pricing_day_group_snapshot='fri_sun' and price_per_hour_snapshot=190 and total_price=380)) from public.reservations where reservation_date=current_date+9018 and lane_id='$($ids.Standalone)')::text;"
 
   # 19-22: config with block/event on the same family and sibling resources.
   Invoke-ConcurrentScenario -Order '19' -Name 'parent config vs child lane block' `
@@ -689,20 +799,30 @@ try {
     -UserB $ids.Admin -SqlB (Get-BlockSql 'S19' 9019 $ids.A1) -ExpectedB @('created') `
     -Timing serialized -CheckSql "select 'check_passed='||(exists(select 1 from public.lane_blocks where reason='$marker[S19]'))::text;"
 
+  Invoke-ConcurrentScenario -Order '19.2' -Name 'child lane block first vs parent config' `
+    -UserA $ids.Admin -SqlA (Get-BlockSql 'S19-REVERSE' 9119 $ids.A1) -ExpectedA @('created') `
+    -UserB $ids.Admin -SqlB (Get-ConfigSql $ids.RootA -Price 219) -ExpectedB @('updated') `
+    -Timing serialized -CheckSql "select 'check_passed='||(exists(select 1 from public.lane_blocks where reason='$marker[S19-REVERSE]'))::text;"
+
   Invoke-ConcurrentScenario -Order '20' -Name 'parent config vs child event' `
     -UserA $ids.Admin -SqlA (Get-ConfigSql $ids.RootA -Price 120) -ExpectedA @('updated') `
     -UserB $ids.Admin -SqlB (Get-EventSql 'S20' 9020 @($ids.A1)) -ExpectedB @('created') `
     -Timing serialized -CheckSql "select 'check_passed='||(exists(select 1 from public.events where title='$marker[S20]'))::text;"
 
+  Invoke-ConcurrentScenario -Order '20.2' -Name 'child event first vs parent config' `
+    -UserA $ids.Admin -SqlA (Get-EventSql 'S20-REVERSE' 9120 @($ids.A1)) -ExpectedA @('created') `
+    -UserB $ids.Admin -SqlB (Get-ConfigSql $ids.RootA -Price 220) -ExpectedB @('updated') `
+    -Timing serialized -CheckSql "select 'check_passed='||(exists(select 1 from public.events where title='$marker[S20-REVERSE]'))::text;"
+
   Invoke-ConcurrentScenario -Order '21' -Name 'child config vs sibling lane block' `
     -UserA $ids.Admin -SqlA (Get-ConfigSql $ids.A1 -Position $true -Price 121) -ExpectedA @('updated') `
     -UserB $ids.Admin -SqlB (Get-BlockSql 'S21' 9021 $ids.A2) -ExpectedB @('created') `
-    -Timing parallel -CheckSql "select 'check_passed='||(exists(select 1 from public.lane_blocks where reason='$marker[S21]'))::text;"
+    -Timing serialized -CheckSql "select 'check_passed='||(exists(select 1 from public.lane_blocks where reason='$marker[S21]'))::text;"
 
   Invoke-ConcurrentScenario -Order '22' -Name 'child config vs sibling event' `
     -UserA $ids.Admin -SqlA (Get-ConfigSql $ids.A1 -Position $true -Price 122) -ExpectedA @('updated') `
     -UserB $ids.Admin -SqlB (Get-EventSql 'S22' 9022 @($ids.A2)) -ExpectedB @('created') `
-    -Timing parallel -CheckSql "select 'check_passed='||(exists(select 1 from public.events where title='$marker[S22]'))::text;"
+    -Timing serialized -CheckSql "select 'check_passed='||(exists(select 1 from public.events where title='$marker[S22]'))::text;"
 
   # 23-26: globally ordered multi-root locks and unrelated-root independence.
   Invoke-ConcurrentScenario -Order '23' -Name 'multi-root event permutations' `
@@ -739,6 +859,11 @@ try {
     -UserB $ids.Admin -SqlB (Get-BlockSql 'S26B' 9028 $ids.B1) -ExpectedB @('created') `
     -Timing parallel -CheckSql "select 'check_passed='||(exists(select 1 from public.lane_blocks where reason='$marker[S26B]'))::text;"
 
+  Invoke-ConcurrentScenario -Order '26.4' -Name 'config writes on different roots' `
+    -UserA $ids.Admin -SqlA (Get-ConfigSql $ids.RootA -Price 129) -ExpectedA @('updated') `
+    -UserB $ids.Admin -SqlB (Get-ConfigSql $ids.RootB -Price 229) -ExpectedB @('updated') `
+    -Timing parallel -CheckSql "select 'check_passed='||((select bool_and(hourly_price in (129,149)) from public.lane_pricing_rules where lane_id='$($ids.RootA)' and is_active) and (select bool_and(hourly_price in (229,249)) from public.lane_pricing_rules where lane_id='$($ids.RootB)' and is_active))::text;"
+
   # 27-33: same-resource contention and deterministic idempotency/final state.
   Invoke-ConcurrentScenario -Order '27' -Name 'two reservations same child' `
     -UserA $ids.User1 -SqlA (Get-ReservationSql $ids.B2 9029 27) -ExpectedA @('created') `
@@ -763,10 +888,12 @@ try {
     -UserB $ids.Admin -SqlB $activateEvent -ExpectedB @('no_change') `
     -Timing serialized -CheckSql "select 'check_passed='||(select is_active from public.events where id='$($ids.EventActivate)')::text;"
 
-  Invoke-ConcurrentScenario -Order '31' -Name 'two config writers same resource' `
+  $versionBefore31 = [long](Invoke-Check -Name 'scenario-31-version-before' -Sql "select configuration_version from public.lane_booking_family_configuration_versions where root_lane_id='$($ids.RootB)';")
+  $auditBefore31 = [long](Invoke-Check -Name 'scenario-31-audit-before' -Sql "select count(*) from public.audit_logs where action='lane_booking_family_configuration_updated' and target_id='$($ids.RootB)'::uuid;")
+  Invoke-ConcurrentScenario -Order '31' -Name 'two config writers same expected version' `
     -UserA $ids.Admin -SqlA (Get-ConfigSql $ids.RootB -Price 231) -ExpectedA @('updated') `
-    -UserB $ids.Admin -SqlB (Get-ConfigSql $ids.RootB -Price 232) -ExpectedB @('updated') `
-    -Timing serialized -CheckSql "select 'check_passed='||(select bool_and(hourly_price in (232,252)) from public.lane_pricing_rules where lane_id='$($ids.RootB)' and is_active)::text;"
+    -UserB $ids.Admin -SqlB (Get-ConfigSql $ids.RootB -Price 232) -ExpectedB @('stale_configuration') `
+    -Timing serialized -CheckSql "select 'check_passed='||((select bool_and(hourly_price in (231,251)) from public.lane_pricing_rules where lane_id='$($ids.RootB)' and is_active) and (select configuration_version=$($versionBefore31 + 1) from public.lane_booking_family_configuration_versions where root_lane_id='$($ids.RootB)') and (select count(*)=$($auditBefore31 + 1) from public.audit_logs where action='lane_booking_family_configuration_updated' and target_id='$($ids.RootB)'::uuid))::text;"
 
   $sameEventUpdateA = "public.admin_update_event_v2('$($ids.EventSame)','$marker EVENT SAME A','$marker',current_date+9332,time '11:00',time '12:00','$marker A',11,11,array['$($ids.A1)']::uuid[])"
   $sameEventUpdateB = "public.admin_update_event_v2('$($ids.EventSame)','$marker EVENT SAME B','$marker',current_date+9332,time '12:00',time '13:00','$marker B',12,12,array['$($ids.A1)']::uuid[])"
@@ -837,7 +964,7 @@ try {
 
   $null = Invoke-Check -Name 'prepare-config-deactivate' -Sql "update public.shooting_lanes set is_active=true where id in ('$($ids.RootA)'::uuid,'$($ids.A1)'::uuid,'$($ids.B1)'::uuid); select 'prepared=true';"
   Invoke-ConcurrentScenario -Order '43' -Name 'config deactivation vs reservation' `
-    -UserA $ids.Admin -SqlA (Get-ConfigSql $ids.RootA -Active $false -Price 143) -ExpectedA @('updated') `
+    -UserA $ids.Admin -SqlA (Get-ConfigSql $ids.RootA -Active $false -Price 143 -AcknowledgeFutureObligations $true) -ExpectedA @('updated') `
     -UserB $ids.User1 -SqlB (Get-ReservationSql $ids.A1 9043 43) -ExpectedB @('lane_inactive') `
     -Timing serialized -CheckSql "select 'check_passed='||((select not is_active from public.shooting_lanes where id='$($ids.RootA)') and not exists(select 1 from public.reservations where reservation_date=current_date+9043))::text;"
 
@@ -855,7 +982,7 @@ try {
     -CheckSql "select 'check_passed='||(not exists(select 1 from public.reservations where reservation_date=current_date+9046))::text;"
 
   # Restore active test resources before randomized mixed-writer stress.
-  $null = Invoke-Check -Name 'prepare-stress' -Sql "update public.shooting_lanes set is_active=true where name like '$marker%'; select 'prepared=true';"
+  $null = Invoke-Check -Name 'prepare-stress' -Sql "update public.shooting_lanes set is_active=true where name like '$marker%'; update public.shooting_lanes set whole_lane_bookable=true,positions_bookable=true where id in ('$($ids.RootA)'::uuid,'$($ids.RootB)'::uuid); update public.lane_booking_rules set online_bookable=true where lane_id in (select id from public.shooting_lanes where name like '$marker%'); select 'prepared=true';"
 
   for ($iteration = 1; $iteration -le $StressIterations; $iteration++) {
     $dateOffset = 9600 + $iteration
@@ -880,7 +1007,7 @@ try {
         Invoke-ConcurrentScenario -Order $stressOrder -Name 'stress sibling config and event' `
           -UserA $ids.Admin -SqlA (Get-ConfigSql $ids.A1 -Position $true -Price (200 + $iteration)) -ExpectedA @('updated') `
           -UserB $ids.Admin -SqlB (Get-EventSql "STRESS-$iteration" $dateOffset @($ids.A2)) -ExpectedB @('created') `
-          -Timing parallel -CheckSql "select 'check_passed='||(exists(select 1 from public.events where title='$marker[STRESS-$iteration]'))::text;" `
+          -Timing serialized -CheckSql "select 'check_passed='||(exists(select 1 from public.events where title='$marker[STRESS-$iteration]'))::text;" `
           -HoldMilliseconds 250 -StartDelayMilliseconds 45 -Stress
       }
       default {
@@ -913,7 +1040,7 @@ $fingerprintsUnchanged = $fingerprintsBefore -eq $fingerprintsAfter
 
 $deterministic | Format-Table test_order,scenario,passed,session_a_code,session_b_code,session_b_wait_seconds,timing,invariant_violations -AutoSize
 Write-Output "deterministic_executions=$($deterministic.Count)"
-Write-Output 'deterministic_requirements=46'
+Write-Output 'deterministic_requirements=52'
 Write-Output "stress_iterations=$($stress.Count)"
 Write-Output "stress_passed=$(@($stress | Where-Object passed).Count)"
 Write-Output "deadlock_40P01=$($script:SqlStates['40P01'])"
@@ -929,7 +1056,7 @@ if ($workDirFull.StartsWith($tempRootFull, [StringComparison]::OrdinalIgnoreCase
 }
 Write-Output "temporary_logs_removed=$((-not (Test-Path $workDirFull)).ToString().ToLowerInvariant())"
 
-if ($deterministic.Count -ne 49 `
+if ($deterministic.Count -ne 52 `
     -or $stress.Count -ne $StressIterations `
     -or $failed.Count -gt 0 `
     -or $script:SqlStates['40P01'] -ne 0 `
