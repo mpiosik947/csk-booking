@@ -120,6 +120,25 @@ export type LanePositionReadiness = {
   missing: string[];
 };
 
+export type LaneFamilyPositionSummary = {
+  positions: number;
+  ready: number;
+  active: number;
+  online: number;
+};
+
+export type LanePositionBulkActivationItem = {
+  lane_id: string;
+  name: string;
+  reasons: string[];
+};
+
+export type LanePositionBulkActivationPlan = {
+  eligiblePositions: LanePositionBulkActivationItem[];
+  positionsToActivate: LanePositionBulkActivationItem[];
+  skippedPositions: LanePositionBulkActivationItem[];
+};
+
 export const LANE_CONFIGURATION_WRITE_CODES = [
   "updated",
   "no_change",
@@ -850,6 +869,84 @@ export function getLanePositionReadiness(
   }
 
   return { ready: missing.size === 0, missing: [...missing] };
+}
+
+export function getLaneFamilyPositionSummary(
+  family: LaneConfigurationFamily,
+  state: LaneFamilyEditState
+): LaneFamilyPositionSummary {
+  const edits = new Map(
+    state.resources.map((resource) => [resource.lane_id, resource])
+  );
+  return {
+    positions: family.children.length,
+    ready: family.children.filter(
+      (child) => getLanePositionReadiness(family, state, child.lane_id).ready
+    ).length,
+    active: family.children.filter((child) => edits.get(child.lane_id)?.is_active)
+      .length,
+    online: family.children.filter(
+      (child) => edits.get(child.lane_id)?.online_bookable
+    ).length,
+  };
+}
+
+export function getLanePositionBulkActivationPlan(
+  family: LaneConfigurationFamily,
+  state: LaneFamilyEditState
+): LanePositionBulkActivationPlan {
+  const edits = new Map(
+    state.resources.map((resource) => [resource.lane_id, resource])
+  );
+  const eligiblePositions: LanePositionBulkActivationItem[] = [];
+  const positionsToActivate: LanePositionBulkActivationItem[] = [];
+  const skippedPositions: LanePositionBulkActivationItem[] = [];
+
+  for (const child of family.children) {
+    const readiness = getLanePositionReadiness(family, state, child.lane_id);
+    const reasons = [...readiness.missing];
+    if (!family.root.is_active) {
+      reasons.push("Oś główna jest nieaktywna.");
+    }
+    const item = { lane_id: child.lane_id, name: child.name, reasons };
+    if (!readiness.ready || !family.root.is_active) {
+      skippedPositions.push(item);
+      continue;
+    }
+
+    eligiblePositions.push(item);
+    const edit = edits.get(child.lane_id);
+    if (!edit?.is_active || !edit.online_bookable) {
+      positionsToActivate.push(item);
+    }
+  }
+
+  return { eligiblePositions, positionsToActivate, skippedPositions };
+}
+
+export function prepareLanePositionBulkActivation(
+  family: LaneConfigurationFamily,
+  state: LaneFamilyEditState
+): { state: LaneFamilyEditState; plan: LanePositionBulkActivationPlan } {
+  const plan = getLanePositionBulkActivationPlan(family, state);
+  if (plan.eligiblePositions.length === 0) {
+    return { state, plan };
+  }
+  const eligibleIds = new Set(
+    plan.eligiblePositions.map((position) => position.lane_id)
+  );
+  return {
+    plan,
+    state: {
+      ...state,
+      root_positions_bookable: true,
+      resources: state.resources.map((resource) =>
+        eligibleIds.has(resource.lane_id)
+          ? { ...resource, is_active: true, online_bookable: true }
+          : resource
+      ),
+    },
+  };
 }
 
 export function laneFamilyHasUsableOnlinePosition(

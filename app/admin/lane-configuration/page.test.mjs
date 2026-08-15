@@ -268,6 +268,40 @@ test("families with positions use root and positions tabs while standalone lanes
   assert.match(editor, /activeTab === "root" \|\| family\.children\.length === 0/);
 });
 
+test("positions tab shows a distinct parent summary and local bulk activation confirmation", async () => {
+  const [, editor, , , helper] = await sources();
+  const bulkHandler = editor.slice(
+    editor.indexOf("function applyBulkPositionActivation"),
+    editor.indexOf("async function submit")
+  );
+
+  assert.match(editor, /function ParentPositionsSummary/);
+  assert.match(editor, /Status osi/);
+  assert.match(editor, /Rezerwacja całej osi/);
+  assert.match(editor, /Rezerwacja stanowisk/);
+  assert.match(editor, /Liczba stanowisk/);
+  assert.match(editor, /Gotowe do uruchomienia/);
+  assert.match(editor, /Aktywne stanowiska/);
+  assert.match(editor, /Stanowiska online/);
+  assert.match(
+    editor,
+    /Status osi i dostępność rezerwacji stanowisk są niezależnymi stanami\./
+  );
+  assert.match(editor, /Uruchom wszystkie gotowe stanowiska/);
+  assert.match(editor, /Przygotuj uruchomienie/);
+  assert.match(editor, /Potwierdź lokalne przygotowanie/);
+  assert.match(editor, /„Rezerwacja stanowisk” zostanie włączona\./);
+  assert.match(editor, /„Rezerwacja całej osi” pozostanie bez zmian/);
+  assert.match(editor, /Pominięte stanowiska/);
+  assert.match(bulkHandler, /prepareLanePositionBulkActivation/);
+  assert.match(bulkHandler, /setState\(result\.state\)/);
+  assert.doesNotMatch(bulkHandler, /onWrite|admin_set_lane_booking_family_configuration_v2/);
+  assert.match(helper, /getLaneFamilyPositionSummary/);
+  assert.match(helper, /getLanePositionBulkActivationPlan/);
+  assert.match(helper, /root_positions_bookable: true/);
+  assert.match(helper, /is_active: true, online_bookable: true/);
+});
+
 test("positions are configured one at a time and returning to the list preserves family edit state", async () => {
   const [, editor] = await sources();
 

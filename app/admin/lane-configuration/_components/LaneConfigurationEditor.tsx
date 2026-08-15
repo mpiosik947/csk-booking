@@ -11,16 +11,20 @@ import {
   buildLaneFamilyWritePayload,
   copyLanePositionEditSettings,
   createLaneFamilyEditState,
+  getLaneFamilyPositionSummary,
   getLanePositionReadiness,
+  getLanePositionBulkActivationPlan,
   getLaneFamilyChanges,
   isLaneFamilyDirty,
   laneFamilyHasUsableOnlinePosition,
+  prepareLanePositionBulkActivation,
   validateLaneFamilyEditState,
   type LaneConfigurationFamily,
   type LaneConfigurationResource,
   type LaneConfigurationWriteResult,
   type LaneFamilyEditState,
   type LaneFamilyPricingEdit,
+  type LanePositionBulkActivationPlan,
   type LaneFamilyWriteResource,
 } from "../../../../lib/admin/lane-configuration";
 
@@ -849,6 +853,204 @@ function PositionList({
   );
 }
 
+function ParentPositionsSummary({
+  family,
+  state,
+}: {
+  family: LaneConfigurationFamily;
+  state: LaneFamilyEditState;
+}) {
+  const summary = getLaneFamilyPositionSummary(family, state);
+  const items = [
+    ["Status osi", family.root.is_active ? "Aktywna" : "Nieaktywna"],
+    [
+      "Rezerwacja całej osi",
+      state.root_whole_lane_bookable ? "Włączona" : "Wyłączona",
+    ],
+    [
+      "Rezerwacja stanowisk",
+      state.root_positions_bookable ? "Włączona" : "Wyłączona",
+    ],
+    ["Liczba stanowisk", String(summary.positions)],
+    ["Gotowe do uruchomienia", String(summary.ready)],
+    ["Aktywne stanowiska", String(summary.active)],
+    ["Stanowiska online", String(summary.online)],
+  ] as const;
+
+  return (
+    <section
+      aria-labelledby="parent-positions-summary-heading"
+      className="rounded-2xl border border-[#3d4638] bg-[#101310] p-4 sm:p-5"
+    >
+      <div>
+        <p className="text-xs font-bold uppercase tracking-[0.16em] text-[#d7c895]">
+          Stan rodziny
+        </p>
+        <h3
+          id="parent-positions-summary-heading"
+          className="mt-1 break-words font-bold text-[#f2efe4]"
+        >
+          {family.root.name}
+        </h3>
+        <p className="mt-2 text-xs leading-5 text-[#a9ada4]">
+          Status osi i dostępność rezerwacji stanowisk są niezależnymi stanami.
+        </p>
+      </div>
+      <dl className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        {items.map(([label, value]) => (
+          <div
+            key={label}
+            className="min-w-0 rounded-xl border border-[#30372c] bg-[#171b17] p-3"
+          >
+            <dt className="text-xs leading-5 text-[#92988c]">{label}</dt>
+            <dd className="mt-1 break-words text-sm font-bold text-[#f2efe4]">
+              {value}
+            </dd>
+          </div>
+        ))}
+      </dl>
+    </section>
+  );
+}
+
+function BulkPositionActivation({
+  plan,
+  wholeLaneBookable,
+  positionsBookable,
+  confirmationOpen,
+  result,
+  disabled,
+  onPrepare,
+  onCancel,
+  onConfirm,
+}: {
+  plan: LanePositionBulkActivationPlan;
+  wholeLaneBookable: boolean;
+  positionsBookable: boolean;
+  confirmationOpen: boolean;
+  result: LanePositionBulkActivationPlan | null;
+  disabled: boolean;
+  onPrepare: () => void;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  const hasLocalChange =
+    plan.positionsToActivate.length > 0 || !positionsBookable;
+
+  return (
+    <section
+      aria-labelledby="bulk-position-activation-heading"
+      className="rounded-2xl border border-[#665d45] bg-[#191e19] p-4 sm:p-5"
+    >
+      <h3
+        id="bulk-position-activation-heading"
+        className="font-bold text-[#f2efe4]"
+      >
+        Uruchom wszystkie gotowe stanowiska
+      </h3>
+      <p className="mt-2 text-sm leading-6 text-[#a9ada4]">
+        Przygotowanie zmienia wyłącznie lokalny formularz. Zapis nastąpi dopiero
+        po osobnym podsumowaniu i potwierdzeniu całej rodziny.
+      </p>
+
+      {!confirmationOpen && (
+        <button
+          type="button"
+          disabled={
+            disabled ||
+            plan.eligiblePositions.length === 0 ||
+            !hasLocalChange
+          }
+          onClick={onPrepare}
+          className="mt-4 min-h-11 w-full rounded-xl border border-[#806a32] px-4 font-semibold text-[#e1c477] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#e1c477] disabled:cursor-not-allowed disabled:opacity-40 sm:w-auto"
+        >
+          Przygotuj uruchomienie
+        </button>
+      )}
+
+      {confirmationOpen && (
+        <div
+          role="alertdialog"
+          aria-labelledby="bulk-position-confirmation-heading"
+          className="mt-4 rounded-xl border border-[#806a32] bg-[#2b2618] p-4"
+        >
+          <h4
+            id="bulk-position-confirmation-heading"
+            className="font-bold text-[#f2efe4]"
+          >
+            Potwierdź lokalne przygotowanie
+          </h4>
+          <p className="mt-2 text-sm text-[#e1c477]">
+            Aktywowane i włączone online: {plan.positionsToActivate.length}.
+          </p>
+          {plan.positionsToActivate.length > 0 && (
+            <ul className="mt-3 list-disc space-y-1 pl-5 text-sm text-[#f2efe4]">
+              {plan.positionsToActivate.map((position) => (
+                <li key={position.lane_id}>{position.name}</li>
+              ))}
+            </ul>
+          )}
+          <div className="mt-4 space-y-1 text-sm leading-6 text-[#c7cbbf]">
+            <p>„Rezerwacja stanowisk” zostanie włączona.</p>
+            <p>
+              „Rezerwacja całej osi” pozostanie bez zmian: {wholeLaneBookable ? "włączona" : "wyłączona"}.
+            </p>
+          </div>
+          {plan.skippedPositions.length > 0 && (
+            <div className="mt-4 rounded-lg border border-[#665d45] p-3">
+              <p className="text-sm font-semibold text-[#e1c477]">
+                Pominięte stanowiska
+              </p>
+              <ul className="mt-2 space-y-2 text-xs leading-5 text-[#c7cbbf]">
+                {plan.skippedPositions.map((position) => (
+                  <li key={position.lane_id}>
+                    <strong>{position.name}:</strong> {position.reasons.join(" ")}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+          <div className="mt-5 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+            <button
+              type="button"
+              disabled={disabled}
+              onClick={onCancel}
+              className="min-h-11 rounded-xl border border-[#665d45] px-4 font-semibold text-[#c7cbbf] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d7c895] disabled:opacity-50"
+            >
+              Anuluj
+            </button>
+            <button
+              type="button"
+              disabled={disabled}
+              onClick={onConfirm}
+              className="min-h-11 rounded-xl bg-[#d7c895] px-4 font-bold text-[#171a15] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#f2efe4] disabled:opacity-50"
+            >
+              Uruchom wszystkie gotowe stanowiska
+            </button>
+          </div>
+        </div>
+      )}
+
+      {result && !confirmationOpen && (
+        <div role="status" className="mt-4 rounded-xl border border-[#536143] bg-[#202720] p-4 text-sm text-[#b7d2ad]">
+          <p className="font-bold">
+            Lokalnie przygotowano {result.positionsToActivate.length} stanowisk.
+          </p>
+          {result.skippedPositions.length > 0 && (
+            <ul className="mt-2 space-y-2 text-xs leading-5 text-[#c7cbbf]">
+              {result.skippedPositions.map((position) => (
+                <li key={position.lane_id}>
+                  Pominięto <strong>{position.name}</strong>: {position.reasons.join(" ")}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+    </section>
+  );
+}
+
 function CopySettingsPanel({
   source,
   targets,
@@ -1003,6 +1205,9 @@ export default function LaneConfigurationEditor({
   );
   const [copyPanelOpen, setCopyPanelOpen] = useState(false);
   const [copyTargetIds, setCopyTargetIds] = useState<string[]>([]);
+  const [bulkConfirmationOpen, setBulkConfirmationOpen] = useState(false);
+  const [bulkResult, setBulkResult] =
+    useState<LanePositionBulkActivationPlan | null>(null);
   const [step, setStep] = useState<EditorStep>("edit");
   const [pendingWrite, setPendingWrite] = useState<PendingWrite | null>(null);
   const [confirmationResult, setConfirmationResult] =
@@ -1029,6 +1234,10 @@ export default function LaneConfigurationEditor({
   const hasUsableOnlinePosition = laneFamilyHasUsableOnlinePosition(
     family,
     state
+  );
+  const bulkActivationPlan = useMemo(
+    () => getLanePositionBulkActivationPlan(family, state),
+    [family, state]
   );
   const copyTargets = selectedPosition
     ? family.children.filter(
@@ -1114,12 +1323,23 @@ export default function LaneConfigurationEditor({
     setSelectedPositionId(laneId);
     setCopyPanelOpen(false);
     setCopyTargetIds([]);
+    setBulkConfirmationOpen(false);
   }
 
   function returnToPositions() {
     setSelectedPositionId(null);
     setCopyPanelOpen(false);
     setCopyTargetIds([]);
+  }
+
+  function applyBulkPositionActivation() {
+    const result = prepareLanePositionBulkActivation(family, state);
+    setState(result.state);
+    setBulkResult(result.plan);
+    setBulkConfirmationOpen(false);
+    setMessage(
+      "Stanowiska przygotowano lokalnie. Sprawdź podsumowanie i zapisz całą rodzinę, aby zatwierdzić zmiany."
+    );
   }
 
   function openCopyPanel() {
@@ -1360,6 +1580,21 @@ export default function LaneConfigurationEditor({
               </div>
             ) : (
               <div role="tabpanel" aria-label="Stanowiska" className="space-y-5">
+                <ParentPositionsSummary family={family} state={state} />
+                <BulkPositionActivation
+                  plan={bulkActivationPlan}
+                  wholeLaneBookable={state.root_whole_lane_bookable}
+                  positionsBookable={state.root_positions_bookable}
+                  confirmationOpen={bulkConfirmationOpen}
+                  result={bulkResult}
+                  disabled={locked}
+                  onPrepare={() => {
+                    setBulkResult(null);
+                    setBulkConfirmationOpen(true);
+                  }}
+                  onCancel={() => setBulkConfirmationOpen(false)}
+                  onConfirm={applyBulkPositionActivation}
+                />
                 {selectedPosition ? (
                   <>
                     <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
