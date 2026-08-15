@@ -9,6 +9,7 @@ import {
 } from "react";
 import {
   buildLaneFamilyWritePayload,
+  copyLanePositionEditSettings,
   createLaneFamilyEditState,
   getLaneFamilyChanges,
   isLaneFamilyDirty,
@@ -22,6 +23,7 @@ import {
 } from "../../../../lib/admin/lane-configuration";
 
 type EditorStep = "edit" | "review" | "confirmation" | "stale";
+type EditorTab = "root" | "positions";
 
 type PendingWrite = {
   expectedVersion: number;
@@ -230,12 +232,12 @@ function DurationEditor({
   }
 
   return (
-    <section aria-labelledby={`durations-${resource.lane_id}`} className="rounded-xl border border-[#30372c] bg-[#161a16] p-4">
+    <section aria-labelledby={`durations-${resource.lane_id}`} className="rounded-2xl border border-[#30372c] bg-[#191e19] p-4 sm:p-5">
       <h5 id={`durations-${resource.lane_id}`} className="font-semibold text-[#f2efe4]">
-        Dostępne czasy rezerwacji
+        Czasy rezerwacji
       </h5>
       <p className="mt-1 text-xs leading-5 text-[#92988c]">
-        Czas musi być podzielny przez krok {resource.booking_step_minutes} min. Maksymalnie 1440 min.
+        Krok rezerwacji: {resource.booking_step_minutes} min.
       </p>
       <div className="mt-3 flex flex-wrap gap-2">
         {edit.durations_minutes.length === 0 && (
@@ -340,7 +342,12 @@ function PricingEditor({
       day_group: dayGroup,
       min_shooters: String(nextMin),
       max_shooters: String(nextMin),
-      label: "",
+      label:
+        nextMin === 1
+          ? "1 osoba"
+          : nextMin >= 2 && nextMin <= 4
+            ? `${nextMin} osoby`
+            : `${nextMin} osób`,
       hourly_price: "",
     };
     onChange(
@@ -351,83 +358,247 @@ function PricingEditor({
     );
   }
 
+  function removeRule(editKey: string) {
+    onChange(
+      updateResourceEdit(state, resource.lane_id, (current) => ({
+        ...current,
+        pricing: current.pricing.filter(
+          (candidate) => candidate.edit_key !== editKey
+        ),
+      }))
+    );
+  }
+
+  const sortedRules = [...edit.pricing].sort(
+    (first, second) =>
+      (Number(first.min_shooters) || Number.MAX_SAFE_INTEGER) -
+        (Number(second.min_shooters) || Number.MAX_SAFE_INTEGER) ||
+      (Number(first.max_shooters) || Number.MAX_SAFE_INTEGER) -
+        (Number(second.max_shooters) || Number.MAX_SAFE_INTEGER) ||
+      first.day_group.localeCompare(second.day_group) ||
+      first.edit_key.localeCompare(second.edit_key)
+  );
+  const monThuRules = sortedRules.filter((rule) => rule.day_group === "mon_thu");
+  const friSunRules = sortedRules.filter((rule) => rule.day_group === "fri_sun");
+  const pricingRows = Array.from(
+    { length: Math.max(monThuRules.length, friSunRules.length) },
+    (_, index) => ({
+      monThu: monThuRules[index],
+      friSun: friSunRules[index],
+    })
+  );
+
+  function rangeLabel(rule: LaneFamilyPricingEdit) {
+    if (rule.min_shooters === rule.max_shooters) {
+      const peopleCount = Number(rule.min_shooters);
+      if (peopleCount === 1) return "1 osoba";
+      if (peopleCount >= 2 && peopleCount <= 4) return `${rule.min_shooters} osoby`;
+      return `${rule.min_shooters} osób`;
+    }
+    return `${rule.min_shooters}–${rule.max_shooters} osób`;
+  }
+
+  function renderRuleCell(
+    rule: LaneFamilyPricingEdit | undefined,
+    dayGroup: LaneFamilyPricingEdit["day_group"]
+  ) {
+    const groupLabel = dayGroup === "mon_thu" ? "Pon–Czw" : "Pt–Nd";
+    if (!rule) {
+      return (
+        <div className="rounded-xl border border-dashed border-[#3d4638] p-3 text-sm text-[#858c7f]">
+          Brak progu {groupLabel}
+        </div>
+      );
+    }
+    const idBase = `${resource.lane_id}-${dayGroup}-${rule.edit_key.replace(
+      /[^a-zA-Z0-9_-]/g,
+      "-"
+    )}`;
+    return (
+      <div className="min-w-0 rounded-xl border border-[#30372c] bg-[#101310] p-3">
+        <label
+          htmlFor={`${idBase}-price`}
+          className="block min-w-0 text-sm font-semibold text-[#c7cbbf]"
+        >
+          <span className="md:sr-only">Cena {groupLabel}</span>
+          <span className="flex min-h-11 items-center rounded-xl border border-[#3d4638] bg-[#161a16] px-3 focus-within:ring-2 focus-within:ring-[#d7c895]/25">
+            <input
+              id={`${idBase}-price`}
+              type="text"
+              inputMode="decimal"
+              value={rule.hourly_price}
+              disabled={disabled}
+              onChange={(event) =>
+                updateRule(rule.edit_key, "hourly_price", event.target.value)
+              }
+              className="min-w-0 flex-1 bg-transparent text-right text-[#f2efe4] outline-none disabled:opacity-50"
+            />
+            <span className="ml-2 shrink-0 text-xs text-[#92988c]">
+              {resource.currency_code}/h
+            </span>
+          </span>
+        </label>
+        <p className="mt-2 truncate text-xs text-[#a9ada4]" title={rule.label}>
+          {rule.label}
+        </p>
+        <details className="mt-2 rounded-lg border border-[#30372c] bg-[#161a16] px-3">
+          <summary className="flex min-h-11 cursor-pointer items-center text-xs font-semibold text-[#d7c895] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d7c895]">
+            Edytuj zakres i opis
+          </summary>
+          <div className="space-y-3 pb-3">
+            <div className="grid gap-3 sm:grid-cols-2">
+              <label
+                htmlFor={`${idBase}-min`}
+                className="text-xs text-[#c7cbbf]"
+              >
+                Liczba osób — od
+                <input
+                  id={`${idBase}-min`}
+                  type="number"
+                  inputMode="numeric"
+                  min="1"
+                  value={rule.min_shooters}
+                  disabled={disabled}
+                  onChange={(event) =>
+                    updateRule(rule.edit_key, "min_shooters", event.target.value)
+                  }
+                  className="mt-1 min-h-11 w-full rounded-xl border border-[#3d4638] bg-[#101310] px-3 text-[#f2efe4] outline-none focus:ring-2 focus:ring-[#d7c895]/25 disabled:opacity-50"
+                />
+              </label>
+              <label
+                htmlFor={`${idBase}-max`}
+                className="text-xs text-[#c7cbbf]"
+              >
+                Liczba osób — do
+                <input
+                  id={`${idBase}-max`}
+                  type="number"
+                  inputMode="numeric"
+                  min="1"
+                  value={rule.max_shooters}
+                  disabled={disabled}
+                  onChange={(event) =>
+                    updateRule(rule.edit_key, "max_shooters", event.target.value)
+                  }
+                  className="mt-1 min-h-11 w-full rounded-xl border border-[#3d4638] bg-[#101310] px-3 text-[#f2efe4] outline-none focus:ring-2 focus:ring-[#d7c895]/25 disabled:opacity-50"
+                />
+              </label>
+            </div>
+            <label
+              htmlFor={`${idBase}-label`}
+              className="block text-xs text-[#c7cbbf]"
+            >
+              Opis / nazwa progu
+              <input
+                id={`${idBase}-label`}
+                type="text"
+                value={rule.label}
+                disabled={disabled}
+                onChange={(event) =>
+                  updateRule(rule.edit_key, "label", event.target.value)
+                }
+                className="mt-1 min-h-11 w-full rounded-xl border border-[#3d4638] bg-[#101310] px-3 text-[#f2efe4] outline-none focus:ring-2 focus:ring-[#d7c895]/25 disabled:opacity-50"
+              />
+            </label>
+            <button
+              type="button"
+              disabled={disabled}
+              onClick={() => removeRule(rule.edit_key)}
+              aria-label={`Usuń próg cennika ${groupLabel} dla ${resource.name}`}
+              className="min-h-11 rounded-xl border border-[#704b3f] px-3 text-sm font-semibold text-[#e6b5a5] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#e6b5a5] disabled:opacity-50"
+            >
+              Usuń próg
+            </button>
+          </div>
+        </details>
+      </div>
+    );
+  }
+
   return (
-    <section aria-labelledby={`pricing-${resource.lane_id}`} className="rounded-xl border border-[#30372c] bg-[#161a16] p-4">
+    <section
+      aria-labelledby={`pricing-${resource.lane_id}`}
+      className="rounded-2xl border border-[#30372c] bg-[#191e19] p-4 sm:p-5"
+    >
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div>
-          <h5 id={`pricing-${resource.lane_id}`} className="font-semibold text-[#f2efe4]">Cennik</h5>
+          <h5
+            id={`pricing-${resource.lane_id}`}
+            className="font-semibold text-[#f2efe4]"
+          >
+            Cennik
+          </h5>
           <p className="mt-1 text-xs leading-5 text-[#92988c]">
-            Stawka godzinowa. Waluta: {resource.currency_code} — tylko odczyt.
+            Ceny godzinowe. Waluta: {resource.currency_code} — tylko odczyt.
           </p>
         </div>
       </div>
-      <div className="mt-4 grid min-w-0 gap-4 lg:grid-cols-2">
-        {(["mon_thu", "fri_sun"] as const).map((dayGroup) => {
-          const groupLabel = dayGroup === "mon_thu" ? "Pon–Czw" : "Pt–Nd";
-          const rules = edit.pricing
-            .filter((rule) => rule.day_group === dayGroup)
-            .sort(
-              (first, second) =>
-                (Number(first.min_shooters) || Number.MAX_SAFE_INTEGER) -
-                  (Number(second.min_shooters) || Number.MAX_SAFE_INTEGER) ||
-                (Number(first.max_shooters) || Number.MAX_SAFE_INTEGER) -
-                  (Number(second.max_shooters) || Number.MAX_SAFE_INTEGER) ||
-                first.edit_key.localeCompare(second.edit_key)
-            );
+      <div className="mt-4 space-y-3">
+        <div className="hidden grid-cols-[minmax(7rem,0.8fr)_minmax(0,1fr)_minmax(0,1fr)] gap-3 px-3 text-xs font-bold uppercase tracking-[0.12em] text-[#8f9589] md:grid">
+          <span>Zakres osób</span>
+          <span className="text-center">Pon–Czw</span>
+          <span className="text-center">Pt–Nd</span>
+        </div>
+        {pricingRows.length === 0 && (
+          <p className="rounded-xl border border-dashed border-[#3d4638] p-4 text-sm text-[#a9ada4]">
+            Brak progów cenowych.
+          </p>
+        )}
+        {pricingRows.map(({ monThu, friSun }) => {
+          const representative = monThu ?? friSun!;
+          const matchingRanges =
+            !monThu ||
+            !friSun ||
+            (monThu.min_shooters === friSun.min_shooters &&
+              monThu.max_shooters === friSun.max_shooters);
           return (
-            <fieldset key={dayGroup} className="min-w-0 rounded-xl border border-[#3d4638] p-3">
-              <legend className="px-2 text-sm font-bold text-[#d7c895]">{groupLabel}</legend>
-              <div className="space-y-3">
-                {rules.length === 0 && <p className="text-sm text-[#a9ada4]">Brak progów.</p>}
-                {rules.map((rule, index) => {
-                  const idBase = `${resource.lane_id}-${dayGroup}-${rule.edit_key.replace(/[^a-zA-Z0-9_-]/g, "-")}`;
-                  return (
-                    <div key={rule.edit_key} className="min-w-0 rounded-xl border border-[#30372c] bg-[#101310] p-3">
-                      <p className="mb-3 text-xs font-semibold uppercase tracking-[0.12em] text-[#8f9589]">Próg {index + 1}</p>
-                      <div className="grid min-w-0 gap-3 sm:grid-cols-2">
-                        <label htmlFor={`${idBase}-min`} className="min-w-0 text-sm text-[#c7cbbf]">
-                          Liczba osób — od
-                          <input id={`${idBase}-min`} type="number" inputMode="numeric" min="1" value={rule.min_shooters} disabled={disabled} onChange={(event) => updateRule(rule.edit_key, "min_shooters", event.target.value)} className="mt-1 min-h-11 w-full rounded-xl border border-[#3d4638] bg-[#161a16] px-3 text-[#f2efe4] outline-none focus:ring-2 focus:ring-[#d7c895]/25 disabled:opacity-50" />
-                        </label>
-                        <label htmlFor={`${idBase}-max`} className="min-w-0 text-sm text-[#c7cbbf]">
-                          Liczba osób — do
-                          <input id={`${idBase}-max`} type="number" inputMode="numeric" min="1" value={rule.max_shooters} disabled={disabled} onChange={(event) => updateRule(rule.edit_key, "max_shooters", event.target.value)} className="mt-1 min-h-11 w-full rounded-xl border border-[#3d4638] bg-[#161a16] px-3 text-[#f2efe4] outline-none focus:ring-2 focus:ring-[#d7c895]/25 disabled:opacity-50" />
-                        </label>
-                        <label htmlFor={`${idBase}-label`} className="min-w-0 text-sm text-[#c7cbbf] sm:col-span-2">
-                          Opis / nazwa progu
-                          <input id={`${idBase}-label`} type="text" value={rule.label} disabled={disabled} onChange={(event) => updateRule(rule.edit_key, "label", event.target.value)} className="mt-1 min-h-11 w-full rounded-xl border border-[#3d4638] bg-[#161a16] px-3 text-[#f2efe4] outline-none focus:ring-2 focus:ring-[#d7c895]/25 disabled:opacity-50" />
-                        </label>
-                        <label htmlFor={`${idBase}-price`} className="min-w-0 text-sm text-[#c7cbbf] sm:col-span-2">
-                          Cena za godzinę ({resource.currency_code})
-                          <input id={`${idBase}-price`} type="text" inputMode="decimal" value={rule.hourly_price} disabled={disabled} onChange={(event) => updateRule(rule.edit_key, "hourly_price", event.target.value)} className="mt-1 min-h-11 w-full rounded-xl border border-[#3d4638] bg-[#161a16] px-3 text-[#f2efe4] outline-none focus:ring-2 focus:ring-[#d7c895]/25 disabled:opacity-50" />
-                        </label>
-                      </div>
-                      <button
-                        type="button"
-                        disabled={disabled}
-                        onClick={() =>
-                          onChange(
-                            updateResourceEdit(state, resource.lane_id, (current) => ({
-                              ...current,
-                              pricing: current.pricing.filter((candidate) => candidate.edit_key !== rule.edit_key),
-                            }))
-                          )
-                        }
-                        aria-label={`Usuń próg ${index + 1} cennika ${groupLabel} dla ${resource.name}`}
-                        className="mt-3 min-h-11 rounded-xl border border-[#704b3f] px-3 text-sm font-semibold text-[#e6b5a5] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#e6b5a5] disabled:opacity-50"
-                      >
-                        Usuń próg
-                      </button>
-                    </div>
-                  );
-                })}
+            <div
+              key={`${monThu?.edit_key ?? "empty"}:${friSun?.edit_key ?? "empty"}`}
+              className="grid min-w-0 gap-3 rounded-2xl border border-[#30372c] bg-[#161a16] p-3 md:grid-cols-[minmax(7rem,0.8fr)_minmax(0,1fr)_minmax(0,1fr)]"
+            >
+              <div className="flex items-center justify-between gap-3 md:block">
+                <span className="text-sm font-bold text-[#f2efe4]">
+                  {matchingRanges
+                    ? rangeLabel(representative)
+                    : `${rangeLabel(monThu!)} / ${rangeLabel(friSun!)}`}
+                </span>
+                <span className="text-xs text-[#858c7f] md:mt-1 md:block">
+                  Zakres i opis są dostępne w ustawieniach progu
+                </span>
               </div>
-              <button type="button" disabled={disabled} onClick={() => addRule(dayGroup)} className="mt-3 min-h-11 w-full rounded-xl border border-[#665d45] px-3 text-sm font-semibold text-[#d7c895] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d7c895] disabled:opacity-50">
-                + Dodaj próg
-              </button>
-            </fieldset>
+              <div>
+                <p className="mb-1 text-xs font-bold uppercase tracking-[0.12em] text-[#8f9589] md:sr-only">
+                  Pon–Czw
+                </p>
+                {renderRuleCell(monThu, "mon_thu")}
+              </div>
+              <div>
+                <p className="mb-1 text-xs font-bold uppercase tracking-[0.12em] text-[#8f9589] md:sr-only">
+                  Pt–Nd
+                </p>
+                {renderRuleCell(friSun, "fri_sun")}
+              </div>
+            </div>
           );
         })}
+      </div>
+      <div className="mt-4 grid gap-3 sm:grid-cols-2">
+        <button
+          type="button"
+          disabled={disabled}
+          onClick={() => addRule("mon_thu")}
+          className="min-h-11 rounded-xl border border-[#665d45] px-3 text-sm font-semibold text-[#d7c895] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d7c895] disabled:opacity-50"
+        >
+          + Dodaj próg Pon–Czw
+        </button>
+        <button
+          type="button"
+          disabled={disabled}
+          onClick={() => addRule("fri_sun")}
+          className="min-h-11 rounded-xl border border-[#665d45] px-3 text-sm font-semibold text-[#d7c895] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d7c895] disabled:opacity-50"
+        >
+          + Dodaj próg Pt–Nd
+        </button>
       </div>
       {resource.pricing.some((rule) => !rule.is_active) && (
         <p className="mt-3 text-xs text-[#858c7f]">
@@ -438,22 +609,207 @@ function PricingEditor({
   );
 }
 
-function SalesConfigurationEditor({
+function ResourceConfigurationSections({
   resource,
   state,
   disabled,
+  rootControls,
   onChange,
 }: {
   resource: LaneConfigurationResource;
   state: LaneFamilyEditState;
   disabled: boolean;
+  rootControls?: React.ReactNode;
   onChange: (state: LaneFamilyEditState) => void;
 }) {
   return (
-    <div className="mt-5 space-y-4">
-      <DurationEditor resource={resource} state={state} disabled={disabled} onChange={onChange} />
-      <PricingEditor resource={resource} state={state} disabled={disabled} onChange={onChange} />
+    <div className="space-y-5">
+      <section className="rounded-2xl border border-[#30372c] bg-[#191e19] p-4 sm:p-5">
+        <h3 className="font-bold text-[#f2efe4]">
+          {resource.resource_kind === "position" ? "Podstawowe" : "Rezerwacje"}
+        </h3>
+        <div className="mt-4">
+          <LimitFields
+            resource={resource}
+            state={state}
+            disabled={disabled}
+            onChange={onChange}
+          />
+        </div>
+        {rootControls && <div className="mt-5">{rootControls}</div>}
+      </section>
+      <DurationEditor
+        resource={resource}
+        state={state}
+        disabled={disabled}
+        onChange={onChange}
+      />
+      <PricingEditor
+        resource={resource}
+        state={state}
+        disabled={disabled}
+        onChange={onChange}
+      />
     </div>
+  );
+}
+
+function PositionList({
+  positions,
+  disabled,
+  onConfigure,
+}: {
+  positions: LaneConfigurationResource[];
+  disabled: boolean;
+  onConfigure: (laneId: string) => void;
+}) {
+  return (
+    <section aria-labelledby="positions-list-heading">
+      <div className="mb-4">
+        <h3 id="positions-list-heading" className="font-bold text-[#f2efe4]">
+          Stanowiska
+        </h3>
+        <p className="mt-1 text-sm text-[#a9ada4]">
+          Wybierz jedno stanowisko, aby edytować jego limity, czasy i cennik.
+        </p>
+      </div>
+      <div className="grid gap-3">
+        {positions.map((position) => (
+          <article
+            key={position.lane_id}
+            className="flex min-w-0 flex-col gap-3 rounded-2xl border border-[#30372c] bg-[#191e19] p-4 sm:flex-row sm:items-center sm:justify-between"
+          >
+            <div className="min-w-0">
+              <h4 className="truncate font-semibold text-[#f2efe4]">
+                {position.name}
+              </h4>
+              <p className="mt-1 text-sm text-[#a9ada4]">
+                {position.is_active ? "Aktywne" : "Nieaktywne"} ·{" "}
+                {position.online_bookable ? "Online" : "Offline"}
+              </p>
+            </div>
+            <button
+              type="button"
+              disabled={disabled}
+              onClick={() => onConfigure(position.lane_id)}
+              className="min-h-11 shrink-0 rounded-xl border border-[#665d45] px-4 text-sm font-semibold text-[#d7c895] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d7c895] disabled:opacity-50"
+            >
+              Konfiguruj
+            </button>
+          </article>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function CopySettingsPanel({
+  source,
+  targets,
+  selectedTargetIds,
+  disabled,
+  onToggleTarget,
+  onSelectAll,
+  onCancel,
+  onCopy,
+}: {
+  source: LaneConfigurationResource;
+  targets: LaneConfigurationResource[];
+  selectedTargetIds: string[];
+  disabled: boolean;
+  onToggleTarget: (laneId: string) => void;
+  onSelectAll: () => void;
+  onCancel: () => void;
+  onCopy: () => void;
+}) {
+  const selectedTargets = targets.filter((target) =>
+    selectedTargetIds.includes(target.lane_id)
+  );
+
+  return (
+    <section
+      aria-labelledby="copy-position-settings-heading"
+      className="rounded-2xl border border-[#806a32] bg-[#2b2618] p-4 sm:p-5"
+    >
+      <h3
+        id="copy-position-settings-heading"
+        className="font-bold text-[#f2efe4]"
+      >
+        Skopiuj ustawienia do innych stanowisk
+      </h3>
+      <dl className="mt-4 grid gap-3 text-sm sm:grid-cols-3">
+        <div>
+          <dt className="text-[#92988c]">Źródło</dt>
+          <dd className="mt-1 font-semibold text-[#f2efe4]">{source.name}</dd>
+        </div>
+        <div>
+          <dt className="text-[#92988c]">Do</dt>
+          <dd className="mt-1 font-semibold text-[#f2efe4]">
+            {selectedTargets.length > 0
+              ? selectedTargets.map((target) => target.name).join(", ")
+              : "Nie wybrano"}
+          </dd>
+        </div>
+        <div>
+          <dt className="text-[#92988c]">Kopiowane</dt>
+          <dd className="mt-1 font-semibold text-[#f2efe4]">
+            Limity, czasy i cennik
+          </dd>
+        </div>
+      </dl>
+      <div className="mt-5 flex flex-wrap items-center justify-between gap-3">
+        <p className="text-sm font-semibold text-[#e1c477]">
+          Wybierz stanowiska docelowe
+        </p>
+        <button
+          type="button"
+          disabled={disabled || targets.length === 0}
+          onClick={onSelectAll}
+          className="min-h-11 rounded-xl border border-[#806a32] px-3 text-sm font-semibold text-[#e1c477] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#e1c477] disabled:opacity-50"
+        >
+          Zaznacz wszystkie pozostałe
+        </button>
+      </div>
+      <div className="mt-3 grid gap-2 sm:grid-cols-2">
+        {targets.map((target) => (
+          <label
+            key={target.lane_id}
+            className="flex min-h-11 items-center gap-3 rounded-xl border border-[#4f462d] bg-[#211d14] px-3 text-sm text-[#f2efe4]"
+          >
+            <input
+              type="checkbox"
+              checked={selectedTargetIds.includes(target.lane_id)}
+              disabled={disabled}
+              onChange={() => onToggleTarget(target.lane_id)}
+              className="h-5 w-5 accent-[#8b7b48] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#e1c477]"
+            />
+            <span className="min-w-0 truncate">{target.name}</span>
+          </label>
+        ))}
+      </div>
+      <p className="mt-4 text-xs leading-5 text-[#b9ae8a]">
+        Kopiowanie zmienia tylko lokalny formularz. Nie zmienia identyfikatorów,
+        nazw, statusu, dostępności online ani wersji i nie wykonuje zapisu RPC.
+      </p>
+      <div className="mt-5 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+        <button
+          type="button"
+          disabled={disabled}
+          onClick={onCancel}
+          className="min-h-11 rounded-xl border border-[#665d45] px-4 font-semibold text-[#c7cbbf] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d7c895] disabled:opacity-50"
+        >
+          Anuluj
+        </button>
+        <button
+          type="button"
+          disabled={disabled || selectedTargetIds.length === 0}
+          onClick={onCopy}
+          className="min-h-11 rounded-xl bg-[#d7c895] px-4 font-bold text-[#171a15] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#f2efe4] disabled:opacity-40"
+        >
+          Skopiuj
+        </button>
+      </div>
+    </section>
   );
 }
 
@@ -495,6 +851,12 @@ export default function LaneConfigurationEditor({
   onCompleted,
 }: Props) {
   const [state, setState] = useState(() => createLaneFamilyEditState(family));
+  const [activeTab, setActiveTab] = useState<EditorTab>("root");
+  const [selectedPositionId, setSelectedPositionId] = useState<string | null>(
+    null
+  );
+  const [copyPanelOpen, setCopyPanelOpen] = useState(false);
+  const [copyTargetIds, setCopyTargetIds] = useState<string[]>([]);
   const [step, setStep] = useState<EditorStep>("edit");
   const [pendingWrite, setPendingWrite] = useState<PendingWrite | null>(null);
   const [confirmationResult, setConfirmationResult] =
@@ -511,6 +873,13 @@ export default function LaneConfigurationEditor({
     [family, state]
   );
   const locked = saving || step === "confirmation" || step === "stale";
+  const selectedPosition =
+    family.children.find((child) => child.lane_id === selectedPositionId) ?? null;
+  const copyTargets = selectedPosition
+    ? family.children.filter(
+        (child) => child.lane_id !== selectedPosition.lane_id
+      )
+    : [];
 
   useEffect(() => {
     dirtyRef.current = dirty;
@@ -583,6 +952,50 @@ export default function LaneConfigurationEditor({
       setStep("review");
     } catch {
       setMessage("Nie udało się przygotować bezpiecznego zestawu zmian.");
+    }
+  }
+
+  function openPositionEditor(laneId: string) {
+    setSelectedPositionId(laneId);
+    setCopyPanelOpen(false);
+    setCopyTargetIds([]);
+  }
+
+  function returnToPositions() {
+    setSelectedPositionId(null);
+    setCopyPanelOpen(false);
+    setCopyTargetIds([]);
+  }
+
+  function openCopyPanel() {
+    setCopyPanelOpen(true);
+    setCopyTargetIds([]);
+  }
+
+  function toggleCopyTarget(laneId: string) {
+    setCopyTargetIds((current) =>
+      current.includes(laneId)
+        ? current.filter((candidate) => candidate !== laneId)
+        : [...current, laneId]
+    );
+  }
+
+  function applyPositionCopy() {
+    if (!selectedPosition || copyTargetIds.length === 0) return;
+    try {
+      setState((current) =>
+        copyLanePositionEditSettings(
+          family,
+          current,
+          selectedPosition.lane_id,
+          copyTargetIds
+        )
+      );
+      setCopyPanelOpen(false);
+      setCopyTargetIds([]);
+      setMessage("Ustawienia skopiowano lokalnie. Zapisz rodzinę, aby je zatwierdzić.");
+    } catch {
+      setMessage("Nie udało się bezpiecznie skopiować ustawień stanowiska.");
     }
   }
 
@@ -682,80 +1095,171 @@ export default function LaneConfigurationEditor({
 
         {step === "edit" && (
           <div className="mt-6 space-y-6">
-            <section aria-labelledby="root-settings-heading" className="rounded-2xl border border-[#3d4638] bg-[#191e19] p-4 sm:p-5">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <h3 id="root-settings-heading" className="font-bold text-[#f2efe4]">ROOT</h3>
-                <span className="rounded-full border border-[#3d4638] px-3 py-1 text-xs font-semibold text-[#a9ada4]">
-                  Status: {family.root.is_active ? "Aktywna" : "Nieaktywna"} — tylko odczyt
-                </span>
+            {family.children.length > 0 && (
+              <div
+                role="tablist"
+                aria-label="Zakres konfiguracji rodziny"
+                className="grid grid-cols-2 gap-2 rounded-2xl border border-[#30372c] bg-[#101310] p-2"
+              >
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={activeTab === "root"}
+                  onClick={() => setActiveTab("root")}
+                  className={`min-h-11 rounded-xl px-3 text-sm font-bold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d7c895] ${
+                    activeTab === "root"
+                      ? "bg-[#d7c895] text-[#171a15]"
+                      : "text-[#c7cbbf] hover:bg-[#1d211b]"
+                  }`}
+                >
+                  Oś główna
+                </button>
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={activeTab === "positions"}
+                  onClick={() => setActiveTab("positions")}
+                  className={`min-h-11 rounded-xl px-3 text-sm font-bold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d7c895] ${
+                    activeTab === "positions"
+                      ? "bg-[#d7c895] text-[#171a15]"
+                      : "text-[#c7cbbf] hover:bg-[#1d211b]"
+                  }`}
+                >
+                  Stanowiska
+                </button>
               </div>
-              <div className="mt-5">
-                <LimitFields
+            )}
+
+            {activeTab === "root" || family.children.length === 0 ? (
+              <div role="tabpanel" aria-label="Oś główna" className="space-y-4">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <p className="text-xs font-bold uppercase tracking-[0.16em] text-[#d7c895]">
+                      Oś główna
+                    </p>
+                    <h3 className="mt-1 text-lg font-bold text-[#f2efe4]">
+                      {family.root.name}
+                    </h3>
+                  </div>
+                  <span className="rounded-full border border-[#3d4638] px-3 py-1 text-xs font-semibold text-[#a9ada4]">
+                    Status: {family.root.is_active ? "Aktywna" : "Nieaktywna"} — tylko odczyt
+                  </span>
+                </div>
+                <ResourceConfigurationSections
                   resource={family.root}
                   state={state}
                   disabled={locked}
                   onChange={setState}
-                />
-              </div>
-              <div className="mt-5 grid gap-3 sm:grid-cols-2">
-                <ToggleField
-                  id={`online-${family.root_lane_id}`}
-                  label="Rezerwacja online"
-                  checked={state.root_online_bookable}
-                  disabled={locked}
-                  onChange={(checked) => setState((current) => ({ ...current, root_online_bookable: checked }))}
-                />
-                <ToggleField
-                  id={`whole-${family.root_lane_id}`}
-                  label="Rezerwacja całej osi"
-                  checked={state.root_whole_lane_bookable}
-                  disabled={locked}
-                  onChange={(checked) => setState((current) => ({ ...current, root_whole_lane_bookable: checked }))}
-                />
-                <ToggleField
-                  id={`positions-${family.root_lane_id}`}
-                  label="Rezerwacja stanowisk"
-                  checked={state.root_positions_bookable}
-                  disabled={locked || family.children.length === 0}
-                  onChange={(checked) => setState((current) => ({ ...current, root_positions_bookable: checked }))}
-                />
-              </div>
-              <SalesConfigurationEditor
-                resource={family.root}
-                state={state}
-                disabled={locked}
-                onChange={setState}
-              />
-            </section>
-
-            {family.children.length > 0 && (
-              <section aria-labelledby="position-settings-heading" className="rounded-2xl border border-[#3d4638] bg-[#191e19] p-4 sm:p-5">
-                <h3 id="position-settings-heading" className="font-bold text-[#f2efe4]">STANOWISKA</h3>
-                <p className="mt-2 text-sm text-[#a9ada4]">
-                  Status i dostępność online stanowisk są w tym etapie tylko do odczytu.
-                </p>
-                <div className="mt-5 space-y-4">
-                  {family.children.map((child) => (
-                    <article key={child.lane_id} className="rounded-2xl border border-[#30372c] bg-[#141814] p-4">
-                      <div className="flex flex-wrap items-start justify-between gap-3">
-                        <h4 className="font-semibold text-[#f2efe4]">{child.name}</h4>
-                        <span className="text-xs font-semibold text-[#a9ada4]">
-                          {child.is_active ? "Aktywne" : "Nieaktywne"} · {child.online_bookable ? "Online" : "Offline"}
-                        </span>
-                      </div>
-                      <div className="mt-4">
-                        <LimitFields resource={child} state={state} disabled={locked} onChange={setState} />
-                      </div>
-                      <SalesConfigurationEditor
-                        resource={child}
-                        state={state}
+                  rootControls={
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <ToggleField
+                        id={`online-${family.root_lane_id}`}
+                        label="Rezerwacje online"
+                        checked={state.root_online_bookable}
                         disabled={locked}
-                        onChange={setState}
+                        onChange={(checked) =>
+                          setState((current) => ({
+                            ...current,
+                            root_online_bookable: checked,
+                          }))
+                        }
                       />
-                    </article>
-                  ))}
-                </div>
-              </section>
+                      <ToggleField
+                        id={`whole-${family.root_lane_id}`}
+                        label="Rezerwacja całej osi"
+                        checked={state.root_whole_lane_bookable}
+                        disabled={locked}
+                        onChange={(checked) =>
+                          setState((current) => ({
+                            ...current,
+                            root_whole_lane_bookable: checked,
+                          }))
+                        }
+                      />
+                      <ToggleField
+                        id={`positions-${family.root_lane_id}`}
+                        label="Rezerwacja stanowisk"
+                        checked={state.root_positions_bookable}
+                        disabled={locked || family.children.length === 0}
+                        onChange={(checked) =>
+                          setState((current) => ({
+                            ...current,
+                            root_positions_bookable: checked,
+                          }))
+                        }
+                      />
+                    </div>
+                  }
+                />
+              </div>
+            ) : (
+              <div role="tabpanel" aria-label="Stanowiska" className="space-y-5">
+                {selectedPosition ? (
+                  <>
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                      <button
+                        type="button"
+                        disabled={locked}
+                        onClick={returnToPositions}
+                        className="min-h-11 self-start rounded-xl border border-[#3d4638] px-4 text-sm font-semibold text-[#c7cbbf] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d7c895] disabled:opacity-50"
+                      >
+                        ← Wróć do stanowisk
+                      </button>
+                      <span className="text-sm text-[#a9ada4]">
+                        {selectedPosition.is_active ? "Aktywne" : "Nieaktywne"} ·{" "}
+                        {selectedPosition.online_bookable ? "Online" : "Offline"} — tylko odczyt
+                      </span>
+                    </div>
+                    <div>
+                      <p className="text-xs font-bold uppercase tracking-[0.16em] text-[#d7c895]">
+                        Konfiguracja stanowiska
+                      </p>
+                      <h3 className="mt-1 text-lg font-bold text-[#f2efe4]">
+                        {selectedPosition.name}
+                      </h3>
+                    </div>
+                    <ResourceConfigurationSections
+                      resource={selectedPosition}
+                      state={state}
+                      disabled={locked}
+                      onChange={setState}
+                    />
+                    {copyTargets.length > 0 && !copyPanelOpen && (
+                      <button
+                        type="button"
+                        disabled={locked}
+                        onClick={openCopyPanel}
+                        className="min-h-11 w-full rounded-xl border border-[#665d45] px-4 font-semibold text-[#d7c895] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d7c895] disabled:opacity-50 sm:w-auto"
+                      >
+                        Skopiuj ustawienia do innych stanowisk
+                      </button>
+                    )}
+                    {copyPanelOpen && (
+                      <CopySettingsPanel
+                        source={selectedPosition}
+                        targets={copyTargets}
+                        selectedTargetIds={copyTargetIds}
+                        disabled={locked}
+                        onToggleTarget={toggleCopyTarget}
+                        onSelectAll={() =>
+                          setCopyTargetIds(copyTargets.map((target) => target.lane_id))
+                        }
+                        onCancel={() => {
+                          setCopyPanelOpen(false);
+                          setCopyTargetIds([]);
+                        }}
+                        onCopy={applyPositionCopy}
+                      />
+                    )}
+                  </>
+                ) : (
+                  <PositionList
+                    positions={family.children}
+                    disabled={locked}
+                    onConfigure={openPositionEditor}
+                  />
+                )}
+              </div>
             )}
 
             {!validation.valid && (

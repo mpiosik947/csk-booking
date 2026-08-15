@@ -152,11 +152,13 @@ test("active state and position online stay read-only while sales configuration 
   const [, editor] = await sources();
 
   assert.match(editor, /Status: \{family\.root\.is_active \? "Aktywna" : "Nieaktywna"\} — tylko odczyt/);
-  assert.match(editor, /Status i dostępność online stanowisk są w tym etapie tylko do odczytu\./);
-  assert.match(editor, /Dostępne czasy rezerwacji/);
+  assert.match(editor, /\{selectedPosition\.is_active \? "Aktywne" : "Nieaktywne"\}/);
+  assert.match(editor, /\{selectedPosition\.online_bookable \? "Online" : "Offline"\} — tylko odczyt/);
+  assert.match(editor, /Czasy rezerwacji/);
   assert.match(editor, /\+ Dodaj czas/);
-  assert.match(editor, /Cena za godzinę/);
-  assert.match(editor, /\+ Dodaj próg/);
+  assert.match(editor, /Cennik/);
+  assert.match(editor, /\+ Dodaj próg Pon–Czw/);
+  assert.match(editor, /\+ Dodaj próg Pt–Nd/);
   assert.match(editor, /Usuń próg/);
   assert.doesNotMatch(editor, /Aktywuj|Dezaktywuj/);
   assert.doesNotMatch(editor, /child\.online_bookable[^\n]*onChange/);
@@ -165,14 +167,17 @@ test("active state and position online stay read-only while sales configuration 
 test("pricing UI uses the existing hourly model, day groups and read-only currency", async () => {
   const [, editor, , , helper] = await sources();
 
-  assert.match(editor, /"mon_thu", "fri_sun"/);
+  assert.match(editor, /rule\.day_group === "mon_thu"/);
+  assert.match(editor, /rule\.day_group === "fri_sun"/);
   assert.match(editor, /Pon–Czw/);
   assert.match(editor, /Pt–Nd/);
   assert.match(editor, /Liczba osób — od/);
   assert.match(editor, /Liczba osób — do/);
   assert.match(editor, /Opis \/ nazwa progu/);
-  assert.match(editor, /Cena za godzinę \(\{resource\.currency_code\}\)/);
+  assert.match(editor, /\{resource\.currency_code\}\/h/);
   assert.match(editor, /Waluta: \{resource\.currency_code\} — tylko odczyt/);
+  assert.match(editor, /Edytuj zakres i opis/);
+  assert.match(editor, /<details/);
   assert.match(editor, /Number\(first\.min_shooters\)/);
   assert.match(editor, /Number\(first\.max_shooters\)/);
   assert.match(helper, /hourly_price: hourlyPrice/);
@@ -182,7 +187,8 @@ test("pricing UI uses the existing hourly model, day groups and read-only curren
 test("duration and pricing editors are mobile-safe, labelled and keyboard accessible", async () => {
   const [, editor] = await sources();
 
-  assert.match(editor, /lg:grid-cols-2/);
+  assert.match(editor, /md:grid-cols-\[minmax\(7rem,0\.8fr\)_minmax\(0,1fr\)_minmax\(0,1fr\)\]/);
+  assert.match(editor, /overflow-x-hidden/);
   assert.match(editor, /min-w-0/);
   assert.match(editor, /aria-label=\{`Usuń czas/);
   assert.match(editor, /aria-label=\{`Usuń próg/);
@@ -229,13 +235,54 @@ test("uses business-friendly capacity and reservation labels without changing fi
 test("incomplete dormant children remain visible and block invalid positions mode", async () => {
   const [, editor, , , helper] = await sources();
 
-  assert.match(editor, /family\.children\.map/);
-  assert.match(editor, /child\.is_active \? "Aktywne" : "Nieaktywne"/);
-  assert.match(editor, /child\.online_bookable \? "Online" : "Offline"/);
+  assert.match(editor, /positions\.map/);
+  assert.match(editor, /position\.is_active \? "Aktywne" : "Nieaktywne"/);
+  assert.match(editor, /position\.online_bookable \? "Online" : "Offline"/);
   assert.match(
     helper,
     /Najpierw skonfiguruj co najmniej jedno stanowisko do rezerwacji online\./
   );
+});
+
+test("families with positions use root and positions tabs while standalone lanes skip them", async () => {
+  const [, editor] = await sources();
+
+  assert.match(editor, /family\.children\.length > 0 && \(/);
+  assert.match(editor, /role="tablist"/);
+  assert.match(editor, /role="tab"/);
+  assert.match(editor, /aria-selected=\{activeTab === "root"\}/);
+  assert.match(editor, /aria-selected=\{activeTab === "positions"\}/);
+  assert.match(editor, />\s*Oś główna\s*<\/button>/);
+  assert.match(editor, />\s*Stanowiska\s*<\/button>/);
+  assert.match(editor, /activeTab === "root" \|\| family\.children\.length === 0/);
+});
+
+test("positions are configured one at a time and returning to the list preserves family edit state", async () => {
+  const [, editor] = await sources();
+
+  assert.match(editor, /const \[state, setState\] = useState/);
+  assert.match(editor, /const \[selectedPositionId, setSelectedPositionId\]/);
+  assert.match(editor, /selectedPosition \? \(/);
+  assert.match(editor, /<PositionList[\s\S]*positions=\{family\.children\}/);
+  assert.match(editor, /← Wróć do stanowisk/);
+  assert.match(editor, /setSelectedPositionId\(null\)/);
+  assert.doesNotMatch(editor, /returnToPositions[\s\S]{0,200}createLaneFamilyEditState/);
+});
+
+test("position copy is explicit, local-only and does not invoke the family writer", async () => {
+  const [, editor] = await sources();
+  const copyHandler = editor.slice(
+    editor.indexOf("function applyPositionCopy"),
+    editor.indexOf("async function submit")
+  );
+
+  assert.match(editor, /Skopiuj ustawienia do innych stanowisk/);
+  assert.match(editor, />Kopiowane<\/dt>[\s\S]*Limity, czasy i cennik/);
+  assert.match(editor, /Zaznacz wszystkie pozostałe/);
+  assert.match(editor, /selectedTargetIds/);
+  assert.match(copyHandler, /copyLanePositionEditSettings/);
+  assert.match(copyHandler, /setState/);
+  assert.doesNotMatch(copyHandler, /onWrite/);
 });
 
 test("success closes edit mode and refreshes from V2 instead of trusting local state", async () => {

@@ -531,6 +531,48 @@ export function createLaneFamilyEditState(
   };
 }
 
+export function copyLanePositionEditSettings(
+  family: LaneConfigurationFamily,
+  state: LaneFamilyEditState,
+  sourceLaneId: string,
+  targetLaneIds: string[]
+): LaneFamilyEditState {
+  const positionIds = new Set(family.children.map((child) => child.lane_id));
+  const uniqueTargetIds = [...new Set(targetLaneIds)];
+  if (
+    !positionIds.has(sourceLaneId) ||
+    uniqueTargetIds.length === 0 ||
+    uniqueTargetIds.some(
+      (laneId) => laneId === sourceLaneId || !positionIds.has(laneId)
+    )
+  ) {
+    throw new Error("invalid_copy_target");
+  }
+
+  const source = state.resources.find(
+    (resource) => resource.lane_id === sourceLaneId
+  );
+  if (!source) throw new Error("invalid_copy_source");
+
+  const targetSet = new Set(uniqueTargetIds);
+  return {
+    ...state,
+    resources: state.resources.map((resource) => {
+      if (!targetSet.has(resource.lane_id)) return resource;
+      return {
+        ...resource,
+        max_shooters: source.max_shooters,
+        max_people_online: source.max_people_online,
+        durations_minutes: [...source.durations_minutes],
+        pricing: source.pricing.map((rule, index) => ({
+          ...rule,
+          edit_key: `${resource.lane_id}:copied:${rule.day_group}:${index}`,
+        })),
+      };
+    }),
+  };
+}
+
 function parsePositiveInteger(value: string) {
   return /^[1-9][0-9]*$/.test(value) && Number.isSafeInteger(Number(value))
     ? Number(value)
