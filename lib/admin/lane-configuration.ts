@@ -285,11 +285,13 @@ function parseResource(value: unknown): LaneConfigurationResource {
     throw new Error("duplicate_duration");
   }
 
-  const pricingKeys = pricing.map(
+  const activePricingKeys = pricing
+    .filter((rule) => rule.is_active)
+    .map(
     (rule) =>
-      `${rule.day_group}:${rule.min_shooters}:${rule.max_shooters}:${rule.is_active}`
-  );
-  if (new Set(pricingKeys).size !== pricingKeys.length) {
+      `${rule.day_group}:${rule.min_shooters}:${rule.max_shooters}`
+    );
+  if (new Set(activePricingKeys).size !== activePricingKeys.length) {
     throw new Error("duplicate_pricing");
   }
 
