@@ -11,8 +11,10 @@ import {
   buildLaneFamilyWritePayload,
   copyLanePositionEditSettings,
   createLaneFamilyEditState,
+  getLanePositionReadiness,
   getLaneFamilyChanges,
   isLaneFamilyDirty,
+  laneFamilyHasUsableOnlinePosition,
   validateLaneFamilyEditState,
   type LaneConfigurationFamily,
   type LaneConfigurationResource,
@@ -80,6 +82,20 @@ function updateResourceEdit(
   };
 }
 
+function updatePositionActivation(
+  state: LaneFamilyEditState,
+  laneId: string,
+  field: "is_active" | "online_bookable",
+  checked: boolean
+) {
+  return updateResourceEdit(state, laneId, (resource) => {
+    if (field === "is_active" && !checked) {
+      return { ...resource, is_active: false, online_bookable: false };
+    }
+    return { ...resource, [field]: checked };
+  });
+}
+
 function ToggleField({
   id,
   label,
@@ -108,6 +124,103 @@ function ToggleField({
         className="h-6 w-6 accent-[#8b7b48] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d7c895] disabled:cursor-not-allowed disabled:opacity-50"
       />
     </label>
+  );
+}
+
+function PositionActivationControls({
+  family,
+  resource,
+  state,
+  disabled,
+  onChange,
+}: {
+  family: LaneConfigurationFamily;
+  resource: LaneConfigurationResource;
+  state: LaneFamilyEditState;
+  disabled: boolean;
+  onChange: (state: LaneFamilyEditState) => void;
+}) {
+  const edit = state.resources.find(
+    (candidate) => candidate.lane_id === resource.lane_id
+  );
+  const readiness = getLanePositionReadiness(family, state, resource.lane_id);
+  if (!edit) return null;
+
+  return (
+    <div className="mt-5 space-y-4">
+      <div
+        role="status"
+        className={`rounded-xl border p-4 text-sm ${
+          readiness.ready
+            ? "border-[#536143] bg-[#202720] text-[#b7d2ad]"
+            : "border-[#806a32] bg-[#2b2618] text-[#e1c477]"
+        }`}
+      >
+        <p className="font-bold">
+          {readiness.ready ? "Gotowe do uruchomienia" : "Wymaga konfiguracji"}
+        </p>
+        {!readiness.ready && (
+          <ul className="mt-2 list-disc space-y-1 pl-5">
+            {readiness.missing.map((missing) => (
+              <li key={missing}>{missing}</li>
+            ))}
+          </ul>
+        )}
+      </div>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <ToggleField
+          id={`active-${resource.lane_id}`}
+          label="Aktywne"
+          checked={edit.is_active}
+          disabled={disabled}
+          onChange={(checked) =>
+            onChange(
+              updatePositionActivation(
+                state,
+                resource.lane_id,
+                "is_active",
+                checked
+              )
+            )
+          }
+        />
+        <ToggleField
+          id={`position-online-${resource.lane_id}`}
+          label="Rezerwacje online"
+          checked={edit.online_bookable}
+          disabled={
+            disabled ||
+            !edit.is_active ||
+            (!readiness.ready && !edit.online_bookable)
+          }
+          onChange={(checked) =>
+            onChange(
+              updatePositionActivation(
+                state,
+                resource.lane_id,
+                "online_bookable",
+                checked
+              )
+            )
+          }
+        />
+      </div>
+      {!edit.is_active && (
+        <p className="text-xs leading-5 text-[#a9ada4]">
+          Aktywuj stanowisko, aby można było włączyć dla niego rezerwacje online.
+        </p>
+      )}
+      {edit.is_active && !readiness.ready && (
+        <p className="text-xs leading-5 text-[#a9ada4]">
+          Rezerwacje online pozostają zablokowane do czasu uzupełnienia konfiguracji.
+        </p>
+      )}
+      {edit.is_active && (
+        <p className="text-xs leading-5 text-[#a9ada4]">
+          Wyłączenie statusu automatycznie wyłączy rezerwacje online w lokalnym formularzu.
+        </p>
+      )}
+    </div>
   );
 }
 
@@ -614,12 +727,14 @@ function ResourceConfigurationSections({
   state,
   disabled,
   rootControls,
+  positionControls,
   onChange,
 }: {
   resource: LaneConfigurationResource;
   state: LaneFamilyEditState;
   disabled: boolean;
   rootControls?: React.ReactNode;
+  positionControls?: React.ReactNode;
   onChange: (state: LaneFamilyEditState) => void;
 }) {
   return (
@@ -637,6 +752,7 @@ function ResourceConfigurationSections({
           />
         </div>
         {rootControls && <div className="mt-5">{rootControls}</div>}
+        {positionControls}
       </section>
       <DurationEditor
         resource={resource}
@@ -655,10 +771,14 @@ function ResourceConfigurationSections({
 }
 
 function PositionList({
+  family,
+  state,
   positions,
   disabled,
   onConfigure,
 }: {
+  family: LaneConfigurationFamily;
+  state: LaneFamilyEditState;
   positions: LaneConfigurationResource[];
   disabled: boolean;
   onConfigure: (laneId: string) => void;
@@ -674,30 +794,56 @@ function PositionList({
         </p>
       </div>
       <div className="grid gap-3">
-        {positions.map((position) => (
-          <article
-            key={position.lane_id}
-            className="flex min-w-0 flex-col gap-3 rounded-2xl border border-[#30372c] bg-[#191e19] p-4 sm:flex-row sm:items-center sm:justify-between"
-          >
-            <div className="min-w-0">
-              <h4 className="truncate font-semibold text-[#f2efe4]">
-                {position.name}
-              </h4>
-              <p className="mt-1 text-sm text-[#a9ada4]">
-                {position.is_active ? "Aktywne" : "Nieaktywne"} ·{" "}
-                {position.online_bookable ? "Online" : "Offline"}
-              </p>
-            </div>
-            <button
-              type="button"
-              disabled={disabled}
-              onClick={() => onConfigure(position.lane_id)}
-              className="min-h-11 shrink-0 rounded-xl border border-[#665d45] px-4 text-sm font-semibold text-[#d7c895] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d7c895] disabled:opacity-50"
+        {positions.map((position) => {
+          const edit = state.resources.find(
+            (resource) => resource.lane_id === position.lane_id
+          );
+          const readiness = getLanePositionReadiness(
+            family,
+            state,
+            position.lane_id
+          );
+          return (
+            <article
+              key={position.lane_id}
+              className="flex min-w-0 flex-col gap-3 rounded-2xl border border-[#30372c] bg-[#191e19] p-4 sm:flex-row sm:items-start sm:justify-between"
             >
-              Konfiguruj
-            </button>
-          </article>
-        ))}
+              <div className="min-w-0">
+                <h4 className="break-words font-semibold text-[#f2efe4]">
+                  {position.name}
+                </h4>
+                <p className="mt-1 text-sm text-[#a9ada4]">
+                  {edit?.is_active ? "Aktywne" : "Nieaktywne"} ·{" "}
+                  {edit?.online_bookable ? "Online" : "Offline"}
+                </p>
+                <p
+                  className={`mt-2 text-sm font-semibold ${
+                    readiness.ready ? "text-[#b7d2ad]" : "text-[#e1c477]"
+                  }`}
+                >
+                  {readiness.ready
+                    ? "Gotowe do uruchomienia"
+                    : "Wymaga konfiguracji"}
+                </p>
+                {!readiness.ready && (
+                  <ul className="mt-1 list-disc space-y-1 pl-5 text-xs leading-5 text-[#b9ae8a]">
+                    {readiness.missing.map((missing) => (
+                      <li key={missing}>{missing}</li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+              <button
+                type="button"
+                disabled={disabled}
+                onClick={() => onConfigure(position.lane_id)}
+                className="min-h-11 shrink-0 rounded-xl border border-[#665d45] px-4 text-sm font-semibold text-[#d7c895] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d7c895] disabled:opacity-50"
+              >
+                Konfiguruj
+              </button>
+            </article>
+          );
+        })}
       </div>
     </section>
   );
@@ -875,6 +1021,15 @@ export default function LaneConfigurationEditor({
   const locked = saving || step === "confirmation" || step === "stale";
   const selectedPosition =
     family.children.find((child) => child.lane_id === selectedPositionId) ?? null;
+  const selectedPositionEdit = selectedPosition
+    ? state.resources.find(
+        (resource) => resource.lane_id === selectedPosition.lane_id
+      ) ?? null
+    : null;
+  const hasUsableOnlinePosition = laneFamilyHasUsableOnlinePosition(
+    family,
+    state
+  );
   const copyTargets = selectedPosition
     ? family.children.filter(
         (child) => child.lane_id !== selectedPosition.lane_id
@@ -1180,7 +1335,12 @@ export default function LaneConfigurationEditor({
                         id={`positions-${family.root_lane_id}`}
                         label="Rezerwacja stanowisk"
                         checked={state.root_positions_bookable}
-                        disabled={locked || family.children.length === 0}
+                        disabled={
+                          locked ||
+                          family.children.length === 0 ||
+                          (!state.root_positions_bookable &&
+                            !hasUsableOnlinePosition)
+                        }
                         onChange={(checked) =>
                           setState((current) => ({
                             ...current,
@@ -1188,6 +1348,12 @@ export default function LaneConfigurationEditor({
                           }))
                         }
                       />
+                      {!hasUsableOnlinePosition && (
+                        <p className="text-xs leading-5 text-[#a9ada4] sm:col-span-2">
+                          Aby włączyć rezerwację stanowisk, przygotuj co najmniej jedno
+                          aktywne stanowisko z włączonymi rezerwacjami online.
+                        </p>
+                      )}
                     </div>
                   }
                 />
@@ -1206,8 +1372,8 @@ export default function LaneConfigurationEditor({
                         ← Wróć do stanowisk
                       </button>
                       <span className="text-sm text-[#a9ada4]">
-                        {selectedPosition.is_active ? "Aktywne" : "Nieaktywne"} ·{" "}
-                        {selectedPosition.online_bookable ? "Online" : "Offline"} — tylko odczyt
+                        {selectedPositionEdit?.is_active ? "Aktywne" : "Nieaktywne"} ·{" "}
+                        {selectedPositionEdit?.online_bookable ? "Online" : "Offline"}
                       </span>
                     </div>
                     <div>
@@ -1223,6 +1389,15 @@ export default function LaneConfigurationEditor({
                       state={state}
                       disabled={locked}
                       onChange={setState}
+                      positionControls={
+                        <PositionActivationControls
+                          family={family}
+                          resource={selectedPosition}
+                          state={state}
+                          disabled={locked}
+                          onChange={setState}
+                        />
+                      }
                     />
                     {copyTargets.length > 0 && !copyPanelOpen && (
                       <button
@@ -1254,6 +1429,8 @@ export default function LaneConfigurationEditor({
                   </>
                 ) : (
                   <PositionList
+                    family={family}
+                    state={state}
                     positions={family.children}
                     disabled={locked}
                     onConfigure={openPositionEditor}

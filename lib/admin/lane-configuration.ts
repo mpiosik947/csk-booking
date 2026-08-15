@@ -59,6 +59,8 @@ export type LaneConfigurationSummary = {
 
 export type LaneFamilyResourceEdit = {
   lane_id: string;
+  is_active: boolean;
+  online_bookable: boolean;
   max_shooters: string;
   max_people_online: string;
   durations_minutes: string[];
@@ -111,6 +113,11 @@ export type LaneFamilyChange = {
 export type LaneFamilyValidation = {
   valid: boolean;
   errors: string[];
+};
+
+export type LanePositionReadiness = {
+  ready: boolean;
+  missing: string[];
 };
 
 export const LANE_CONFIGURATION_WRITE_CODES = [
@@ -506,6 +513,8 @@ export function createLaneFamilyEditState(
     root_positions_bookable: family.root.positions_bookable,
     resources: family.resources.map((resource) => ({
       lane_id: resource.lane_id,
+      is_active: resource.is_active,
+      online_bookable: resource.online_bookable,
       max_shooters: String(resource.max_shooters),
       max_people_online: String(resource.max_people_online),
       durations_minutes: resource.durations
@@ -589,6 +598,8 @@ function parseMoney(value: string) {
 }
 
 type ParsedLaneFamilyResourceEdit = {
+  isActive: boolean;
+  onlineBookable: boolean;
   maxShooters: number;
   maxPeopleOnline: number;
   durationsMinutes: number[];
@@ -692,6 +703,13 @@ function parseLaneFamilyEditState(
       errors.push(`${resource.name}: brak ustawień zasobu w formularzu.`);
       continue;
     }
+    if (
+      typeof edit.is_active !== "boolean" ||
+      typeof edit.online_bookable !== "boolean"
+    ) {
+      errors.push(`${resource.name}: status zasobu jest nieprawidłowy.`);
+      continue;
+    }
     const maxShooters = parsePositiveInteger(edit.max_shooters);
     const maxPeopleOnline = parsePositiveInteger(edit.max_people_online);
     if (maxShooters === null || maxPeopleOnline === null) {
@@ -773,7 +791,7 @@ function parseLaneFamilyEditState(
     const onlineBookable =
       resource.lane_id === family.root_lane_id
         ? state.root_online_bookable
-        : resource.online_bookable;
+        : edit.online_bookable;
     if (onlineBookable && durationsMinutes.length === 0) {
       errors.push(`${resource.name}: rezerwacja online wymaga co najmniej jednego czasu.`);
     }
@@ -788,6 +806,8 @@ function parseLaneFamilyEditState(
 
     if (durationsValid && pricingRowsValid) {
       values.set(resource.lane_id, {
+        isActive: edit.is_active,
+        onlineBookable: edit.online_bookable,
         maxShooters,
         maxPeopleOnline,
         durationsMinutes,
@@ -797,6 +817,55 @@ function parseLaneFamilyEditState(
   }
 
   return { values, errors };
+}
+
+export function getLanePositionReadiness(
+  family: LaneConfigurationFamily,
+  state: LaneFamilyEditState,
+  laneId: string
+): LanePositionReadiness {
+  const position = family.children.find((child) => child.lane_id === laneId);
+  if (!position) {
+    return { ready: false, missing: ["Nie znaleziono stanowiska w tej rodzinie."] };
+  }
+
+  const parsed = parseLaneFamilyEditState(family, state);
+  const values = parsed.values.get(laneId);
+  const positionErrors = parsed.errors
+    .filter((error) => error.startsWith(`${position.name}:`))
+    .map((error) => error.slice(position.name.length + 1).trim());
+  const missing = new Set(positionErrors);
+
+  if (!values) {
+    if (missing.size === 0) {
+      missing.add("Uzupełnij poprawne limity, czasy i cennik.");
+    }
+    return { ready: false, missing: [...missing] };
+  }
+  if (values.durationsMinutes.length === 0) {
+    missing.add("Dodaj co najmniej jeden poprawny czas rezerwacji.");
+  }
+  if (!hasCompletePricingCoverage(values.pricing, values.maxPeopleOnline)) {
+    missing.add("Uzupełnij cennik Pon–Czw i Pt–Nd dla pełnego zakresu osób.");
+  }
+
+  return { ready: missing.size === 0, missing: [...missing] };
+}
+
+export function laneFamilyHasUsableOnlinePosition(
+  family: LaneConfigurationFamily,
+  state: LaneFamilyEditState
+) {
+  return family.children.some((child) => {
+    const edit = state.resources.find(
+      (resource) => resource.lane_id === child.lane_id
+    );
+    return Boolean(
+      edit?.is_active &&
+        edit.online_bookable &&
+        getLanePositionReadiness(family, state, child.lane_id).ready
+    );
+  });
 }
 
 export function validateLaneFamilyEditState(
@@ -819,17 +888,40 @@ export function validateLaneFamilyEditState(
     );
   }
 
-  const usableChildren = family.children.filter(
-    (child) =>
-      child.is_active &&
-      child.online_bookable &&
-      parsed.values.has(child.lane_id) &&
-      parsed.values.get(child.lane_id)!.durationsMinutes.length > 0 &&
-      hasCompletePricingCoverage(
-        parsed.values.get(child.lane_id)!.pricing,
-        parsed.values.get(child.lane_id)!.maxPeopleOnline
-      )
-  );
+  const usableChildren = family.children.filter((child) => {
+    const values = parsed.values.get(child.lane_id);
+    return Boolean(
+      values?.isActive &&
+        values.onlineBookable &&
+        values.durationsMinutes.length > 0 &&
+        hasCompletePricingCoverage(values.pricing, values.maxPeopleOnline)
+    );
+  });
+  for (const child of family.children) {
+    const values = parsed.values.get(child.lane_id);
+    if (!values) continue;
+    if (!values.isActive && values.onlineBookable) {
+      errors.push(`${child.name}: nieaktywne stanowisko nie może przyjmować rezerwacji online.`);
+    }
+    if (
+      values.onlineBookable &&
+      !getLanePositionReadiness(family, state, child.lane_id).ready
+    ) {
+      errors.push(`${child.name}: uzupełnij konfigurację przed włączeniem rezerwacji online.`);
+    }
+    if (values.onlineBookable && !state.root_positions_bookable) {
+      errors.push(`${child.name}: włącz na osi tryb „Rezerwacja stanowisk”.`);
+    }
+  }
+  if (
+    !family.root.is_active &&
+    family.children.some((child) => {
+      const values = parsed.values.get(child.lane_id);
+      return values?.isActive || values?.onlineBookable;
+    })
+  ) {
+    errors.push("Nieaktywna oś nie może mieć aktywnych ani dostępnych online stanowisk.");
+  }
   if (state.root_positions_bookable && usableChildren.length === 0) {
     errors.push("Najpierw skonfiguruj co najmniej jedno stanowisko do rezerwacji online.");
   }
@@ -862,7 +954,7 @@ export function buildLaneFamilyWritePayload(
       const isRoot = resource.lane_id === family.root_lane_id;
       return {
         lane_id: resource.lane_id,
-        is_active: resource.is_active,
+        is_active: isRoot ? resource.is_active : edited.isActive,
         whole_lane_bookable: isRoot
           ? state.root_whole_lane_bookable
           : resource.whole_lane_bookable,
@@ -872,7 +964,7 @@ export function buildLaneFamilyWritePayload(
         max_shooters: edited.maxShooters,
         online_bookable: isRoot
           ? state.root_online_bookable
-          : resource.online_bookable,
+          : edited.onlineBookable,
         max_people_online: edited.maxPeopleOnline,
         durations_minutes: edited.durationsMinutes,
         pricing: edited.pricing,
@@ -945,6 +1037,28 @@ export function getLaneFamilyChanges(
   for (const resource of family.resources) {
     const edited = parsed.values.get(resource.lane_id);
     if (!edited) continue;
+    if (
+      resource.resource_kind === "position" &&
+      edited.isActive !== resource.is_active
+    ) {
+      changes.push({
+        resourceName: resource.name,
+        label: "Status",
+        before: resource.is_active ? "Aktywne" : "Nieaktywne",
+        after: edited.isActive ? "Aktywne" : "Nieaktywne",
+      });
+    }
+    if (
+      resource.resource_kind === "position" &&
+      edited.onlineBookable !== resource.online_bookable
+    ) {
+      changes.push({
+        resourceName: resource.name,
+        label: "Rezerwacje online",
+        before: resource.online_bookable ? "Włączone" : "Wyłączone",
+        after: edited.onlineBookable ? "Włączone" : "Wyłączone",
+      });
+    }
     if (edited.maxShooters !== resource.max_shooters) {
       changes.push({
         resourceName: resource.name,
@@ -1010,6 +1124,8 @@ function comparableEditState(state: LaneFamilyEditState) {
     resources: state.resources
       .map((resource) => ({
         lane_id: resource.lane_id,
+        is_active: resource.is_active,
+        online_bookable: resource.online_bookable,
         max_shooters: resource.max_shooters,
         max_people_online: resource.max_people_online,
         durations_minutes: [...resource.durations_minutes].sort(

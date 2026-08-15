@@ -56,6 +56,10 @@ test("the family V2 RPC is the only configuration write path", async () => {
   const runtime = `${page}\n${editor}`;
 
   assert.match(page, /rpc\(\s*"admin_set_lane_booking_family_configuration_v2"/);
+  assert.equal(
+    [...runtime.matchAll(/admin_set_lane_booking_family_configuration_v2/g)].length,
+    1
+  );
   assert.doesNotMatch(runtime, /admin_set_lane_booking_configuration\s*["'(]/);
   assert.doesNotMatch(runtime, /\.(?:insert|update|delete|upsert)\s*\(/);
   for (const table of [
@@ -148,20 +152,26 @@ test("all ten backend result codes and unknown responses have controlled handlin
   assert.doesNotMatch(editor, /error\.message/);
 });
 
-test("active state and position online stay read-only while sales configuration is editable", async () => {
-  const [, editor] = await sources();
+test("root activation stays read-only while position activation is controlled locally", async () => {
+  const [, editor, , , helper] = await sources();
 
   assert.match(editor, /Status: \{family\.root\.is_active \? "Aktywna" : "Nieaktywna"\} — tylko odczyt/);
-  assert.match(editor, /\{selectedPosition\.is_active \? "Aktywne" : "Nieaktywne"\}/);
-  assert.match(editor, /\{selectedPosition\.online_bookable \? "Online" : "Offline"\} — tylko odczyt/);
+  assert.match(editor, /function PositionActivationControls/);
+  assert.match(editor, /label="Aktywne"/);
+  assert.match(editor, /label="Rezerwacje online"/);
+  assert.match(editor, /getLanePositionReadiness/);
+  assert.match(editor, /Gotowe do uruchomienia/);
+  assert.match(editor, /Wymaga konfiguracji/);
+  assert.match(editor, /updatePositionActivation/);
+  assert.match(editor, /is_active: false, online_bookable: false/);
+  assert.match(helper, /is_active: isRoot \? resource\.is_active : edited\.isActive/);
   assert.match(editor, /Czasy rezerwacji/);
   assert.match(editor, /\+ Dodaj czas/);
   assert.match(editor, /Cennik/);
   assert.match(editor, /\+ Dodaj próg Pon–Czw/);
   assert.match(editor, /\+ Dodaj próg Pt–Nd/);
   assert.match(editor, /Usuń próg/);
-  assert.doesNotMatch(editor, /Aktywuj|Dezaktywuj/);
-  assert.doesNotMatch(editor, /child\.online_bookable[^\n]*onChange/);
+  assert.doesNotMatch(editor, /family\.root\.is_active[^\n]*onChange/);
 });
 
 test("pricing UI uses the existing hourly model, day groups and read-only currency", async () => {
@@ -198,15 +208,15 @@ test("duration and pricing editors are mobile-safe, labelled and keyboard access
   assert.match(editor, /focus-visible:ring-2/);
 });
 
-test("inactive history is diagnostic only and dormant positions remain offline", async () => {
+test("inactive history is diagnostic only and position flags come from local family state", async () => {
   const [, editor, , , helper] = await sources();
 
   assert.match(editor, /Historyczne nieaktywne czasy pozostają zachowane/);
   assert.match(editor, /Historyczne nieaktywne progi pozostają zachowane/);
   assert.match(helper, /\.filter\(\(duration\) => duration\.is_active\)/);
   assert.match(helper, /\.filter\(\(rule\) => rule\.is_active\)/);
-  assert.match(helper, /is_active: resource\.is_active/);
-  assert.match(helper, /online_bookable: isRoot[\s\S]*resource\.online_bookable/);
+  assert.match(helper, /is_active: isRoot \? resource\.is_active : edited\.isActive/);
+  assert.match(helper, /online_bookable: isRoot[\s\S]*edited\.onlineBookable/);
 });
 
 test("uses business-friendly capacity and reservation labels without changing field mapping", async () => {
@@ -236,8 +246,9 @@ test("incomplete dormant children remain visible and block invalid positions mod
   const [, editor, , , helper] = await sources();
 
   assert.match(editor, /positions\.map/);
-  assert.match(editor, /position\.is_active \? "Aktywne" : "Nieaktywne"/);
-  assert.match(editor, /position\.online_bookable \? "Online" : "Offline"/);
+  assert.match(editor, /edit\?\.is_active \? "Aktywne" : "Nieaktywne"/);
+  assert.match(editor, /edit\?\.online_bookable \? "Online" : "Offline"/);
+  assert.match(editor, /!state\.root_positions_bookable &&[\s\S]*!hasUsableOnlinePosition/);
   assert.match(
     helper,
     /Najpierw skonfiguruj co najmniej jedno stanowisko do rezerwacji online\./
@@ -270,10 +281,14 @@ test("positions are configured one at a time and returning to the list preserves
 });
 
 test("position copy is explicit, local-only and does not invoke the family writer", async () => {
-  const [, editor] = await sources();
+  const [, editor, , , helper] = await sources();
   const copyHandler = editor.slice(
     editor.indexOf("function applyPositionCopy"),
     editor.indexOf("async function submit")
+  );
+  const copyHelper = helper.slice(
+    helper.indexOf("export function copyLanePositionEditSettings"),
+    helper.indexOf("function parsePositiveInteger")
   );
 
   assert.match(editor, /Skopiuj ustawienia do innych stanowisk/);
@@ -283,6 +298,8 @@ test("position copy is explicit, local-only and does not invoke the family write
   assert.match(copyHandler, /copyLanePositionEditSettings/);
   assert.match(copyHandler, /setState/);
   assert.doesNotMatch(copyHandler, /onWrite/);
+  assert.doesNotMatch(copyHelper, /is_active: source\.is_active/);
+  assert.doesNotMatch(copyHelper, /online_bookable: source\.online_bookable/);
 });
 
 test("success closes edit mode and refreshes from V2 instead of trusting local state", async () => {
