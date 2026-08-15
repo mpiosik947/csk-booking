@@ -10,8 +10,15 @@ import {
 } from "../../lib/booking-day-group";
 import type {
   BookingDuration,
+  BookingLaneFamily,
   BookingLane,
+  BookingMode,
   BookingPricingRule,
+} from "../../lib/public-booking-configuration";
+import {
+  getBookingModeStartingPrice,
+  getBookingSelectionLabel,
+  getInitialBookingFamilySelection,
 } from "../../lib/public-booking-configuration";
 import {
   addMinutesToTime,
@@ -26,6 +33,7 @@ import {
 } from "../../lib/booking-time-range";
 
 type BookingFormProps = {
+  families: BookingLaneFamily[];
   lanes: BookingLane[];
   durations: BookingDuration[];
   pricingRules: BookingPricingRule[];
@@ -62,7 +70,9 @@ type ConfirmationData = {
   date: string;
   startTime: string;
   endTime: string;
-  laneName: string;
+  familyName: string;
+  mode: BookingMode;
+  positionName: string | null;
   shootersCount: number;
   durationMinutes: number;
   pricingDayGroup: BookingDayGroup;
@@ -170,6 +180,7 @@ function isCreateReservationResponse(
 }
 
 export default function BookingForm({
+  families,
   lanes,
   durations,
   pricingRules,
@@ -178,6 +189,8 @@ export default function BookingForm({
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [reservationDate, setReservationDate] = useState("");
+  const [familyId, setFamilyId] = useState("");
+  const [bookingMode, setBookingMode] = useState<BookingMode | "">("");
   const [laneId, setLaneId] = useState("");
   const [durationMinutes, setDurationMinutes] = useState(0);
   const [shootersCount, setShootersCount] = useState(1);
@@ -197,7 +210,15 @@ export default function BookingForm({
   const submissionInProgressRef = useRef(false);
   const availabilityRequestRef = useRef(0);
 
+  const selectedFamily = families.find(
+    (family) => family.root.id === familyId
+  );
   const selectedLane = lanes.find((lane) => lane.id === laneId);
+  const selectedBookingStepMinutes = selectedLane?.booking_step_minutes ?? null;
+  const selectionLabel =
+    selectedFamily && selectedLane && bookingMode
+      ? getBookingSelectionLabel(selectedFamily, bookingMode, selectedLane)
+      : "";
   const selectedDayGroup = getBookingDayGroup(reservationDate);
   const laneDurations = useMemo(
     () => durations.filter((duration) => duration.lane_id === laneId),
@@ -218,13 +239,13 @@ export default function BookingForm({
         ) / 100
       : null;
 
-  const bookingSlots = useMemo(() => {
-    if (!selectedLane) {
+  const bookingSlots = (() => {
+    if (!selectedBookingStepMinutes) {
       return [];
     }
 
     const result: string[] = [];
-    const step = Number(selectedLane.booking_step_minutes);
+    const step = Number(selectedBookingStepMinutes);
 
     for (
       let start = 8 * 60;
@@ -235,15 +256,15 @@ export default function BookingForm({
     }
 
     return result;
-  }, [selectedLane]);
+  })();
 
-  const selectedRangeSlots = useMemo(
-    () => getOccupiedSlotStarts(selectedHour, durationMinutes, bookingSlots),
-    [bookingSlots, durationMinutes, selectedHour]
+  const selectedRangeSlots = getOccupiedSlotStarts(
+    selectedHour,
+    durationMinutes,
+    bookingSlots
   );
-  const selectedRangeSlotSet = useMemo(
-    () => new Set(selectedRangeSlots.map(normalizeBookingTime)),
-    [selectedRangeSlots]
+  const selectedRangeSlotSet = new Set(
+    selectedRangeSlots.map(normalizeBookingTime)
   );
 
   const selectedEndTime = selectedHour
@@ -341,17 +362,87 @@ export default function BookingForm({
     return true;
   }, []);
 
-  const getSlotState = useCallback((
+  function selectBookingResource(nextLaneId: string) {
+    const nextLane = lanes.find((lane) => lane.id === nextLaneId);
+    const nextDurations = durations.filter(
+      (duration) => duration.lane_id === nextLaneId
+    );
+
+    setLaneId(nextLaneId);
+    setDurationMinutes(nextDurations[0]?.duration_minutes ?? 0);
+    setShootersCount((current) =>
+      nextLane ? Math.min(Math.max(current, 1), nextLane.max_people_online) : 1
+    );
+    setSelectedHour("");
+    availabilityRequestRef.current += 1;
+    setBusyRanges([]);
+    setBlockedRanges([]);
+    setAvailabilityReady(false);
+    setCheckingAvailability(Boolean(nextLaneId && reservationDate));
+
+    if (nextLaneId && reservationDate) {
+      void loadAvailability(nextLaneId, reservationDate);
+    }
+
+    resetAttempt();
+  }
+
+  function selectFamily(family: BookingLaneFamily) {
+    const initialSelection = getInitialBookingFamilySelection(family);
+    setFamilyId(family.root.id);
+    setBookingMode(initialSelection.mode);
+    selectBookingResource(initialSelection.laneId);
+  }
+
+  function selectMode(mode: BookingMode) {
+    if (!selectedFamily || !selectedFamily.availableModes.includes(mode)) {
+      return;
+    }
+
+    setBookingMode(mode);
+    selectBookingResource(
+      mode === "whole" ? selectedFamily.wholeResource?.id ?? "" : ""
+    );
+  }
+
+  function goBackInResourceFlow() {
+    if (!selectedFamily) {
+      return;
+    }
+
+    if (laneId && bookingMode === "position") {
+      selectBookingResource("");
+      return;
+    }
+
+    if (laneId && selectedFamily.availableModes.length === 2) {
+      setBookingMode("");
+      selectBookingResource("");
+      return;
+    }
+
+    if (!laneId && selectedFamily.availableModes.length === 2 && bookingMode) {
+      setBookingMode("");
+      selectBookingResource("");
+      return;
+    }
+
+    setFamilyId("");
+    setBookingMode("");
+    selectBookingResource("");
+  }
+
+  function getSlotState(
     hour: string,
     candidateDuration = durationMinutes,
     candidateSelection = selectedHour
-  ): BookingSlotState => {
+  ): BookingSlotState {
     const now = new Date();
     const [hourValue, minuteValue] = hour.split(":").map(Number);
 
     return classifyBookingSlot({
       slotStart: hour,
-      slotMinutes: Number(selectedLane?.booking_step_minutes ?? 60),
+      slotMinutes: Number(selectedBookingStepMinutes ?? 60),
       durationMinutes: candidateDuration,
       openingStart: "08:00",
       openingEnd: "20:00",
@@ -362,14 +453,7 @@ export default function BookingForm({
         reservationDate === getTodayDateString() &&
         hourValue * 60 + minuteValue <= now.getHours() * 60 + now.getMinutes(),
     });
-  }, [
-    blockedRanges,
-    busyRanges,
-    durationMinutes,
-    reservationDate,
-    selectedHour,
-    selectedLane?.booking_step_minutes,
-  ]);
+  }
 
   async function sendConfirmationEmail(
     accessToken: string,
@@ -407,6 +491,8 @@ export default function BookingForm({
 
     if (
       !reservationDate ||
+      !selectedFamily ||
+      !bookingMode ||
       !laneId ||
       !selectedLane ||
       !selectedHour ||
@@ -520,7 +606,10 @@ export default function BookingForm({
         date: reservationDate,
         startTime: selectedHour,
         endTime,
-        laneName: selectedLane.name,
+        familyName: selectedFamily.root.name,
+        mode: bookingMode,
+        positionName:
+          bookingMode === "position" ? selectedLane.resource_name : null,
         shootersCount: result.shootersCount,
         durationMinutes: result.durationMinutes,
         pricingDayGroup: result.pricingDayGroup,
@@ -538,6 +627,8 @@ export default function BookingForm({
 
       creationRequestIdRef.current = "";
       setReservationDate("");
+      setFamilyId("");
+      setBookingMode("");
       setLaneId("");
       setDurationMinutes(0);
       setShootersCount(1);
@@ -589,8 +680,15 @@ export default function BookingForm({
     Boolean(laneId) &&
     (laneDurations.length === 0 ||
       !pricingRules.some((rule) => rule.lane_id === laneId));
-  const lanePricingNotice = selectedLane
+  const lanePricingNotice =
+    selectedLane?.resource_kind === "lane"
     ? getLanePricingNotice(selectedLane.name)
+    : null;
+  const wholeStartingPrice = selectedFamily
+    ? getBookingModeStartingPrice(selectedFamily, "whole", pricingRules)
+    : null;
+  const positionStartingPrice = selectedFamily
+    ? getBookingModeStartingPrice(selectedFamily, "position", pricingRules)
     : null;
 
   return (
@@ -613,7 +711,22 @@ export default function BookingForm({
               <p>
                 {confirmationData.startTime}–{confirmationData.endTime}
               </p>
-              <p className="break-words">{confirmationData.laneName}</p>
+              <p className="break-words">
+                <span className="text-[#858c7f]">Oś:</span>{" "}
+                {confirmationData.familyName}
+              </p>
+              <p>
+                <span className="text-[#858c7f]">Tryb:</span>{" "}
+                {confirmationData.mode === "position"
+                  ? "Pojedyncze stanowisko"
+                  : "Cała oś na wyłączność"}
+              </p>
+              {confirmationData.positionName && (
+                <p className="break-words">
+                  <span className="text-[#858c7f]">Stanowisko:</span>{" "}
+                  {confirmationData.positionName}
+                </p>
+              )}
               <p>
                 {confirmationData.shootersCount} strzelców ·{" "}
                 {formatDuration(confirmationData.durationMinutes)}
@@ -661,6 +774,144 @@ export default function BookingForm({
           </div>
         )}
 
+        <section
+          aria-labelledby="booking-resource-heading"
+          className="rounded-2xl border border-[#30372c] bg-[#141814] p-4 sm:p-5"
+        >
+          {!selectedFamily ? (
+            <div>
+              <h2 id="booking-resource-heading" className="text-xl font-bold">
+                Wybierz oś
+              </h2>
+              <p className="mt-1 text-sm text-[#a9ada4]">
+                Najpierw wybierz logiczną oś, z której chcesz korzystać.
+              </p>
+              <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                {families.map((family) => (
+                  <button
+                    key={family.root.id}
+                    type="button"
+                    disabled={profileRejected || loading}
+                    onClick={() => selectFamily(family)}
+                    className="min-h-14 rounded-xl border border-[#3f4935] bg-[#191e19] px-4 py-3 text-left font-semibold transition hover:border-[#78865f] hover:bg-[#202720] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#e1c477] disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    <span className="block break-words">{family.root.name}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <div>
+              <button
+                type="button"
+                onClick={goBackInResourceFlow}
+                disabled={loading}
+                className="inline-flex min-h-11 items-center rounded-lg px-2 text-sm font-semibold text-[#d7c895] hover:text-[#f2efe4] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#e1c477]"
+              >
+                ← Wróć
+              </button>
+              <p className="mt-2 text-xs font-semibold uppercase tracking-[0.18em] text-[#858c7f]">
+                Wybrana oś
+              </p>
+              <h2 id="booking-resource-heading" className="mt-1 text-xl font-bold">
+                {selectedFamily.root.name}
+              </h2>
+
+              {!bookingMode && selectedFamily.availableModes.length === 2 && (
+                <div className="mt-5">
+                  <h3 className="text-lg font-bold">Jak chcesz korzystać z osi?</h3>
+                  <div className="mt-3 grid gap-3 md:grid-cols-2">
+                    <button
+                      type="button"
+                      aria-pressed={false}
+                      onClick={() => selectMode("position")}
+                      disabled={loading}
+                      className="min-h-44 rounded-xl border border-[#3f4935] bg-[#191e19] p-4 text-left transition hover:border-[#78865f] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#e1c477]"
+                    >
+                      <span className="block text-lg font-bold">
+                        Pojedyncze stanowisko
+                      </span>
+                      <span className="mt-2 block text-sm leading-6 text-[#a9ada4]">
+                        Rezerwujesz jedno stanowisko. W tym samym czasie z pozostałych
+                        stanowisk mogą korzystać inni strzelający.
+                      </span>
+                      {positionStartingPrice && (
+                        <span className="mt-3 block font-semibold text-[#d7c895]">
+                          od {formatMoney(positionStartingPrice.amount, positionStartingPrice.currency)}/h
+                        </span>
+                      )}
+                    </button>
+                    <button
+                      type="button"
+                      aria-pressed={false}
+                      onClick={() => selectMode("whole")}
+                      disabled={loading}
+                      className="min-h-44 rounded-xl border border-[#3f4935] bg-[#191e19] p-4 text-left transition hover:border-[#78865f] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#e1c477]"
+                    >
+                      <span className="block text-lg font-bold">
+                        Cała oś na wyłączność
+                      </span>
+                      <span className="mt-2 block text-sm leading-6 text-[#a9ada4]">
+                        Rezerwujesz całą oś. Wszystkie stanowiska są zarezerwowane
+                        wyłącznie dla Ciebie i Twojej grupy.
+                      </span>
+                      {wholeStartingPrice && (
+                        <span className="mt-3 block font-semibold text-[#d7c895]">
+                          od {formatMoney(wholeStartingPrice.amount, wholeStartingPrice.currency)}/h
+                        </span>
+                      )}
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {bookingMode === "position" && !laneId && (
+                <div className="mt-5">
+                  <h3 className="text-lg font-bold">Wybierz stanowisko</h3>
+                  <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                    {selectedFamily.children.map((position) => (
+                      <button
+                        key={position.id}
+                        type="button"
+                        aria-pressed={laneId === position.id}
+                        onClick={() => selectBookingResource(position.id)}
+                        disabled={loading}
+                        className="min-h-12 rounded-xl border border-[#3f4935] bg-[#191e19] px-4 py-3 text-left transition hover:border-[#78865f] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#e1c477]"
+                      >
+                        <span className="block font-semibold">
+                          {position.resource_name}
+                        </span>
+                        <span className="mt-1 block text-sm text-[#858c7f]">
+                          Maks. {position.max_people_online} osób w rezerwacji
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {selectedLane && bookingMode && (
+                <div
+                  role="status"
+                  className="mt-5 rounded-xl border border-[#536143] bg-[#202720] p-4"
+                >
+                  <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#a9d4ad]">
+                    Wybrany sposób rezerwacji
+                  </p>
+                  <p className="mt-1 break-words font-semibold">{selectionLabel}</p>
+                  <p className="mt-2 text-sm text-[#a9ada4]">
+                    {bookingMode === "position"
+                      ? "Rezerwacja pojedynczego stanowiska nie gwarantuje wyłączności osi."
+                      : "Rezerwacja obejmuje całą oś na wyłączność."}
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
+        </section>
+
+        {selectedLane && (
+          <>
         <div className="grid gap-4 md:grid-cols-3">
           <label className="grid gap-2 text-sm text-[#a9ada4]">
             Imię i nazwisko
@@ -689,41 +940,6 @@ export default function BookingForm({
         </div>
 
         <div className="grid gap-4 md:grid-cols-2">
-          <label className="grid gap-2 text-sm text-[#a9ada4]">
-            Oś / stanowisko
-            <select
-              value={laneId}
-              disabled={profileRejected || loading}
-              onChange={(event) => {
-                const nextLaneId = event.target.value;
-                const nextDurations = durations.filter(
-                  (duration) => duration.lane_id === nextLaneId
-                );
-                setLaneId(nextLaneId);
-                setDurationMinutes(nextDurations[0]?.duration_minutes ?? 0);
-                setShootersCount(1);
-                setSelectedHour("");
-                availabilityRequestRef.current += 1;
-                setBusyRanges([]);
-                setBlockedRanges([]);
-                setAvailabilityReady(false);
-                setCheckingAvailability(Boolean(nextLaneId && reservationDate));
-                if (nextLaneId && reservationDate) {
-                  void loadAvailability(nextLaneId, reservationDate);
-                }
-                resetAttempt();
-              }}
-              className="min-h-12 w-full min-w-0 rounded-xl border border-[#30372c] bg-[#141814] px-4 text-[#f2efe4]"
-            >
-              <option value="">Wybierz oś</option>
-              {lanes.map((lane) => (
-                <option key={lane.id} value={lane.id}>
-                  {lane.name} · maks. {lane.max_people_online}
-                </option>
-              ))}
-            </select>
-          </label>
-
           <label className="grid gap-2 text-sm text-[#a9ada4]">
             Data
             <input
@@ -984,6 +1200,8 @@ export default function BookingForm({
         >
           {loading ? "Tworzenie rezerwacji..." : "Potwierdź rezerwację"}
         </button>
+          </>
+        )}
       </form>
     </>
   );

@@ -7,12 +7,14 @@ import {
   adaptPublicBookingConfiguration,
   parsePublicBookingConfiguration,
   type BookingDuration,
+  type BookingLaneFamily,
   type BookingLane,
   type BookingPricingRule,
 } from "../../lib/public-booking-configuration";
 import BookingForm from "./BookingForm";
 
 export default function BookingPage() {
+  const [families, setFamilies] = useState<BookingLaneFamily[]>([]);
   const [lanes, setLanes] = useState<BookingLane[]>([]);
   const [durations, setDurations] = useState<BookingDuration[]>([]);
   const [pricingRules, setPricingRules] = useState<BookingPricingRule[]>([]);
@@ -47,6 +49,7 @@ export default function BookingPage() {
       }
 
       const configuration = adaptPublicBookingConfiguration(resources);
+      setFamilies(configuration.families);
       setLanes(configuration.lanes);
       setDurations(configuration.durations);
       setPricingRules(configuration.pricingRules);
@@ -65,13 +68,14 @@ export default function BookingPage() {
           </p>
           <h1 className="text-3xl font-bold sm:text-4xl">Zarezerwuj oś</h1>
           <p className="mt-3 max-w-3xl leading-7 text-[#a9ada4]">
-            Wybierz datę, oś, liczbę strzelców, godzinę i czas rezerwacji.
-            Ostateczna dostępność i cena są potwierdzane podczas zapisu.
+            Wybierz oś i sposób rezerwacji, a następnie datę, liczbę
+            strzelców, godzinę i czas. Ostateczna dostępność i cena są
+            potwierdzane podczas zapisu.
           </p>
         </header>
 
         <div className="mt-6 rounded-2xl border border-[#30372c] bg-[#191e19] px-4 py-3 text-sm leading-6 text-[#a9ada4] sm:px-5">
-          Wybierz oś → datę → liczbę strzelców → długość → godzinę
+          Wybierz oś → sposób rezerwacji → termin → potwierdzenie
         </div>
 
         {loading && (
@@ -92,7 +96,7 @@ export default function BookingPage() {
           </div>
         )}
 
-        {!loading && lanes.length === 0 && !message && (
+        {!loading && families.length === 0 && !message && (
           <div
             role="status"
             className="mt-6 rounded-xl border border-[#806a32] bg-[#2b2618] p-4 text-[#e1c477]"
@@ -101,9 +105,10 @@ export default function BookingPage() {
           </div>
         )}
 
-        {!loading && lanes.length > 0 && !message && (
+        {!loading && families.length > 0 && !message && (
           <section aria-label="Formularz rezerwacji" className="mt-8 w-full">
             <BookingForm
+              families={families}
               lanes={lanes}
               durations={durations}
               pricingRules={pricingRules}

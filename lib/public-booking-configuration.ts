@@ -28,10 +28,27 @@ export type PublicBookingConfigurationRow = {
 export type BookingLane = {
   id: string;
   name: string;
+  resource_name: string;
+  display_name: string;
+  resource_kind: "lane" | "position";
+  parent_lane_id: string | null;
   max_people_online: number;
   booking_step_minutes: number;
   display_order: number;
   currency_code: string;
+};
+
+export type BookingMode = "whole" | "position";
+
+export type BookingLaneFamily = {
+  root: {
+    id: string;
+    name: string;
+    display_order: number;
+  };
+  wholeResource: BookingLane | null;
+  children: BookingLane[];
+  availableModes: BookingMode[];
 };
 
 export type BookingDuration = {
@@ -44,9 +61,15 @@ export type BookingPricingRule = PublicBookingPricing & {
 };
 
 export type BookingConfiguration = {
+  families: BookingLaneFamily[];
   lanes: BookingLane[];
   durations: BookingDuration[];
   pricingRules: BookingPricingRule[];
+};
+
+export type BookingFamilySelection = {
+  mode: BookingMode | "";
+  laneId: string;
 };
 
 const UUID_PATTERN =
@@ -357,15 +380,66 @@ export function adaptPublicBookingConfiguration(
       ? `${resource.display_name} — Cała oś`
       : resource.display_name;
 
-  return {
-    lanes: selectableResources.map((resource) => ({
+  const lanes = selectableResources.map((resource) => ({
       id: resource.lane_id,
       name: getBookingLabel(resource),
+      resource_name: resource.name,
+      display_name: resource.display_name,
+      resource_kind: resource.resource_kind,
+      parent_lane_id: resource.parent_lane_id,
       max_people_online: resource.max_people_online,
       booking_step_minutes: resource.booking_step_minutes,
       display_order: resource.display_order,
       currency_code: resource.currency_code,
-    })),
+    }));
+  const lanesById = new Map(lanes.map((lane) => [lane.id, lane]));
+  const families = resources
+    .filter((resource) => resource.resource_kind === "lane")
+    .map((root): BookingLaneFamily => {
+      const wholeResource = lanesById.get(root.lane_id) ?? null;
+      const children = lanes
+        .filter(
+          (lane) =>
+            lane.resource_kind === "position" &&
+            lane.parent_lane_id === root.lane_id
+        )
+        .sort(
+          (left, right) =>
+            left.display_order - right.display_order ||
+            left.display_name.localeCompare(right.display_name, "pl") ||
+            left.id.localeCompare(right.id)
+        );
+      const availableModes: BookingMode[] = [];
+
+      if (wholeResource) {
+        availableModes.push("whole");
+      }
+      if (children.length > 0) {
+        availableModes.push("position");
+      }
+
+      return {
+        root: {
+          id: root.lane_id,
+          name: root.display_name,
+          display_order: root.display_order,
+        },
+        wholeResource,
+        children,
+        availableModes,
+      };
+    })
+    .filter((family) => family.availableModes.length > 0)
+    .sort(
+      (left, right) =>
+        left.root.display_order - right.root.display_order ||
+        left.root.name.localeCompare(right.root.name, "pl") ||
+        left.root.id.localeCompare(right.root.id)
+    );
+
+  return {
+    families,
+    lanes,
     durations: selectableResources.flatMap((resource) =>
       resource.durations_minutes.map((durationMinutes) => ({
         lane_id: resource.lane_id,
@@ -378,5 +452,63 @@ export function adaptPublicBookingConfiguration(
         ...pricingRule,
       }))
     ),
+  };
+}
+
+export function getInitialBookingFamilySelection(
+  family: BookingLaneFamily
+): BookingFamilySelection {
+  if (
+    family.availableModes.length === 1 &&
+    family.availableModes[0] === "whole" &&
+    family.wholeResource
+  ) {
+    return { mode: "whole", laneId: family.wholeResource.id };
+  }
+
+  if (
+    family.availableModes.length === 1 &&
+    family.availableModes[0] === "position"
+  ) {
+    return { mode: "position", laneId: "" };
+  }
+
+  return { mode: "", laneId: "" };
+}
+
+export function getBookingSelectionLabel(
+  family: BookingLaneFamily,
+  mode: BookingMode,
+  resource: BookingLane
+) {
+  return mode === "whole"
+    ? `${family.root.name} — Cała oś na wyłączność`
+    : `${family.root.name} — ${resource.resource_name}`;
+}
+
+export function getBookingModeStartingPrice(
+  family: BookingLaneFamily,
+  mode: BookingMode,
+  pricingRules: BookingPricingRule[]
+): { amount: number; currency: string } | null {
+  const resources =
+    mode === "whole"
+      ? family.wholeResource
+        ? [family.wholeResource]
+        : []
+      : family.children;
+  const currencies = new Set(resources.map((resource) => resource.currency_code));
+  const resourceIds = new Set(resources.map((resource) => resource.id));
+  const prices = pricingRules
+    .filter((rule) => resourceIds.has(rule.lane_id))
+    .map((rule) => rule.hourly_price);
+
+  if (resources.length === 0 || currencies.size !== 1 || prices.length === 0) {
+    return null;
+  }
+
+  return {
+    amount: Math.min(...prices),
+    currency: resources[0].currency_code,
   };
 }
