@@ -739,8 +739,10 @@ test("calendar read model requests hierarchy metadata without adding database wr
   );
   assert.match(
     routeSource,
-    /id,name,is_active,display_order,booking_step_minutes,resource_kind,parent_lane_id/
+    /id,name,is_active,display_order,booking_step_minutes,resource_kind,parent_lane_id,whole_lane_bookable,positions_bookable,lane_booking_rules\(online_bookable\)/
   );
+  assert.equal((routeSource.match(/\.from\("shooting_lanes"\)/g) ?? []).length, 1);
+  assert.equal((routeSource.match(/lane_booking_rules\(online_bookable\)/g) ?? []).length, 1);
   assert.doesNotMatch(routeSource, /\.insert\(|\.update\(|\.delete\(|\.upsert\(/);
 });
 

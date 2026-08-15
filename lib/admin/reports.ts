@@ -1,4 +1,5 @@
 import { buildLaneHierarchyDisplayModel } from "./lane-hierarchy.js";
+import { buildEffectiveLaneCapacity } from "./lane-capacity.js";
 
 export const REPORT_PAGE_SIZE = 500;
 export const REPORT_OPEN_MINUTES_PER_DAY = 16 * 60;
@@ -121,37 +122,23 @@ export function calculateHierarchyUtilization(
   }
 
   const lanesById = new Map(lanes.map((lane) => [lane.id, lane]));
-  const activeChildrenByParent = new Map<string, number>();
-
-  for (const item of hierarchy.value) {
-    if (
-      item.isPosition &&
-      item.isActive &&
-      onlineBookableByLaneId.get(item.id) === true &&
-      item.parentLaneId
-    ) {
-      activeChildrenByParent.set(
-        item.parentLaneId,
-        (activeChildrenByParent.get(item.parentLaneId) ?? 0) + 1,
-      );
-    }
-  }
-
-  const capacityByRootId = new Map<string, number>();
-  let effectiveCapacity = 0;
-
-  for (const item of hierarchy.value) {
-    if (!item.isParent || !item.isActive) continue;
-
-    const lane = lanesById.get(item.id);
-    if (!lane) return { ok: false as const, code: "invalid_input" as const };
-
-    const activeChildren = activeChildrenByParent.get(item.id) ?? 0;
-    const capacity =
-      lane.positions_bookable && activeChildren > 0 ? activeChildren : 1;
-
-    capacityByRootId.set(item.id, capacity);
-    effectiveCapacity += capacity;
+  const capacity = buildEffectiveLaneCapacity(
+    hierarchy.value.map((item) => {
+      const lane = lanesById.get(item.id);
+      return {
+        id: item.id,
+        isActive: item.isActive,
+        isParent: item.isParent,
+        isPosition: item.isPosition,
+        parentLaneId: item.parentLaneId,
+        onlineBookable: onlineBookableByLaneId.get(item.id)!,
+        wholeLaneBookable: lane!.whole_lane_bookable,
+        positionsBookable: lane!.positions_bookable,
+      };
+    }),
+  );
+  if (!capacity.ok) {
+    return { ok: false as const, code: "invalid_input" as const };
   }
 
   let occupiedResourceMinutes = 0;
@@ -162,19 +149,15 @@ export function calculateHierarchyUtilization(
       return { ok: false as const, code: "invalid_input" as const };
     }
 
-    const resource = reservation.lane_id
-      ? lanesById.get(reservation.lane_id)
-      : null;
-    const weight =
-      resource?.resource_kind === "lane"
-        ? (capacityByRootId.get(resource.id) ?? 1)
-        : 1;
+    const weight = reservation.lane_id
+      ? (capacity.unitIdsByResourceId.get(reservation.lane_id)?.length ?? 0)
+      : 0;
 
     occupiedResourceMinutes += duration * weight;
   }
 
   const availableResourceMinutes =
-    effectiveCapacity * openMinutesPerDay * daysInRange;
+    capacity.effectiveCapacity * openMinutesPerDay * daysInRange;
   const utilizationPercent =
     availableResourceMinutes > 0
       ? Math.round(
@@ -184,7 +167,7 @@ export function calculateHierarchyUtilization(
 
   return {
     ok: true as const,
-    effectiveCapacity,
+    effectiveCapacity: capacity.effectiveCapacity,
     occupiedResourceMinutes,
     availableResourceMinutes,
     utilizationPercent,

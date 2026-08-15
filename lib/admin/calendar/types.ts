@@ -154,7 +154,7 @@ export type CalendarFeed = {
   timeZone: "Europe/Warsaw";
   openingStart: string;
   openingEnd: string;
-  occupancyBasis: "current_active_lanes";
+  occupancyBasis: "effective_family_capacity";
   lanes: CalendarLane[];
   entries: CalendarEntry[];
   dailySummaries: CalendarDaySummary[];

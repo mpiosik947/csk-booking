@@ -77,7 +77,7 @@ export async function GET(request: Request) {
     const laneRequest = supabase
       .from("shooting_lanes")
       .select(
-        "id,name,is_active,display_order,booking_step_minutes,resource_kind,parent_lane_id"
+        "id,name,is_active,display_order,booking_step_minutes,resource_kind,parent_lane_id,whole_lane_bookable,positions_bookable,lane_booking_rules(online_bookable)"
       );
     const { data: laneData, error: laneError } = await laneRequest;
 

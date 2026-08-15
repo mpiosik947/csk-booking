@@ -11,6 +11,7 @@ import {
   type CalendarReservationStatus,
 } from "./types";
 import { buildLaneHierarchyDisplayModel } from "../lane-hierarchy.js";
+import { buildEffectiveLaneCapacity } from "../lane-capacity.js";
 import {
   CALENDAR_OPENING_END,
   CALENDAR_OPENING_START,
@@ -34,6 +35,9 @@ export type CalendarLaneRow = {
   booking_step_minutes: unknown;
   resource_kind: unknown;
   parent_lane_id: unknown;
+  whole_lane_bookable: unknown;
+  positions_bookable: unknown;
+  lane_booking_rules: unknown;
 };
 
 export type CalendarReservationRow = {
@@ -78,6 +82,12 @@ export type CalendarFeedRows = {
   events: CalendarEventRow[];
 };
 
+type CalendarCapacityLane = CalendarLane & {
+  onlineBookable: boolean;
+  wholeLaneBookable: boolean;
+  positionsBookable: boolean;
+};
+
 export function parseCalendarFeedRole(value: unknown): CalendarFeedRole | null {
   if (typeof value !== "string") return null;
   const normalized = value.trim().toLowerCase();
@@ -109,6 +119,22 @@ function requireNonNegativeInteger(value: unknown, label: string) {
     throw new Error(`Invalid ${label}.`);
   }
   return value;
+}
+
+function requireOnlineBookable(value: unknown) {
+  const relation = Array.isArray(value)
+    ? value.length === 1
+      ? value[0]
+      : null
+    : value;
+  if (
+    !relation ||
+    typeof relation !== "object" ||
+    typeof (relation as { online_bookable?: unknown }).online_bookable !== "boolean"
+  ) {
+    throw new Error("Invalid calendar lane booking rule.");
+  }
+  return (relation as { online_bookable: boolean }).online_bookable;
 }
 
 function normalizeDatabaseTime(value: unknown) {
@@ -183,15 +209,18 @@ export function getReservationCalendarState(status: unknown, includeHistorical: 
 
 export function buildCalendarDaySummaries(
   query: CalendarFeedQuery,
-  lanes: CalendarLane[],
+  lanes: CalendarCapacityLane[],
   entries: CalendarEntry[]
 ): CalendarDaySummary[] {
   const dates = getCalendarDatesInclusive(query.rangeStart, query.rangeEnd);
   if (!dates) throw new Error("Invalid calendar summary range.");
 
-  const activeLaneIds = new Set(
-    lanes.filter((lane) => lane.isActive).map((lane) => lane.id)
-  );
+  const capacity = buildEffectiveLaneCapacity(lanes);
+  if (!capacity.ok) throw new Error("Invalid calendar lane capacity.");
+  const selectedUnitIds =
+    query.laneId === "all"
+      ? capacity.unitIds
+      : new Set(capacity.unitIdsByResourceId.get(query.laneId) ?? []);
   const openingMinutes = getCalendarRangeDurationMinutes(
     CALENDAR_OPENING_START,
     CALENDAR_OPENING_END
@@ -235,8 +264,7 @@ export function buildCalendarDaySummaries(
 
       if (
         !entry.occupiesLane ||
-        !entry.laneMetadataAvailable ||
-        !activeLaneIds.has(entry.laneId)
+        !entry.laneMetadataAvailable
       ) {
         continue;
       }
@@ -246,9 +274,16 @@ export function buildCalendarDaySummaries(
         flags.add("outside_opening_hours");
         continue;
       }
-      const laneIntervals = intervalsByLane.get(entry.laneId) ?? [];
-      laneIntervals.push(clipped);
-      intervalsByLane.set(entry.laneId, laneIntervals);
+      const occupiedUnitIds = (
+        capacity.unitIdsByResourceId.get(entry.laneId) ?? []
+      ).filter((unitId) => selectedUnitIds.has(unitId));
+      if (occupiedUnitIds.length === 0) continue;
+
+      for (const unitId of occupiedUnitIds) {
+        const unitIntervals = intervalsByLane.get(unitId) ?? [];
+        unitIntervals.push(clipped);
+        intervalsByLane.set(unitId, unitIntervals);
+      }
 
       if (
         entry.type === "lane_block" &&
@@ -278,7 +313,7 @@ export function buildCalendarDaySummaries(
       }
     }
 
-    const availableMinutes = activeLaneIds.size * openingMinutes;
+    const availableMinutes = selectedUnitIds.size * openingMinutes;
     const occupiedMinutes = [...intervalsByLane.values()].reduce(
       (total, intervals) => total + getCalendarTimeRangesUnionMinutes(intervals),
       0
@@ -315,6 +350,14 @@ export function buildCalendarFeed(
   if (!isValidCalendarDate(today)) throw new Error("Invalid current date.");
 
   const bookingStepByLaneId = new Map<string, number>();
+  const bookingConfigurationByLaneId = new Map<
+    string,
+    {
+      onlineBookable: boolean;
+      wholeLaneBookable: boolean;
+      positionsBookable: boolean;
+    }
+  >();
   for (const row of rows.lanes) {
     const laneId = requireString(row.id, "lane id");
     const bookingStepMinutes = requireNonNegativeInteger(
@@ -323,15 +366,26 @@ export function buildCalendarFeed(
     );
     if (bookingStepMinutes < 1) throw new Error("Invalid lane booking step.");
     bookingStepByLaneId.set(laneId, bookingStepMinutes);
+    bookingConfigurationByLaneId.set(laneId, {
+      onlineBookable: requireOnlineBookable(row.lane_booking_rules),
+      wholeLaneBookable: requireBoolean(
+        row.whole_lane_bookable,
+        "whole lane booking mode",
+      ),
+      positionsBookable: requireBoolean(
+        row.positions_bookable,
+        "positions booking mode",
+      ),
+    });
   }
 
   const hierarchy = buildLaneHierarchyDisplayModel(rows.lanes);
   if (!hierarchy.ok) throw new Error("Invalid calendar lane hierarchy.");
 
-  const laneMap = new Map<string, CalendarLane>(
-    hierarchy.value.map((lane) => [
-      lane.id,
-      {
+  const allCapacityLanes = hierarchy.value.map((lane): CalendarCapacityLane => {
+    const bookingConfiguration = bookingConfigurationByLaneId.get(lane.id);
+    if (!bookingConfiguration) throw new Error("Invalid calendar lane configuration.");
+    return {
         id: lane.id,
         name: lane.name,
         displayName: lane.displayName,
@@ -345,8 +399,28 @@ export function buildCalendarFeed(
         depth: lane.depth,
         isParent: lane.isParent,
         isPosition: lane.isPosition,
+        ...bookingConfiguration,
+      };
+  });
+  const laneMap = new Map<string, CalendarLane>(
+    allCapacityLanes.map((lane) => [
+      lane.id,
+      {
+        id: lane.id,
+        name: lane.name,
+        displayName: lane.displayName,
+        parentName: lane.parentName,
+        isActive: lane.isActive,
+        isHistoricalOnly: lane.isHistoricalOnly,
+        displayOrder: lane.displayOrder,
+        bookingStepMinutes: lane.bookingStepMinutes,
+        resourceKind: lane.resourceKind,
+        parentLaneId: lane.parentLaneId,
+        depth: lane.depth,
+        isParent: lane.isParent,
+        isPosition: lane.isPosition,
       },
-    ])
+    ]),
   );
   const toEntryResource = (lane: CalendarLane) => ({
     id: lane.id,
@@ -512,7 +586,11 @@ export function buildCalendarFeed(
       first.id.localeCompare(second.id)
   );
 
-  const dailySummaries = buildCalendarDaySummaries(query, lanes, entries);
+  const dailySummaries = buildCalendarDaySummaries(
+    query,
+    allCapacityLanes,
+    entries,
+  );
 
   return {
     ok: true,
@@ -521,7 +599,7 @@ export function buildCalendarFeed(
     timeZone: CALENDAR_TIME_ZONE,
     openingStart: CALENDAR_OPENING_START,
     openingEnd: CALENDAR_OPENING_END,
-    occupancyBasis: "current_active_lanes",
+    occupancyBasis: "effective_family_capacity",
     lanes,
     entries,
     dailySummaries,
