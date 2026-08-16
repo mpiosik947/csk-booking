@@ -10,6 +10,7 @@ import {
   checkConfirmationEmailRateLimit,
   getConfirmationRateLimitSecret,
 } from "@/lib/server/confirmation-email-rate-limit";
+import { verifyAuthUser } from "@/lib/server/auth-user-verification";
 
 type EventRegistrationConfirmationPayload = {
   registrationId?: unknown;
@@ -106,6 +107,7 @@ function jsonError(
   code:
     | "invalid_request"
     | "unauthorized"
+    | "auth_unavailable"
     | "not_found"
     | "invalid_status"
     | "delivery_failed"
@@ -126,14 +128,15 @@ export async function POST(request: Request) {
     }
 
     const supabase = getAuthenticatedSupabaseClient(accessToken);
-    const {
-      data: { user },
-      error: userError,
-    } = await supabase.auth.getUser(accessToken);
+    const authResult = await verifyAuthUser(() =>
+      supabase.auth.getUser(accessToken)
+    );
 
-    if (userError || !user) {
-      return jsonError("unauthorized", 401);
+    if (!authResult.ok) {
+      return jsonError(authResult.code, authResult.status);
     }
+
+    const user = authResult.user;
 
     let parsedBody: unknown;
 

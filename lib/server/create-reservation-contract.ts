@@ -1,6 +1,9 @@
 export const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+export const CREATE_RESERVATION_AUTH_UNAVAILABLE_MESSAGE =
+  "Usługa logowania jest chwilowo niedostępna. Spróbuj ponownie.";
+
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 const TIME_PATTERN = /^(?:[01]\d|2[0-3]):[0-5]\d$/;
 

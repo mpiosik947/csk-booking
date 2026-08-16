@@ -85,6 +85,8 @@ const UUID_PATTERN =
 
 const CODE_MESSAGES: Record<string, string> = {
   unauthorized: "Sesja wygasła. Zaloguj się ponownie.",
+  auth_unavailable:
+    "Usługa logowania jest chwilowo niedostępna. Spróbuj ponownie.",
   not_allowed: "To konto nie może tworzyć rezerwacji.",
   profile_not_found: "Nie znaleziono profilu użytkownika.",
   profile_incomplete:
