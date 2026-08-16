@@ -15,15 +15,18 @@ import {
   filterLaneConfigurationHierarchy,
   getLaneConfigurationSummary,
   parseAdminLaneConfigurationSnapshot,
+  parseLaneFamilyCreateResult,
   parseLaneConfigurationWriteResult,
   type AdminLaneConfigurationSnapshot,
   type LaneConfigurationFamily,
   type LaneConfigurationPricingRule,
   type LaneConfigurationResource,
   type LaneFamilyWriteResource,
+  type LaneFamilyCreateWritePayload,
 } from "../../../lib/admin/lane-configuration";
 import AdminShell from "../_components/AdminShell";
 import LaneConfigurationEditor from "./_components/LaneConfigurationEditor";
+import LaneFamilyCreateDialog from "./_components/LaneFamilyCreateDialog";
 
 const CONTROLLED_READ_ERROR =
   "Nie udało się bezpiecznie odczytać konfiguracji osi.";
@@ -481,11 +484,13 @@ export default function AdminLaneConfigurationPage() {
   const [search, setSearch] = useState("");
   const [selectedResourceId, setSelectedResourceId] = useState<string | null>(null);
   const [selectedFamilyId, setSelectedFamilyId] = useState<string | null>(null);
+  const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [editorDirty, setEditorDirty] = useState(false);
   const [successMessage, setSuccessMessage] = useState("");
   const requestRef = useRef(0);
   const detailsTriggerRef = useRef<HTMLButtonElement | null>(null);
   const editorTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const createTriggerRef = useRef<HTMLButtonElement | null>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
 
   const loadConfiguration = useCallback(async () => {
@@ -671,6 +676,31 @@ export default function AdminLaneConfigurationPage() {
     [loadConfiguration]
   );
 
+  const createLaneFamily = useCallback(
+    async (payload: LaneFamilyCreateWritePayload) => {
+      const { data, error } = await supabase.rpc(
+        "admin_create_lane_booking_family_v1",
+        { p_family: payload }
+      );
+      if (error) {
+        console.error("Admin lane family creation failed:", error.code);
+        throw new Error("controlled_create_error");
+      }
+      return parseLaneFamilyCreateResult(data);
+    },
+    []
+  );
+
+  const completeCreation = useCallback(
+    async (message: string) => {
+      setCreateDialogOpen(false);
+      await loadConfiguration();
+      setSuccessMessage(message);
+      window.setTimeout(() => createTriggerRef.current?.focus(), 0);
+    },
+    [loadConfiguration]
+  );
+
   const refreshConfiguration = useCallback(async () => {
     if (
       editorDirty &&
@@ -691,6 +721,18 @@ export default function AdminLaneConfigurationPage() {
       badge={<StatusBadge tone="olive">Edycja kontrolowana</StatusBadge>}
       actions={
         <>
+          <button
+            ref={createTriggerRef}
+            type="button"
+            onClick={() => {
+              setSuccessMessage("");
+              setCreateDialogOpen(true);
+            }}
+            disabled={loading || accessDenied}
+            className="min-h-11 rounded-xl bg-[#d7c895] px-4 py-2 text-sm font-bold text-[#171a15] transition hover:bg-[#e3d5a7] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#f2efe4] disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            + Dodaj nową oś
+          </button>
           <button
             type="button"
             onClick={() => void refreshConfiguration()}
@@ -813,6 +855,16 @@ export default function AdminLaneConfigurationPage() {
           onDirtyChange={setEditorDirty}
           onWrite={writeFamilyConfiguration}
           onCompleted={completeEditor}
+        />
+      )}
+      {createDialogOpen && (
+        <LaneFamilyCreateDialog
+          onClose={() => {
+            setCreateDialogOpen(false);
+            window.setTimeout(() => createTriggerRef.current?.focus(), 0);
+          }}
+          onCreate={createLaneFamily}
+          onCompleted={completeCreation}
         />
       )}
     </AdminShell>
