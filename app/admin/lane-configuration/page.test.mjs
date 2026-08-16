@@ -76,6 +76,7 @@ test("write adapter sends a complete family with the snapshot version", async ()
   const [page, editor, , , helper] = await sources();
 
   assert.match(helper, /family\.resources[\s\S]*durations_minutes/);
+  assert.match(helper, /name: edited\.name/);
   assert.match(helper, /durations_minutes: edited\.durationsMinutes/);
   assert.match(helper, /pricing: edited\.pricing/);
   assert.match(helper, /\.filter\(\(duration\) => duration\.is_active\)/);
@@ -83,6 +84,17 @@ test("write adapter sends a complete family with the snapshot version", async ()
   assert.match(editor, /expectedVersion: family\.configuration_version/);
   assert.match(page, /p_expected_version: expectedVersion/);
   assert.match(page, /p_resources: payload/);
+});
+
+test("editor exposes controlled root and position display-name fields", async () => {
+  const [, editor, , , helper] = await sources();
+
+  assert.match(editor, /resource\.resource_kind === "position" \? "Nazwa stanowiska" : "Nazwa osi"/);
+  assert.match(editor, /value=\{edit\.name\}/);
+  assert.match(editor, /maxLength=\{LANE_RESOURCE_NAME_MAX_LENGTH\}/);
+  assert.match(editor, /Techniczna tożsamość zasobu pozostaje bez zmian/);
+  assert.match(helper, /trimmedName = typeof edit\.name === "string" \? edit\.name\.trim\(\) : ""/);
+  assert.match(helper, /label: resource\.resource_kind === "position" \? "Nazwa stanowiska" : "Nazwa osi"/);
 });
 
 test("save is explicit, dirty-aware and presents only before/after changes", async () => {

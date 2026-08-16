@@ -1,4 +1,5 @@
 export const ADMIN_LANE_CONFIGURATION_CONTRACT_VERSION = 2;
+export const LANE_RESOURCE_NAME_MAX_LENGTH = 120;
 
 export type LaneResourceKind = "lane" | "position";
 
@@ -59,6 +60,7 @@ export type LaneConfigurationSummary = {
 
 export type LaneFamilyResourceEdit = {
   lane_id: string;
+  name: string;
   is_active: boolean;
   online_bookable: boolean;
   max_shooters: string;
@@ -93,6 +95,7 @@ export type LaneFamilyWritePricing = {
 
 export type LaneFamilyWriteResource = {
   lane_id: string;
+  name: string;
   is_active: boolean;
   whole_lane_bookable: boolean;
   positions_bookable: boolean;
@@ -532,6 +535,7 @@ export function createLaneFamilyEditState(
     root_positions_bookable: family.root.positions_bookable,
     resources: family.resources.map((resource) => ({
       lane_id: resource.lane_id,
+      name: resource.name,
       is_active: resource.is_active,
       online_bookable: resource.online_bookable,
       max_shooters: String(resource.max_shooters),
@@ -617,6 +621,7 @@ function parseMoney(value: string) {
 }
 
 type ParsedLaneFamilyResourceEdit = {
+  name: string;
   isActive: boolean;
   onlineBookable: boolean;
   maxShooters: number;
@@ -729,6 +734,18 @@ function parseLaneFamilyEditState(
       errors.push(`${resource.name}: status zasobu jest nieprawidłowy.`);
       continue;
     }
+    const trimmedName = typeof edit.name === "string" ? edit.name.trim() : "";
+    if (
+      trimmedName === "" ||
+      trimmedName.length > LANE_RESOURCE_NAME_MAX_LENGTH ||
+      /[<>\u0000-\u001f\u007f]/u.test(trimmedName)
+    ) {
+      const label = resource.resource_kind === "position" ? "Nazwa stanowiska" : "Nazwa osi";
+      errors.push(
+        `${resource.name}: ${label.toLocaleLowerCase("pl-PL")} musi mieć od 1 do ${LANE_RESOURCE_NAME_MAX_LENGTH} znaków i nie może zawierać znaczników HTML.`
+      );
+      continue;
+    }
     const maxShooters = parsePositiveInteger(edit.max_shooters);
     const maxPeopleOnline = parsePositiveInteger(edit.max_people_online);
     if (maxShooters === null || maxPeopleOnline === null) {
@@ -825,6 +842,7 @@ function parseLaneFamilyEditState(
 
     if (durationsValid && pricingRowsValid) {
       values.set(resource.lane_id, {
+        name: trimmedName,
         isActive: edit.is_active,
         onlineBookable: edit.online_bookable,
         maxShooters,
@@ -1051,6 +1069,7 @@ export function buildLaneFamilyWritePayload(
       const isRoot = resource.lane_id === family.root_lane_id;
       return {
         lane_id: resource.lane_id,
+        name: edited.name,
         is_active: isRoot ? resource.is_active : edited.isActive,
         whole_lane_bookable: isRoot
           ? state.root_whole_lane_bookable
@@ -1134,6 +1153,14 @@ export function getLaneFamilyChanges(
   for (const resource of family.resources) {
     const edited = parsed.values.get(resource.lane_id);
     if (!edited) continue;
+    if (edited.name !== resource.name) {
+      changes.push({
+        resourceName: resource.name,
+        label: resource.resource_kind === "position" ? "Nazwa stanowiska" : "Nazwa osi",
+        before: resource.name,
+        after: edited.name,
+      });
+    }
     if (
       resource.resource_kind === "position" &&
       edited.isActive !== resource.is_active
@@ -1221,6 +1248,7 @@ function comparableEditState(state: LaneFamilyEditState) {
     resources: state.resources
       .map((resource) => ({
         lane_id: resource.lane_id,
+        name: resource.name,
         is_active: resource.is_active,
         online_bookable: resource.online_bookable,
         max_shooters: resource.max_shooters,

@@ -8,6 +8,7 @@ import {
   useState,
 } from "react";
 import {
+  LANE_RESOURCE_NAME_MAX_LENGTH,
   buildLaneFamilyWritePayload,
   copyLanePositionEditSettings,
   createLaneFamilyEditState,
@@ -303,6 +304,47 @@ function LimitFields({
         </span>
       </label>
     </div>
+  );
+}
+
+function ResourceNameField({
+  resource,
+  state,
+  disabled,
+  onChange,
+}: {
+  resource: LaneConfigurationResource;
+  state: LaneFamilyEditState;
+  disabled: boolean;
+  onChange: (state: LaneFamilyEditState) => void;
+}) {
+  const edit = state.resources.find((candidate) => candidate.lane_id === resource.lane_id);
+  if (!edit) return null;
+  const label = resource.resource_kind === "position" ? "Nazwa stanowiska" : "Nazwa osi";
+
+  return (
+    <label className="block">
+      <span className="text-sm font-semibold text-[#e3dfd2]">{label}</span>
+      <input
+        type="text"
+        value={edit.name}
+        maxLength={LANE_RESOURCE_NAME_MAX_LENGTH}
+        autoComplete="off"
+        disabled={disabled}
+        onChange={(event) =>
+          onChange(
+            updateResourceEdit(state, resource.lane_id, (current) => ({
+              ...current,
+              name: event.target.value,
+            }))
+          )
+        }
+        className="mt-2 min-h-11 w-full rounded-xl border border-[#3d4638] bg-[#101310] px-3 text-[#f2efe4] outline-none focus:border-[#7a6a3c] focus:ring-2 focus:ring-[#d7c895]/25 disabled:cursor-not-allowed disabled:opacity-60"
+      />
+      <span className="mt-2 block text-xs leading-5 text-[#92988c]">
+        Nazwa wyświetlana klientom i obsłudze. Techniczna tożsamość zasobu pozostaje bez zmian.
+      </span>
+    </label>
   );
 }
 
@@ -747,6 +789,14 @@ function ResourceConfigurationSections({
         <h3 className="font-bold text-[#f2efe4]">
           {resource.resource_kind === "position" ? "Podstawowe" : "Rezerwacje"}
         </h3>
+        <div className="mt-4">
+          <ResourceNameField
+            resource={resource}
+            state={state}
+            disabled={disabled}
+            onChange={onChange}
+          />
+        </div>
         <div className="mt-4">
           <LimitFields
             resource={resource}
