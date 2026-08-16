@@ -46,3 +46,4 @@ supabase/.branches/
 supabase/backup_20260816/
 supabase/migrations_legacy_20260816/
 supabase/remote_schema_20260816.sql
+supabase/snippets/
