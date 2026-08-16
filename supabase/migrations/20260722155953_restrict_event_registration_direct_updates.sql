@@ -1,8 +1,2 @@
--- Ogranicz bezpośrednie aktualizacje zapisów na szkolenia do płatności.
-revoke update on table public.event_registrations from authenticated;
-revoke update on table public.event_registrations from anon;
-revoke update on table public.event_registrations from public;
-
-grant update (payment_status)
-on table public.event_registrations
-to authenticated;
+-- Historical migration absorbed into 20260816090000_remote_baseline.sql.
+SELECT 1;

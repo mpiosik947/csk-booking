@@ -1,4 +1,2 @@
--- Keep reservation writer V1 available only as an administrative rollback path.
-revoke execute on function public.create_reservation(
-  uuid, date, time without time zone, integer, integer, uuid, text
-) from authenticated;
+-- Historical migration absorbed into 20260816090000_remote_baseline.sql.
+SELECT 1;
