@@ -167,6 +167,7 @@ export type CalendarFeedErrorCode =
   | "range_too_large"
   | "invalid_types"
   | "unauthorized"
+  | "auth_unavailable"
   | "forbidden"
   | "lane_not_found"
   | "calendar_feed_failed";

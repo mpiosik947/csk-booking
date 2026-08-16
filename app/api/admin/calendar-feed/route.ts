@@ -12,6 +12,7 @@ import {
 import { parseCalendarFeedQuery } from "@/lib/admin/calendar/query";
 import { getWarsawCalendarDate } from "@/lib/admin/calendar/time";
 import type { CalendarFeedErrorCode } from "@/lib/admin/calendar/types";
+import { verifyAuthUser } from "@/lib/server/auth-user-verification";
 
 const RESPONSE_HEADERS = { "Cache-Control": "private, no-store" };
 
@@ -45,13 +46,28 @@ export async function GET(request: Request) {
     }
 
     const supabase = getAuthenticatedSupabaseClient(accessToken);
-    const {
-      data: { user },
-      error: userError,
-    } = await supabase.auth.getUser(accessToken);
+    const authResult = await verifyAuthUser(() =>
+      supabase.auth.getUser(accessToken)
+    );
 
-    if (userError || !user) {
-      return jsonError("unauthorized", "Wymagane jest zalogowanie.", 401);
+    if (!authResult.ok) {
+      if (authResult.code === "unauthorized") {
+        return jsonError("unauthorized", "Wymagane jest zalogowanie.", 401);
+      }
+
+      if (authResult.code === "auth_unavailable") {
+        return jsonError(
+          "auth_unavailable",
+          "Usługa logowania jest chwilowo niedostępna.",
+          503
+        );
+      }
+
+      return jsonError(
+        "calendar_feed_failed",
+        "Nie udało się pobrać kalendarza.",
+        500
+      );
     }
 
     const parsedQuery = parseCalendarFeedQuery(new URL(request.url).searchParams);

@@ -1,11 +1,13 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import {
+  CREATE_RESERVATION_AUTH_UNAVAILABLE_MESSAGE,
   CREATE_RESERVATION_MESSAGES,
   getCreateReservationHttpStatus,
   isCreateReservationRpcResult,
   parseCreateReservationPayload,
 } from "@/lib/server/create-reservation-contract";
+import { verifyAuthUser } from "@/lib/server/auth-user-verification";
 
 function getAuthenticatedSupabaseClient(accessToken: string) {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -28,13 +30,25 @@ function getAuthenticatedSupabaseClient(accessToken: string) {
   });
 }
 
-function jsonError(code: "invalid_request" | "unauthorized" | "internal_error", status: number) {
+function jsonError(
+  code:
+    | "invalid_request"
+    | "unauthorized"
+    | "auth_unavailable"
+    | "internal_error",
+  status: number
+) {
+  const error =
+    code === "auth_unavailable"
+      ? CREATE_RESERVATION_AUTH_UNAVAILABLE_MESSAGE
+      : CREATE_RESERVATION_MESSAGES[code];
+
   return NextResponse.json(
     {
       ok: false,
       changed: false,
       code,
-      error: CREATE_RESERVATION_MESSAGES[code],
+      error,
     },
     { status }
   );
@@ -51,13 +65,12 @@ export async function POST(request: Request) {
     }
 
     const supabase = getAuthenticatedSupabaseClient(accessToken);
-    const {
-      data: { user },
-      error: userError,
-    } = await supabase.auth.getUser(accessToken);
+    const authResult = await verifyAuthUser(() =>
+      supabase.auth.getUser(accessToken)
+    );
 
-    if (userError || !user) {
-      return jsonError("unauthorized", 401);
+    if (!authResult.ok) {
+      return jsonError(authResult.code, authResult.status);
     }
 
     let parsedBody: unknown;

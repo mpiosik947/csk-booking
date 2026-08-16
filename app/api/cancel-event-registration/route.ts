@@ -1,6 +1,10 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { promoteEventReserve } from "../../../lib/server/event-reserve-promotion";
+import {
+  getAuthUserFailureMessage,
+  verifyAuthUser,
+} from "@/lib/server/auth-user-verification";
 
 type CancellationPayload = {
   registrationId?: unknown;
@@ -114,12 +118,21 @@ export async function POST(request: Request) {
     }
 
     const supabase = getAuthenticatedSupabaseClient(accessToken);
-    const {
-      data: { user },
-      error: userError,
-    } = await supabase.auth.getUser(accessToken);
+    const authResult = await verifyAuthUser(() =>
+      supabase.auth.getUser(accessToken)
+    );
 
-    if (userError || !user) {
+    if (!authResult.ok) {
+      if (authResult.code !== "unauthorized") {
+        return NextResponse.json(
+          {
+            code: authResult.code,
+            error: getAuthUserFailureMessage(authResult),
+          },
+          { status: authResult.status }
+        );
+      }
+
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
