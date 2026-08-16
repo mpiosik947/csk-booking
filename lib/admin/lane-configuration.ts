@@ -106,6 +106,51 @@ export type LaneFamilyWriteResource = {
   pricing: LaneFamilyWritePricing[];
 };
 
+export type LaneFamilyCreateResourceEdit = {
+  edit_key: string;
+  name: string;
+  is_active: boolean;
+  online_bookable: boolean;
+  max_shooters: string;
+  max_people_online: string;
+  booking_step_minutes: string;
+  durations_minutes: string[];
+  pricing: LaneFamilyPricingEdit[];
+};
+
+export type LaneFamilyCreateState = {
+  root_whole_lane_bookable: boolean;
+  root_positions_bookable: boolean;
+  root: LaneFamilyCreateResourceEdit;
+  positions: LaneFamilyCreateResourceEdit[];
+};
+
+export type LaneFamilyCreateWriteResource = {
+  name: string;
+  is_active: boolean;
+  online_bookable: boolean;
+  max_shooters: number;
+  max_people_online: number;
+  booking_step_minutes: number;
+  durations_minutes: number[];
+  pricing: LaneFamilyWritePricing[];
+};
+
+export type LaneFamilyCreateWritePayload = {
+  root: LaneFamilyCreateWriteResource & {
+    whole_lane_bookable: boolean;
+    positions_bookable: boolean;
+  };
+  positions: LaneFamilyCreateWriteResource[];
+};
+
+export type LaneFamilyCreateResult = {
+  code: "created" | "not_allowed" | "invalid_payload" | "invalid_configuration";
+  rootLaneId: string | null;
+  configurationVersion: number | null;
+  createdResourceCount: number;
+};
+
 export type LaneFamilyChange = {
   resourceName: string;
   label: string;
@@ -620,6 +665,71 @@ function parseMoney(value: string) {
   return Number.isFinite(parsed) && parsed <= 9999999999.99 ? parsed : null;
 }
 
+function createDefaultPricing(editKey: string): LaneFamilyPricingEdit[] {
+  return (["mon_thu", "fri_sun"] as const).map((dayGroup) => ({
+    edit_key: `${editKey}:pricing:${dayGroup}:1`,
+    day_group: dayGroup,
+    min_shooters: "1",
+    max_shooters: "1",
+    label: "1 osoba",
+    hourly_price: "",
+  }));
+}
+
+function createEmptyCreateResource(
+  editKey: string,
+  name: string
+): LaneFamilyCreateResourceEdit {
+  return {
+    edit_key: editKey,
+    name,
+    is_active: false,
+    online_bookable: false,
+    max_shooters: "1",
+    max_people_online: "1",
+    booking_step_minutes: "60",
+    durations_minutes: ["60"],
+    pricing: createDefaultPricing(editKey),
+  };
+}
+
+export function createInitialLaneFamilyCreateState(): LaneFamilyCreateState {
+  return {
+    root_whole_lane_bookable: true,
+    root_positions_bookable: false,
+    root: createEmptyCreateResource("root", ""),
+    positions: [],
+  };
+}
+
+export function addPositionToLaneFamilyCreateState(
+  state: LaneFamilyCreateState
+): LaneFamilyCreateState {
+  const nextNumber =
+    state.positions.reduce((highest, position) => {
+      const match = /^position:(\d+)$/.exec(position.edit_key);
+      return match ? Math.max(highest, Number(match[1])) : highest;
+    }, 0) + 1;
+  const editKey = `position:${nextNumber}`;
+  return {
+    ...state,
+    positions: [
+      ...state.positions,
+      createEmptyCreateResource(editKey, `Stanowisko ${nextNumber}`),
+    ],
+  };
+}
+
+export function removePositionFromLaneFamilyCreateState(
+  state: LaneFamilyCreateState,
+  editKey: string
+): LaneFamilyCreateState {
+  return {
+    ...state,
+    positions: state.positions.filter((position) => position.edit_key !== editKey),
+  };
+}
+
 type ParsedLaneFamilyResourceEdit = {
   name: string;
   isActive: boolean;
@@ -702,6 +812,243 @@ function pricingCoverageErrors(
     }
   }
   return errors;
+}
+
+type ParsedLaneFamilyCreateResource = {
+  name: string;
+  isActive: boolean;
+  onlineBookable: boolean;
+  maxShooters: number;
+  maxPeopleOnline: number;
+  bookingStepMinutes: number;
+  durationsMinutes: number[];
+  pricing: LaneFamilyWritePricing[];
+};
+
+function parseLaneFamilyCreateResource(
+  resource: LaneFamilyCreateResourceEdit,
+  resourceLabel: string
+): { value: ParsedLaneFamilyCreateResource | null; errors: string[] } {
+  const errors: string[] = [];
+  const name = typeof resource.name === "string" ? resource.name.trim() : "";
+  if (
+    name === "" ||
+    name.length > LANE_RESOURCE_NAME_MAX_LENGTH ||
+    /[<>\u0000-\u001f\u007f]/u.test(name)
+  ) {
+    errors.push(
+      `${resourceLabel}: nazwa musi mieć od 1 do ${LANE_RESOURCE_NAME_MAX_LENGTH} znaków i nie może zawierać znaczników HTML ani znaków sterujących.`
+    );
+  }
+
+  const maxShooters = parsePositiveInteger(resource.max_shooters);
+  const maxPeopleOnline = parsePositiveInteger(resource.max_people_online);
+  const bookingStepMinutes = parsePositiveInteger(resource.booking_step_minutes);
+  if (maxShooters === null || maxPeopleOnline === null) {
+    errors.push(`${resourceLabel}: oba limity muszą być liczbami całkowitymi co najmniej 1.`);
+  } else if (maxPeopleOnline > maxShooters) {
+    errors.push(
+      `${resourceLabel}: maks. osób w jednej rezerwacji nie może przekraczać pojemności zasobu.`
+    );
+  }
+  if (bookingStepMinutes === null || bookingStepMinutes > 1440) {
+    errors.push(`${resourceLabel}: krok rezerwacji musi wynosić od 1 do 1440 minut.`);
+  }
+
+  const durationsMinutes: number[] = [];
+  for (const duration of resource.durations_minutes) {
+    const parsed = parsePositiveInteger(duration);
+    if (
+      parsed === null ||
+      parsed > 1440 ||
+      bookingStepMinutes === null ||
+      parsed % bookingStepMinutes !== 0
+    ) {
+      errors.push(
+        `${resourceLabel}: każdy czas musi wynosić 1–1440 minut i być podzielny przez krok rezerwacji.`
+      );
+    } else {
+      durationsMinutes.push(parsed);
+    }
+  }
+  if (durationsMinutes.length === 0) {
+    errors.push(`${resourceLabel}: dodaj co najmniej jeden czas rezerwacji.`);
+  }
+  if (new Set(durationsMinutes).size !== durationsMinutes.length) {
+    errors.push(`${resourceLabel}: ten sam czas rezerwacji występuje więcej niż raz.`);
+  }
+
+  const pricing: LaneFamilyWritePricing[] = [];
+  for (const rule of resource.pricing) {
+    const minShooters = parsePositiveInteger(rule.min_shooters);
+    const maxRuleShooters = parsePositiveInteger(rule.max_shooters);
+    const hourlyPrice = parseMoney(rule.hourly_price);
+    const label = rule.label.trim();
+    if (
+      minShooters === null ||
+      maxRuleShooters === null ||
+      maxRuleShooters < minShooters
+    ) {
+      errors.push(`${resourceLabel}: zakres liczby osób w cenniku jest nieprawidłowy.`);
+      continue;
+    }
+    if (!label) {
+      errors.push(`${resourceLabel}: opis progu cenowego nie może być pusty.`);
+      continue;
+    }
+    if (hourlyPrice === null) {
+      errors.push(
+        `${resourceLabel}: cena musi być nieujemna i mieć maksymalnie 2 miejsca po przecinku.`
+      );
+      continue;
+    }
+    pricing.push({
+      day_group: rule.day_group,
+      min_shooters: minShooters,
+      max_shooters: maxRuleShooters,
+      label,
+      hourly_price: hourlyPrice,
+    });
+  }
+
+  if (maxPeopleOnline !== null) {
+    errors.push(...pricingCoverageErrors(resourceLabel, pricing, maxPeopleOnline));
+  }
+
+  if (
+    errors.length > 0 ||
+    maxShooters === null ||
+    maxPeopleOnline === null ||
+    bookingStepMinutes === null
+  ) {
+    return { value: null, errors: [...new Set(errors)] };
+  }
+
+  return {
+    errors: [],
+    value: {
+      name,
+      isActive: resource.is_active,
+      onlineBookable: resource.online_bookable,
+      maxShooters,
+      maxPeopleOnline,
+      bookingStepMinutes,
+      durationsMinutes: [...durationsMinutes].sort((first, second) => first - second),
+      pricing: pricing.sort(sortPricing),
+    },
+  };
+}
+
+function parseLaneFamilyCreateState(state: LaneFamilyCreateState) {
+  const root = parseLaneFamilyCreateResource(state.root, "Oś główna");
+  const positionKeys = new Set<string>();
+  const positions = state.positions.map((position, index) => {
+    if (positionKeys.has(position.edit_key)) {
+      return {
+        value: null,
+        errors: [`Stanowisko ${index + 1}: wykryto zduplikowany klucz formularza.`],
+      };
+    }
+    positionKeys.add(position.edit_key);
+    return parseLaneFamilyCreateResource(position, `Stanowisko ${index + 1}`);
+  });
+  return {
+    root: root.value,
+    positions: positions.map((position) => position.value),
+    errors: [...root.errors, ...positions.flatMap((position) => position.errors)],
+  };
+}
+
+export function validateLaneFamilyCreateState(
+  state: LaneFamilyCreateState
+): LaneFamilyValidation {
+  const parsed = parseLaneFamilyCreateState(state);
+  const errors = [...parsed.errors];
+  const root = parsed.root;
+  const positions = parsed.positions.filter(
+    (position): position is ParsedLaneFamilyCreateResource => position !== null
+  );
+
+  if (root) {
+    if (root.onlineBookable && (!root.isActive || !state.root_whole_lane_bookable)) {
+      errors.push(
+        "Rezerwacja online całej osi wymaga aktywnej osi i włączonej rezerwacji całej osi."
+      );
+    }
+    if (
+      !root.isActive &&
+      (root.onlineBookable ||
+        positions.some((position) => position.isActive || position.onlineBookable))
+    ) {
+      errors.push("Nieaktywna oś nie może mieć aktywnych ani dostępnych online stanowisk.");
+    }
+    if (
+      positions.some(
+        (position) =>
+          position.onlineBookable &&
+          (!position.isActive || !state.root_positions_bookable)
+      )
+    ) {
+      errors.push(
+        "Stanowisko online wymaga aktywnego statusu i włączonej rezerwacji stanowisk."
+      );
+    }
+    if (
+      state.root_positions_bookable &&
+      !positions.some((position) => position.isActive && position.onlineBookable)
+    ) {
+      errors.push(
+        "Rezerwacja stanowisk wymaga co najmniej jednego aktywnego stanowiska online."
+      );
+    }
+    const positionCapacity = positions
+      .filter((position) => position.isActive && position.onlineBookable)
+      .reduce((total, position) => total + position.maxShooters, 0);
+    if (state.root_positions_bookable && positionCapacity > root.maxShooters) {
+      errors.push("Suma pojemności stanowisk online przekracza pojemność osi.");
+    }
+  }
+
+  return { valid: errors.length === 0, errors: [...new Set(errors)] };
+}
+
+function toCreateWriteResource(
+  resource: ParsedLaneFamilyCreateResource
+): LaneFamilyCreateWriteResource {
+  return {
+    name: resource.name,
+    is_active: resource.isActive,
+    online_bookable: resource.onlineBookable,
+    max_shooters: resource.maxShooters,
+    max_people_online: resource.maxPeopleOnline,
+    booking_step_minutes: resource.bookingStepMinutes,
+    durations_minutes: resource.durationsMinutes,
+    pricing: resource.pricing,
+  };
+}
+
+export function buildLaneFamilyCreatePayload(
+  state: LaneFamilyCreateState
+): LaneFamilyCreateWritePayload {
+  const validation = validateLaneFamilyCreateState(state);
+  const parsed = parseLaneFamilyCreateState(state);
+  if (
+    !validation.valid ||
+    !parsed.root ||
+    parsed.positions.some((position) => position === null)
+  ) {
+    throw new Error("invalid_create_state");
+  }
+  return {
+    root: {
+      ...toCreateWriteResource(parsed.root),
+      whole_lane_bookable: state.root_whole_lane_bookable,
+      positions_bookable: state.root_positions_bookable,
+    },
+    positions: parsed.positions.map((position) =>
+      toCreateWriteResource(position as ParsedLaneFamilyCreateResource)
+    ),
+  };
 }
 
 function parseLaneFamilyEditState(
@@ -1332,5 +1679,56 @@ export function parseLaneConfigurationWriteResult(
     futureReservationsCount: 0,
     futureLaneBlocksCount: 0,
     futureEventsCount: 0,
+  };
+}
+
+export function parseLaneFamilyCreateResult(value: unknown): LaneFamilyCreateResult {
+  const expectedKeys = [
+    "changed",
+    "code",
+    "configuration_version",
+    "created_resource_count",
+    "ok",
+    "root_lane_id",
+  ] as const;
+  if (!isRecord(value) || !hasExactKeys(value, expectedKeys)) {
+    throw new Error("invalid_create_result");
+  }
+  const allowedCodes = [
+    "created",
+    "not_allowed",
+    "invalid_payload",
+    "invalid_configuration",
+  ] as const;
+  if (
+    typeof value.code !== "string" ||
+    !(allowedCodes as readonly string[]).includes(value.code) ||
+    typeof value.ok !== "boolean" ||
+    typeof value.changed !== "boolean" ||
+    !isInteger(value.created_resource_count)
+  ) {
+    throw new Error("invalid_create_result");
+  }
+  const created = value.code === "created";
+  if (
+    value.ok !== created ||
+    value.changed !== created ||
+    (created &&
+      (typeof value.root_lane_id !== "string" ||
+        !UUID_PATTERN.test(value.root_lane_id) ||
+        value.configuration_version !== 1 ||
+        value.created_resource_count < 1)) ||
+    (!created &&
+      (value.root_lane_id !== null ||
+        value.configuration_version !== null ||
+        value.created_resource_count !== 0))
+  ) {
+    throw new Error("invalid_create_result");
+  }
+  return {
+    code: value.code as LaneFamilyCreateResult["code"],
+    rootLaneId: created ? (value.root_lane_id as string) : null,
+    configurationVersion: created ? 1 : null,
+    createdResourceCount: value.created_resource_count,
   };
 }

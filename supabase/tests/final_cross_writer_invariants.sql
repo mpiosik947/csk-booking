@@ -1,5 +1,11 @@
 -- Read-only invariant suite for the isolated 6B-4E cross-writer regression.
 -- The caller must scope the database to synthetic fixtures; this query performs no DML.
+\set ON_ERROR_STOP on
+\pset format unaligned
+\pset tuples_only on
+
+select '1..1';
+
 with
 active_reservations as (
   select reservation.id, reservation.lane_id, reservation.reservation_date,
@@ -216,14 +222,14 @@ summary as (
        invalid_capacity, orphan_event_lanes, incomplete_online_configuration,
        reader_exposes_incomplete_configuration
 )
-select
-  'total_violations=' || (
+select case when (
     parent_child_reservations + reservation_block + reservation_event +
     block_event + invalid_hierarchy + duplicate_durations + pricing_coverage +
     invalid_capacity + orphan_event_lanes + incomplete_online_configuration +
     reader_exposes_incomplete_configuration
-  ) ||
-  ';parent_child_reservations=' || parent_child_reservations ||
+) = 0 then 'ok 1 - current cross-writer invariants hold'
+else 'not ok 1 - current cross-writer invariant violation # ' ||
+  'parent_child_reservations=' || parent_child_reservations ||
   ';reservation_block=' || reservation_block ||
   ';reservation_event=' || reservation_event ||
   ';block_event=' || block_event ||
@@ -234,4 +240,5 @@ select
   ';orphan_event_lanes=' || orphan_event_lanes ||
   ';incomplete_online_configuration=' || incomplete_online_configuration ||
   ';reader_exposes_incomplete_configuration=' || reader_exposes_incomplete_configuration
+end
 from summary;

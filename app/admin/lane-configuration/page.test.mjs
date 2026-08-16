@@ -4,6 +4,10 @@ import test from "node:test";
 
 const pagePath = new URL("./page.tsx", import.meta.url);
 const editorPath = new URL("./_components/LaneConfigurationEditor.tsx", import.meta.url);
+const createDialogPath = new URL(
+  "./_components/LaneFamilyCreateDialog.tsx",
+  import.meta.url
+);
 const dashboardPath = new URL("../page.tsx", import.meta.url);
 const middlewarePath = new URL("../../../middleware.ts", import.meta.url);
 const helperPath = new URL("../../../lib/admin/lane-configuration.ts", import.meta.url);
@@ -15,6 +19,7 @@ async function sources() {
     readFile(dashboardPath, "utf8"),
     readFile(middlewarePath, "utf8"),
     readFile(helperPath, "utf8"),
+    readFile(createDialogPath, "utf8"),
   ]);
 }
 
@@ -51,13 +56,18 @@ test("route, dashboard tile and runtime role check remain admin-only", async () 
   );
 });
 
-test("the family V2 RPC is the only configuration write path", async () => {
-  const [page, editor] = await sources();
-  const runtime = `${page}\n${editor}`;
+test("existing edits and new-family creation use only their controlled RPCs", async () => {
+  const [page, editor, , , , createDialog] = await sources();
+  const runtime = `${page}\n${editor}\n${createDialog}`;
 
   assert.match(page, /rpc\(\s*"admin_set_lane_booking_family_configuration_v2"/);
+  assert.match(page, /rpc\(\s*"admin_create_lane_booking_family_v1"/);
   assert.equal(
     [...runtime.matchAll(/admin_set_lane_booking_family_configuration_v2/g)].length,
+    1
+  );
+  assert.equal(
+    [...runtime.matchAll(/admin_create_lane_booking_family_v1/g)].length,
     1
   );
   assert.doesNotMatch(runtime, /admin_set_lane_booking_configuration\s*["'(]/);
@@ -381,10 +391,69 @@ test("editor dialog is accessible and mobile-safe", async () => {
 });
 
 test("runtime contains no production-name, UUID or fixed-position-count conditions", async () => {
-  const [page, editor, , , helper] = await sources();
-  const runtime = `${page}\n${editor}\n${helper}`;
+  const [page, editor, , , helper, createDialog] = await sources();
+  const runtime = `${page}\n${editor}\n${helper}\n${createDialog}`;
 
   assert.doesNotMatch(runtime, /Oś 100 m/);
   assert.doesNotMatch(runtime, /254ca7f6-ce80-4267-8966-4558cc8f8fd2/);
   assert.doesNotMatch(runtime, /children\.length\s*===\s*5/);
+});
+
+test("new lane workflow is explicit, dynamic and safe by default", async () => {
+  const [page, , , , helper, createDialog] = await sources();
+
+  assert.match(page, /\+ Dodaj nową oś/);
+  assert.match(page, /admin_create_lane_booking_family_v1/);
+  assert.match(page, /p_family: payload/);
+  assert.match(createDialog, /createInitialLaneFamilyCreateState/);
+  assert.match(createDialog, /Nowa rodzina startuje bezpiecznie jako nieaktywna i offline/);
+  assert.match(createDialog, /<legend[^>]*>Rodzaj<\/legend>/);
+  assert.match(createDialog, />Samodzielna<\/strong>/);
+  assert.match(createDialog, />Ze stanowiskami<\/strong>/);
+  assert.match(createDialog, /\+ Dodaj stanowisko/);
+  assert.match(createDialog, /`Stanowisko \$\{nextNumber\}`|Stanowisko \{index \+ 1\}/);
+  assert.match(createDialog, /Przejdź do podsumowania/);
+  assert.match(createDialog, /Utwórz rodzinę osi/);
+  assert.match(createDialog, /await onCreate\(payload\)/);
+  assert.doesNotMatch(createDialog, /\.rpc\(/);
+  assert.match(helper, /root_lane_id|configurationVersion/);
+});
+
+test("create confirmation sends one complete family and refreshes V2 only after success", async () => {
+  const [page, , , , helper, createDialog] = await sources();
+  const submit = createDialog.slice(
+    createDialog.indexOf("async function submit"),
+    createDialog.indexOf("return (", createDialog.indexOf("async function submit"))
+  );
+
+  assert.equal([...submit.matchAll(/onCreate\(payload\)/g)].length, 1);
+  assert.match(submit, /result\.code === "created"/);
+  assert.match(submit, /await onCompleted/);
+  assert.match(page, /setCreateDialogOpen\(false\)[\s\S]*await loadConfiguration\(\)/);
+  assert.doesNotMatch(page, /setSnapshot\([^)]*payload/);
+  assert.match(helper, /buildLaneFamilyCreatePayload/);
+  assert.match(helper, /positions: parsed\.positions\.map/);
+});
+
+test("create workflow validates full pricing and remains mobile-safe", async () => {
+  const [, , , , helper, createDialog] = await sources();
+
+  assert.match(helper, /pricingCoverageErrors\(resourceLabel, pricing, maxPeopleOnline\)/);
+  assert.match(helper, /Suma pojemności stanowisk online przekracza pojemność osi/);
+  assert.match(createDialog, /max-h-\[94vh\] w-full overflow-y-auto overflow-x-hidden/);
+  assert.match(createDialog, /grid min-w-0 gap-3/);
+  assert.match(createDialog, /sm:grid-cols-2/);
+  assert.match(createDialog, /min-h-11/);
+  assert.match(createDialog, /focus-visible:ring-2/);
+});
+
+test("create errors are controlled and never produce a partial local family", async () => {
+  const [page, , , , , createDialog] = await sources();
+
+  assert.match(page, /Admin lane family creation failed:/);
+  assert.doesNotMatch(page, /error\.message/);
+  assert.match(createDialog, /Nie udało się bezpiecznie utworzyć osi/);
+  assert.match(createDialog, /setErrorMessage/);
+  assert.doesNotMatch(createDialog, /setSnapshot/);
+  assert.doesNotMatch(createDialog, /window\.location|location\.reload/);
 });
