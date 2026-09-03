@@ -34,6 +34,90 @@ PASS
 
 ---
 
+# SEC-007 AUDIT LOG INTEGRITY PRODUCTION SMOKE
+
+Test date: 2026-09-03
+
+Application commit: `1661abb — security: harden audit log integrity`
+
+Migration: `20260903100000_harden_audit_log_integrity.sql`
+
+The linked production migration history contains `20260903100000`. The smoke
+test was executed through Supabase Management API as one PostgreSQL statement.
+Fixture setup and control reads used the privileged Management API connection;
+every tested application operation explicitly assumed `anon` or
+`authenticated` and set the corresponding synthetic `auth.uid()`.
+
+The statement deliberately ended with the sentinel exception
+`SEC007_SMOKE_ALL_20_PASS_ROLLBACK`. PostgreSQL therefore rolled back the whole
+statement, including four synthetic Auth users/profiles, the synthetic profile
+change, and its trusted audit. A separate read-only post-check confirmed that
+all fixture was absent.
+
+| TEST | RESULT | EVIDENCE |
+|---|---|---|
+| Remote migration history | PASS | `20260903100000` exists remotely. |
+| anon direct INSERT | PASS | Denied with `insufficient_privilege` / SQLSTATE 42501. |
+| ordinary user direct INSERT | PASS | Denied with SQLSTATE 42501. |
+| employee direct INSERT | PASS | Denied with SQLSTATE 42501. |
+| admin direct INSERT | PASS | Denied with SQLSTATE 42501. |
+| employee direct UPDATE | PASS | Denied with SQLSTATE 42501. |
+| admin direct UPDATE | PASS | Denied with SQLSTATE 42501. |
+| employee direct DELETE | PASS | Denied with SQLSTATE 42501. |
+| admin direct DELETE | PASS | Denied with SQLSTATE 42501. |
+| authenticated TRUNCATE | PASS | Admin and employee attempts denied with SQLSTATE 42501. |
+| admin SELECT | PASS | Admin saw exactly the synthetic trusted audit through RLS. |
+| employee SELECT | PASS | Employee saw zero audit rows through RLS. |
+| trusted business flow | PASS | `admin_set_user_note_v1` returned `updated`. |
+| trusted audit count | PASS | Exactly one `profile_admin_note_updated` audit was created. |
+| actor integrity | PASS | `actor_user_id` matched the authenticated admin's `auth.uid()`. |
+| action integrity | PASS | Action and target fields came from the trusted RPC contract. |
+| timestamp integrity | PASS | `created_at` equalled PostgreSQL `transaction_timestamp()`. |
+| idempotent repeat | PASS | Repeat returned `no_change`; audit count remained one. |
+| secret/token minimization | PASS | `details` contained only note-presence booleans and `operator_role`; no token, JWT, key, credential, cookie, or note body. |
+| fixture isolation | PASS | All four synthetic accounts/profiles and one audit existed only inside the rolled-back statement. |
+
+## ACL and RLS post-check
+
+```text
+PUBLIC:        no audit_logs privileges
+anon:          no audit_logs privileges
+authenticated: SELECT only; no INSERT/UPDATE/DELETE/TRUNCATE/REFERENCES/TRIGGER/MAINTAIN
+service_role:  existing privileged platform baseline preserved
+
+RLS policies: exactly 1
+Admins can view audit logs: SELECT, authenticated, USING is_admin()
+Mutation policies: 0
+```
+
+All independent post-check booleans returned `true`:
+
+```text
+migration_present
+auth_fixture_absent
+profile_fixture_absent
+audit_fixture_absent
+rls_contract_intact
+public_has_no_acl
+anon_has_no_acl
+authenticated_select_only
+service_role_baseline_intact
+```
+
+No full token, production customer PII, credential, or service-role key was
+printed or stored in this report. No real customer record was used.
+
+```text
+remaining synthetic fixture = 0
+
+SEC-007 PRODUCTION SMOKE: PASS
+
+SEC-007 STATUS:
+FULLY REMEDIATED
+```
+
+---
+
 ## SEC-005 CHECK-IN TOKEN PRODUCTION SMOKE
 
 Date: 2026-09-03
