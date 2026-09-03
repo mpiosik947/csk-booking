@@ -26,7 +26,7 @@ create temporary table expected_table_acl(
 ) on commit drop;
 
 insert into expected_table_acl values
-  ('audit_logs','E','{}','{INSERT,SELECT}','{DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE}'),
+  ('audit_logs','E','{}','{SELECT}','{DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE}'),
   ('confirmation_email_rate_limits','D','{}','{}','{MAINTAIN,REFERENCES,TRIGGER,TRUNCATE}'),
   ('email_deliveries','D','{}','{}','{DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE}'),
   ('event_lanes','C','{}','{SELECT}','{DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE}'),
@@ -245,10 +245,11 @@ begin
   begin
     perform pg_temp.set_client('authenticated',v_admin);
     insert into public.audit_logs(actor_user_id,action,target_type,details) values(v_admin,'sec002b_admin','test','{}');
-    select count(*) into v_count from public.audit_logs where action='sec002b_admin';
     execute 'reset role';
+    v_denied:=false;
+  exception when insufficient_privilege then v_denied:=true;
   end;
-  perform pg_temp.record_result(20,'Admin audit flow remains allowed',v_count=1,'Jawne INSERT/SELECT audytu dla admina działa.');
+  perform pg_temp.record_result(20,'Admin direct audit insert is denied',v_denied,'Audyt może powstać wyłącznie przez zaufany flow SECURITY DEFINER.');
 
   begin
     perform pg_temp.set_client('authenticated',v_user);
@@ -342,7 +343,6 @@ revoke all privileges on all tables in schema public from public, anon, authenti
 revoke all privileges on all sequences in schema public from public, anon, authenticated;
 grant select on table public.events,public.lane_booking_durations,public.lane_booking_rules,public.lane_pricing_rules,public.shooting_lanes to anon,authenticated;
 grant select on table public.audit_logs,public.event_lanes,public.event_registrations,public.lane_blocks,public.profiles,public.reservations to authenticated;
-grant insert on table public.audit_logs to authenticated;
 grant insert,update on table public.profiles to authenticated;
 grant insert,delete on table public.event_registrations to authenticated;
 grant delete on table public.reservations to authenticated;
@@ -353,7 +353,6 @@ revoke all privileges on all tables in schema public from public, anon, authenti
 revoke all privileges on all sequences in schema public from public, anon, authenticated;
 grant select on table public.events,public.lane_booking_durations,public.lane_booking_rules,public.lane_pricing_rules,public.shooting_lanes to anon,authenticated;
 grant select on table public.audit_logs,public.event_lanes,public.event_registrations,public.lane_blocks,public.profiles,public.reservations to authenticated;
-grant insert on table public.audit_logs to authenticated;
 grant insert,update on table public.profiles to authenticated;
 grant insert,delete on table public.event_registrations to authenticated;
 grant delete on table public.reservations to authenticated;
