@@ -23,7 +23,7 @@ import {
 } from "../../../lib/admin/events/event-management";
 import { supabase } from "../../../lib/supabase";
 
-type RegistrationAction = "approve" | "cancel";
+type RegistrationAction = "approve" | "cancel" | "payment";
 
 const EVENTS_LOAD_ERROR_MESSAGE =
   "Nie udało się poprawnie wczytać listy szkoleń.";
@@ -59,6 +59,16 @@ type ApproveRegistrationResult = {
   event_id?: string;
   previous_status?: string;
   new_status?: string;
+};
+
+type MarkRegistrationPaidResult = {
+  ok: boolean;
+  changed: boolean;
+  code: string;
+  registration_id?: string;
+  event_id?: string;
+  previous_payment_status?: string;
+  new_payment_status?: string;
 };
 
 type CancelRegistrationResult = {
@@ -995,6 +1005,21 @@ export default function AdminEventsPage() {
     );
   }
 
+  function isMarkRegistrationPaidResult(
+    value: unknown
+  ): value is MarkRegistrationPaidResult {
+    if (!value || typeof value !== "object" || Array.isArray(value)) {
+      return false;
+    }
+
+    const result = value as Record<string, unknown>;
+    return (
+      typeof result.ok === "boolean" &&
+      typeof result.changed === "boolean" &&
+      typeof result.code === "string"
+    );
+  }
+
   function isCancelRegistrationResult(
     value: unknown
   ): value is CancelRegistrationResult {
@@ -1244,30 +1269,65 @@ export default function AdminEventsPage() {
   }
 
   async function markRegistrationPaid(registrationId: string) {
+    setMessage("");
+
     if (!canManageEvents) {
       setMessage("Brak uprawnień do zarządzania zapisami uczestników.");
       return;
     }
 
-    const { error } = await supabase
-      .from("event_registrations")
-      .update({ payment_status: "paid_on_site" })
-      .eq("id", registrationId);
-
-    if (error) {
-      setMessage(`Błąd zmiany płatności: ${error.message}`);
+    if (!beginRegistrationAction(registrationId, "payment")) {
       return;
     }
 
-    setRegistrations((current) =>
-      current.map((item) =>
-        item.id === registrationId
-          ? { ...item, payment_status: "paid_on_site" }
-          : item
-      )
-    );
+    try {
+      const { data, error } = await supabase.rpc(
+        "mark_event_registration_paid",
+        { p_registration_id: registrationId }
+      );
 
-    setMessage("Uczestnik oznaczony jako opłacony.");
+      if (error) {
+        console.error("Event registration payment update failed", {
+          code: error.code,
+        });
+        setMessage("Nie udało się zmienić płatności. Spróbuj ponownie.");
+        return;
+      }
+
+      if (
+        !isMarkRegistrationPaidResult(data) ||
+        (data.code !== "updated" && data.code !== "no_change") ||
+        !data.ok ||
+        data.registration_id !== registrationId ||
+        data.event_id !== selectedEventId ||
+        data.new_payment_status !== "paid_on_site" ||
+        (data.code === "updated" && !data.changed) ||
+        (data.code === "no_change" && data.changed)
+      ) {
+        console.error("Event registration payment update returned invalid data");
+        setMessage("Nie udało się potwierdzić wyniku zmiany płatności.");
+        await reloadSelectedRegistrations();
+        return;
+      }
+
+      setRegistrations((current) =>
+        current.map((item) =>
+          item.id === registrationId
+            ? { ...item, payment_status: "paid_on_site" }
+            : item
+        )
+      );
+
+      setMessage(
+        data.changed
+          ? "Uczestnik oznaczony jako opłacony."
+          : "Płatność uczestnika jest już oznaczona jako opłacona."
+      );
+    } catch {
+      setMessage("Nie udało się zmienić płatności. Spróbuj ponownie.");
+    } finally {
+      endRegistrationAction(registrationId);
+    }
   }
 
   function getMessageClass(message: string) {

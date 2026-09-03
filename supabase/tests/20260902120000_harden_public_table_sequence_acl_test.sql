@@ -30,7 +30,7 @@ insert into expected_table_acl values
   ('confirmation_email_rate_limits','D','{}','{}','{MAINTAIN,REFERENCES,TRIGGER,TRUNCATE}'),
   ('email_deliveries','D','{}','{}','{DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE}'),
   ('event_lanes','C','{}','{SELECT}','{DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE}'),
-  ('event_registrations','B','{}','{DELETE,INSERT,SELECT}','{DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE}'),
+  ('event_registrations','B','{}','{SELECT}','{DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE}'),
   ('events','A','{SELECT}','{SELECT}','{DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE}'),
   ('lane_blocks','C','{}','{SELECT}','{DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE}'),
   ('lane_booking_durations','A','{SELECT}','{SELECT}','{DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE}'),
@@ -344,7 +344,6 @@ revoke all privileges on all sequences in schema public from public, anon, authe
 grant select on table public.events,public.lane_booking_durations,public.lane_booking_rules,public.lane_pricing_rules,public.shooting_lanes to anon,authenticated;
 grant select on table public.audit_logs,public.event_lanes,public.event_registrations,public.lane_blocks,public.profiles,public.reservations to authenticated;
 grant insert,update on table public.profiles to authenticated;
-grant insert,delete on table public.event_registrations to authenticated;
 grant delete on table public.reservations to authenticated;
 
 alter default privileges for role postgres in schema public revoke all privileges on tables from public, anon, authenticated;
@@ -354,7 +353,6 @@ revoke all privileges on all sequences in schema public from public, anon, authe
 grant select on table public.events,public.lane_booking_durations,public.lane_booking_rules,public.lane_pricing_rules,public.shooting_lanes to anon,authenticated;
 grant select on table public.audit_logs,public.event_lanes,public.event_registrations,public.lane_blocks,public.profiles,public.reservations to authenticated;
 grant insert,update on table public.profiles to authenticated;
-grant insert,delete on table public.event_registrations to authenticated;
 grant delete on table public.reservations to authenticated;
 
 select pg_temp.record_result(29,'Double application is idempotent',

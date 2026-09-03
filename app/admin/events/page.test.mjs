@@ -153,6 +153,33 @@ test("event status filter has safe empty states and preserves V2 management RPCs
   assert.match(source, /\.rpc\(\s*"admin_set_event_active_v2",\s*payload\.value\s*\)/);
 });
 
+test("event registration payment uses only the controlled minimal RPC", async () => {
+  const source = await readAdminPage();
+  const paymentAction = functionSource(
+    source,
+    "async function markRegistrationPaid(",
+    "function getMessageClass("
+  );
+
+  assert.match(
+    paymentAction,
+    /\.rpc\(\s*"mark_event_registration_paid",\s*\{ p_registration_id: registrationId \}\s*\)/
+  );
+  assert.doesNotMatch(paymentAction, /\.from\("event_registrations"\)/);
+  assert.doesNotMatch(paymentAction, /\.update\(|\.insert\(|\.delete\(|\.upsert\(/);
+  assert.doesNotMatch(
+    paymentAction,
+    /p_(?:user_id|event_id|payment_status|promotion_token|created_at)\s*:/
+  );
+  assert.doesNotMatch(paymentAction, /error\.message/);
+  assert.match(paymentAction, /beginRegistrationAction\(registrationId, "payment"\)/);
+  assert.match(paymentAction, /isMarkRegistrationPaidResult\(data\)/);
+  assert.match(paymentAction, /data\.new_payment_status !== "paid_on_site"/);
+  assert.match(paymentAction, /data\.event_id !== selectedEventId/);
+  assert.match(paymentAction, /finally[\s\S]*endRegistrationAction\(registrationId\)/);
+  assert.equal((paymentAction.match(/mark_event_registration_paid/g) ?? []).length, 1);
+});
+
 test("event card actions use the dashboard palette without a blue edit accent", async () => {
   const source = await readAdminPage();
   const actions = functionSource(
