@@ -32,6 +32,66 @@ PRODUCTION SECURITY SMOKE:
 PASS
 ```
 
+---
+
+## SEC-005 CHECK-IN TOKEN PRODUCTION SMOKE
+
+Date: 2026-09-03
+
+Application commit verified by deployed behavior: `d0e7ced — security: harden check-in token access`.
+
+Migration history: LOCAL and REMOTE both contain `20260902160000_harden_check_in_token_access.sql`.
+
+Controlled marker: `[TEST][SEC-005][20260903T174923784Z][8A2B7C]`.
+
+The run created two synthetic Auth users, one isolated inactive lane, one pricing rule and four synthetic reservations. Service-role credentials were used only for fixture setup, control reads and cleanup. Public calls used the anon role. Staff and ordinary-user checks used real production password sessions and their own Bearer JWTs. No real customer data was read or changed.
+
+| TEST | RESULT | EVIDENCE |
+|---|---|---|
+| 1. Public valid token | PASS | Anonymous `get_public_check_in_status_v1(uuid)` returned HTTP 200 and exactly `{ok:true, code:"ready"}`. Production `/check-in/[token]` returned HTTP 200 with the neutral ready UI, no fixture marker, e-mail, phone, profile, reservation detail or service-role content. The page includes `no-referrer` and `noindex, nofollow` metadata. |
+| 2. Invalid token | PASS | A random unknown UUID returned HTTP 200 and exactly `{ok:false, code:"unavailable"}`; no PII and no 5xx. |
+| 3. Too early | PASS | A reservation more than 24 hours in the future returned HTTP 200 and the same neutral `unavailable` result. |
+| 4. Expired | PASS | A reservation whose end plus two hours was in the past returned HTTP 200 and the same neutral `unavailable` result. |
+| 5. Cancelled | PASS | A cancelled reservation returned HTTP 200 / `unavailable`; the staff token reader returned no reservation row. |
+| 6. Staff lookup | PASS | Authenticated admin received HTTP 200 and one allowlisted row. Authenticated ordinary user received 403, anon received 401, and service role received 403. The DTO contained no `check_in_token`, internal note or address fields. Authorization was exercised through a real JWT and the role stored in `profiles`. |
+| 7. Check-in idempotency | PASS | First `update_reservation_attendance(...,'start')`: HTTP 200, `started`, `changed=true`. Repeat: HTTP 200, `already_started`, `changed=false`. Attendance remained `present`, `checked_in_at` did not change, and the total audit delta was exactly one. |
+| 8. Token after check-in | PASS | Public reader returned HTTP 200 and exactly `{ok:true, code:"already_checked_in"}`. Staff lookup still returned one allowlisted row inside the window. No second attendance mutation occurred. |
+| 9. ACL | PASS | Production schema dump: public reader has explicit PUBLIC revoke and anon grant only; staff reader has explicit PUBLIC revoke and authenticated grant only; private lifecycle helper has explicit PUBLIC revoke and no client grant. Runtime additionally confirmed authenticated/service-role denial on the public reader and anon/service-role denial on the staff reader. |
+| 10. Log / secret review | PASS | Public RPC/DTO and staff DTO returned no token. Public response contained no PII or raw DB error. Tested calls produced no 5xx. Application source logs only a controlled RPC error code and never the token. No password, JWT, service key or full token is recorded in this report. |
+
+### ACL matrix
+
+| Function | PUBLIC | anon | authenticated | service_role |
+|---|---:|---:|---:|---:|
+| `get_public_check_in_status_v1(uuid)` | NO | EXECUTE | NO | NO |
+| `get_check_in_reservation_v1(uuid)` | NO | NO | EXECUTE, with internal admin/pracownik check | NO |
+| `is_reservation_check_in_token_usable_v1(...)` | NO | NO | NO | NO |
+
+### Data-minimization and logging note
+
+The RPC response never returns the bearer token as a data field. As expected for a dynamic Next.js route, the HTML/RSC router state mirrors the token-bearing URL that the requester already supplied; it does not add a second token field or expose it to another principal. `Referrer-Policy: no-referrer` is emitted as page metadata, and application logging does not log the route parameter. Infrastructure access logging of request paths remains an inherent residual risk of the approved URL-bearer design and should be handled by platform log-retention/redaction controls.
+
+### Cleanup
+
+The harness deleted only records identified by the generated marker and exact synthetic IDs. Final control reads returned:
+
+```text
+synthetic reservations remaining: 0
+synthetic lanes remaining: 0
+synthetic profiles remaining: 0
+synthetic Auth users remaining: 0
+remaining synthetic fixture: 0
+```
+
+No schema, migration, ACL, RLS, application configuration or production code was changed during the smoke test.
+
+```text
+SEC-005 PRODUCTION SMOKE: PASS
+
+SEC-005 STATUS:
+FULLY REMEDIATED
+```
+
 ## Preflight
 
 - Local and `origin/main`: `d04c17163b8eb4717bbcfa0d040163140a267b7e`.
