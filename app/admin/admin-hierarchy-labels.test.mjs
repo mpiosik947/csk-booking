@@ -63,7 +63,9 @@ test("reports change only the grouping label and retain totals without extra row
 test("check-in token lookup and controlled operational actions remain available", async () => {
   const content = await source("./check-in/page.tsx");
 
-  assert.match(content, /\.eq\("check_in_token", checkInToken\)/);
+  assert.match(content, /"get_check_in_reservation_v1"/);
+  assert.match(content, /p_token: checkInToken/);
+  assert.doesNotMatch(content, /\.eq\("check_in_token", checkInToken\)/);
   assert.match(content, /updateReservationPayment/);
   assert.match(content, /update_reservation_attendance/);
   assert.match(content, /p_action: action/);

@@ -24,7 +24,6 @@ type VerificationAction = "verify" | "mark_pending" | "reject";
 
 type Reservation = {
   id: string;
-  check_in_token: string | null;
   user_id: string | null;
   customer_name: string | null;
   customer_email: string | null;
@@ -48,6 +47,38 @@ type Reservation = {
     parent_lane?: unknown;
   }[] | null;
 };
+
+type CheckInLookupRow = {
+  reservation_id: string;
+  user_id: string | null;
+  customer_name: string | null;
+  customer_email: string | null;
+  customer_phone: string | null;
+  reservation_date: string | null;
+  start_time: string | null;
+  end_time: string | null;
+  reservation_status: string | null;
+  attendance_status: string | null;
+  payment_status: string | null;
+  checked_in_at: string | null;
+  completed_at: string | null;
+  price: number | null;
+  lane_id: string | null;
+  lane_name: string | null;
+  lane_resource_kind: string | null;
+  lane_parent_lane_id: string | null;
+  lane_display_order: number | null;
+  lane_is_active: boolean | null;
+  parent_lane_id: string | null;
+  parent_lane_name: string | null;
+  parent_lane_resource_kind: string | null;
+  parent_lane_parent_lane_id: string | null;
+  parent_lane_display_order: number | null;
+  parent_lane_is_active: boolean | null;
+};
+
+const UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 type Profile = {
   id: string;
@@ -161,6 +192,94 @@ function valueOrMissing(value: string | null | undefined) {
   return value && value.trim() ? value : "Brak danych";
 }
 
+function isNullableString(value: unknown): value is string | null {
+  return value === null || typeof value === "string";
+}
+
+function parseCheckInLookupRow(value: unknown): Reservation | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return null;
+  }
+
+  const row = value as Partial<CheckInLookupRow>;
+
+  if (
+    typeof row.reservation_id !== "string" ||
+    !UUID_PATTERN.test(row.reservation_id) ||
+    !isNullableString(row.user_id) ||
+    !isNullableString(row.customer_name) ||
+    !isNullableString(row.customer_email) ||
+    !isNullableString(row.customer_phone) ||
+    !isNullableString(row.reservation_date) ||
+    !isNullableString(row.start_time) ||
+    !isNullableString(row.end_time) ||
+    !isNullableString(row.reservation_status) ||
+    !isNullableString(row.attendance_status) ||
+    !isNullableString(row.payment_status) ||
+    !isNullableString(row.checked_in_at) ||
+    !isNullableString(row.completed_at) ||
+    (row.price !== null && typeof row.price !== "number") ||
+    !isNullableString(row.lane_id) ||
+    !isNullableString(row.lane_name) ||
+    !isNullableString(row.lane_resource_kind) ||
+    !isNullableString(row.lane_parent_lane_id) ||
+    (row.lane_display_order !== null &&
+      typeof row.lane_display_order !== "number") ||
+    (row.lane_is_active !== null && typeof row.lane_is_active !== "boolean") ||
+    !isNullableString(row.parent_lane_id) ||
+    !isNullableString(row.parent_lane_name) ||
+    !isNullableString(row.parent_lane_resource_kind) ||
+    !isNullableString(row.parent_lane_parent_lane_id) ||
+    (row.parent_lane_display_order !== null &&
+      typeof row.parent_lane_display_order !== "number") ||
+    (row.parent_lane_is_active !== null &&
+      typeof row.parent_lane_is_active !== "boolean")
+  ) {
+    return null;
+  }
+
+  const parentLane = row.parent_lane_id
+    ? {
+        id: row.parent_lane_id,
+        name: row.parent_lane_name ?? null,
+        resource_kind: row.parent_lane_resource_kind ?? null,
+        parent_lane_id: row.parent_lane_parent_lane_id ?? null,
+        display_order: row.parent_lane_display_order ?? null,
+        is_active: row.parent_lane_is_active ?? null,
+      }
+    : null;
+
+  return {
+    id: row.reservation_id,
+    user_id: row.user_id ?? null,
+    customer_name: row.customer_name ?? null,
+    customer_email: row.customer_email ?? null,
+    customer_phone: row.customer_phone ?? null,
+    reservation_date: row.reservation_date ?? null,
+    start_time: row.start_time ?? null,
+    end_time: row.end_time ?? null,
+    reservation_status: row.reservation_status ?? null,
+    attendance_status: row.attendance_status ?? null,
+    payment_status: row.payment_status ?? null,
+    checked_in_at: row.checked_in_at ?? null,
+    completed_at: row.completed_at ?? null,
+    price: row.price ?? null,
+    shooting_lanes: row.lane_id
+      ? [
+          {
+            id: row.lane_id,
+            name: row.lane_name ?? null,
+            resource_kind: row.lane_resource_kind ?? null,
+            parent_lane_id: row.lane_parent_lane_id ?? null,
+            display_order: row.lane_display_order ?? null,
+            is_active: row.lane_is_active ?? null,
+            parent_lane: parentLane,
+          },
+        ]
+      : null,
+  };
+}
+
 function yesNo(value: boolean | null | undefined) {
   return value ? "Tak" : "Nie";
 }
@@ -246,10 +365,6 @@ function getPermissionsClass(profile: Profile | null | undefined) {
   }
 
   return "border-yellow-700 bg-yellow-950 text-yellow-300";
-}
-
-function isNullableString(value: unknown): value is string | null {
-  return typeof value === "string" || value === null;
 }
 
 function isVerificationRpcResult(value: unknown): value is VerificationRpcResult {
@@ -524,7 +639,6 @@ function CheckInContent() {
       .select(
         `
         id,
-        check_in_token,
         user_id,
         customer_name,
         customer_email,
@@ -576,44 +690,30 @@ function CheckInContent() {
       return;
     }
 
-    const { data, error } = await supabase
-      .from("reservations")
-      .select(
-        `
-        id,
-        check_in_token,
-        user_id,
-        customer_name,
-        customer_email,
-        customer_phone,
-        reservation_date,
-        start_time,
-        end_time,
-        reservation_status,
-        attendance_status,
-        payment_status,
-        checked_in_at,
-        completed_at,
-        price,
-        shooting_lanes (
-          id, name, resource_kind, parent_lane_id, display_order, is_active,
-          parent_lane:shooting_lanes!parent_lane_id (
-            id, name, resource_kind, parent_lane_id, display_order, is_active
-          )
-        )
-      `
-      )
-      .eq("check_in_token", checkInToken)
-      .single();
-
-    setLoading(false);
-
-    if (error) {
-      setMessage("Nie znaleziono rezerwacji dla tego kodu QR.");
+    if (!UUID_PATTERN.test(checkInToken)) {
+      setLoading(false);
+      setMessage("Nie znaleziono aktywnego kodu check-in.");
       return;
     }
 
-    const reservation = data as unknown as Reservation;
+    const { data, error } = await supabase.rpc(
+      "get_check_in_reservation_v1",
+      { p_token: checkInToken }
+    );
+
+    setLoading(false);
+
+    if (error || !Array.isArray(data) || data.length !== 1) {
+      setMessage("Nie znaleziono aktywnego kodu check-in.");
+      return;
+    }
+
+    const reservation = parseCheckInLookupRow(data[0]);
+
+    if (!reservation) {
+      setMessage("Nie udało się bezpiecznie odczytać danych check-in.");
+      return;
+    }
 
     setSelectedReservation(reservation);
     await loadProfilesForReservations([reservation]);
@@ -676,7 +776,6 @@ function CheckInContent() {
       .select(
         `
         id,
-        check_in_token,
         user_id,
         customer_name,
         customer_email,

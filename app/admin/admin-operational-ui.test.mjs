@@ -38,7 +38,8 @@ test("check-in retains token lookup and operational actions with an explicit emp
 
   assert.match(content, /<AdminShell/);
   assert.match(content, /aria-labelledby="check-in-filters-heading"/);
-  assert.match(content, /\.eq\("check_in_token", checkInToken\)/);
+  assert.match(content, /"get_check_in_reservation_v1"/);
+  assert.doesNotMatch(content, /\.eq\("check_in_token", checkInToken\)/);
   assert.match(content, /verifyAccountAndStartVisit\(reservation\)/);
   assert.match(content, /markCompleted\(reservation\)/);
   assert.match(content, /markNoShow\(reservation\)/);
