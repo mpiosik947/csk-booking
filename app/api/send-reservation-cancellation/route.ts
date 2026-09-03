@@ -7,6 +7,7 @@ import {
   getAuthUserFailureMessage,
   verifyAuthUser,
 } from "@/lib/server/auth-user-verification";
+import { escapeHtml } from "@/lib/server/email-html";
 
 type ReservationCancellationPayload = {
   reservationId?: unknown;
@@ -55,18 +56,6 @@ function getAdminSupabaseClient() {
       autoRefreshToken: false,
     },
   });
-}
-
-function escapeHtml(value: string) {
-  const entities: Record<string, string> = {
-    "&": "&amp;",
-    "<": "&lt;",
-    ">": "&gt;",
-    "'": "&#39;",
-    '"': "&quot;",
-  };
-
-  return value.replace(/[&<>'"]/g, (character) => entities[character]);
 }
 
 function getLaneName(reservation: ReservationRecord) {

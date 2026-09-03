@@ -11,6 +11,7 @@ import {
   getConfirmationRateLimitSecret,
 } from "@/lib/server/confirmation-email-rate-limit";
 import { verifyAuthUser } from "@/lib/server/auth-user-verification";
+import { escapeEmailHref, escapeHtml } from "@/lib/server/email-html";
 
 type EventRegistrationConfirmationPayload = {
   registrationId?: unknown;
@@ -54,20 +55,6 @@ function getAuthenticatedSupabaseClient(accessToken: string) {
         Authorization: `Bearer ${accessToken}`,
       },
     },
-  });
-}
-
-function escapeHtml(value: string) {
-  return value.replace(/[&<>"']/g, (character) => {
-    const entities: Record<string, string> = {
-      "&": "&amp;",
-      "<": "&lt;",
-      ">": "&gt;",
-      '"': "&quot;",
-      "'": "&#39;",
-    };
-
-    return entities[character];
   });
 }
 
@@ -291,7 +278,7 @@ export async function POST(request: Request) {
     const safeLocation = escapeHtml(location);
     const safeFormattedStatus = escapeHtml(formattedStatus);
     const safeFormattedPrice = escapeHtml(formattedPrice);
-    const safeMyEventsUrl = escapeHtml(myEventsUrl);
+    const safeMyEventsUrl = escapeEmailHref(myEventsUrl);
 
     const subject = "Potwierdzenie zapisu na szkolenie — CSK Booking";
     const html = `

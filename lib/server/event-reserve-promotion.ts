@@ -2,6 +2,7 @@ import "server-only";
 
 import { headers } from "next/headers";
 import { Resend } from "resend";
+import { escapeEmailHref, escapeHtml } from "./email-html";
 import { createClient } from "@supabase/supabase-js";
 
 type EventRecord = {
@@ -508,6 +509,14 @@ export async function promoteEventReserve(
 
       const confirmUrl = `${siteUrl}/events/confirm/${promotion.promotion_token}`;
       const displayName = registration.customer_name?.trim() || "Uczestniku";
+      const safeDisplayName = escapeHtml(displayName);
+      const safeEventTitle = escapeHtml(eventItem.title ?? "-");
+      const safeFormattedDate = escapeHtml(formattedDate);
+      const safeFormattedStartTime = escapeHtml(formattedStartTime);
+      const safeFormattedEndTime = escapeHtml(formattedEndTime);
+      const safeLocation = escapeHtml(eventItem.location ?? "-");
+      const safeFormattedPrice = escapeHtml(formattedPrice);
+      const safeConfirmUrl = escapeEmailHref(confirmUrl);
 
       const subject = "Zwolniło się miejsce na szkoleniu — CSK Booking";
       const html = `
@@ -521,20 +530,20 @@ export async function promoteEventReserve(
                 Zwolniło się miejsce na szkoleniu
               </h1>
               <p style="margin:0 0 18px 0;font-size:16px;line-height:1.6;color:#d4d4d8;">
-                Cześć ${displayName}, na szkoleniu z Twojej listy rezerwowej pojawiła się możliwość potwierdzenia udziału.
+                Cześć ${safeDisplayName}, na szkoleniu z Twojej listy rezerwowej pojawiła się możliwość potwierdzenia udziału.
               </p>
               <div style="margin:24px 0;padding:18px;border:1px solid #3f3f46;border-radius:14px;background:#09090b;">
-                <p style="margin:0 0 10px 0;font-size:15px;color:#d4d4d8;"><strong style="color:#ffffff;">Szkolenie:</strong> ${eventItem.title ?? "-"}</p>
-                <p style="margin:0 0 10px 0;font-size:15px;color:#d4d4d8;"><strong style="color:#ffffff;">Data:</strong> ${formattedDate}</p>
-                <p style="margin:0 0 10px 0;font-size:15px;color:#d4d4d8;"><strong style="color:#ffffff;">Godzina:</strong> ${formattedStartTime} - ${formattedEndTime}</p>
-                <p style="margin:0 0 10px 0;font-size:15px;color:#d4d4d8;"><strong style="color:#ffffff;">Miejsce:</strong> ${eventItem.location ?? "-"}</p>
-                <p style="margin:0;font-size:15px;color:#d4d4d8;"><strong style="color:#ffffff;">Płatność:</strong> ${formattedPrice}, płatność na miejscu</p>
+                <p style="margin:0 0 10px 0;font-size:15px;color:#d4d4d8;"><strong style="color:#ffffff;">Szkolenie:</strong> ${safeEventTitle}</p>
+                <p style="margin:0 0 10px 0;font-size:15px;color:#d4d4d8;"><strong style="color:#ffffff;">Data:</strong> ${safeFormattedDate}</p>
+                <p style="margin:0 0 10px 0;font-size:15px;color:#d4d4d8;"><strong style="color:#ffffff;">Godzina:</strong> ${safeFormattedStartTime} - ${safeFormattedEndTime}</p>
+                <p style="margin:0 0 10px 0;font-size:15px;color:#d4d4d8;"><strong style="color:#ffffff;">Miejsce:</strong> ${safeLocation}</p>
+                <p style="margin:0;font-size:15px;color:#d4d4d8;"><strong style="color:#ffffff;">Płatność:</strong> ${safeFormattedPrice}, płatność na miejscu</p>
               </div>
               <div style="margin:24px 0;padding:18px;border:1px solid #365314;border-radius:14px;background:#13210d;">
                 <p style="margin:0 0 12px 0;font-size:15px;line-height:1.6;color:#d9f99d;">
                   Kliknij przycisk poniżej, aby potwierdzić udział. Miejsce otrzyma pierwsza osoba z listy rezerwowej, która skutecznie potwierdzi udział.
                 </p>
-                <a href="${confirmUrl}" style="display:inline-block;padding:12px 16px;border-radius:10px;background:#22c55e;color:#052e16;text-decoration:none;font-weight:bold;font-size:14px;">Potwierdź udział</a>
+                <a href="${safeConfirmUrl}" style="display:inline-block;padding:12px 16px;border-radius:10px;background:#22c55e;color:#052e16;text-decoration:none;font-weight:bold;font-size:14px;">Potwierdź udział</a>
               </div>
               <p style="margin:0 0 14px 0;font-size:14px;line-height:1.6;color:#a1a1aa;">Link jest ważny przez 24 godziny. Samo otrzymanie tej wiadomości nie gwarantuje miejsca — decyduje pierwsze skuteczne potwierdzenie.</p>
               <p style="margin:0;font-size:14px;line-height:1.6;color:#a1a1aa;">Jeżeli nie chcesz brać udziału w szkoleniu, zignoruj tę wiadomość.</p>

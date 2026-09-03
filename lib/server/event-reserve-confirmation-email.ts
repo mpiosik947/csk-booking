@@ -1,6 +1,7 @@
 import "server-only";
 
 import { Resend } from "resend";
+import { escapeEmailHref, escapeHtml } from "./email-html";
 
 export type ConfirmedEvent = {
   title: string | null;
@@ -81,6 +82,14 @@ export async function sendConfirmedPlaceEmail(
 
   const myEventsUrl = `${siteUrl}/my-events`;
   const subject = "Twoje miejsce na szkoleniu zostało potwierdzone — CSK Booking";
+  const safeDisplayName = escapeHtml(displayName);
+  const safeEventTitle = escapeHtml(event?.title ?? "-");
+  const safeFormattedDate = escapeHtml(formattedDate);
+  const safeFormattedStartTime = escapeHtml(formattedStartTime);
+  const safeFormattedEndTime = escapeHtml(formattedEndTime);
+  const safeLocation = escapeHtml(event?.location ?? "-");
+  const safeFormattedPrice = escapeHtml(formattedPrice);
+  const safeMyEventsUrl = escapeEmailHref(myEventsUrl);
 
   const html = `
     <div style="margin:0;padding:0;background:#09090b;font-family:Arial,Helvetica,sans-serif;color:#ffffff;">
@@ -95,24 +104,24 @@ export async function sendConfirmedPlaceEmail(
           </h1>
 
           <p style="margin:0 0 18px 0;font-size:16px;line-height:1.6;color:#d4d4d8;">
-            Cześć ${displayName}, Twoje miejsce na szkoleniu zostało potwierdzone.
+            Cześć ${safeDisplayName}, Twoje miejsce na szkoleniu zostało potwierdzone.
           </p>
 
           <div style="margin:24px 0;padding:18px;border:1px solid #3f3f46;border-radius:14px;background:#09090b;">
             <p style="margin:0 0 10px 0;font-size:15px;color:#d4d4d8;">
-              <strong style="color:#ffffff;">Szkolenie:</strong> ${event?.title ?? "-"}
+              <strong style="color:#ffffff;">Szkolenie:</strong> ${safeEventTitle}
             </p>
             <p style="margin:0 0 10px 0;font-size:15px;color:#d4d4d8;">
-              <strong style="color:#ffffff;">Data:</strong> ${formattedDate}
+              <strong style="color:#ffffff;">Data:</strong> ${safeFormattedDate}
             </p>
             <p style="margin:0 0 10px 0;font-size:15px;color:#d4d4d8;">
-              <strong style="color:#ffffff;">Godzina:</strong> ${formattedStartTime} - ${formattedEndTime}
+              <strong style="color:#ffffff;">Godzina:</strong> ${safeFormattedStartTime} - ${safeFormattedEndTime}
             </p>
             <p style="margin:0 0 10px 0;font-size:15px;color:#d4d4d8;">
-              <strong style="color:#ffffff;">Miejsce:</strong> ${event?.location ?? "-"}
+              <strong style="color:#ffffff;">Miejsce:</strong> ${safeLocation}
             </p>
             <p style="margin:0;font-size:15px;color:#d4d4d8;">
-              <strong style="color:#ffffff;">Płatność:</strong> ${formattedPrice}, płatność na miejscu
+              <strong style="color:#ffffff;">Płatność:</strong> ${safeFormattedPrice}, płatność na miejscu
             </p>
           </div>
 
@@ -121,7 +130,7 @@ export async function sendConfirmedPlaceEmail(
               Szczegóły zapisu znajdziesz w panelu uczestnika.
             </p>
 
-            <a href="${myEventsUrl}" style="display:inline-block;padding:12px 16px;border-radius:10px;background:#22c55e;color:#052e16;text-decoration:none;font-weight:bold;font-size:14px;">
+            <a href="${safeMyEventsUrl}" style="display:inline-block;padding:12px 16px;border-radius:10px;background:#22c55e;color:#052e16;text-decoration:none;font-weight:bold;font-size:14px;">
               Moje szkolenia
             </a>
           </div>

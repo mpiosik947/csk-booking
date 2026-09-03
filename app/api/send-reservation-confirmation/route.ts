@@ -11,6 +11,7 @@ import {
   getConfirmationRateLimitSecret,
 } from "@/lib/server/confirmation-email-rate-limit";
 import { verifyAuthUser } from "@/lib/server/auth-user-verification";
+import { escapeEmailHref, escapeHtml } from "@/lib/server/email-html";
 
 type ReservationConfirmationPayload = {
   reservationId?: unknown;
@@ -52,20 +53,6 @@ function getAuthenticatedSupabaseClient(accessToken: string) {
         Authorization: `Bearer ${accessToken}`,
       },
     },
-  });
-}
-
-function escapeHtml(value: string) {
-  return value.replace(/[&<>"']/g, (character) => {
-    const entities: Record<string, string> = {
-      "&": "&amp;",
-      "<": "&lt;",
-      ">": "&gt;",
-      '"': "&quot;",
-      "'": "&#39;",
-    };
-
-    return entities[character];
   });
 }
 
@@ -279,7 +266,7 @@ export async function POST(request: Request) {
     const safeEndTime = escapeHtml(endTime);
     const safeLaneName = escapeHtml(laneName);
     const safeFormattedPrice = escapeHtml(formattedPrice);
-    const safeCheckInUrl = escapeHtml(checkInUrl);
+    const safeCheckInUrl = escapeEmailHref(checkInUrl);
 
     const subject = "Potwierdzenie rezerwacji — CSK Booking";
     const html = `
