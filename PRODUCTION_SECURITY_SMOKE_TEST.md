@@ -32,6 +32,45 @@ PRODUCTION SECURITY SMOKE:
 PASS
 ```
 
+## SEC-018 EVENT REGISTRATION DML PRODUCTION SMOKE
+
+Production deployment under test:
+
+```text
+commit: 66a0610 — security: harden event registration writes
+migration: 20260903160000_harden_event_registration_direct_dml.sql
+migration present on production: true
+```
+
+The production smoke test executed 31 security and regression checks using only
+synthetic fixture. The test finished with its expected controlled exception:
+
+```text
+ERROR: P0001: SEC018_SMOKE_ALL_31_PASS_ROLLBACK
+```
+
+This exception rolled back the complete smoke-test statement, including Auth
+users, profiles, events, event registrations, and audit logs created by the
+fixture.
+
+| TEST | RESULT | EVIDENCE |
+|---|---|---|
+| SEC-018 contract and regression checks | PASS | 31/31 checks completed before the controlled rollback exception. |
+| Controlled rollback | PASS | Final result was `SEC018_SMOKE_ALL_31_PASS_ROLLBACK`. |
+| Synthetic Auth users removed | PASS | Post-smoke read-only count: `0`. |
+| Synthetic profiles removed | PASS | Post-smoke read-only count: `0`. |
+| Synthetic events removed | PASS | Post-smoke read-only count: `0`. |
+| Synthetic event registrations removed | PASS | Post-smoke read-only count: `0`. |
+| Synthetic audit logs removed | PASS | Post-smoke read-only count: `0`. |
+| Complete fixture cleanup | PASS | `remaining_synthetic_fixture = 0`. |
+
+```text
+SEC-018 PRODUCTION SMOKE: PASS
+
+SEC-018 STATUS:
+FULLY REMEDIATED
+```
+
 ---
 
 # SEC-007 AUDIT LOG INTEGRITY PRODUCTION SMOKE
