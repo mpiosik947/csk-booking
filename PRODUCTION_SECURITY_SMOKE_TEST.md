@@ -1114,3 +1114,54 @@ PASS
 SEC-013 STATUS:
 FULLY REMEDIATED / PROD PASS
 ```
+
+---
+
+# SEC-016 PRIVACY POLICY PRODUCTION SMOKE
+
+**Date:** 2026-09-04
+
+**Production application:** `https://csk-booking-5nwh.vercel.app`
+
+**Production commit:** `f7d685d — docs: update privacy policy and terms`
+
+This was a read-only application smoke. It created no fixture and performed no
+database, configuration, migration or deployment operation.
+
+## Results
+
+| Check | Result | Evidence |
+|---|---|---|
+| `/privacy` availability | PASS | Production GET returned HTTP 200, a Vercel response body of 32,679 bytes and no 5xx. |
+| `/terms` availability | PASS | Production GET returned HTTP 200, a Vercel response body of 29,334 bytes and no 5xx. |
+| General draft wording | PASS | Neither rendered page contains `wersja robocza` or an equivalent general draft marker. |
+| Current data-flow coverage | PASS | The rendered privacy page describes account/profile data, reservations, event registrations, check-in, e-mail delivery, user data export, account deletion, anonymization, audit logs and abuse/rate-limit metadata. |
+| Technical providers | PASS | The rendered notice names only the verified providers in scope: Supabase for database/authentication, Vercel for hosting and Resend for e-mail delivery. |
+| Last-updated date | PASS | The page renders `Ostatnia aktualizacja: 4 września 2026 r.` |
+| Approved owner-data residual | PASS | Visible owner placeholders are limited to legal name, legal form, address and privacy contact. The block is explicitly marked for completion before formal service launch. |
+| Other placeholders | PASS | Rendered `/privacy` and `/terms` contain no `TODO`, `example.com`, dotted blank fields or unrelated placeholder data. |
+| Terms consistency | PASS | `/terms` no longer presents itself as a draft, retains its personal-data section and links to the current `/privacy` page. |
+| Browser/runtime | PASS | Fresh headless Chromium loads returned HTTP 200 with 0 console errors, 0 page errors and 0 failed resource requests for both pages. The interactive browser showed the expected headings, content, image and legal navigation without a Next.js error overlay. |
+
+## Changes and residual
+
+No application code, database data, schema, RLS, ACL, configuration, migration
+or deployment was changed during this smoke. No synthetic fixture was required.
+
+The remaining limitation is intentional and visible: legal identity and contact
+details await the final business-entity decision. This prevents SEC-016 from
+being classified as fully remediated but does not invalidate the verified
+content update.
+
+## SEC-016 final result
+
+```text
+SEC-016 PRODUCTION SMOKE:
+PASS
+
+SEC-016 STATUS:
+PARTIALLY REMEDIATED — OWNER DATA DEFERRED
+
+KNOWN RESIDUAL:
+legal identity/contact details pending final business entity decision.
+```
