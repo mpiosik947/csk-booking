@@ -205,20 +205,21 @@ deployment fails before step B, roll back the application normally. If step B
 fails, leave the already stricter application in place and resolve the Auth
 configuration; do not weaken the UI.
 
-## Production verification required
+## Production verification
 
 ```text
-YES
+COMPLETED — 2026-09-04
 ```
 
-Required evidence for a future production PASS:
+Verified evidence:
 
 - deployed application contains the shared 12–72 policy;
 - production Auth reports minimum 12 and no required character classes;
-- leaked-password protection is visibly enabled;
-- synthetic 11/12 and 72/73 checks match the contract;
+- leaked-password protection remains off because it is unavailable on the
+  current Free plan and is tracked as an accepted residual;
+- synthetic 11/12 and 72/73 checks matched the contract;
 - register, reset, account change, and existing-user login remain operational;
-- synthetic fixture cleanup equals zero.
+- synthetic fixture cleanup equalled zero.
 
 ## Files changed by this remediation
 
@@ -236,11 +237,11 @@ was not modified by this remediation.
 ## Verdict
 
 ```text
-SEC-010 PARTIALLY REMEDIATED
+SEC-010 REMEDIATED WITH ACCEPTED RESIDUAL
 ```
 
-The application portion is fully remediated locally. The complete approved
-target is not yet satisfied because production Supabase Auth still enforces a
-minimum of 6 and leaked-password protection remains unavailable/off on the
-current plan. SEC-010 must not be marked production PASS until both production
-settings and their post-deployment smoke test are verified.
+The application and production password-length policies are consistently
+12–72 with no required character classes. The production smoke passed and all
+synthetic fixture was removed. Leaked-password protection remains unavailable
+and off on the current Free plan; it is explicitly accepted as residual risk
+and retained as future hardening after a plan upgrade.

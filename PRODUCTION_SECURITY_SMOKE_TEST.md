@@ -528,3 +528,145 @@ No real customer record was read, modified, or deleted.
 PRODUCTION SECURITY SMOKE:
 PASS
 ```
+
+---
+
+# SEC-010 PASSWORD POLICY PRODUCTION SMOKE
+
+**Date:** 2026-09-04
+
+**Production application:** `ea51547 — security: strengthen password policy`
+
+**Vercel status:** Production / Ready
+**Synthetic run:** uniquely marked SEC-010 fixture; identifiers and passwords omitted
+
+No Supabase Auth setting, application code, migration, or production schema was
+changed during this smoke test.
+
+## Provider policy
+
+The production Auth contract was verified independently of the application UI:
+
+| Boundary | HTTP | Provider result | Verdict |
+|---|---:|---|---|
+| 11 characters | 422 | `weak_password`, reason `length`; user not created | PASS |
+| 12 simple lowercase characters | 200 | accepted; no required character class | PASS |
+| 72 characters | 200 | accepted | PASS |
+| 73 characters | 400 | controlled validation rejection | PASS |
+
+This proves the effective production length range is 12–72. The accepted
+12-character value deliberately contained no uppercase letter, digit, or
+symbol, confirming the approved `No required characters` policy.
+
+## Application contracts
+
+### Registration
+
+- production `/register` exposes `Minimum 12 znaków` and input bounds 12–72;
+- 11 characters returned `Hasło musi mieć minimum 12 znaków.` locally;
+- 12 characters passed application validation and reached the controlled
+  registration-success state;
+- the separate direct Auth boundary test confirmed that the provider itself
+  also rejects 11 and accepts 12.
+
+```text
+REGISTER APPLICATION CONTRACT: PASS
+```
+
+### Reset password
+
+The deployed reset page was exercised using only the authenticated synthetic
+account; no reset message was sent to a real user:
+
+- 11 characters were rejected with the shared minimum-12 message;
+- 12 characters were accepted and produced the controlled success response;
+- recovery-link exchange and reset-session code were not modified by SEC-010.
+
+```text
+RESET PASSWORD CONTRACT: PASS
+```
+
+### Account password change
+
+On the confirmed synthetic account:
+
+- 11 characters were rejected locally;
+- 12 characters were accepted by the application and production Auth;
+- the previous synthetic password subsequently returned
+  `invalid_credentials`;
+- the new 12-character synthetic password authenticated successfully with
+  HTTP 200.
+
+No password or session token is recorded in this report.
+
+```text
+ACCOUNT PASSWORD CHANGE: PASS
+```
+
+## Existing-user compatibility
+
+No real user's password was read or changed. Supabase's documented contract
+states that strengthening password requirements does not automatically remove,
+rewrite, or invalidate existing passwords. Existing users can still sign in;
+new users and future password changes must satisfy the strengthened policy,
+and Auth can surface weak-password information for an older credential.
+
+The synthetic account also remained usable across multiple successful password
+changes until its deliberate cleanup.
+
+```text
+EXISTING USER COMPATIBILITY: PASS
+```
+
+Reference: [Supabase password security](https://supabase.com/docs/guides/auth/password-security)
+
+## Leaked-password protection
+
+Production inspection confirmed:
+
+```text
+Prevent use of leaked passwords: OFF
+Project plan: Free
+Availability: Pro plan and above
+```
+
+The setting was not changed or bypassed. This is recorded as an accepted
+residual constrained by the current plan, not as an application regression.
+
+```text
+LEAKED PASSWORD PROTECTION:
+ACCEPTED RESIDUAL — PLAN LIMITATION
+```
+
+## Cleanup
+
+Exactly three synthetic Auth users were created: one 12-character boundary
+user, one 72-character boundary user, and one confirmed account used for
+password-change tests. The 11- and 73-character cases created no users.
+
+Each deletion was fail-closed against the exact synthetic address. An
+independent read-only SQL post-check returned:
+
+```text
+synthetic_auth_users: 0
+synthetic_profiles: 0
+remaining_synthetic_fixture: 0
+```
+
+No real account or profile was modified or deleted.
+
+## SEC-010 final result
+
+```text
+SEC-010 PASSWORD LENGTH POLICY:
+PROD PASS
+
+SEC-010 APPLICATION CONSISTENCY:
+PASS
+
+LEAKED PASSWORD PROTECTION:
+ACCEPTED RESIDUAL — PLAN LIMITATION
+
+SEC-010 FINAL STATUS:
+REMEDIATED WITH ACCEPTED RESIDUAL
+```
