@@ -847,3 +847,123 @@ PASS
 SEC-011 STATUS:
 FULLY REMEDIATED / PROD PASS
 ```
+
+---
+
+# SEC-012 APPLICATION SECURITY HEADERS PRODUCTION SMOKE
+
+**Date:** 2026-09-04
+
+**Production application:** the deployment contains the SEC-012 header baseline
+from `0b6acf0 — security: add application security headers`.
+
+The test used direct read-only HTTP requests plus an interactive browser session.
+No application action that writes data was invoked. No code, Vercel setting,
+database object, configuration, migration, or deployment was changed.
+
+## Direct production response inventory
+
+| Route | HTTP/result | CSP and browser headers | Cache result | Verdict |
+|---|---|---|---|---|
+| `/` | 200 | Complete SEC-012 baseline | Public page cache | PASS |
+| `/login` | 200 | Complete SEC-012 baseline | Public page cache | PASS |
+| `/account` | 200 | Complete SEC-012 baseline | `private, no-store, max-age=0, must-revalidate` | PASS |
+| `/admin` without session | 307 to login | Complete SEC-012 baseline | `private, no-store, max-age=0, must-revalidate` | PASS |
+| `/api/admin/calendar-feed` without Bearer JWT | controlled 401 | Complete SEC-012 baseline | `private, no-store` | PASS |
+| `/check-in/[synthetic-invalid-token]` | controlled 200 | Complete baseline plus `Referrer-Policy: no-referrer` | `private, no-cache, no-store, max-age=0, must-revalidate` | PASS |
+| `/events/confirm/[synthetic-invalid-token]` | controlled 200 | Complete baseline plus `Referrer-Policy: no-referrer` | `private, no-cache, no-store, max-age=0, must-revalidate` | PASS |
+
+The anonymous account response contains only the static client shell; it is now
+explicitly non-cacheable regardless. The admin redirect and API denial also
+remain non-cacheable. Public `/` and `/login` contain no private response data
+and retain normal public page caching.
+
+## Header values
+
+Every tested response contained:
+
+```text
+X-Content-Type-Options: nosniff
+Referrer-Policy: strict-origin-when-cross-origin
+X-Frame-Options: DENY
+Permissions-Policy: accelerometer=(), camera=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), payment=(), usb=()
+Cross-Origin-Opener-Policy: same-origin
+```
+
+The two token routes correctly override the general referrer policy with:
+
+```text
+Referrer-Policy: no-referrer
+```
+
+Vercel continues to provide, without an application duplicate:
+
+```text
+Strict-Transport-Security: max-age=63072000; includeSubDomains; preload
+```
+
+## Production CSP verification
+
+The exact deployed CSP directives were:
+
+```text
+default-src 'self';
+base-uri 'self';
+form-action 'self';
+frame-ancestors 'none';
+object-src 'none';
+script-src 'self' 'unsafe-inline';
+script-src-attr 'none';
+style-src 'self' 'unsafe-inline';
+img-src 'self' data: blob:;
+font-src 'self' data:;
+connect-src 'self' https://yuyxfodozzpzrdzkmolu.supabase.co wss://yuyxfodozzpzrdzkmolu.supabase.co;
+frame-src 'none';
+manifest-src 'self';
+worker-src 'self' blob:
+```
+
+Verified properties:
+
+- no broad wildcard source;
+- no production `unsafe-eval`;
+- Supabase HTTP and WebSocket connections are limited to the exact production
+  project origin;
+- `frame-ancestors 'none'` and X-Frame-Options DENY agree;
+- inline event-handler attributes are blocked by `script-src-attr 'none'`;
+- base URL changes, object embedding, cross-origin forms, and frames fail closed.
+
+## Browser smoke
+
+| Check | Result | Evidence |
+|---|---|---|
+| Public home and login | PASS | Both rendered with HTTP 200 under the deployed CSP. |
+| Login and Supabase Auth | PASS | Interactive production login completed and the subsequent trusted server session identified the administrator. |
+| Account | PASS | The authenticated account page loaded its profile contract under CSP; no write action was used. |
+| Admin UI | PASS | `/admin` loaded the operational dashboard and all eight authorized module links for the administrator. |
+| Admin Calendar API | PASS | `/admin/calendar` completed loading, enabled its controls, and rendered production lane configuration through the authenticated calendar feed. |
+| Anonymous API behavior | PASS | Direct `/api/admin/calendar-feed` without a token returned controlled HTTP 401, not 5xx. |
+| Token pages | PASS | Both synthetic-invalid token pages rendered controlled states without 5xx. |
+| CSP compatibility | PASS | Automated anonymous Chromium navigation reported zero CSP violations and zero console/page errors; authenticated Account, Dashboard and Calendar completed their Supabase/API reads without a blocked-resource state. |
+| Assets/layout | PASS | Branding and application layouts rendered normally on public, account, admin, calendar and token pages. |
+
+The smoke did not create a reservation, event registration, check-in, or any
+other fixture. No production cleanup was required.
+
+## Residual
+
+`unsafe-inline` remains in `script-src` and `style-src` as the documented,
+intentional compatibility limitation of the current Next.js rendering setup.
+Production does not allow `unsafe-eval`; inline event-handler attributes remain
+blocked. Removing `unsafe-inline` requires the separately staged nonce/hash
+hardening described in the remediation report and is not falsely claimed here.
+
+## SEC-012 final result
+
+```text
+SEC-012 PRODUCTION SMOKE:
+PASS
+
+SEC-012 STATUS:
+FULLY REMEDIATED / PROD PASS
+```
