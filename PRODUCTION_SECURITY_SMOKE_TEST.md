@@ -1060,3 +1060,57 @@ PASS
 SEC-015 STATUS:
 FULLY REMEDIATED / PROD PASS
 ```
+
+---
+
+# SEC-013 SAFE ERROR HANDLING PRODUCTION SMOKE
+
+**Date:** 2026-09-04
+
+**Production application:** `524da7a — security: harden client error handling`
+
+This smoke used only malformed requests, missing/invalid authentication and a
+non-existing all-zero UUID. No fixture, valid business mutation, provider
+delivery, database write or production configuration change was performed.
+
+## Results
+
+| Check | Result | Evidence |
+|---|---|---|
+| Invalid request | PASS | `GET /api/create-reservation` returned HTTP 405 with an empty body. No raw message, database detail, hint, stack trace, SQL object name or 5xx was returned. |
+| Missing authentication | PASS | `POST /api/confirm-event-reserve-promotion` without a Bearer token returned HTTP 401 with only `unauthorized` and the controlled message `Musisz się zalogować.` |
+| Invalid authentication | PASS | The same endpoint with an invalid synthetic Bearer value returned HTTP 401 with only `unauthorized` and the controlled message `Musisz zalogować się ponownie.` |
+| Admin API authorization | PASS | Anonymous `GET /api/admin/calendar-feed` returned HTTP 401 with the stable `unauthorized` code and controlled Polish text. |
+| Promotion API authorization | PASS | Anonymous `POST /api/send-event-reserve-promotion` returned controlled HTTP 401 `Unauthorized`; the request did not reach provider delivery. |
+| Controlled not found | PASS | As an authenticated admin, submitting `/events/confirm/00000000-0000-4000-8000-000000000000` rendered only `Nie znaleziono aktywnego zaproszenia.` The deployed allowlisted contract maps `not_found` to HTTP 404 and ignores the RPC-provided message. No mutation or email occurred. |
+| Invalid check-in token | PASS | `/check-in/00000000-0000-4000-8000-000000000000` returned HTTP 200 with the controlled neutral `Check-in niedostępny` state and no reservation data or technical error. |
+| Provider/delivery failure contract | PASS (static contract verification) | Deliberate production-provider failure was not induced. Source at the production commit returns fixed response codes/messages, omits provider bodies and stack traces, and logs only an operation/stage plus bounded code/status. Focused tests cover unknown/provider failures. |
+| Account and customer UI | PASS | Authenticated `/account`, `/my-reservations` and `/my-events` loaded successfully. `/booking` and `/events` loaded their normal public views. No raw-error markers or visible 500 state appeared. |
+| Admin UI | PASS | Authenticated `/admin`, `/admin/check-in`, `/admin/reservations` and `/admin/users` loaded successfully. No raw-error markers or visible 500 state appeared. |
+| Known business codes | PASS | The deployed mapping retains controlled handling for `not_allowed`, `not_found`, conflict codes, `rate_limited`, `already_sent` and the active reservation/event/configuration codes. The focused suite passed 17/17. |
+| Client/API exposure | PASS | Observed API bodies and error UI contained no `details`, `hint`, stack, SQL table/function name, filesystem path, raw error object or provider response body. |
+| Secret/PII logging contract | PASS | Runtime source at the deployed commit does not log Authorization headers, JWTs, service-role keys, check-in/confirmation/reserve tokens, request bodies, email/phone PII or complete error objects. Client diagnostics are limited to operation name and an optional bounded stable code. |
+| Normal-flow 5xx regression | PASS | Direct GET checks returned 200 for `/`, `/login`, `/account`, `/booking`, `/events`, `/my-reservations` and `/my-events`; anonymous `/admin/*` returned the expected 307 authorization redirect. Authenticated admin/dashboard/check-in/reservations/users views loaded in the browser. No tested normal flow returned 5xx. |
+
+The Vercel log viewer was not available in the smoke browser session (it
+required a separate Vercel login), so no private cloud log contents were
+copied. Logging safety was verified from the exact deployed source contract and
+from the absence of technical data in the exercised production responses and
+UI. No token, secret or customer data is included in this report.
+
+## Cleanup and changes
+
+No synthetic persistent fixture was created, therefore cleanup was not
+required and remaining fixture is zero by construction. No application code,
+configuration, database data, schema, migration, RLS, ACL or deployment was
+changed during the smoke.
+
+## SEC-013 final result
+
+```text
+SEC-013 PRODUCTION SMOKE:
+PASS
+
+SEC-013 STATUS:
+FULLY REMEDIATED / PROD PASS
+```
