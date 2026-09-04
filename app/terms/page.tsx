@@ -19,9 +19,8 @@ export default function TermsPage() {
           </h1>
 
           <p className="mt-4 text-left leading-7 text-[#a9ada4] sm:text-center">
-            Poniżej znajduje się roboczy regulamin korzystania ze strzelnicy oraz
-            link do polityki prywatności / klauzuli RODO. Przed użyciem
-            produkcyjnym treść warto dopasować do oficjalnego regulaminu obiektu.
+            Poniżej znajdują się zasady korzystania ze strzelnicy oraz link do
+            aktualnej polityki prywatności i informacji o przetwarzaniu danych.
           </p>
         </header>
 
