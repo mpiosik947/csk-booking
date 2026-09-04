@@ -967,3 +967,96 @@ PASS
 SEC-012 STATUS:
 FULLY REMEDIATED / PROD PASS
 ```
+
+---
+
+# SEC-015 RESERVATION CANCELLATION EMAIL PRODUCTION SMOKE
+
+**Date:** 2026-09-04
+
+**Production application:** `b587010 — security: harden reservation cancellation email delivery`
+
+**Production migration:** `20260904180000_harden_reservation_cancellation_email_delivery.sql`
+
+The production smoke used only fixture marked with the unique run marker
+`[TEST][SEC-015][2af86979ff]`. User-facing operations were executed through
+`POST /api/send-reservation-cancellation` with anonymous or real synthetic-user
+JWT contexts. The service role was limited to fixture setup, verification, and
+cleanup. Exactly three messages were sent, all to the approved controlled
+mailbox through unique plus-address aliases.
+
+## Results
+
+| Check | Result | Evidence |
+|---|---|---|
+| Migration | PASS | Remote migration history contains `20260904180000`. |
+| Anonymous authorization | PASS | Missing Bearer JWT returned controlled HTTP 401 `unauthorized`. |
+| Owner authorization | PASS | Owner request returned HTTP 200 `sent`. |
+| Foreign user authorization | PASS | Foreign user received non-disclosing HTTP 404; no delivery was created. |
+| Instructor authorization | PASS | Instructor received non-disclosing HTTP 404; no delivery was created. |
+| Employee authorization | PASS | Employee request for the synthetic owner's cancelled reservation returned HTTP 200 `sent`. |
+| Admin authorization | PASS | Two concurrent admin requests produced exactly one `sent` result and one controlled `already_sent` result. |
+| Request-field integrity | PASS | A request containing extra recipient, user, customer-name, and content fields was rejected with controlled HTTP 400 `invalid_request`. |
+| First delivery | PASS | First owner request completed one provider delivery and returned HTTP 200 `sent`. |
+| Repeat after success | PASS | Repeat returned HTTP 200 `already_sent`; provider delivery count remained one for that reservation. |
+| Parallel claim | PASS | Concurrent production endpoint calls produced one provider completion only; the other request returned the controlled no-send state. The deployed claim definition retains the five-minute lease and `in_progress` branch. |
+| Delivery count and recipient | PASS | Exactly three provider-completed rows existed before cleanup, each with attempt count 1 and the synthetic reservation owner's UUID as recipient. |
+| Attempt bound | PASS (contract verification) | The deployed prepare definition retains the maximum three attempts per 24-hour attempt window and returns `attempt_limit_reached`; failure injection was intentionally not performed against the production provider. |
+| Provider failure | PASS (contract verification) | The deployed route uses the safe completion path, returns stable `delivery_failed`, does not expose the provider error, and performs no automatic resend. No production failure was induced. |
+| User rate limit | PASS | Ten endpoint requests for one synthetic user reached the normal controlled 404 path; request 11 returned HTTP 429 `rate_limited` with `Retry-After: 592`. |
+| HMAC IP rate limit | PASS | Thirty accepted endpoint requests populated only the HMAC IP scope; the next request returned HTTP 429 with `Retry-After: 568`. No raw IP appeared in the response or persisted rate-limit key. |
+| Recipient integrity | PASS | The browser could not supply an email or content field. Provider completions all referenced the reservation owner, including staff-triggered delivery. |
+| SEC-006 HTML escaping | PASS | Delivered HTML rendered `<script>`, `<img onerror>`, and `<b>` literally as text. Original MIME contained `&lt;`, `&gt;`, `&amp;`, `&quot;`, and `&#39;` exactly once; no executable injected element or double escaping was present. |
+| Plain-text body | PASS | Original MIME contained a separate `text/plain` part with the dynamic values as ordinary text, without HTML-entity escaping. |
+| Template regression | PASS | The legitimate structural HTML, heading, reservation details, and footer rendered normally in Gmail. |
+| SEC-007 audit integrity | PASS | The delivery claim, concurrent/repeat result, and email send created zero synthetic email business audits; the cancellation audit contract remains owned by the cancellation RPC. |
+| Safe response/error surface | PASS | Every tested response contained only the stable `ok` and `code` fields. No JWT, service-role key, provider secret, raw IP, technical token, or raw database/provider error was returned. Static route review confirms generic server logging without token, IP, recipient, or raw error content. |
+
+The automated production run completed **36/36 assertions**. The three messages
+were independently visible in the controlled mailbox. SPF, DKIM, and DMARC
+were all reported as PASS by the recipient mailbox.
+
+## Production RPC ACL
+
+| RPC | PUBLIC | anon | authenticated | service_role | Result |
+|---|---:|---:|---:|---:|---|
+| `prepare_confirmation_email(text,uuid)` | no | no | yes | no | PASS |
+| `complete_confirmation_email(uuid,boolean,text,text)` | no | no | no | yes | PASS |
+| `check_confirmation_email_rate_limit(uuid,text)` | no | no | no | yes | PASS |
+
+All three functions remain `SECURITY DEFINER`, owned by `postgres`, with the
+expected `search_path = public, pg_temp`. The endpoint's authenticated client
+performs the business authorization and prepare claim; the server-only client
+is restricted to the limiter and completion contracts.
+
+## Cleanup
+
+Application fixture cleanup completed first and independently confirmed zero
+remaining synthetic Auth users, profiles, reservations, delivery rows, audit
+rows, lane rows, and pricing rows.
+
+The rate-limit pre-check then identified exactly nine synthetic user-scope rows
+with the expected per-user cardinalities and exactly one IP-scope row containing
+only the 30 matching timestamps from this run. A fail-closed transaction removed
+exactly those ten rows. It would have rolled back on any count, identity,
+timestamp-window, or IP-content mismatch. The final independent result was:
+
+```text
+remaining synthetic fixture = 0
+remaining synthetic rate-limit residue = 0
+cleanup_confirmed = true
+```
+
+No real reservation, user, profile, audit, delivery, or rate-limit timestamp
+was changed. No application code, configuration, schema, RLS, ACL, migration,
+or deployment was changed during the smoke.
+
+## SEC-015 final result
+
+```text
+SEC-015 PRODUCTION SMOKE:
+PASS
+
+SEC-015 STATUS:
+FULLY REMEDIATED / PROD PASS
+```
