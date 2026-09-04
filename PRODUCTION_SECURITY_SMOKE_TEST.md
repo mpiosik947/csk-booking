@@ -670,3 +670,80 @@ ACCEPTED RESIDUAL — PLAN LIMITATION
 SEC-010 FINAL STATUS:
 REMEDIATED WITH ACCEPTED RESIDUAL
 ```
+
+---
+
+# SEC-009 CORE LIFECYCLE PRODUCTION SMOKE
+
+**Date:** 2026-09-04
+
+**Production application:** `1288fd5 — security: add account pii lifecycle`
+
+**Production migration:** `20260904120000_add_account_pii_lifecycle.sql`
+
+The smoke test used two uniquely identified synthetic users and isolated
+synthetic business records. User-facing operations were executed through the
+production Auth and application API contracts. Privileged database access was
+used only for fixture setup, read-only before/after verification, and the
+confirmed, fail-closed cleanup. No real customer record was read, modified, or
+deleted. No credential, bearer token, password, or technical token is recorded
+in this report.
+
+## Results
+
+| Test | Result | Evidence |
+|---|---|---|
+| Migration and RPC presence | PASS | Remote migration history contains `20260904120000`; both lifecycle RPC signatures exist. |
+| Anonymous export | PASS | `GET /api/account/export` returned HTTP 401. |
+| Owner export | PASS | Synthetic User A received HTTP 200, JSON, `export_version = 1`, and a populated `generated_at`. |
+| Export ownership isolation | PASS | The export contained exactly User A's synthetic reservation and event registration; User B identifiers and data were absent. A `user_id` query parameter was rejected with HTTP 400. |
+| Export data minimization | PASS | No admin notes, check-in or promotion tokens, JWT, password hash, service-role material, rate-limit state, or audit-log payload was returned. |
+| Anonymous deletion | PASS | `POST /api/account/delete` without a bearer session returned HTTP 401 and made no change. |
+| Cross-user deletion input | PASS | A body containing an additional User B `user_id` was rejected with HTTP 400; the endpoint accepts only the exact confirmation field. |
+| Owner self-delete | PASS | User A's authenticated request returned HTTP 200 with the controlled `deleted` result. Runtime behavior and route ordering confirmed database anonymization precedes Auth Admin deletion. |
+| Profile and direct PII removal | PASS | User A's profile was absent; reservation and registration owner links, names, contact data, notes, and active technical tokens were removed or replaced with the approved pseudonymous values. |
+| Operational-history retention | PASS | The synthetic reservation and event-registration records remained with their date/time, resource, status, payment, attendance, and other approved operational fields intact. |
+| Audit integrity and idempotency | PASS | Exactly one pseudonymous `account_anonymized` audit existed. It contained only allowlisted lifecycle summary fields and no PII, token, or secret. Reuse of the old JWT returned HTTP 401 and did not create a second audit. |
+| Auth deletion and old credentials | PASS | User A disappeared from Auth. A login attempt with the old synthetic credentials returned the controlled `invalid_credentials` result. |
+| User B isolation | PASS | User B's Auth user, profile, reservation, registration, PII, notes, and tokens remained unchanged before cleanup. |
+| RPC ACL | PASS | `authenticated` has EXECUTE on both lifecycle RPCs; `PUBLIC`, `anon`, and `service_role` do not. |
+| Secret/error exposure | PASS | Tested API responses contained no JWT, service-role material, technical token, foreign-user data, or raw database error. |
+| Retry after Auth-provider failure | PASS (contract) | No production outage was injected. The deployed orchestration and regression contract preserve anonymized DB state, return retryable `auth_deletion_pending`, and retry only Auth deletion after `already_anonymized`. |
+
+## Cleanup
+
+Before cleanup, a read-only inventory identified only the records belonging to
+this run: one remaining synthetic Auth user and profile, two retained
+reservations, two retained event registrations, one synthetic event, one lane,
+one pricing rule, one delivery record, one user rate-limit record, and three
+synthetic audit records.
+
+The cleanup ran in one transaction with exact identity/count preconditions. An
+independent read-only post-check returned zero for every component:
+
+```text
+synthetic_auth_users: 0
+synthetic_auth_identities: 0
+synthetic_profiles: 0
+synthetic_lanes_and_pricing: 0
+synthetic_events: 0
+synthetic_reservations: 0
+synthetic_event_registrations: 0
+synthetic_email_deliveries: 0
+synthetic_rate_limits: 0
+synthetic_audit_logs: 0
+remaining_synthetic_fixture: 0
+```
+
+## SEC-009 final result
+
+```text
+SEC-009 CORE LIFECYCLE PRODUCTION SMOKE:
+PASS
+
+SEC-009 CORE LIFECYCLE STATUS:
+FULLY REMEDIATED / PROD PASS
+
+SEC-009 TIME-BASED RETENTION 10B:
+NOT IMPLEMENTED / DEFERRED
+```
