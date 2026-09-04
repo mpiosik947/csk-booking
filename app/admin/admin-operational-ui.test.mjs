@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
+import { ADMIN_ROUTE_PERMISSIONS } from "../../lib/admin/route-protection.js";
 
 async function source(file) {
   return readFile(new URL(file, import.meta.url), "utf8");
@@ -49,21 +50,12 @@ test("check-in retains token lookup and operational actions with an explicit emp
 });
 
 test("instructor is fail-closed for check-in navigation and customer dashboard reads", async () => {
-  const [middleware, dashboard, checkIn] = await Promise.all([
-    source("../../middleware.ts"),
+  const [dashboard, checkIn] = await Promise.all([
     source("./page.tsx"),
     source("./check-in/page.tsx"),
   ]);
 
-  assert.match(
-    middleware,
-    /"\/admin\/check-in": \[\s*"admin",\s*"pracownik",\s*\]/
-  );
-  const checkInPermissions = middleware.match(
-    /"\/admin\/check-in": \[([\s\S]*?)\],/
-  )?.[1];
-  assert.ok(checkInPermissions);
-  assert.doesNotMatch(checkInPermissions, /"instruktor"/);
+  assert.deepEqual(ADMIN_ROUTE_PERMISSIONS["/admin/check-in"], ["admin", "pracownik"]);
   assert.match(
     dashboard,
     /title: "Check-in",[\s\S]*?roles: \["admin", "pracownik"\]/

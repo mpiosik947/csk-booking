@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
+import { ADMIN_ROUTE_PERMISSIONS } from "../../../lib/admin/route-protection.js";
 
 const pagePath = new URL("./page.tsx", import.meta.url);
 const editorPath = new URL("./_components/LaneConfigurationEditor.tsx", import.meta.url);
@@ -38,13 +39,9 @@ test("runtime uses only the admin V2 read contract", async () => {
 });
 
 test("route, dashboard tile and runtime role check remain admin-only", async () => {
-  const [page, , dashboard, middleware] = await sources();
+  const [page, , dashboard] = await sources();
 
-  assert.match(middleware, /"\/admin\/lane-configuration": \["admin"\]/);
-  assert.doesNotMatch(
-    middleware,
-    /"\/admin\/lane-configuration": \["admin",\s*"pracownik"/
-  );
+  assert.deepEqual(ADMIN_ROUTE_PERMISSIONS["/admin/lane-configuration"], ["admin"]);
   assert.match(page, /roleData !== "admin"/);
   assert.ok(
     page.indexOf('rpc("get_my_role")') <

@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
+import { ADMIN_ROUTE_PERMISSIONS } from "../../../lib/admin/route-protection.js";
 
 const pagePath = new URL("./page.tsx", import.meta.url);
-const middlewarePath = new URL("../../../middleware.ts", import.meta.url);
 
 test("admin users keeps hardened server-side read and writer RPCs", async () => {
   const source = await readFile(pagePath, "utf8");
@@ -149,7 +149,5 @@ test("loading, empty, malformed and controlled error states are explicit", async
 });
 
 test("admin users route remains admin-only in middleware", async () => {
-  const source = await readFile(middlewarePath, "utf8");
-  assert.match(source, /"\/admin\/users": \["admin"\]/);
-  assert.doesNotMatch(source, /"\/admin\/users": \["admin", "pracownik"\]/);
+  assert.deepEqual(ADMIN_ROUTE_PERMISSIONS["/admin/users"], ["admin"]);
 });

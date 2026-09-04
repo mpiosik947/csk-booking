@@ -1,46 +1,16 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
+import {
+  ADMIN_STAFF_ROLES,
+  canRoleAccessAdminRoute,
+  isAdminRoutePath,
+} from "@/lib/admin/route-protection.js";
 
 type UserRole =
   | "admin"
   | "pracownik"
   | "instruktor"
   | "user";
-
-const routePermissions: Record<string, UserRole[]> = {
-  "/admin/lane-configuration": ["admin"],
-
-  "/admin/users": ["admin"],
-
-  "/admin/reports": ["admin"],
-
-  "/admin/reservations": [
-    "admin",
-    "pracownik",
-  ],
-
-  "/admin/lane-blocks": [
-    "admin",
-    "pracownik",
-  ],
-
-  "/admin/calendar": [
-    "admin",
-    "pracownik",
-    "instruktor",
-  ],
-
-  "/admin/check-in": [
-    "admin",
-    "pracownik",
-  ],
-
-  "/admin/events": [
-    "admin",
-    "pracownik",
-    "instruktor",
-  ],
-};
 
 export async function middleware(
   request: NextRequest
@@ -53,7 +23,7 @@ export async function middleware(
     request.nextUrl.pathname;
 
   const isAdminRoute =
-    path.startsWith("/admin");
+    isAdminRoutePath(path);
 
   if (!isAdminRoute) {
     return response;
@@ -152,9 +122,7 @@ export async function middleware(
       .toLowerCase() as UserRole;
 
   const adminAccess =
-    role === "admin" ||
-    role === "pracownik" ||
-    role === "instruktor";
+    ADMIN_STAFF_ROLES.includes(role);
 
   if (!adminAccess) {
     return NextResponse.redirect(
@@ -165,22 +133,13 @@ export async function middleware(
     );
   }
 
-  for (const route in routePermissions) {
-    if (path.startsWith(route)) {
-      const allowedRoles =
-        routePermissions[route];
-
-      if (
-        !allowedRoles.includes(role)
-      ) {
-        return NextResponse.redirect(
-          new URL(
-            "/admin",
-            request.url
-          )
-        );
-      }
-    }
+  if (!canRoleAccessAdminRoute(path, role)) {
+    return NextResponse.redirect(
+      new URL(
+        "/admin",
+        request.url
+      )
+    );
   }
 
   return response;
