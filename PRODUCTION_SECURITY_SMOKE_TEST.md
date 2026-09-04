@@ -32,6 +32,83 @@ PRODUCTION SECURITY SMOKE:
 PASS
 ```
 
+---
+
+# SEC-006 EMAIL HTML INJECTION PRODUCTION SMOKE
+
+Date: 2026-09-03
+Production commit under test: `4a1182f`
+Run marker: `[TEST][SEC-006][d09778ff]`
+Recipient: controlled, masked test mailbox
+
+The run was stopped fail-closed after the second flow returned HTTP 500. Exactly one of the authorized five messages was sent; no further send was attempted after the failure.
+
+| TEST | RESULT | EVIDENCE |
+|---|---|---|
+| Reservation confirmation | PASS | HTTP 200 and one message delivered to the controlled mailbox. |
+| Reservation cancellation | FAIL | Production endpoint returned HTTP 500. No cancellation message was sent. |
+| Event registration confirmation | NOT RUN | Stopped after the first failure. |
+| Event reserve promotion | NOT RUN | Stopped after the first failure. |
+| Confirmed reserve place | NOT RUN | Stopped after the first failure. |
+| HTML payloads in delivered message | PASS | `<script>`, `<img ... onerror=...>` and `<b>Injected</b>` were displayed literally as text; the message body contained zero injected script nodes, zero injected `src=x` images and zero injected bold nodes. |
+| Special characters | PASS | `&`, `<`, `>`, double quote and apostrophe rendered as their intended text values. |
+| Double escaping | PASS | The mailbox displayed literal payload text, not visible HTML entities such as `&lt;script&gt;`. |
+| URL safety in delivered message | PARTIAL | Two expected HTTPS template links were present and no `javascript:` or `data:` href existed. The dedicated unsafe-URL event fixture was not delivered because the run stopped. |
+| Plain-text MIME part | NOT VERIFIED | The run stopped before all five flows could be inspected; no claim of complete production plain-text coverage is made. |
+| Template structure | PASS | The legitimate heading, paragraphs, labels and HTTPS action links rendered normally. |
+| Secret/error exposure | PASS FOR DELIVERED MESSAGE | No JWT, service-role key, raw database error or provider error was visible. Functional scoped link values are intentionally omitted from this report. |
+
+## Failure and stop condition
+
+```text
+reservation_confirmation: HTTP 200
+reservation_cancellation: HTTP 500
+messages sent: 1/5
+additional sends after failure: 0
+PRODUCTION ERRORS: FOUND
+```
+
+No application fix, retry, migration, configuration change or additional remediation was attempted.
+
+## Cleanup
+
+Before rate-limit cleanup, a read-only query identified exactly one paired user/IP timestamp for this run:
+
+```text
+user rate-limit timestamps: 1
+IP rate-limit timestamps: 1
+timestamps attributable to this run: 1
+```
+
+The cleanup removed the single synthetic user rate-limit row and exactly the single test timestamp from the paired IP row. Because that IP row contained no other timestamp, its now-empty row was deleted. No earlier or later real timestamp was changed.
+
+The failed harness left one marked synthetic Auth user/profile pair and one marked synthetic lane. Each was independently identified by the exact run marker; dependency checks returned zero before their deletion. The Auth profile was removed through the existing user-delete cascade.
+
+Independent post-cleanup queries returned:
+
+```text
+synthetic auth users: 0
+synthetic profiles: 0
+synthetic reservations: 0
+synthetic events: 0
+synthetic event registrations: 0
+synthetic audit logs: 0
+synthetic email deliveries: 0
+synthetic lanes: 0
+synthetic pricing rows: 0
+synthetic rate-limit timestamps: 0
+remaining synthetic fixture: 0
+```
+
+Cleanup was limited to `[TEST][SEC-006][d09778ff]`. No real customer data or unrelated rate-limit timestamp was modified.
+
+```text
+SEC-006 PRODUCTION SMOKE: FAIL
+
+SEC-006 STATUS:
+PARTIALLY REMEDIATED
+```
+
 ## SEC-018 EVENT REGISTRATION DML PRODUCTION SMOKE
 
 Production deployment under test:
