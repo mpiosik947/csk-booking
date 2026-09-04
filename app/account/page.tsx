@@ -108,7 +108,11 @@ function getVerificationClass(status: string, permissionsVerified: boolean) {
 }
 
 function getMessageClass(message: string) {
-  if (message.includes("zapisane") || message.includes("zmienione")) {
+  if (
+    message.includes("zapisane") ||
+    message.includes("zmienione") ||
+    message.includes("eksport")
+  ) {
     return "rounded-xl border border-[#3f6848] bg-[#1b2a1d] p-4 text-sm font-semibold text-[#a9d4ad]";
   }
 
@@ -165,6 +169,10 @@ export default function AccountPage() {
   const [loading, setLoading] = useState(true);
   const [savingProfile, setSavingProfile] = useState(false);
   const [savingPassword, setSavingPassword] = useState(false);
+  const [exportingData, setExportingData] = useState(false);
+  const [deletingAccount, setDeletingAccount] = useState(false);
+  const [showDeleteConfirmation, setShowDeleteConfirmation] = useState(false);
+  const [deleteConfirmation, setDeleteConfirmation] = useState("");
 
   const [email, setEmail] = useState("");
   const [firstName, setFirstName] = useState("");
@@ -550,6 +558,107 @@ export default function AccountPage() {
     setNewPassword("");
     setRepeatPassword("");
     setMessage("Hasło zostało zmienione.");
+  }
+
+  async function exportMyData() {
+    if (exportingData || deletingAccount) {
+      return;
+    }
+
+    setMessage("");
+    setExportingData(true);
+
+    try {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
+      if (!session?.access_token) {
+        setMessage("Sesja wygasła. Zaloguj się ponownie.");
+        return;
+      }
+
+      const response = await fetch("/api/account/export", {
+        method: "GET",
+        headers: { Authorization: `Bearer ${session.access_token}` },
+        cache: "no-store",
+      });
+
+      if (!response.ok) {
+        const body = (await response.json().catch(() => null)) as
+          | { error?: unknown }
+          | null;
+        setMessage(
+          typeof body?.error === "string"
+            ? body.error
+            : "Nie udało się przygotować eksportu."
+        );
+        return;
+      }
+
+      const blob = await response.blob();
+      const downloadUrl = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = downloadUrl;
+      link.download = "csk-booking-my-data.json";
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(downloadUrl);
+      setMessage("Przygotowano eksport Twoich danych.");
+    } catch {
+      setMessage("Nie udało się przygotować eksportu.");
+    } finally {
+      setExportingData(false);
+    }
+  }
+
+  async function deleteMyAccount() {
+    if (deletingAccount || deleteConfirmation !== "USUŃ KONTO") {
+      return;
+    }
+
+    setMessage("");
+    setDeletingAccount(true);
+
+    try {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
+      if (!session?.access_token) {
+        setMessage("Sesja wygasła. Zaloguj się ponownie.");
+        return;
+      }
+
+      const response = await fetch("/api/account/delete", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ confirmation: deleteConfirmation }),
+      });
+      const body = (await response.json().catch(() => null)) as
+        | { error?: unknown }
+        | null;
+
+      if (!response.ok) {
+        setMessage(
+          typeof body?.error === "string"
+            ? body.error
+            : "Nie udało się usunąć konta."
+        );
+        return;
+      }
+
+      await supabase.auth.signOut();
+      window.location.assign("/");
+    } catch {
+      setMessage("Nie udało się usunąć konta.");
+    } finally {
+      setDeletingAccount(false);
+    }
   }
 
   const displayName =
@@ -1072,6 +1181,41 @@ export default function AccountPage() {
                   </button>
             </section>
 
+            <section className="rounded-2xl border border-[#30372c] bg-[#191e19] p-4 sm:p-6">
+              <h2 className="mb-4 text-xl font-semibold text-[#f2efe4]">
+                Twoje dane i konto
+              </h2>
+
+              <p className="mb-5 text-sm leading-6 text-[#a9ada4]">
+                Możesz pobrać wersjonowany eksport swoich danych albo trwale
+                zamknąć konto. Eksport nie zawiera haseł, tokenów ani notatek
+                administracyjnych.
+              </p>
+
+              <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
+                <button
+                  type="button"
+                  onClick={exportMyData}
+                  disabled={exportingData || deletingAccount}
+                  className="min-h-12 rounded-xl border border-[#30372c] bg-[#141814] px-5 py-3 font-semibold text-[#d7c895] transition hover:border-[#536143] hover:text-[#f2efe4] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#c5a861] focus-visible:ring-offset-2 focus-visible:ring-offset-[#191e19] disabled:cursor-not-allowed disabled:text-[#858c7f]"
+                >
+                  {exportingData ? "Przygotowywanie eksportu..." : "Pobierz moje dane"}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDeleteConfirmation("");
+                    setShowDeleteConfirmation(true);
+                  }}
+                  disabled={deletingAccount || exportingData}
+                  className="min-h-12 rounded-xl border border-[#744545] bg-[#2a1b1b] px-5 py-3 font-semibold text-[#e0a0a0] transition hover:bg-[#3a2222] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#e0a0a0] focus-visible:ring-offset-2 focus-visible:ring-offset-[#191e19] disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  Usuń konto
+                </button>
+              </div>
+            </section>
+
                 {message && (
                   <div
                     role={
@@ -1094,6 +1238,78 @@ export default function AccountPage() {
                 >
                   {savingProfile ? "Zapisywanie..." : "Zapisz dane"}
                 </button>
+          </div>
+        )}
+
+        {showDeleteConfirmation && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 px-4 py-6">
+            <div
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="delete-account-title"
+              aria-describedby="delete-account-description"
+              className="w-full max-w-xl rounded-[2rem] border border-[#744545] bg-[#141814] p-6 shadow-2xl shadow-black/50 sm:p-8"
+            >
+              <h2
+                id="delete-account-title"
+                className="text-2xl font-bold text-[#e0a0a0]"
+              >
+                Trwale usunąć konto?
+              </h2>
+
+              <div
+                id="delete-account-description"
+                className="mt-4 space-y-3 text-sm leading-6 text-[#a9ada4]"
+              >
+                <p>
+                  Dane profilu zostaną usunięte. Historyczne rezerwacje i
+                  zapisy na szkolenia pozostaną wyłącznie jako zanonimizowane
+                  dane operacyjne i statystyczne.
+                </p>
+                <p>
+                  Aktywne tokeny zostaną unieważnione, a notatki zawierające
+                  dane konta usunięte. Tej operacji nie można cofnąć.
+                </p>
+              </div>
+
+              <label
+                htmlFor="delete-account-confirmation"
+                className="mt-6 block text-sm font-semibold text-[#f2efe4]"
+              >
+                Wpisz <span className="text-[#e0a0a0]">USUŃ KONTO</span>, aby
+                potwierdzić
+              </label>
+              <input
+                id="delete-account-confirmation"
+                type="text"
+                value={deleteConfirmation}
+                onChange={(event) => setDeleteConfirmation(event.target.value)}
+                disabled={deletingAccount}
+                autoComplete="off"
+                className="mt-2 min-h-12 w-full rounded-xl border border-[#744545] bg-[#191e19] px-4 py-3 text-[#f2efe4] outline-none focus-visible:ring-2 focus-visible:ring-[#e0a0a0] focus-visible:ring-offset-2 focus-visible:ring-offset-[#141814]"
+              />
+
+              <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+                <button
+                  type="button"
+                  onClick={() => setShowDeleteConfirmation(false)}
+                  disabled={deletingAccount}
+                  className="min-h-12 rounded-xl border border-[#30372c] px-5 py-3 font-semibold text-[#a9ada4] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#c5a861] disabled:opacity-60"
+                >
+                  Anuluj
+                </button>
+                <button
+                  type="button"
+                  onClick={deleteMyAccount}
+                  disabled={
+                    deletingAccount || deleteConfirmation !== "USUŃ KONTO"
+                  }
+                  className="min-h-12 rounded-xl border border-[#744545] bg-[#7a3030] px-5 py-3 font-semibold text-white transition hover:bg-[#963d3d] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#e0a0a0] focus-visible:ring-offset-2 focus-visible:ring-offset-[#141814] disabled:cursor-not-allowed disabled:bg-[#30372c] disabled:text-[#858c7f]"
+                >
+                  {deletingAccount ? "Usuwanie konta..." : "Potwierdź usunięcie"}
+                </button>
+              </div>
+            </div>
           </div>
         )}
 
