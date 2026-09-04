@@ -1165,3 +1165,67 @@ PARTIALLY REMEDIATED — OWNER DATA DEFERRED
 KNOWN RESIDUAL:
 legal identity/contact details pending final business entity decision.
 ```
+
+---
+
+# CLEAN-004 DIRECT RESERVATION DELETE HARDENING PRODUCTION SMOKE
+
+**Date:** 2026-09-04
+
+**Production commit:** `7e0d05f — security: block direct reservation deletes`
+
+**Production migration:** `20260904200000_harden_reservation_direct_delete.sql`
+
+The smoke used a unique synthetic run marker and dynamically generated UUIDs.
+All fixture and application-role checks ran in one transaction. Successful
+completion deliberately raised
+`CLEAN004_SMOKE_ALL_20_PASS_ROLLBACK`, forcing rollback of the complete test
+fixture.
+
+## Results
+
+| Check | Result | Evidence |
+|---|---|---|
+| Migration | PASS | Production migration history contains `20260904200000` / `harden_reservation_direct_delete`. |
+| Reservation RLS contract | PASS | RLS remains enabled; no direct reservation DELETE policy exists for admin, employee or another client role. |
+| Reservation table ACL | PASS | `authenticated` retains SELECT without DELETE; `anon` and `PUBLIC` have no direct table privilege; the existing `service_role` privileged baseline is unchanged. |
+| Anonymous direct DELETE | PASS | Direct DELETE was denied. |
+| Ordinary-user direct DELETE | PASS | Direct DELETE was denied, including against the user's synthetic reservation. |
+| Instructor direct DELETE | PASS | Direct DELETE was denied. |
+| Employee direct DELETE | PASS | Direct DELETE was denied. |
+| Admin direct DELETE | PASS | Direct DELETE was denied. |
+| Client TRUNCATE | PASS | The application role could not truncate `reservations`. |
+| Owner cancellation | PASS | The owner cancelled their own synthetic reservation through the controlled cancellation RPC. |
+| Employee cancellation | PASS | Employee cancellation through the controlled application RPC succeeded. |
+| Admin cancellation | PASS | Admin cancellation through the controlled application RPC succeeded. |
+| Operational history | PASS | Each controlled cancellation retained the reservation row and changed only the expected cancellation state; the record remained available to operational/reporting history. |
+| Cancellation audit | PASS | Successful controlled cancellation produced the expected audit entry; denied direct DELETE could not bypass the audit path. |
+| Idempotency | PASS | Repeating the already-applied controlled cancellation produced the controlled no-change result and no duplicate audit. |
+| SEC-009 anonymization | PASS | `anonymize_my_account_v1` completed for the synthetic lifecycle user without deleting the reservation. Direct PII was removed while the anonymized reservation history remained. |
+| History count | PASS | Reservation row counts for the synthetic lifecycle case were preserved across anonymization. |
+| Transaction safety | PASS | Exactly 20 smoke assertions passed before the deliberate terminal exception; no `COMMIT` was executed. |
+| Controlled rollback | PASS | SQL Editor returned the expected `ERROR: P0001: CLEAN004_SMOKE_ALL_20_PASS_ROLLBACK`. |
+| Independent cleanup check | PASS | Read-only post-check returned zero synthetic Auth users, profiles, lanes, pricing rules, reservations and audit logs; `remaining_synthetic_fixture = 0`. |
+
+## Compatibility and security conclusion
+
+The hardening blocks every tested client-side direct reservation deletion while
+preserving the supported user, employee and admin cancellation workflows.
+Cancellation keeps the reservation as operational history and remains audited.
+The SEC-009 account-lifecycle flow continues to anonymize rather than delete
+reservation history.
+
+No application code, configuration, production schema, migration, RLS or ACL
+was changed during this smoke. The only database writes were synthetic rows
+inside the transaction that ended in the deliberate rollback exception. The
+independent post-check was read-only and confirmed zero residue.
+
+## CLEAN-004 final result
+
+```text
+CLEAN-004 PRODUCTION SMOKE:
+PASS
+
+CLEAN-004 STATUS:
+FULLY REMEDIATED / PROD PASS
+```
