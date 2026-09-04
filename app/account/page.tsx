@@ -1,6 +1,11 @@
 ﻿"use client";
 
 import { useEffect, useState } from "react";
+import {
+  getPasswordLengthError,
+  PASSWORD_MAX_LENGTH,
+  PASSWORD_MIN_LENGTH,
+} from "../../lib/password-policy";
 import { supabase } from "../../lib/supabase";
 
 type ProfileData = {
@@ -518,8 +523,9 @@ export default function AccountPage() {
       return;
     }
 
-    if (newPassword.length < 8) {
-      setMessage("Hasło musi mieć minimum 8 znaków.");
+    const passwordLengthError = getPasswordLengthError(newPassword);
+    if (passwordLengthError) {
+      setMessage(passwordLengthError);
       return;
     }
 
@@ -1007,7 +1013,7 @@ export default function AccountPage() {
 
                   <p className="mb-5 text-sm text-[#a9ada4]">
                     Zmień hasło do swojego konta. Nowe hasło musi mieć minimum
-                    8 znaków.
+                    {` ${PASSWORD_MIN_LENGTH} znaków.`}
                   </p>
 
                   <div className="grid gap-5 md:grid-cols-2">
@@ -1026,7 +1032,9 @@ export default function AccountPage() {
                         onChange={(event) =>
                           setNewPassword(event.target.value)
                         }
-                        placeholder="Minimum 8 znaków"
+                        minLength={PASSWORD_MIN_LENGTH}
+                        maxLength={PASSWORD_MAX_LENGTH}
+                        placeholder={`Minimum ${PASSWORD_MIN_LENGTH} znaków`}
                         className="min-h-12 w-full rounded-xl border border-[#30372c] bg-[#141814] px-4 py-3 text-[#f2efe4] outline-none placeholder:text-[#858c7f] focus-visible:border-[#536143] focus-visible:ring-2 focus-visible:ring-[#c5a861] focus-visible:ring-offset-2 focus-visible:ring-offset-[#191e19]"
                       />
                     </div>
@@ -1046,6 +1054,8 @@ export default function AccountPage() {
                         onChange={(event) =>
                           setRepeatPassword(event.target.value)
                         }
+                        minLength={PASSWORD_MIN_LENGTH}
+                        maxLength={PASSWORD_MAX_LENGTH}
                         placeholder="Powtórz nowe hasło"
                         className="min-h-12 w-full rounded-xl border border-[#30372c] bg-[#141814] px-4 py-3 text-[#f2efe4] outline-none placeholder:text-[#858c7f] focus-visible:border-[#536143] focus-visible:ring-2 focus-visible:ring-[#c5a861] focus-visible:ring-offset-2 focus-visible:ring-offset-[#191e19]"
                       />

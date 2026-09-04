@@ -2,6 +2,11 @@
 
 import Image from "next/image";
 import { useState } from "react";
+import {
+  getPasswordLengthError,
+  PASSWORD_MAX_LENGTH,
+  PASSWORD_MIN_LENGTH,
+} from "../../lib/password-policy";
 import { supabase } from "../../lib/supabase";
 
 type ConfirmationData = {
@@ -35,8 +40,9 @@ export default function RegisterPage() {
       return;
     }
 
-    if (password.length < 6) {
-      setMessage("Hasło musi mieć minimum 6 znaków.");
+    const passwordLengthError = getPasswordLengthError(password);
+    if (passwordLengthError) {
+      setMessage(passwordLengthError);
       return;
     }
 
@@ -297,7 +303,9 @@ export default function RegisterPage() {
                   type="password"
                   value={password}
                   onChange={(event) => setPassword(event.target.value)}
-                  placeholder="Minimum 6 znaków"
+                  minLength={PASSWORD_MIN_LENGTH}
+                  maxLength={PASSWORD_MAX_LENGTH}
+                  placeholder={`Minimum ${PASSWORD_MIN_LENGTH} znaków`}
                   className="min-h-12 w-full rounded-xl border border-[#30372c] bg-[#191e19] px-4 py-3.5 text-base text-[#f2efe4] placeholder:text-[#858c7f] focus-visible:border-[#536143] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#c5a861] focus-visible:ring-offset-2 focus-visible:ring-offset-[#141814]"
                 />
               </div>

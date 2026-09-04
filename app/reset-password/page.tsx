@@ -2,6 +2,12 @@
 
 import Image from "next/image";
 import { useEffect, useState } from "react";
+import {
+  getPasswordLengthError,
+  PASSWORD_MAX_LENGTH,
+  PASSWORD_MIN_LENGTH,
+  PASSWORD_MIN_LENGTH_MESSAGE,
+} from "../../lib/password-policy";
 import { supabase } from "../../lib/supabase";
 
 function translatePasswordError(message: string) {
@@ -19,7 +25,7 @@ function translatePasswordError(message: string) {
     normalizedMessage.includes("password should be at least") ||
     normalizedMessage.includes("weak password")
   ) {
-    return "Hasło jest za słabe. Użyj minimum 8 znaków.";
+    return PASSWORD_MIN_LENGTH_MESSAGE;
   }
 
   if (
@@ -97,8 +103,9 @@ export default function ResetPasswordPage() {
       return;
     }
 
-    if (password.length < 8) {
-      setMessage("Hasło musi mieć minimum 8 znaków.");
+    const passwordLengthError = getPasswordLengthError(password);
+    if (passwordLengthError) {
+      setMessage(passwordLengthError);
       setMessageType("error");
       return;
     }
@@ -179,7 +186,9 @@ export default function ResetPasswordPage() {
                   type="password"
                   value={password}
                   onChange={(event) => setPassword(event.target.value)}
-                  placeholder="Minimum 8 znaków"
+                  minLength={PASSWORD_MIN_LENGTH}
+                  maxLength={PASSWORD_MAX_LENGTH}
+                  placeholder={`Minimum ${PASSWORD_MIN_LENGTH} znaków`}
                   disabled={!hasSession}
                   className="min-h-12 w-full rounded-xl border border-[#30372c] bg-[#191e19] px-4 py-3.5 text-base text-[#f2efe4] placeholder:text-[#858c7f] focus-visible:border-[#536143] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#c5a861] focus-visible:ring-offset-2 focus-visible:ring-offset-[#141814] disabled:cursor-not-allowed disabled:bg-[#171a17] disabled:text-[#858c7f]"
                 />
@@ -198,6 +207,8 @@ export default function ResetPasswordPage() {
                   type="password"
                   value={passwordRepeat}
                   onChange={(event) => setPasswordRepeat(event.target.value)}
+                  minLength={PASSWORD_MIN_LENGTH}
+                  maxLength={PASSWORD_MAX_LENGTH}
                   placeholder="Powtórz hasło"
                   disabled={!hasSession}
                   className="min-h-12 w-full rounded-xl border border-[#30372c] bg-[#191e19] px-4 py-3.5 text-base text-[#f2efe4] placeholder:text-[#858c7f] focus-visible:border-[#536143] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#c5a861] focus-visible:ring-offset-2 focus-visible:ring-offset-[#141814] disabled:cursor-not-allowed disabled:bg-[#171a17] disabled:text-[#858c7f]"
