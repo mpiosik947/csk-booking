@@ -24,9 +24,7 @@ export async function handleFreedEventPlace(
       return {
         reserveFound: false,
         emailsSent: 0,
-        error:
-          data?.error ??
-          "Nie udało się wysłać powiadomień do listy rezerwowej.",
+        error: "Nie udało się wysłać powiadomień do listy rezerwowej.",
       };
     }
 

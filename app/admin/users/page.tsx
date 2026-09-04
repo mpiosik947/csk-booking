@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { supabase } from "../../../lib/supabase";
 import AdminShell from "../_components/AdminShell";
+import { reportClientError } from "../../../lib/safe-client-error";
 
 type UserRole = "admin" | "pracownik" | "instruktor" | "user";
 type VerificationAction = "verify" | "mark_pending" | "reject";
@@ -374,7 +375,7 @@ export default function AdminUsersPage() {
       setLoading(false);
 
       if (error) {
-        console.error("Admin users read failed:", error);
+        reportClientError("Admin users read failed", error);
         setProfiles([]);
         setTotalCount(0);
         setFeedback({ tone: "error", text: "Nie udało się pobrać użytkowników. Spróbuj ponownie." });
@@ -517,7 +518,7 @@ export default function AdminUsersPage() {
     setSavingUserId(null);
 
     if (error) {
-      console.error("Admin role mutation failed:", error);
+      reportClientError("Admin role mutation failed", error);
       setFeedback({ tone: "error", text: "Nie udało się zapisać zmiany roli." });
       return;
     }
@@ -568,7 +569,7 @@ export default function AdminUsersPage() {
     setSavingUserId(null);
 
     if (error) {
-      console.error("Admin note mutation failed:", error);
+      reportClientError("Admin note mutation failed", error);
       setFeedback({ tone: "error", text: "Nie udało się zapisać notatki administratora." });
       return;
     }
@@ -618,7 +619,7 @@ export default function AdminUsersPage() {
     setSavingUserId(null);
 
     if (error) {
-      console.error("Profile verification RPC failed:", error);
+      reportClientError("Profile verification RPC failed", error);
       setFeedback({ tone: "error", text: "Nie udało się zaktualizować weryfikacji profilu." });
       return;
     }
@@ -668,7 +669,7 @@ export default function AdminUsersPage() {
     });
     setSavingUserId(null);
     if (error || !isIdentityRpcResult(data) || data.user_id !== profile.user_id) {
-      if (error) console.error("Profile identity RPC failed:", error);
+      if (error) reportClientError("Profile identity RPC failed", error);
       setFeedback({ tone: "error", text: "Nie udało się zaktualizować imienia i nazwiska." });
       return;
     }
@@ -719,7 +720,7 @@ export default function AdminUsersPage() {
     });
     setSavingUserId(null);
     if (error || !isContactRpcResult(data) || data.user_id !== profile.user_id) {
-      if (error) console.error("Profile contact RPC failed:", error);
+      if (error) reportClientError("Profile contact RPC failed", error);
       setFeedback({ tone: "error", text: "Nie udało się zaktualizować danych kontaktowych." });
       return;
     }

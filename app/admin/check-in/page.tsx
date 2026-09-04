@@ -16,6 +16,7 @@ import {
 } from "../../../lib/reservation-status";
 import { getLaneRelationDisplay } from "../../../lib/admin/lane-relation-display";
 import { getReservationAttendanceActions } from "../../../lib/reservation-operational-state";
+import { reportClientError } from "../../../lib/safe-client-error";
 import AdminShell from "../_components/AdminShell";
 
 type UserRole = "admin" | "pracownik" | "instruktor" | "user";
@@ -608,7 +609,7 @@ function CheckInContent() {
       );
 
       if (error) {
-        console.error("Operational profile read failed:", error);
+        reportClientError("Operational profile read failed", error);
         setMessage("Nie udało się pobrać danych profili dla rezerwacji.");
         return;
       }
@@ -671,7 +672,8 @@ function CheckInContent() {
     setLoading(false);
 
     if (error) {
-      setMessage(`Błąd pobierania rezerwacji: ${error.message}`);
+      reportClientError("Check-in reservations read failed", error);
+      setMessage("Nie udało się pobrać rezerwacji. Spróbuj ponownie.");
       return;
     }
 
@@ -801,7 +803,7 @@ function CheckInContent() {
       .single();
 
     if (error) {
-      console.error("Refreshing reservation after attendance RPC failed:", error);
+      reportClientError("Refreshing reservation after attendance RPC failed", error);
       return false;
     }
 
@@ -842,7 +844,7 @@ function CheckInContent() {
       );
 
       if (error) {
-        console.error("Reservation attendance RPC failed:", error);
+        reportClientError("Reservation attendance RPC failed", error);
         setMessage(getAttendanceErrorMessage(error));
         return false;
       }
@@ -854,7 +856,7 @@ function CheckInContent() {
         result.reservation_id !== reservationId ||
         result.action !== action
       ) {
-        console.error("Reservation attendance RPC returned invalid data:", data);
+        reportClientError("Reservation attendance RPC returned invalid data");
         setMessage(
           "Nie udało się zaktualizować rezerwacji. Spróbuj ponownie."
         );
@@ -877,8 +879,8 @@ function CheckInContent() {
 
       setMessage(successMessage);
       return true;
-    } catch (error) {
-      console.error("Reservation attendance RPC failed:", error);
+    } catch {
+      reportClientError("Reservation attendance RPC failed");
       setMessage(
         "Nie udało się zaktualizować rezerwacji. Spróbuj ponownie."
       );
@@ -985,7 +987,7 @@ function CheckInContent() {
       );
 
       if (error) {
-        console.error("Profile verification RPC failed:", error);
+        reportClientError("Profile verification RPC failed", error);
         setMessage(
           "Nie udało się zaktualizować weryfikacji profilu. Spróbuj ponownie."
         );
@@ -993,7 +995,7 @@ function CheckInContent() {
       }
 
       if (!isVerificationRpcResult(data) || data.user_id !== profile.user_id) {
-        console.error("Profile verification RPC returned invalid data:", data);
+        reportClientError("Profile verification RPC returned invalid data");
         setMessage(
           "Nie udało się zaktualizować weryfikacji profilu. Spróbuj ponownie."
         );
@@ -1014,8 +1016,8 @@ function CheckInContent() {
       }));
 
       return data;
-    } catch (error) {
-      console.error("Profile verification RPC failed:", error);
+    } catch {
+      reportClientError("Profile verification RPC failed");
       setMessage(
         "Nie udało się zaktualizować weryfikacji profilu. Spróbuj ponownie."
       );
@@ -1145,7 +1147,7 @@ function CheckInContent() {
       });
 
       if (error) {
-        console.error("Check-in reservation cancellation RPC failed", error);
+        reportClientError("Check-in reservation cancellation RPC failed", error);
         setMessage(getCancellationErrorMessage(error));
         return;
       }
@@ -1153,7 +1155,7 @@ function CheckInContent() {
       const result = parseCancelReservationRpcResult(data);
 
       if (!result) {
-        console.error("Invalid cancel_reservation RPC response", data);
+        reportClientError("Check-in reservation cancellation returned invalid data");
         setMessage("Nie udało się anulować rezerwacji. Spróbuj ponownie.");
         return;
       }
@@ -1199,8 +1201,8 @@ function CheckInContent() {
           );
           return;
         }
-      } catch (emailError) {
-        console.error("Reservation cancellation email failed", emailError);
+      } catch {
+        reportClientError("Check-in reservation cancellation email failed");
         setMessage(
           "Rezerwacja została anulowana, ale nie udało się wysłać wiadomości e-mail."
         );
@@ -1210,11 +1212,8 @@ function CheckInContent() {
       setMessage(
         "Rezerwacja została anulowana. Email anulowania został wysłany."
       );
-    } catch (unexpectedError) {
-      console.error(
-        "Unexpected check-in reservation cancellation error",
-        unexpectedError
-      );
+    } catch {
+      reportClientError("Unexpected check-in reservation cancellation error");
       setMessage("Nie udało się anulować rezerwacji. Spróbuj ponownie.");
     } finally {
       cancellationInProgressIdsRef.current.delete(reservation.id);

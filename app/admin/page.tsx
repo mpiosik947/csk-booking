@@ -13,6 +13,7 @@ import {
 } from "../../lib/payment-status";
 import AdminShell from "./_components/AdminShell";
 import { getLaneRelationDisplay } from "../../lib/admin/lane-relation-display";
+import { reportClientError } from "../../lib/safe-client-error";
 
 type Role = "admin" | "pracownik" | "instruktor" | "user";
 
@@ -371,7 +372,8 @@ export default function AdminPage() {
     );
 
     if (roleError) {
-      setMessage(`Błąd pobierania roli: ${roleError.message}`);
+      reportClientError("Admin dashboard role read failed", roleError);
+      setMessage("Nie udało się sprawdzić uprawnień. Spróbuj ponownie.");
       setLoading(false);
       return;
     }
@@ -474,25 +476,22 @@ export default function AdminPage() {
     ]);
 
     if (todayReservationsResult.error) {
-      setMessage(
-        `Błąd pobierania dzisiejszych rezerwacji: ${todayReservationsResult.error.message}`
-      );
+      reportClientError("Admin dashboard daily reservations read failed", todayReservationsResult.error);
+      setMessage("Nie udało się pobrać dzisiejszych rezerwacji.");
       setLoading(false);
       return;
     }
 
     if (monthReservationsResult.error) {
-      setMessage(
-        `Błąd pobierania rezerwacji miesięcznych: ${monthReservationsResult.error.message}`
-      );
+      reportClientError("Admin dashboard monthly reservations read failed", monthReservationsResult.error);
+      setMessage("Nie udało się pobrać rezerwacji miesięcznych.");
       setLoading(false);
       return;
     }
 
     if (upcomingEventsResult.error) {
-      setMessage(
-        `Błąd pobierania najbliższych szkoleń: ${upcomingEventsResult.error.message}`
-      );
+      reportClientError("Admin dashboard upcoming events read failed", upcomingEventsResult.error);
+      setMessage("Nie udało się pobrać najbliższych szkoleń.");
       setLoading(false);
       return;
     }
@@ -513,7 +512,7 @@ export default function AdminPage() {
         );
 
         if (profileError) {
-          console.error("Dashboard operational profile read failed:", profileError);
+          reportClientError("Dashboard operational profile read failed", profileError);
           setMessage("Nie udało się pobrać statusów profili dla dzisiejszych rezerwacji.");
           setLoading(false);
           return;

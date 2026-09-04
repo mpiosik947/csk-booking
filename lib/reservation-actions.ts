@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { PAYMENT_STATUS } from "./payment-status";
+import { reportClientError } from "./safe-client-error";
 
 export type ReservationActionResult<T = unknown> = {
   data: T | null;
@@ -92,11 +93,7 @@ async function callControlledRpc(
 
   const { data, error } = await supabase.rpc(functionName, parameters);
   if (error) {
-    console.error(`${functionName} RPC failed`, {
-      code: error.code,
-      details: error.details,
-      hint: error.hint,
-    });
+    reportClientError(`${functionName} RPC failed`, error);
     return { data: null, error: "Nie udało się zapisać zmiany. Spróbuj ponownie." };
   }
 
@@ -170,11 +167,7 @@ export async function cancelReservation(
     p_reservation_id: options.reservationId,
   });
   if (error) {
-    console.error("cancel_reservation RPC failed", {
-      code: error.code,
-      details: error.details,
-      hint: error.hint,
-    });
+    reportClientError("cancel_reservation RPC failed", error);
     return { data: null, error: "Nie udało się anulować rezerwacji." };
   }
 

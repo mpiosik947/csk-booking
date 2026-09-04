@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { supabase } from "../../lib/supabase";
+import { reportClientError } from "../../lib/safe-client-error";
 
 type EventRegistration = {
   id: string;
@@ -159,7 +160,7 @@ export default function EventsPage() {
       setLoading(false);
 
       if (error) {
-        console.error("Błąd pobierania szkoleń:", error);
+        reportClientError("Public events read failed", error);
         setLoadError(true);
         return;
       }
@@ -356,8 +357,8 @@ export default function EventsPage() {
           "Zapis został utworzony, ale wiadomość e-mail nie została wysłana."
         );
       }
-    } catch (registrationError) {
-      console.error("Event registration request failed:", registrationError);
+    } catch {
+      reportClientError("Event registration request failed");
       setRegistrationConfirmation(null);
       setMessage("Nie udało się zapisać na szkolenie. Spróbuj ponownie.");
     } finally {

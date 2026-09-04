@@ -5,6 +5,7 @@ import {
   verifyAuthUser,
 } from "@/lib/server/auth-user-verification";
 import {
+  getConfirmEventReserveMessage,
   getConfirmEventReserveStatus,
   isConfirmEventReserveResult,
   parseConfirmEventReservePayload,
@@ -140,7 +141,7 @@ export async function POST(request: Request) {
         {
           ok: false,
           code: rpcData.code,
-          message: rpcData.message,
+          message: getConfirmEventReserveMessage(rpcData.code),
         },
         { status }
       );
@@ -176,7 +177,7 @@ export async function POST(request: Request) {
     return NextResponse.json({
       ok: true,
       code: rpcData.code,
-      message: rpcData.message,
+      message: getConfirmEventReserveMessage(rpcData.code),
     });
   } catch {
     console.error("Event reserve confirmation endpoint failed");

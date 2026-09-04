@@ -6,38 +6,9 @@ import {
   getPasswordLengthError,
   PASSWORD_MAX_LENGTH,
   PASSWORD_MIN_LENGTH,
-  PASSWORD_MIN_LENGTH_MESSAGE,
 } from "../../lib/password-policy";
+import { getPasswordUpdateErrorMessage } from "../../lib/safe-client-error";
 import { supabase } from "../../lib/supabase";
-
-function translatePasswordError(message: string) {
-  const normalizedMessage = message.toLowerCase();
-
-  if (
-    normalizedMessage.includes("same password") ||
-    normalizedMessage.includes("different from the old password") ||
-    normalizedMessage.includes("new password should be different")
-  ) {
-    return "Nowe hasło musi być inne niż poprzednie.";
-  }
-
-  if (
-    normalizedMessage.includes("password should be at least") ||
-    normalizedMessage.includes("weak password")
-  ) {
-    return PASSWORD_MIN_LENGTH_MESSAGE;
-  }
-
-  if (
-    normalizedMessage.includes("session") ||
-    normalizedMessage.includes("expired") ||
-    normalizedMessage.includes("invalid")
-  ) {
-    return "Link resetujący jest nieprawidłowy albo wygasł. Wygeneruj nowy link.";
-  }
-
-  return "Nie udało się zmienić hasła. Spróbuj ponownie.";
-}
 
 export default function ResetPasswordPage() {
   const [password, setPassword] = useState("");
@@ -125,7 +96,7 @@ export default function ResetPasswordPage() {
     setLoading(false);
 
     if (error) {
-      setMessage(translatePasswordError(error.message));
+      setMessage(getPasswordUpdateErrorMessage(error, "reset"));
       setMessageType("error");
       return;
     }

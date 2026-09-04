@@ -7,6 +7,7 @@ import {
   PASSWORD_MAX_LENGTH,
   PASSWORD_MIN_LENGTH,
 } from "../../lib/password-policy";
+import { getRegistrationErrorMessage } from "../../lib/safe-client-error";
 import { supabase } from "../../lib/supabase";
 
 type ConfirmationData = {
@@ -83,19 +84,7 @@ export default function RegisterPage() {
     setLoading(false);
 
     if (error) {
-      const isExistingAccountError =
-        error.code === "user_already_exists" ||
-        error.code === "email_exists" ||
-        error.message.toLowerCase().includes("user already registered");
-
-      if (isExistingAccountError) {
-        setMessage(
-          "Konto z tym adresem e-mail już istnieje. Zaloguj się lub skorzystaj z odzyskiwania hasła."
-        );
-        return;
-      }
-
-      setMessage(`Błąd rejestracji: ${error.message}`);
+      setMessage(getRegistrationErrorMessage(error));
       return;
     }
 

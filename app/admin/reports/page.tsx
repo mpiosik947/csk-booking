@@ -22,6 +22,7 @@ import {
   REPORT_PAGE_SIZE,
   type ReportLane,
 } from "../../../lib/admin/reports";
+import { reportClientError } from "../../../lib/safe-client-error";
 
 type ReportMode = "day" | "week" | "month" | "year";
 
@@ -159,7 +160,8 @@ export default function AdminReportsPage() {
     if (requestId !== reportRequestRef.current) return;
 
     if (roleError) {
-      setMessage(`Błąd sprawdzania roli: ${roleError.message}`);
+      reportClientError("Admin reports role read failed", roleError);
+      setMessage("Nie udało się sprawdzić uprawnień. Spróbuj ponownie.");
       setLoading(false);
       return;
     }

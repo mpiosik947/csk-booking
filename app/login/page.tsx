@@ -2,6 +2,7 @@
 
 import Image from "next/image";
 import { useEffect, useState } from "react";
+import { getLoginErrorMessage } from "../../lib/safe-client-error";
 import { supabase } from "../../lib/supabase";
 
 const ALLOWED_LOGIN_REDIRECTS: ReadonlySet<string> = new Set([
@@ -57,19 +58,7 @@ export default function LoginPage() {
     setLoading(false);
 
     if (error) {
-      if (error.message === "Email not confirmed") {
-        setMessage(
-          "Wymagana jest weryfikacja adresu e-mail. Sprawdź skrzynkę pocztową i kliknij link aktywacyjny wysłany podczas rejestracji."
-        );
-        return;
-      }
-
-      if (error.message === "Invalid login credentials") {
-        setMessage("Nieprawidłowy adres e-mail lub hasło.");
-        return;
-      }
-
-      setMessage(`Błąd logowania: ${error.message}`);
+      setMessage(getLoginErrorMessage(error));
       return;
     }
 

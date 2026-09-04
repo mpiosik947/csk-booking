@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { FormEvent, useState } from "react";
+import { getEventConfirmationResponseMessage } from "@/lib/safe-client-error";
 import { supabase } from "@/lib/supabase";
 
 type ConfirmEventReserveFormProps = {
@@ -18,31 +19,6 @@ type ConfirmationState =
       code?: string;
       requiresLogin?: boolean;
     };
-
-type ConfirmationResponse = {
-  ok?: unknown;
-  code?: unknown;
-  message?: unknown;
-  error?: unknown;
-};
-
-function getResponseMessage(value: unknown) {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    return null;
-  }
-
-  const response = value as ConfirmationResponse;
-
-  if (typeof response.message === "string" && response.message.trim()) {
-    return response.message;
-  }
-
-  if (typeof response.error === "string" && response.error.trim()) {
-    return response.error;
-  }
-
-  return null;
-}
 
 export default function ConfirmEventReserveForm({
   token,
@@ -82,15 +58,6 @@ export default function ConfirmEventReserveForm({
         body: JSON.stringify({ token }),
       });
       const result: unknown = await response.json().catch(() => null);
-      const message =
-        getResponseMessage(result) ??
-        "Nie udało się potwierdzić miejsca. Spróbuj ponownie.";
-
-      if (response.ok) {
-        setState({ status: "success", message });
-        return;
-      }
-
       const code =
         result &&
         typeof result === "object" &&
@@ -99,6 +66,12 @@ export default function ConfirmEventReserveForm({
         typeof result.code === "string"
           ? result.code
           : undefined;
+      const message = getEventConfirmationResponseMessage(code, response.ok);
+
+      if (response.ok) {
+        setState({ status: "success", message });
+        return;
+      }
 
       setState({
         status: "error",

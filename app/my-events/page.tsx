@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { getPaymentStatusLabel } from "../../lib/payment-status";
 import { supabase } from "../../lib/supabase";
+import { reportClientError } from "../../lib/safe-client-error";
 
 type EventRegistration = {
   id: string;
@@ -23,8 +24,6 @@ type EventRegistration = {
 
 type CancellationResponse = {
   success?: boolean;
-  error?: string;
-  message?: string;
   cancellation?: {
     registrationId: string;
     eventId: string;
@@ -284,7 +283,8 @@ export default function MyEventsPage() {
         .order("created_at", { ascending: false });
 
       if (error) {
-        setMessage(`Błąd pobierania szkoleń: ${error.message}`);
+        reportClientError("My events read failed", error);
+        setMessage("Nie udało się pobrać zapisów na szkolenia. Spróbuj ponownie.");
         setLoading(false);
         return;
       }
@@ -351,10 +351,9 @@ export default function MyEventsPage() {
 
       if (!response.ok || !data?.success || !data.cancellation) {
         setMessage(
-          data?.error ??
-            (response.status === 409
-              ? "Zapis można anulować najpóźniej 72 godziny przed rozpoczęciem szkolenia."
-              : "Nie udało się anulować udziału w szkoleniu.")
+          response.status === 409
+            ? "Zapis można anulować najpóźniej 72 godziny przed rozpoczęciem szkolenia."
+            : "Nie udało się anulować udziału w szkoleniu."
         );
         return;
       }
@@ -370,7 +369,7 @@ export default function MyEventsPage() {
         )
       );
 
-      setMessage(data.message ?? "Udział jest anulowany.");
+      setMessage("Udział jest anulowany.");
     } catch {
       setMessage("Nie udało się anulować udziału w szkoleniu. Spróbuj ponownie.");
     } finally {

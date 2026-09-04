@@ -101,3 +101,21 @@ export function getConfirmEventReserveStatus(
 
   return 409;
 }
+
+export function getConfirmEventReserveMessage(
+  code: ConfirmEventReserveResult["code"]
+) {
+  switch (code) {
+    case "confirmed":
+      return "Miejsce zostało potwierdzone.";
+    case "full":
+      return "Brak wolnych miejsc na tym szkoleniu.";
+    case "expired":
+      return "Link potwierdzający wygasł.";
+    case "not_found":
+    case "event_not_found":
+      return "Nie znaleziono aktywnego zaproszenia.";
+    case "not_reserve":
+      return "Ten zapis nie oczekuje już na potwierdzenie miejsca.";
+  }
+}

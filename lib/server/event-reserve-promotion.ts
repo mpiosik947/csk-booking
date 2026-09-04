@@ -69,18 +69,29 @@ function getSafeErrorDetails(error: unknown) {
   }
 
   const errorRecord = error as Record<string, unknown>;
-  const errorCode =
+  const rawErrorCode =
     typeof errorRecord.code === "string"
       ? errorRecord.code
       : typeof errorRecord.name === "string"
         ? errorRecord.name
         : undefined;
-  const httpStatus =
+  const errorCode =
+    rawErrorCode && /^[a-z0-9_.:-]{1,64}$/i.test(rawErrorCode)
+      ? rawErrorCode
+      : undefined;
+  const rawHttpStatus =
     typeof errorRecord.statusCode === "number"
       ? errorRecord.statusCode
       : typeof errorRecord.status === "number"
         ? errorRecord.status
         : undefined;
+  const httpStatus =
+    Number.isInteger(rawHttpStatus) &&
+    rawHttpStatus !== undefined &&
+    rawHttpStatus >= 100 &&
+    rawHttpStatus <= 599
+      ? rawHttpStatus
+      : undefined;
 
   return {
     ...(errorCode ? { errorCode } : {}),
@@ -89,14 +100,10 @@ function getSafeErrorDetails(error: unknown) {
 }
 
 function logPromotionFailure(
-  eventId: string,
-  registrationId: string,
   stage: PromotionFailureStage,
   error: unknown
 ) {
   console.error("Event reserve promotion recipient failed", {
-    eventId,
-    registrationId,
     stage,
     ...getSafeErrorDetails(error),
   });
@@ -260,7 +267,7 @@ export async function promoteEventReserve(
     );
 
     if (prepareError) {
-      logPromotionFailure(eventId, eventId, "prepare_rpc", prepareError);
+      logPromotionFailure("prepare_rpc", prepareError);
 
       return {
         attempted: true,
@@ -279,7 +286,7 @@ export async function promoteEventReserve(
     }
 
     if (!Array.isArray(prepareData)) {
-      logPromotionFailure(eventId, eventId, "prepare_rpc", {
+      logPromotionFailure("prepare_rpc", {
         code: "invalid_prepare_result",
       });
 
@@ -323,8 +330,6 @@ export async function promoteEventReserve(
         !data.claim_cleared
       ) {
         logPromotionFailure(
-          eventId,
-          promotion.registration_id,
           "complete_rpc",
           error ?? { code: "invalid_complete_result" }
         );
@@ -458,12 +463,7 @@ export async function promoteEventReserve(
 
     if (registrationError) {
       await failPreparedPromotions("unexpected_error");
-      logPromotionFailure(
-        eventId,
-        eventId,
-        "recipient_query",
-        registrationError
-      );
+      logPromotionFailure("recipient_query", registrationError);
 
       return {
         attempted: true,
@@ -497,12 +497,7 @@ export async function promoteEventReserve(
       if (!registration?.customer_email?.trim()) {
         failedCount += 1;
         failureReasons.add("invalid_recipient");
-        logPromotionFailure(
-          eventId,
-          promotion.registration_id,
-          "resend_send",
-          { code: "invalid_recipient" }
-        );
+        logPromotionFailure("resend_send", { code: "invalid_recipient" });
         await completePromotion(promotion, false, "invalid_recipient");
         continue;
       }
@@ -593,12 +588,7 @@ CSK Booking
         const errorCode = normalizePromotionError(sendError);
         failedCount += 1;
         failureReasons.add(errorCode);
-        logPromotionFailure(
-          eventId,
-          promotion.registration_id,
-          "resend_send",
-          sendError
-        );
+        logPromotionFailure("resend_send", sendError);
         await completePromotion(promotion, false, errorCode);
         continue;
       }

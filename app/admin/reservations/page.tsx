@@ -24,6 +24,7 @@ import {
 import { getReservationAttendanceActions } from "../../../lib/reservation-operational-state";
 import { getLaneRelationDisplay } from "../../../lib/admin/lane-relation-display";
 import AdminShell from "../_components/AdminShell";
+import { reportClientError } from "../../../lib/safe-client-error";
 
 type ReservationSort = "newest" | "oldest" | "lane" | "status" | "payment";
 
@@ -449,7 +450,8 @@ export default function AdminReservationsPage() {
     setLoading(false);
 
     if (error) {
-      setMessage(`Błąd pobierania rezerwacji: ${error.message}`);
+      reportClientError("Admin reservations read failed", error);
+      setMessage("Nie udało się pobrać rezerwacji. Spróbuj ponownie.");
       return;
     }
 
@@ -500,7 +502,7 @@ export default function AdminReservationsPage() {
       });
 
       if (error) {
-        console.error("Admin reservation cancellation RPC failed", error);
+        reportClientError("Admin reservation cancellation RPC failed", error);
         setMessage(getCancellationErrorMessage(error));
         return;
       }
@@ -508,7 +510,7 @@ export default function AdminReservationsPage() {
       const result = parseCancelReservationRpcResult(data);
 
       if (!result) {
-        console.error("Invalid cancel_reservation RPC response", data);
+        reportClientError("Admin reservation cancellation returned invalid data");
         setMessage("Nie udało się anulować rezerwacji. Spróbuj ponownie.");
         return;
       }
@@ -552,8 +554,8 @@ export default function AdminReservationsPage() {
           );
           return;
         }
-      } catch (emailError) {
-        console.error("Reservation cancellation email failed", emailError);
+      } catch {
+        reportClientError("Admin reservation cancellation email failed");
         setMessage(
           "Rezerwacja została anulowana, ale nie udało się wysłać wiadomości e-mail."
         );
@@ -563,11 +565,8 @@ export default function AdminReservationsPage() {
       setMessage(
         "Rezerwacja została anulowana. Email anulowania został wysłany."
       );
-    } catch (unexpectedError) {
-      console.error(
-        "Unexpected admin reservation cancellation error",
-        unexpectedError
-      );
+    } catch {
+      reportClientError("Unexpected admin reservation cancellation error");
       setMessage("Nie udało się anulować rezerwacji. Spróbuj ponownie.");
     } finally {
       cancellationInProgressRef.current = null;

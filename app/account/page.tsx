@@ -6,6 +6,10 @@ import {
   PASSWORD_MAX_LENGTH,
   PASSWORD_MIN_LENGTH,
 } from "../../lib/password-policy";
+import {
+  getPasswordUpdateErrorMessage,
+  reportClientError,
+} from "../../lib/safe-client-error";
 import { supabase } from "../../lib/supabase";
 
 type ProfileData = {
@@ -231,7 +235,8 @@ export default function AccountPage() {
     } = await supabase.auth.getUser();
 
     if (userError) {
-      setMessage(`Błąd pobierania użytkownika: ${userError.message}`);
+      reportClientError("Account user read failed", userError);
+      setMessage("Nie udało się pobrać danych konta. Spróbuj ponownie.");
       setIsLoggedIn(false);
       setLoading(false);
       return;
@@ -295,7 +300,8 @@ export default function AccountPage() {
       .maybeSingle();
 
     if (profileError) {
-      setMessage(`Błąd pobierania profilu: ${profileError.message}`);
+      reportClientError("Account profile read failed", profileError);
+      setMessage("Nie udało się pobrać profilu. Spróbuj ponownie.");
       setLoading(false);
       return;
     }
@@ -469,7 +475,8 @@ export default function AccountPage() {
 
     if (authError) {
       setSavingProfile(false);
-      setMessage(`Błąd zapisu danych konta: ${authError.message}`);
+      reportClientError("Account metadata update failed", authError);
+      setMessage("Nie udało się zapisać danych konta. Spróbuj ponownie.");
       return;
     }
 
@@ -502,8 +509,9 @@ export default function AccountPage() {
     setSavingProfile(false);
 
     if (profileError) {
+      reportClientError("Account profile update failed", profileError);
       setMessage(
-        `Dane konta zapisane, ale nie udało się zaktualizować profilu: ${profileError.message}`
+        "Dane konta zapisane, ale nie udało się zaktualizować profilu. Spróbuj ponownie."
       );
       return;
     }
@@ -551,7 +559,8 @@ export default function AccountPage() {
     setSavingPassword(false);
 
     if (error) {
-      setMessage(`Błąd zmiany hasła: ${error.message}`);
+      reportClientError("Account password update failed", error);
+      setMessage(getPasswordUpdateErrorMessage(error, "account"));
       return;
     }
 
@@ -585,14 +594,7 @@ export default function AccountPage() {
       });
 
       if (!response.ok) {
-        const body = (await response.json().catch(() => null)) as
-          | { error?: unknown }
-          | null;
-        setMessage(
-          typeof body?.error === "string"
-            ? body.error
-            : "Nie udało się przygotować eksportu."
-        );
+        setMessage("Nie udało się przygotować eksportu.");
         return;
       }
 
@@ -639,16 +641,8 @@ export default function AccountPage() {
         },
         body: JSON.stringify({ confirmation: deleteConfirmation }),
       });
-      const body = (await response.json().catch(() => null)) as
-        | { error?: unknown }
-        | null;
-
       if (!response.ok) {
-        setMessage(
-          typeof body?.error === "string"
-            ? body.error
-            : "Nie udało się usunąć konta."
-        );
+        setMessage("Nie udało się usunąć konta.");
         return;
       }
 

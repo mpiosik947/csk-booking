@@ -31,7 +31,7 @@ export default function ForgotPasswordPage() {
     setLoading(false);
 
     if (error) {
-      setMessage(`Błąd wysyłki linku resetującego: ${error.message}`);
+      setMessage("Nie udało się wysłać linku resetującego. Spróbuj ponownie.");
       setMessageType("error");
       return;
     }

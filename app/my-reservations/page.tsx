@@ -13,6 +13,7 @@ import {
   loadAllMyReservations,
   type MyReservation as Reservation,
 } from "../../lib/my-reservations";
+import { reportClientError } from "../../lib/safe-client-error";
 
 type CancelReservationRpcResult = {
   changed: boolean;
@@ -384,7 +385,7 @@ export default function MyReservationsPage() {
       });
 
       if (error) {
-        console.error("Reservation cancellation RPC failed", error);
+        reportClientError("Reservation cancellation RPC failed", error);
         setMessage(getCancellationErrorMessage(error));
         return;
       }
@@ -437,8 +438,8 @@ export default function MyReservationsPage() {
           );
           return;
         }
-      } catch (emailError) {
-        console.error("Reservation cancellation email failed", emailError);
+      } catch {
+        reportClientError("Reservation cancellation email failed");
         setMessage(
           "Rezerwacja została anulowana, ale nie udało się wysłać wiadomości e-mail."
         );
@@ -446,8 +447,8 @@ export default function MyReservationsPage() {
       }
 
       setMessage("Rezerwacja została anulowana.");
-    } catch (error) {
-      console.error("Reservation cancellation flow failed", error);
+    } catch {
+      reportClientError("Reservation cancellation flow failed");
       setMessage(
         "Nie udało się anulować rezerwacji. Spróbuj ponownie."
       );
