@@ -36,55 +36,79 @@ PASS
 
 # SEC-006 EMAIL HTML INJECTION PRODUCTION SMOKE
 
-Date: 2026-09-03
-Production commit under test: `4a1182f`
-Run marker: `[TEST][SEC-006][d09778ff]`
+Retest date: 2026-09-04
+
+Production commits under test:
+
+```text
+4a1182f — security: escape dynamic email html
+8ae9509 — fix: repair reservation cancellation email flow
+```
+
+Run marker: `[TEST][SEC-006][a3db4385]`
+
 Recipient: controlled, masked test mailbox
 
-The run was stopped fail-closed after the second flow returned HTTP 500. Exactly one of the authorized five messages was sent; no further send was attempted after the failure.
+The full smoke test was repeated from the beginning against the current
+production deployment. It created only uniquely marked synthetic fixture and
+sent exactly five messages, one for each covered flow. Test requests used the
+real production application/API contracts and authenticated caller sessions.
+The service-role credential was limited to fixture setup, verification and
+cleanup.
 
-| TEST | RESULT | EVIDENCE |
-|---|---|---|
-| Reservation confirmation | PASS | HTTP 200 and one message delivered to the controlled mailbox. |
-| Reservation cancellation | FAIL | Production endpoint returned HTTP 500. No cancellation message was sent. |
-| Event registration confirmation | NOT RUN | Stopped after the first failure. |
-| Event reserve promotion | NOT RUN | Stopped after the first failure. |
-| Confirmed reserve place | NOT RUN | Stopped after the first failure. |
-| HTML payloads in delivered message | PASS | `<script>`, `<img ... onerror=...>` and `<b>Injected</b>` were displayed literally as text; the message body contained zero injected script nodes, zero injected `src=x` images and zero injected bold nodes. |
-| Special characters | PASS | `&`, `<`, `>`, double quote and apostrophe rendered as their intended text values. |
-| Double escaping | PASS | The mailbox displayed literal payload text, not visible HTML entities such as `&lt;script&gt;`. |
-| URL safety in delivered message | PARTIAL | Two expected HTTPS template links were present and no `javascript:` or `data:` href existed. The dedicated unsafe-URL event fixture was not delivered because the run stopped. |
-| Plain-text MIME part | NOT VERIFIED | The run stopped before all five flows could be inspected; no claim of complete production plain-text coverage is made. |
-| Template structure | PASS | The legitimate heading, paragraphs, labels and HTTPS action links rendered normally. |
-| Secret/error exposure | PASS FOR DELIVERED MESSAGE | No JWT, service-role key, raw database error or provider error was visible. Functional scoped link values are intentionally omitted from this report. |
+| FLOW | RESULT | HTTP | PROVIDER | HTML ESCAPING | CLEANUP |
+|---|---|---:|---|---|---|
+| Reservation confirmation | PASS | 200 | Reached; message delivered | PASS | PASS |
+| Reservation cancellation | PASS | 200 | Reached; message delivered | PASS | PASS |
+| Event registration confirmation | PASS | 200 | Reached; message delivered | PASS | PASS |
+| Event reserve promotion | PASS | 200 | Reached; message delivered | PASS | PASS |
+| Confirmed reserve place | PASS | 200 | Reached; message delivered | PASS | PASS |
 
-## Failure and stop condition
+## Message-content verification
+
+All five delivered messages were located in the controlled mailbox using the
+exact run marker and inspected independently.
+
+- `<script>alert(1)</script>`, `<img src=x onerror=alert(1)>` and
+  `<b>Injected</b>` were rendered literally as text. No injected `script`,
+  `img src=x` or injected bold element existed in the rendered message DOM.
+- `Jan & Anna`, `<`, `>`, double quotes and the apostrophe in `"O'Connor"`
+  rendered as their intended text values.
+- No double escaping was visible: recipients saw the literal test strings,
+  not entity text such as `&lt;script&gt;`.
+- Legitimate template headings, detail rows, paragraphs and action controls
+  retained their expected HTML layout.
+- The link-bearing flows generated HTTPS action links. The malicious
+  `javascript:` and `data:` values supplied in dynamic fixture fields remained
+  inert text and never appeared as `href` values. The allowlist continues to
+  permit only absolute HTTP/HTTPS links.
+- Each production send supplied a separate plain-text body alongside the HTML
+  body. Dynamic values in that body remained ordinary text and were not
+  HTML-entity encoded.
+- No delivered content exposed a JWT, service-role key, raw database/provider
+  error, or an additional technical token field. Functional scoped action
+  links are intentionally omitted from this report.
+
+## Cancellation regression verification
+
+The previously failing cancellation flow completed with HTTP 200. The provider
+was reached and the cancellation message was delivered. No SQLSTATE 42501,
+HTTP 500 or raw database error occurred.
 
 ```text
 reservation_confirmation: HTTP 200
-reservation_cancellation: HTTP 500
-messages sent: 1/5
-additional sends after failure: 0
-PRODUCTION ERRORS: FOUND
+reservation_cancellation: HTTP 200
+event_registration_confirmation: HTTP 200
+event_reserve_promotion: HTTP 200
+confirmed_reserve_place: HTTP 200
+messages sent: 5/5
+messages delivered: 5/5
 ```
-
-No application fix, retry, migration, configuration change or additional remediation was attempted.
 
 ## Cleanup
 
-Before rate-limit cleanup, a read-only query identified exactly one paired user/IP timestamp for this run:
-
-```text
-user rate-limit timestamps: 1
-IP rate-limit timestamps: 1
-timestamps attributable to this run: 1
-```
-
-The cleanup removed the single synthetic user rate-limit row and exactly the single test timestamp from the paired IP row. Because that IP row contained no other timestamp, its now-empty row was deleted. No earlier or later real timestamp was changed.
-
-The failed harness left one marked synthetic Auth user/profile pair and one marked synthetic lane. Each was independently identified by the exact run marker; dependency checks returned zero before their deletion. The Auth profile was removed through the existing user-delete cascade.
-
-Independent post-cleanup queries returned:
+Application fixture cleanup removed only records associated with
+`[TEST][SEC-006][a3db4385]`. Independent control reads confirmed:
 
 ```text
 synthetic auth users: 0
@@ -95,18 +119,29 @@ synthetic event registrations: 0
 synthetic audit logs: 0
 synthetic email deliveries: 0
 synthetic lanes: 0
-synthetic pricing rows: 0
-synthetic rate-limit timestamps: 0
+remaining synthetic application fixture: 0
+```
+
+A separate read-only pre-cleanup query identified exactly two isolated `user`
+rate-limit rows and one `ip` row containing only the two timestamps generated
+by this smoke run. The transactional, fail-closed cleanup required all three
+rows and their exact timestamp sets before deleting them. Its independent
+post-check returned:
+
+```text
+remaining_synthetic_rate_limit_records: 0
+cleanup_confirmed: true
 remaining synthetic fixture: 0
 ```
 
-Cleanup was limited to `[TEST][SEC-006][d09778ff]`. No real customer data or unrelated rate-limit timestamp was modified.
+No real customer data, unrelated rate-limit timestamp, application code,
+schema, migration, RLS, ACL or production configuration was changed.
 
 ```text
-SEC-006 PRODUCTION SMOKE: FAIL
+SEC-006 PRODUCTION SMOKE: PASS
 
 SEC-006 STATUS:
-PARTIALLY REMEDIATED
+FULLY REMEDIATED
 ```
 
 ## SEC-018 EVENT REGISTRATION DML PRODUCTION SMOKE
