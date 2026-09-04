@@ -38,7 +38,7 @@ insert into expected_table_acl values
   ('lane_booking_rules','A','{SELECT}','{SELECT}','{DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE}'),
   ('lane_pricing_rules','A','{SELECT}','{SELECT}','{DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE}'),
   ('profiles','B','{}','{INSERT,SELECT,UPDATE}','{DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE}'),
-  ('reservations','B','{}','{DELETE,SELECT}','{DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE}'),
+  ('reservations','B','{}','{SELECT}','{DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE}'),
   ('shooting_lanes','A','{SELECT}','{SELECT}','{DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE}');
 
 create function pg_temp.table_privileges(p_table text,p_role text)
@@ -261,10 +261,13 @@ begin
   begin
     perform pg_temp.set_client('authenticated',v_user);
     delete from public.reservations where id=v_reservation;
-    get diagnostics v_count=row_count;
     execute 'reset role';
+    v_denied:=false;
+  exception when insufficient_privilege then
+    execute 'reset role';
+    v_denied:=true;
   end;
-  perform pg_temp.record_result(22,'Ordinary user cannot directly delete reservation',v_count=0,'RLS nie dopuszcza bezpośredniego DELETE zwykłego użytkownika.');
+  perform pg_temp.record_result(22,'Ordinary user cannot directly delete reservation',v_denied,'ACL odrzuca bezpośredni DELETE zwykłego użytkownika SQLSTATE 42501.');
 
   begin
     perform pg_temp.set_client('anon',null);
@@ -334,9 +337,9 @@ from pg_catalog.pg_class relation
 join pg_catalog.pg_namespace namespace on namespace.oid=relation.relnamespace
 where namespace.nspname='public' and relation.relkind in ('r','p','S');
 
--- Repeat the migration's idempotent ACL normalization twice. Supabase's test
+-- Repeat the cumulative current ACL normalization twice. Supabase's test
 -- container mounts tests without the sibling migrations directory, so \ir is
--- intentionally avoided here.
+-- intentionally avoided here. The final revoke mirrors CLEAN-004.
 alter default privileges for role postgres in schema public revoke all privileges on tables from public, anon, authenticated;
 alter default privileges for role postgres in schema public revoke all privileges on sequences from public, anon, authenticated;
 revoke all privileges on all tables in schema public from public, anon, authenticated;
@@ -345,6 +348,7 @@ grant select on table public.events,public.lane_booking_durations,public.lane_bo
 grant select on table public.audit_logs,public.event_lanes,public.event_registrations,public.lane_blocks,public.profiles,public.reservations to authenticated;
 grant insert,update on table public.profiles to authenticated;
 grant delete on table public.reservations to authenticated;
+revoke delete on table public.reservations from authenticated;
 
 alter default privileges for role postgres in schema public revoke all privileges on tables from public, anon, authenticated;
 alter default privileges for role postgres in schema public revoke all privileges on sequences from public, anon, authenticated;
@@ -354,6 +358,7 @@ grant select on table public.events,public.lane_booking_durations,public.lane_bo
 grant select on table public.audit_logs,public.event_lanes,public.event_registrations,public.lane_blocks,public.profiles,public.reservations to authenticated;
 grant insert,update on table public.profiles to authenticated;
 grant delete on table public.reservations to authenticated;
+revoke delete on table public.reservations from authenticated;
 
 select pg_temp.record_result(29,'Double application is idempotent',
   (select acl_hash from pg_temp.acl_before_double_apply)=(
