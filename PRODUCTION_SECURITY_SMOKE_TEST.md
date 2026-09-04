@@ -747,3 +747,103 @@ FULLY REMEDIATED / PROD PASS
 SEC-009 TIME-BASED RETENTION 10B:
 NOT IMPLEMENTED / DEFERRED
 ```
+
+---
+
+# SEC-011 ADMIN ROUTES FAIL-CLOSED PRODUCTION SMOKE
+
+**Date:** 2026-09-04
+
+**Production application:** `ea27ca8 — security: fail closed admin routes`
+
+Vercel deployment metadata confirmed the production target is `READY`, the
+deployed branch is `main`, and the exact deployed revision is
+`ea27ca83102db7dabfe4d118eadca03cdc9a0ab5`.
+
+The test used direct production URLs and existing accounts representing all
+four authenticated roles. No account, role, application data, database object,
+configuration, or deployment was changed. No credentials or personal data are
+recorded below.
+
+## Direct URL results
+
+| Role | Route | Result | Evidence |
+|---|---|---|---|
+| Anon | `/admin` | PASS — DENY | HTTP 307 to `/login?redirectTo=%2Fadmin`. |
+| Anon | `/admin/events` | PASS — DENY | HTTP 307 to login with the original route in `redirectTo`. |
+| Anon | `/admin/users` | PASS — DENY | HTTP 307 to login with the original route in `redirectTo`. |
+| Anon | `/admin/__future-test-route` | PASS — DENY | HTTP 307 to login; the missing page was not reached anonymously. |
+| Ordinary user | every current `/admin/*` route tested | PASS — DENY | Direct requests for the admin root, Calendar, Events, Reservations, Users, Reports and Lane Configuration all ended on `/dashboard`. |
+| Ordinary user | `/admin/__future-test-route` | PASS — DENY | Direct request ended on `/dashboard`. |
+| Employee | `/admin`, Reservations, Calendar, Lane Blocks, Events, Check-in | PASS — ALLOW | The production dashboard identified the trusted role as `Pracownik`; each allowed direct URL remained on its requested admin page. |
+| Employee | Reports, Users, Lane Configuration | PASS — DENY | Each direct URL redirected to `/admin`. |
+| Employee | `/admin/__future-test-route` | PASS — DENY | Direct URL redirected to `/admin`, confirming the unknown-route admin-only default. |
+| Instructor | `/admin`, Calendar, Events | PASS — ALLOW | The production dashboard identified the trusted role as `Instruktor`; both allowed module URLs remained accessible. |
+| Instructor | Reservations, Lane Blocks, Check-in, Reports, Users, Lane Configuration | PASS — DENY | Each direct URL redirected to `/admin`. |
+| Instructor | `/admin/__future-test-route` | PASS — DENY | Direct URL redirected to `/admin`. No SEC-008 access was expanded. |
+| Admin | all known admin pages | PASS — ALLOW | Calendar, Events, Reservations, Users, Reports and Lane Configuration loaded directly; the dashboard exposed all 8/8 modules. |
+| Admin | `/admin/__future-test-route` | PASS — AUTHORIZED, THEN 404 | The URL was not redirected to `/admin`; Next.js returned its 404 page because no physical route exists. This separates authorization success from route existence. |
+
+## Authentication failure behavior
+
+| Condition | Result | Evidence |
+|---|---|---|
+| Missing browser session | PASS — fail-closed | Direct requests without cookies returned HTTP 307 to login for all required `/admin` URLs. |
+| Missing API bearer | PASS — fail-closed | `/api/admin/calendar-feed` returned HTTP 401 and the stable `unauthorized` response. |
+| Invalid API bearer | PASS — fail-closed | The same endpoint returned HTTP 401 and did not expose internal Auth details. |
+| Invalid or expired browser session | PASS — contract verified | In the exact deployed middleware, any `userError` or missing user redirects to login before profile or route authorization. It cannot reach the allow response. |
+| Auth service/network failure | PASS — contract verified | A production Auth outage was not induced. A returned Auth error is handled by the same fail-closed branch; a thrown upstream failure cannot reach `NextResponse.next()`. No fail-open fallback exists. |
+
+## Trusted role source
+
+The exact deployed middleware first calls server-side `supabase.auth.getUser()`,
+then reads `role` from `public.profiles` for the authenticated user, normalizes
+that value, and finally applies `canRoleAccessAdminRoute()`. The authorization
+decision does not read a role from query parameters, `localStorage`, browser
+JSON, request body, or a client boolean.
+
+The production behavior matched that contract: the dashboard independently
+identified employee and instructor roles, and direct URL outcomes matched the
+central server-side matrix rather than link visibility.
+
+## Admin API
+
+The only current `/api/admin/*` route is
+`/api/admin/calendar-feed`. It has independent server-side authorization and
+does not rely on the page middleware:
+
+- requires a Bearer token;
+- verifies the user server-side;
+- obtains the role through `get_my_role`;
+- returns 401 for missing/invalid authentication, 403 for a valid disallowed
+  role, 503 for classified Auth unavailability, and a controlled 500 for other
+  unexpected failures;
+- does not use service role;
+- preserves the instructor-safe Calendar data contract.
+
+The endpoint returned controlled HTTP 401 responses for both missing and
+invalid Bearer tokens. The instructor Calendar loaded its production data via
+the authenticated feed, confirming the permitted API path remained operational.
+
+## Regression check
+
+- Calendar: loaded for Admin, Employee and Instructor according to the existing
+  role matrix.
+- Events: loaded for Admin, Employee and Instructor.
+- Reservations: loaded for Admin and Employee; denied for Instructor and User.
+- Users: loaded only for Admin; denied for Employee, Instructor and User.
+- Reports: loaded only for Admin; denied for Employee, Instructor and User.
+- Lane Configuration: loaded only for Admin; denied for Employee, Instructor
+  and User.
+- Unknown future admin route: Admin reached the application 404; every other
+  authenticated role was denied before route resolution.
+
+## SEC-011 final result
+
+```text
+SEC-011 PRODUCTION SMOKE:
+PASS
+
+SEC-011 STATUS:
+FULLY REMEDIATED / PROD PASS
+```
