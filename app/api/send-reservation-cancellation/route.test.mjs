@@ -8,20 +8,23 @@ async function readRoute() {
   return readFile(routeUrl, "utf8");
 }
 
-test("cancellation route uses the caller JWT and never service role", async () => {
+test("caller JWT owns all business reads while service role is internal-only", async () => {
   const source = await readRoute();
 
   assert.match(source, /function getAuthenticatedSupabaseClient\(accessToken: string\)/u);
-  assert.match(source, /process\.env\.NEXT_PUBLIC_SUPABASE_ANON_KEY/u);
   assert.match(source, /Authorization: `Bearer \$\{accessToken\}`/u);
   assert.match(source, /getAuthenticatedSupabaseClient\(accessToken\)/u);
-  assert.doesNotMatch(source, /SUPABASE_SERVICE_ROLE_KEY/u);
-  assert.doesNotMatch(source, /getAdminSupabaseClient/u);
+  assert.match(source, /getConfirmationServiceRoleClient\(configuration\)/u);
+  assert.doesNotMatch(
+    source,
+    /completionClient\s*\.from\((?:"reservations"|"profiles"|"shooting_lanes")\)/u
+  );
 });
 
-test("authorization precedes the scoped staff profile lookup", async () => {
+test("auth and limiter precede scoped reads and delivery", async () => {
   const source = await readRoute();
-  const authIndex = source.indexOf("verifyAuthUser");
+  const authIndex = source.indexOf("supabase.auth.getUser(accessToken)");
+  const limiterIndex = source.indexOf("checkConfirmationEmailRateLimit({");
   const reservationIndex = source.indexOf('.from("reservations")');
   const accessGateIndex = source.indexOf("if (!isOwner && !isStaff)");
   const statusGateIndex = source.indexOf(
@@ -31,51 +34,85 @@ test("authorization precedes the scoped staff profile lookup", async () => {
     'supabase.rpc("get_reservation_customer_profiles_v1"'
   );
   const htmlIndex = source.indexOf("const html = `");
-  const providerIndex = source.indexOf("resend.emails.send");
+  const deliveryIndex = source.indexOf("deliverConfirmationEmail({");
+  const prepareIndex = source.indexOf(
+    'supabase.rpc("prepare_confirmation_email"'
+  );
 
   for (const [name, index] of [
     ["auth", authIndex],
+    ["limiter", limiterIndex],
     ["reservation lookup", reservationIndex],
     ["ownership/role gate", accessGateIndex],
     ["status gate", statusGateIndex],
     ["profile RPC", profileRpcIndex],
     ["HTML", htmlIndex],
-    ["provider", providerIndex],
+    ["delivery", deliveryIndex],
+    ["claim", prepareIndex],
   ]) {
     assert.notEqual(index, -1, `${name} should exist`);
   }
 
-  assert.ok(authIndex < reservationIndex);
+  assert.ok(authIndex < limiterIndex);
+  assert.ok(limiterIndex < reservationIndex);
   assert.ok(reservationIndex < accessGateIndex);
   assert.ok(accessGateIndex < statusGateIndex);
   assert.ok(statusGateIndex < profileRpcIndex);
   assert.ok(profileRpcIndex < htmlIndex);
-  assert.ok(htmlIndex < providerIndex);
+  assert.ok(htmlIndex < deliveryIndex);
+  assert.ok(deliveryIndex < prepareIndex);
 });
 
-test("unauthorized access and lookup failures remain controlled", async () => {
+test("request, authorization, rate-limit and delivery responses are controlled", async () => {
   const source = await readRoute();
 
-  assert.match(
-    source,
-    /if \(!isOwner && !isStaff\)[\s\S]*?Brak uprawnień do tej operacji\.[\s\S]*?status: 403/u
-  );
-  assert.match(
-    source,
-    /if \(ownerProfileError\)[\s\S]*?Nie udało się pobrać danych odbiorcy\.[\s\S]*?status: 500/u
-  );
-  assert.doesNotMatch(
-    source,
-    /ownerProfileError[\s\S]{0,300}(?:message|details|hint)/u
-  );
+  assert.match(source, /Object\.keys\(parsedBody\)\.length !== 1/u);
+  assert.match(source, /!\("reservationId" in parsedBody\)/u);
+  assert.match(source, /return jsonError\("unauthorized", 401\)/u);
+  assert.match(source, /return jsonError\("forbidden", 403\)/u);
+  assert.match(source, /return jsonError\("invalid_status", 409\)/u);
+  assert.match(source, /code: "rate_limited"/u);
+  assert.match(source, /"Retry-After": String\(rateLimit\.retryAfterSeconds\)/u);
+  assert.match(source, /"Cache-Control": "no-store"/u);
+  assert.match(source, /\{ ok: outcome\.ok, code: outcome\.code \}/u);
+  assert.doesNotMatch(source, /details:\s*\w+Error/u);
+  assert.doesNotMatch(source, /message:\s*\w+Error/u);
 });
 
-test("provider is reached only after lookup and dynamic HTML stays escaped", async () => {
+test("recipient and content come only from trusted reservation/profile records", async () => {
   const source = await readRoute();
-  const lookupErrorIndex = source.indexOf("if (ownerProfileError)");
-  const providerIndex = source.indexOf("resend.emails.send");
+  const parsedPayload = source.match(
+    /type ReservationCancellationPayload = \{([\s\S]*?)\};/u
+  )?.[1];
 
-  assert.ok(lookupErrorIndex !== -1 && lookupErrorIndex < providerIndex);
+  assert.match(parsedPayload ?? "", /reservationId\?: unknown/u);
+  assert.doesNotMatch(parsedPayload ?? "", /email|recipient|subject|html|text/iu);
+  assert.match(
+    source,
+    /const customerEmail =\s*reservation\.customer_email\?\.trim\(\)\s*\|\|\s*ownerProfile\?\.email\?\.trim\(\)/u
+  );
+  assert.match(source, /to: customerEmail/u);
+  assert.doesNotMatch(source, /to:\s*body\./u);
+});
+
+test("cancellation uses the shared atomic delivery contract without retry", async () => {
+  const source = await readRoute();
+
+  assert.match(source, /deliverConfirmationEmail\(\{/u);
+  assert.match(source, /p_message_type: "reservation_cancellation"/u);
+  assert.match(source, /p_record_id: reservationId/u);
+  assert.match(source, /\{ idempotencyKey \}/u);
+  assert.match(
+    source,
+    /completionClient\.rpc\("complete_confirmation_email", input\)/u
+  );
+  assert.equal(source.match(/deliverConfirmationEmail\(\{/gu)?.length, 1);
+  assert.equal(source.match(/resend\.emails\.send\(/gu)?.length, 1);
+  assert.doesNotMatch(source, /setTimeout|while\s*\(/u);
+});
+
+test("dynamic HTML remains escaped and plain text remains plain", async () => {
+  const source = await readRoute();
   for (const value of [
     "displayName",
     "formattedDate",
@@ -101,8 +138,9 @@ test("provider is reached only after lookup and dynamic HTML stays escaped", asy
       ),
     []
   );
-
-  // Cancellation mail has no dynamic link. URL validation remains covered by
-  // the shared email-html tests for every link-bearing template.
   assert.doesNotMatch(html, /href=/u);
+
+  const plainText = source.match(/const text = `([\s\S]*?)`;/u)?.[1] ?? "";
+  assert.match(plainText, /\$\{displayName\}/u);
+  assert.doesNotMatch(plainText, /safeDisplayName/u);
 });

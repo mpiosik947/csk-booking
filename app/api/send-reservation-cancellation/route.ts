@@ -4,7 +4,15 @@ import { createClient } from "@supabase/supabase-js";
 import { getProfileDisplayName } from "../../../lib/profile-display-name";
 import { isCancelledReservationStatus } from "../../../lib/reservation-status";
 import {
-  getAuthUserFailureMessage,
+  deliverConfirmationEmail,
+  getConfirmationEmailConfiguration,
+  getConfirmationServiceRoleClient,
+} from "@/lib/server/confirmation-email-delivery";
+import {
+  checkConfirmationEmailRateLimit,
+  getConfirmationRateLimitSecret,
+} from "@/lib/server/confirmation-email-rate-limit";
+import {
   verifyAuthUser,
 } from "@/lib/server/auth-user-verification";
 import { escapeHtml } from "@/lib/server/email-html";
@@ -89,20 +97,29 @@ function formatDate(date?: string) {
   }
 }
 
+function jsonError(
+  code:
+    | "invalid_request"
+    | "unauthorized"
+    | "auth_unavailable"
+    | "not_found"
+    | "forbidden"
+    | "invalid_status"
+    | "delivery_failed"
+    | "internal_error",
+  status: number
+) {
+  return NextResponse.json({ ok: false, code }, { status });
+}
+
 export async function POST(request: Request) {
   try {
-    const resendApiKey = process.env.RESEND_API_KEY;
-    const from = process.env.RESERVATION_EMAIL_FROM;
-
     const authorizationHeader = request.headers.get("authorization");
     const authorizationMatch = authorizationHeader?.match(/^Bearer\s+(.+)$/i);
     const accessToken = authorizationMatch?.[1]?.trim();
 
     if (!accessToken) {
-      return NextResponse.json(
-        { error: "Musisz być zalogowany, aby wysłać wiadomość." },
-        { status: 401 }
-      );
+      return jsonError("unauthorized", 401);
     }
 
     const supabase = getAuthenticatedSupabaseClient(accessToken);
@@ -111,20 +128,8 @@ export async function POST(request: Request) {
     );
 
     if (!authResult.ok) {
-      if (authResult.code !== "unauthorized") {
-        return NextResponse.json(
-          {
-            code: authResult.code,
-            error: getAuthUserFailureMessage(authResult),
-          },
-          { status: authResult.status }
-        );
-      }
-
-      return NextResponse.json(
-        { error: "Nie udało się potwierdzić użytkownika." },
-        { status: 401 }
-      );
+      console.error("Reservation cancellation authorization failed");
+      return jsonError(authResult.code, authResult.status);
     }
 
     const user = authResult.user;
@@ -134,10 +139,8 @@ export async function POST(request: Request) {
     try {
       parsedBody = await request.json();
     } catch {
-      return NextResponse.json(
-        { error: "Nieprawidłowe dane żądania." },
-        { status: 400 }
-      );
+      console.error("Reservation cancellation invalid request body");
+      return jsonError("invalid_request", 400);
     }
 
     if (
@@ -147,10 +150,8 @@ export async function POST(request: Request) {
       Object.keys(parsedBody).length !== 1 ||
       !("reservationId" in parsedBody)
     ) {
-      return NextResponse.json(
-        { error: "Nieprawidłowe dane żądania." },
-        { status: 400 }
-      );
+      console.error("Reservation cancellation invalid request contract");
+      return jsonError("invalid_request", 400);
     }
 
     const body = parsedBody as ReservationCancellationPayload;
@@ -158,9 +159,46 @@ export async function POST(request: Request) {
       typeof body.reservationId === "string" ? body.reservationId.trim() : "";
 
     if (!reservationId || !UUID_PATTERN.test(reservationId)) {
+      console.error("Reservation cancellation invalid reservation id");
+      return jsonError("invalid_request", 400);
+    }
+
+    const configuration = getConfirmationEmailConfiguration();
+    const rateLimitSecret = getConfirmationRateLimitSecret();
+
+    if (!configuration || !rateLimitSecret) {
+      console.error("Reservation cancellation server configuration missing");
+      return jsonError("internal_error", 500);
+    }
+
+    const completionClient =
+      getConfirmationServiceRoleClient(configuration);
+    const rateLimit = await checkConfirmationEmailRateLimit({
+      request,
+      userId: user.id,
+      secret: rateLimitSecret,
+      rpc: async (ipHash) =>
+        completionClient.rpc("check_confirmation_email_rate_limit", {
+          p_user_id: user.id,
+          p_ip_hash: ipHash,
+        }),
+    });
+
+    if (rateLimit.kind === "error") {
+      console.error("Reservation cancellation rate limit failed");
+      return jsonError("internal_error", 500);
+    }
+
+    if (rateLimit.kind === "rate_limited") {
       return NextResponse.json(
-        { error: "Nieprawidłowy identyfikator rezerwacji." },
-        { status: 400 }
+        { ok: false, code: "rate_limited" },
+        {
+          status: 429,
+          headers: {
+            "Retry-After": String(rateLimit.retryAfterSeconds),
+            "Cache-Control": "no-store",
+          },
+        }
       );
     }
 
@@ -172,10 +210,10 @@ export async function POST(request: Request) {
         .maybeSingle();
 
     if (operatorProfileError) {
-      return NextResponse.json(
-        { error: "Nie udało się zweryfikować uprawnień." },
-        { status: 500 }
-      );
+      console.error("Reservation cancellation role read failed", {
+        code: operatorProfileError.code,
+      });
+      return jsonError("internal_error", 500);
     }
 
     const operatorProfile = operatorProfileData as OperatorProfile | null;
@@ -203,17 +241,14 @@ export async function POST(request: Request) {
       .maybeSingle();
 
     if (reservationError) {
-      return NextResponse.json(
-        { error: "Nie udało się pobrać rezerwacji." },
-        { status: 500 }
-      );
+      console.error("Reservation cancellation reservation read failed", {
+        code: reservationError.code,
+      });
+      return jsonError("internal_error", 500);
     }
 
     if (!reservationData) {
-      return NextResponse.json(
-        { error: "Nie znaleziono rezerwacji." },
-        { status: 404 }
-      );
+      return jsonError("not_found", 404);
     }
 
     const reservation = reservationData as ReservationRecord;
@@ -221,17 +256,11 @@ export async function POST(request: Request) {
     const isStaff = operatorRole === "admin" || operatorRole === "pracownik";
 
     if (!isOwner && !isStaff) {
-      return NextResponse.json(
-        { error: "Brak uprawnień do tej operacji." },
-        { status: 403 }
-      );
+      return jsonError("forbidden", 403);
     }
 
     if (!isCancelledReservationStatus(reservation.reservation_status)) {
-      return NextResponse.json(
-        { error: "Rezerwacja nie została anulowana." },
-        { status: 409 }
-      );
+      return jsonError("invalid_status", 409);
     }
 
     const ownerProfileResult = isStaff
@@ -246,10 +275,10 @@ export async function POST(request: Request) {
     const ownerProfileError = ownerProfileResult.error;
 
     if (ownerProfileError) {
-      return NextResponse.json(
-        { error: "Nie udało się pobrać danych odbiorcy." },
-        { status: 500 }
-      );
+      console.error("Reservation cancellation recipient read failed", {
+        code: ownerProfileError.code,
+      });
+      return jsonError("internal_error", 500);
     }
 
     const ownerProfile = (isStaff
@@ -262,10 +291,8 @@ export async function POST(request: Request) {
       "";
 
     if (!customerEmail || !EMAIL_PATTERN.test(customerEmail)) {
-      return NextResponse.json(
-        { error: "Nie udało się ustalić adresu e-mail odbiorcy." },
-        { status: 400 }
-      );
+      console.error("Reservation cancellation recipient unavailable");
+      return jsonError("delivery_failed", 502);
     }
 
     const profileDisplayName = ownerProfile?.full_name?.trim() ||
@@ -280,15 +307,6 @@ export async function POST(request: Request) {
     const endTime = reservation.end_time;
     const laneName = getLaneName(reservation);
     const cancelledBy: "user" | "admin" = isOwner ? "user" : "admin";
-
-    if (!resendApiKey || !from) {
-      return NextResponse.json(
-        { error: "Brak konfiguracji wysyłki email." },
-        { status: 500 }
-      );
-    }
-
-    const resend = new Resend(resendApiKey);
 
     const displayName = customerName;
     const formattedDate = formatDate(reservationDate);
@@ -362,26 +380,34 @@ Centrum Szkolenia Krutla
 CSK Booking
     `;
 
-    const { error } = await resend.emails.send({
-      from,
-      to: customerEmail,
-      subject,
-      html,
-      text,
+    const resend = new Resend(configuration.resendApiKey);
+    const outcome = await deliverConfirmationEmail({
+      prepare: async () =>
+        supabase.rpc("prepare_confirmation_email", {
+          p_message_type: "reservation_cancellation",
+          p_record_id: reservationId,
+        }),
+      send: async (idempotencyKey) =>
+        resend.emails.send(
+          {
+            from: configuration.from,
+            to: customerEmail,
+            subject,
+            html,
+            text,
+          },
+          { idempotencyKey }
+        ),
+      complete: async (input) =>
+        completionClient.rpc("complete_confirmation_email", input),
     });
 
-    if (error) {
-      return NextResponse.json(
-        { error: "Nie udało się wysłać emaila anulowania." },
-        { status: 500 }
-      );
-    }
-
-    return NextResponse.json({ ok: true });
-  } catch {
     return NextResponse.json(
-      { error: "Wystąpił błąd podczas wysyłki emaila anulowania." },
-      { status: 500 }
+      { ok: outcome.ok, code: outcome.code },
+      { status: outcome.status }
     );
+  } catch {
+    console.error("Reservation cancellation endpoint failed");
+    return jsonError("internal_error", 500);
   }
 }
