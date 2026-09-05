@@ -12,6 +12,7 @@ import {
 } from "./types";
 import { buildLaneHierarchyDisplayModel } from "../lane-hierarchy.js";
 import { buildEffectiveLaneCapacity } from "../lane-capacity.js";
+import { getCalendarLaneScopeIds } from "./scope";
 import {
   CALENDAR_OPENING_END,
   CALENDAR_OPENING_START,
@@ -100,6 +101,15 @@ export function getReservationSelectColumns(role: CalendarFeedRole) {
   const safeColumns =
     "id,lane_id,lane_name_snapshot,reservation_date,start_time,end_time,duration_minutes,shooters_count,reservation_status";
   return role === "instruktor" ? safeColumns : `${safeColumns},customer_name`;
+}
+
+export function getCalendarFeedLaneScopeIds(
+  rows: CalendarLaneRow[],
+  laneId: string | "all",
+) {
+  const hierarchy = buildLaneHierarchyDisplayModel(rows);
+  if (!hierarchy.ok) throw new Error("Invalid calendar lane hierarchy.");
+  return getCalendarLaneScopeIds(hierarchy.value, laneId);
 }
 
 function requireString(value: unknown, label: string) {
@@ -402,6 +412,11 @@ export function buildCalendarFeed(
         ...bookingConfiguration,
       };
   });
+  const scopedLaneIds = new Set(
+    getCalendarLaneScopeIds(allCapacityLanes, query.laneId),
+  );
+  const isLaneInScope = (laneId: string) =>
+    query.laneId === "all" || scopedLaneIds.has(laneId);
   const laneMap = new Map<string, CalendarLane>(
     allCapacityLanes.map((lane) => [
       lane.id,
@@ -441,7 +456,7 @@ export function buildCalendarFeed(
       );
       if (!state) continue;
       const laneId = requireString(row.lane_id, "reservation lane id");
-      if (query.laneId !== "all" && laneId !== query.laneId) continue;
+      if (!isLaneInScope(laneId)) continue;
       const date = requireDate(row.reservation_date);
       const range = requireTimeRange(row.start_time, row.end_time);
       const durationMinutes = requireNonNegativeInteger(
@@ -480,7 +495,7 @@ export function buildCalendarFeed(
       const historical = !isActive && compareCalendarDates(date, today) === -1;
       if (!isActive && (!query.includeHistoricalStatuses || !historical)) continue;
       const laneId = requireString(row.lane_id, "lane block lane id");
-      if (query.laneId !== "all" && laneId !== query.laneId) continue;
+      if (!isLaneInScope(laneId)) continue;
       const lane = laneMap.get(laneId);
       referencedLaneIds.add(laneId);
       entries.push({
@@ -552,7 +567,7 @@ export function buildCalendarFeed(
         ...sharedEvent,
       });
       for (const resource of resources) {
-        if (query.laneId !== "all" && resource.id !== query.laneId) continue;
+        if (!isLaneInScope(resource.id)) continue;
         const lane = laneMap.get(resource.id)!;
         referencedLaneIds.add(resource.id);
         entries.push({
@@ -573,7 +588,7 @@ export function buildCalendarFeed(
   const lanes = hierarchy.value
     .map((lane) => laneMap.get(lane.id)!)
     .filter((lane) => {
-      if (query.laneId !== "all" && lane.id !== query.laneId) return false;
+      if (!isLaneInScope(lane.id)) return false;
       return lane.isActive || referencedLaneIds.has(lane.id);
     })
     .map((lane) => ({ ...lane, isHistoricalOnly: !lane.isActive }));

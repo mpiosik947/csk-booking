@@ -19,6 +19,7 @@ async function compileModule(fileName, replacements = new Map()) {
 }
 
 const timeModuleUrl = await compileModule("../../../lib/admin/calendar/time.ts");
+const scopeModuleUrl = await compileModule("../../../lib/admin/calendar/scope.ts");
 const time = await import(timeModuleUrl);
 const ui = await import(
   await compileModule(
@@ -26,6 +27,7 @@ const ui = await import(
     new Map([
       ["@/lib/admin/calendar/time", timeModuleUrl],
       ["@/lib/admin/calendar/types", moduleDataUrl("export {};\n")],
+      ["@/lib/admin/calendar/scope", scopeModuleUrl],
     ])
   )
 );
@@ -212,6 +214,44 @@ test("filtering keeps global events for a concrete lane", () => {
   assert.deepEqual(applyFilters({ laneId: "lane-1" }).map((entry) => entry.id), ["reservation", "block", "event"]);
 });
 
+test("parent-family filtering keeps child entries without sibling projection", () => {
+  const lanes = [
+    calendarLane({ id: "lane-parent" }),
+    calendarLane({
+      id: "lane-child-1",
+      resourceKind: "position",
+      parentLaneId: "lane-parent",
+      parentName: "Oś rodzic",
+      depth: 1,
+      isParent: false,
+      isPosition: true,
+    }),
+    calendarLane({
+      id: "lane-child-2",
+      resourceKind: "position",
+      parentLaneId: "lane-parent",
+      parentName: "Oś rodzic",
+      depth: 1,
+      isParent: false,
+      isPosition: true,
+    }),
+  ];
+  const entries = [
+    reservation("child", "10:00", "11:00", { laneId: "lane-child-1" }),
+  ];
+
+  const result = filterCalendarEntries(entries, {
+    date: "2026-08-05",
+    laneId: "lane-parent",
+    lanes,
+    types: ["reservation"],
+    includeHistoricalStatuses: false,
+  });
+
+  assert.deepEqual(result.map((entry) => entry.id), ["child"]);
+  assert.equal(result[0].laneId, "lane-child-1");
+});
+
 test("filtering distinguishes current and historical entries", () => {
   assert.equal(applyFilters().some((entry) => entry.id === "historical"), false);
   assert.equal(applyFilters({ includeHistoricalStatuses: true }).some((entry) => entry.id === "historical"), true);
@@ -236,6 +276,28 @@ test("lane filtering supports all five lanes and one concrete lane", () => {
   assert.deepEqual(
     getVisibleCalendarLanes(lanes, "lane-3").map((lane) => lane.id),
     ["lane-3"]
+  );
+});
+
+test("a selected parent exposes its family while a selected position stays exact", () => {
+  const parent = calendarLane({ id: "lane-parent" });
+  const child = calendarLane({
+    id: "lane-child",
+    resourceKind: "position",
+    parentLaneId: parent.id,
+    parentName: parent.name,
+    depth: 1,
+    isParent: false,
+    isPosition: true,
+  });
+
+  assert.deepEqual(
+    getVisibleCalendarLanes([parent, child], parent.id).map((lane) => lane.id),
+    [parent.id, child.id],
+  );
+  assert.deepEqual(
+    getVisibleCalendarLanes([parent, child], child.id).map((lane) => lane.id),
+    [child.id],
   );
 });
 
@@ -743,6 +805,8 @@ test("calendar read model requests hierarchy metadata without adding database wr
   );
   assert.equal((routeSource.match(/\.from\("shooting_lanes"\)/g) ?? []).length, 1);
   assert.equal((routeSource.match(/lane_booking_rules\(online_bookable\)/g) ?? []).length, 1);
+  assert.match(routeSource, /getCalendarFeedLaneScopeIds\(laneRows, query\.laneId\)/);
+  assert.match(routeSource, /reservationRequest\.in\("lane_id", scopedLaneIds\)/);
   assert.doesNotMatch(routeSource, /\.insert\(|\.update\(|\.delete\(|\.upsert\(/);
 });
 

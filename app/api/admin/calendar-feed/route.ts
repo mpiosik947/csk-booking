@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import {
   buildCalendarFeed,
+  getCalendarFeedLaneScopeIds,
   getReservationSelectColumns,
   parseCalendarFeedRole,
   type CalendarEventRow,
@@ -101,7 +102,12 @@ export async function GET(request: Request) {
       console.error("Calendar feed lane query failed", { code: laneError.code });
       return jsonError("calendar_feed_failed", "Nie udało się pobrać kalendarza.", 500);
     }
-    if (query.laneId !== "all" && (laneData?.length ?? 0) === 0) {
+    const laneRows = (laneData ?? []) as unknown as CalendarLaneRow[];
+    const scopedLaneIds =
+      query.laneId === "all"
+        ? null
+        : getCalendarFeedLaneScopeIds(laneRows, query.laneId);
+    if (scopedLaneIds?.length === 0) {
       return jsonError("lane_not_found", "Nie znaleziono osi.", 404);
     }
 
@@ -118,8 +124,8 @@ export async function GET(request: Request) {
             ? ["confirmed", "completed", "no_show"]
             : ["confirmed"]
         );
-      if (query.laneId !== "all") {
-        reservationRequest = reservationRequest.eq("lane_id", query.laneId);
+      if (scopedLaneIds) {
+        reservationRequest = reservationRequest.in("lane_id", scopedLaneIds);
       }
       const { data, error } = await reservationRequest;
       if (error) {
@@ -137,7 +143,7 @@ export async function GET(request: Request) {
         .gte("block_date", query.rangeStart)
         .lte("block_date", query.rangeEnd);
       if (!query.includeHistoricalStatuses) blockRequest = blockRequest.eq("is_active", true);
-      if (query.laneId !== "all") blockRequest = blockRequest.eq("lane_id", query.laneId);
+      if (scopedLaneIds) blockRequest = blockRequest.in("lane_id", scopedLaneIds);
       const { data, error } = await blockRequest;
       if (error) {
         console.error("Calendar feed lane block query failed", { code: error.code });
@@ -165,7 +171,7 @@ export async function GET(request: Request) {
       query,
       role,
       {
-        lanes: (laneData ?? []) as unknown as CalendarLaneRow[],
+        lanes: laneRows,
         reservations,
         laneBlocks,
         events,

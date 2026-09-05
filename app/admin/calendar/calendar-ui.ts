@@ -12,6 +12,7 @@ import {
   countCalendarDaysInclusive,
   isValidCalendarDate,
 } from "@/lib/admin/calendar/time";
+import { getCalendarLaneScopeIds } from "@/lib/admin/calendar/scope";
 
 export const CALENDAR_HOUR_HEIGHT = 72;
 export type CalendarView = "day" | "week" | "month";
@@ -64,6 +65,7 @@ function isCalendarLaneEntry(
 export type CalendarUiFilters = {
   date: string;
   laneId: string | "all";
+  lanes?: CalendarLane[];
   types: CalendarEntryType[];
   includeHistoricalStatuses: boolean;
 };
@@ -452,13 +454,22 @@ export function filterCalendarEntries(
   filters: CalendarUiFilters
 ) {
   const visibleTypes = new Set(filters.types);
+  const scopedLaneIds = new Set(
+    filters.lanes
+      ? getCalendarLaneScopeIds(filters.lanes, filters.laneId)
+      : filters.laneId === "all"
+        ? []
+        : [filters.laneId],
+  );
+  const isLaneInScope = (laneId: string | null) =>
+    filters.laneId === "all" || (laneId !== null && scopedLaneIds.has(laneId));
   return entries.filter((entry) => {
     if (entry.date !== filters.date || !visibleTypes.has(entry.type)) return false;
     if (!filters.includeHistoricalStatuses && entry.isHistorical) return false;
     if (entry.type === "event") {
-      return !entry.isLaneProjection || filters.laneId === "all" || entry.laneId === filters.laneId;
+      return !entry.isLaneProjection || isLaneInScope(entry.laneId);
     }
-    return filters.laneId === "all" || entry.laneId === filters.laneId;
+    return isLaneInScope(entry.laneId);
   });
 }
 
@@ -466,7 +477,9 @@ export function getVisibleCalendarLanes(
   lanes: CalendarLane[],
   laneId: string | "all"
 ) {
-  return laneId === "all" ? lanes : lanes.filter((lane) => lane.id === laneId);
+  if (laneId === "all") return lanes;
+  const scopedLaneIds = new Set(getCalendarLaneScopeIds(lanes, laneId));
+  return lanes.filter((lane) => scopedLaneIds.has(lane.id));
 }
 
 export function getCalendarLaneFamilies(

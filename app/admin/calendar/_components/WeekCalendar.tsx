@@ -80,7 +80,7 @@ function WeekEvents({
 
 export default function WeekCalendar({
   days,
-  laneId,
+  laneIds,
   openingStart,
   openingEnd,
   today,
@@ -88,7 +88,7 @@ export default function WeekCalendar({
   onSelectEntry,
 }: {
   days: CalendarWeekDay[];
-  laneId: string;
+  laneIds: string[];
   openingStart: string;
   openingEnd: string;
   today: string;
@@ -141,7 +141,7 @@ export default function WeekCalendar({
           {days.map((day) => {
             const entries = day.entries.filter(
               (entry): entry is CalendarLaneOccupyingEntry =>
-                (entry.type !== "event" || entry.isLaneProjection) && entry.laneId === laneId
+                (entry.type !== "event" || entry.isLaneProjection) && laneIds.includes(entry.laneId)
             );
             const positioned = layoutCalendarLaneEntries(entries, openingStart, openingEnd);
             return (

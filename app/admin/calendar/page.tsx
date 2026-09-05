@@ -247,6 +247,7 @@ function AdminCalendarContent() {
         ? filterCalendarEntries(feed.entries, {
             date,
             laneId: requestLaneId,
+            lanes: feed.lanes,
             types,
             includeHistoricalStatuses,
           })
@@ -442,7 +443,7 @@ function AdminCalendarContent() {
             {weekPresentation === "cards" ? (
               <WeekSummary days={weekDays} laneId={requestLaneId} today={today} onSelectDay={selectDay} />
             ) : requestLaneId !== "all" ? (
-              <div className="hidden md:block"><WeekCalendar days={weekDays} laneId={requestLaneId} openingStart={feed.openingStart} openingEnd={feed.openingEnd} today={today} onSelectDay={selectDay} onSelectEntry={openEntryPreview} /></div>
+              <div className="hidden md:block"><WeekCalendar days={weekDays} laneIds={visibleLanes.map((lane) => lane.id)} openingStart={feed.openingStart} openingEnd={feed.openingEnd} today={today} onSelectDay={selectDay} onSelectEntry={openEntryPreview} /></div>
             ) : null}
           </>
         )}
