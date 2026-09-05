@@ -21,6 +21,16 @@ import {
   validateEventForm,
   validateEventRpcResult,
 } from "../../../lib/admin/events/event-management";
+import {
+  parseAdminEventRegistrations,
+  type AdminEventRegistration,
+} from "../../../lib/admin/events/event-registrations";
+import {
+  EVENT_REGISTRATION_STATUS,
+  getEventRegistrationStatusBadgeClass,
+  getEventRegistrationStatusPresentation,
+} from "../../../lib/event-registration-status";
+import { getPaymentStatusLabel } from "../../../lib/payment-status";
 import { supabase } from "../../../lib/supabase";
 
 type RegistrationAction = "approve" | "cancel" | "payment";
@@ -89,85 +99,55 @@ type CancelRegistrationResult = {
   message: string;
 };
 
-type Registration = {
-  id: string;
-  customer_name: string;
-  customer_email: string;
-  customer_phone: string;
-  registration_status: string;
-  payment_status: string;
-  created_at: string;
-};
-
-function translateRegistrationStatus(status: string) {
-  if (status === "registered") return "Zapisany";
-  if (status === "approved") return "Zatwierdzony";
-  if (status === "cancelled") return "Anulowany";
-  if (status === "reserve") return "Rezerwowy";
-  return status;
-}
-
-function getStatusClass(status: string) {
-  if (status === "approved") {
-    return "rounded-full bg-green-950 px-3 py-1 text-xs font-semibold text-green-400";
-  }
-
-  if (status === "registered") {
-    return "rounded-full bg-blue-950 px-3 py-1 text-xs font-semibold text-blue-300";
-  }
-
-  if (status === "reserve") {
-    return "rounded-full bg-yellow-950 px-3 py-1 text-xs font-semibold text-yellow-300";
-  }
-
-  if (status === "cancelled") {
-    return "rounded-full bg-red-950 px-3 py-1 text-xs font-semibold text-red-300";
-  }
-
-  return "rounded-full bg-zinc-950 px-3 py-1 text-xs font-semibold text-zinc-300";
-}
+type Registration = AdminEventRegistration;
 
 function getPaidRegistrationsCount(registrations: Registration[]) {
   return registrations.filter(
     (registration) =>
-      registration.registration_status === "registered" ||
-      registration.registration_status === "approved"
+      getEventRegistrationStatusPresentation(registration.registration_status)
+        .occupiesPlace
   ).length;
 }
 
 function getReserveRegistrationsCount(registrations: Registration[]) {
   return registrations.filter(
-    (registration) => registration.registration_status === "reserve"
+    (registration) =>
+      registration.registration_status === EVENT_REGISTRATION_STATUS.RESERVE
   ).length;
 }
 
 function getCancelledRegistrationsCount(registrations: Registration[]) {
   return registrations.filter(
-    (registration) => registration.registration_status === "cancelled"
+    (registration) =>
+      registration.registration_status === EVENT_REGISTRATION_STATUS.CANCELLED
   ).length;
 }
 
 function getParticipantRegistrations(registrations: Registration[]) {
   return registrations.filter(
     (registration) =>
-      registration.registration_status === "registered" ||
-      registration.registration_status === "approved"
+      getEventRegistrationStatusPresentation(registration.registration_status)
+        .occupiesPlace
   );
 }
 
 function getReserveRegistrations(registrations: Registration[]) {
   return registrations
-    .filter((registration) => registration.registration_status === "reserve")
+    .filter(
+      (registration) =>
+        registration.registration_status === EVENT_REGISTRATION_STATUS.RESERVE
+    )
     .sort(
       (first, second) =>
-        new Date(first.created_at).getTime() -
-        new Date(second.created_at).getTime()
+        (first.created_at ? Date.parse(first.created_at) : 0) -
+        (second.created_at ? Date.parse(second.created_at) : 0)
     );
 }
 
 function getCancelledRegistrations(registrations: Registration[]) {
   return registrations.filter(
-    (registration) => registration.registration_status === "cancelled"
+    (registration) =>
+      registration.registration_status === EVENT_REGISTRATION_STATUS.CANCELLED
   );
 }
 
@@ -530,7 +510,17 @@ export default function AdminEventsPage() {
 
     const { data, error } = await supabase
       .from("event_registrations")
-      .select("*")
+      .select(
+        `
+        id,
+        customer_name,
+        customer_email,
+        customer_phone,
+        registration_status,
+        payment_status,
+        created_at
+      `
+      )
       .eq("event_id", eventId)
       .order("created_at", { ascending: false });
 
@@ -540,7 +530,15 @@ export default function AdminEventsPage() {
       return;
     }
 
-    setRegistrations((data ?? []) as Registration[]);
+    const parsedRegistrations = parseAdminEventRegistrations(data);
+
+    if (!parsedRegistrations) {
+      console.error("Event registrations returned invalid data");
+      setMessage("Nie udało się poprawnie wczytać zapisów. Spróbuj ponownie.");
+      return;
+    }
+
+    setRegistrations(parsedRegistrations);
   }
 
   function openCreateConfirmation() {
@@ -2224,48 +2222,94 @@ export default function AdminEventsPage() {
                                             {registration.customer_phone}
                                           </td>
                                           <td className="px-4 py-4">
-                                            <span className={getStatusClass(registration.registration_status)}>
-                                              {translateRegistrationStatus(registration.registration_status)}
+                                            <span
+                                              className={getEventRegistrationStatusBadgeClass(
+                                                registration.registration_status
+                                              )}
+                                            >
+                                              {
+                                                getEventRegistrationStatusPresentation(
+                                                  registration.registration_status
+                                                ).label
+                                              }
                                             </span>
                                           </td>
                                           <td className="px-4 py-4 text-zinc-300">
-                                            {registration.payment_status === "paid_on_site"
-                                              ? "Opłacone"
-                                              : "Płatność na miejscu"}
+                                            {getPaymentStatusLabel(registration.payment_status)}
                                           </td>
                                           {canManageEvents && (
                                             <td className="px-4 py-4">
                                               <div className="flex flex-wrap gap-2">
-                                              <button
-                                                type="button"
-                                                onClick={() => approveRegistration(registration.id)}
-                                                disabled={Boolean(registrationActions[registration.id])}
-                                                className="rounded-lg border border-green-800 px-3 py-2 text-xs text-green-300 hover:bg-green-950 disabled:cursor-not-allowed disabled:opacity-50"
-                                              >
-                                                {registrationActions[registration.id] === "approve"
-                                                  ? "Zatwierdzanie..."
-                                                  : "Zatwierdź"}
-                                              </button>
+                                              {getEventRegistrationStatusPresentation(
+                                                registration.registration_status
+                                              ).adminCanApprove && (
+                                                <button
+                                                  type="button"
+                                                  onClick={() =>
+                                                    approveRegistration(
+                                                      registration.id
+                                                    )
+                                                  }
+                                                  disabled={Boolean(
+                                                    registrationActions[
+                                                      registration.id
+                                                    ]
+                                                  )}
+                                                  className="rounded-lg border border-green-800 px-3 py-2 text-xs text-green-300 hover:bg-green-950 disabled:cursor-not-allowed disabled:opacity-50"
+                                                >
+                                                  {registrationActions[
+                                                    registration.id
+                                                  ] === "approve"
+                                                    ? "Zatwierdzanie..."
+                                                    : "Zatwierdź"}
+                                                </button>
+                                              )}
 
-                                              <button
-                                                type="button"
-                                                onClick={() => markRegistrationPaid(registration.id)}
-                                                disabled={Boolean(registrationActions[registration.id])}
-                                                className="rounded-lg border border-blue-800 px-3 py-2 text-xs text-blue-300 hover:bg-blue-950 disabled:cursor-not-allowed disabled:opacity-50"
-                                              >
-                                                Opłacone
-                                              </button>
+                                              {getEventRegistrationStatusPresentation(
+                                                registration.registration_status
+                                              ).adminCanMarkPayment && (
+                                                <button
+                                                  type="button"
+                                                  onClick={() =>
+                                                    markRegistrationPaid(
+                                                      registration.id
+                                                    )
+                                                  }
+                                                  disabled={Boolean(
+                                                    registrationActions[
+                                                      registration.id
+                                                    ]
+                                                  )}
+                                                  className="rounded-lg border border-blue-800 px-3 py-2 text-xs text-blue-300 hover:bg-blue-950 disabled:cursor-not-allowed disabled:opacity-50"
+                                                >
+                                                  Opłacone
+                                                </button>
+                                              )}
 
-                                              <button
-                                                type="button"
-                                                onClick={() => cancelRegistration(registration.id)}
-                                                disabled={Boolean(registrationActions[registration.id])}
-                                                className="rounded-lg border border-red-800 px-3 py-2 text-xs text-red-300 hover:bg-red-950 disabled:cursor-not-allowed disabled:opacity-50"
-                                              >
-                                                {registrationActions[registration.id] === "cancel"
-                                                  ? "Anulowanie..."
-                                                  : "Anuluj"}
-                                              </button>
+                                              {getEventRegistrationStatusPresentation(
+                                                registration.registration_status
+                                              ).adminCanCancel && (
+                                                <button
+                                                  type="button"
+                                                  onClick={() =>
+                                                    cancelRegistration(
+                                                      registration.id
+                                                    )
+                                                  }
+                                                  disabled={Boolean(
+                                                    registrationActions[
+                                                      registration.id
+                                                    ]
+                                                  )}
+                                                  className="rounded-lg border border-red-800 px-3 py-2 text-xs text-red-300 hover:bg-red-950 disabled:cursor-not-allowed disabled:opacity-50"
+                                                >
+                                                  {registrationActions[
+                                                    registration.id
+                                                  ] === "cancel"
+                                                    ? "Anulowanie..."
+                                                    : "Anuluj"}
+                                                </button>
+                                              )}
                                               </div>
                                             </td>
                                           )}
@@ -2326,37 +2370,69 @@ export default function AdminEventsPage() {
                                             {registration.customer_phone}
                                           </td>
                                           <td className="px-4 py-4">
-                                            <span className={getStatusClass(registration.registration_status)}>
-                                              {translateRegistrationStatus(registration.registration_status)}
+                                            <span
+                                              className={getEventRegistrationStatusBadgeClass(
+                                                registration.registration_status
+                                              )}
+                                            >
+                                              {
+                                                getEventRegistrationStatusPresentation(
+                                                  registration.registration_status
+                                                ).label
+                                              }
                                             </span>
                                           </td>
                                           <td className="px-4 py-4 text-zinc-300">
-                                            {registration.payment_status === "paid_on_site"
-                                              ? "Opłacone"
-                                              : "Płatność na miejscu"}
+                                            {getPaymentStatusLabel(registration.payment_status)}
                                           </td>
                                           {canManageEvents && (
                                             <td className="px-4 py-4">
                                               <div className="flex flex-wrap gap-2">
-                                              <button
-                                                type="button"
-                                                onClick={() => markRegistrationPaid(registration.id)}
-                                                disabled={Boolean(registrationActions[registration.id])}
-                                                className="rounded-lg border border-blue-800 px-3 py-2 text-xs text-blue-300 hover:bg-blue-950 disabled:cursor-not-allowed disabled:opacity-50"
-                                              >
-                                                Opłacone
-                                              </button>
+                                              {getEventRegistrationStatusPresentation(
+                                                registration.registration_status
+                                              ).adminCanMarkPayment && (
+                                                <button
+                                                  type="button"
+                                                  onClick={() =>
+                                                    markRegistrationPaid(
+                                                      registration.id
+                                                    )
+                                                  }
+                                                  disabled={Boolean(
+                                                    registrationActions[
+                                                      registration.id
+                                                    ]
+                                                  )}
+                                                  className="rounded-lg border border-blue-800 px-3 py-2 text-xs text-blue-300 hover:bg-blue-950 disabled:cursor-not-allowed disabled:opacity-50"
+                                                >
+                                                  Opłacone
+                                                </button>
+                                              )}
 
-                                              <button
-                                                type="button"
-                                                onClick={() => cancelRegistration(registration.id)}
-                                                disabled={Boolean(registrationActions[registration.id])}
-                                                className="rounded-lg border border-red-800 px-3 py-2 text-xs text-red-300 hover:bg-red-950 disabled:cursor-not-allowed disabled:opacity-50"
-                                              >
-                                                {registrationActions[registration.id] === "cancel"
-                                                  ? "Anulowanie..."
-                                                  : "Anuluj"}
-                                              </button>
+                                              {getEventRegistrationStatusPresentation(
+                                                registration.registration_status
+                                              ).adminCanCancel && (
+                                                <button
+                                                  type="button"
+                                                  onClick={() =>
+                                                    cancelRegistration(
+                                                      registration.id
+                                                    )
+                                                  }
+                                                  disabled={Boolean(
+                                                    registrationActions[
+                                                      registration.id
+                                                    ]
+                                                  )}
+                                                  className="rounded-lg border border-red-800 px-3 py-2 text-xs text-red-300 hover:bg-red-950 disabled:cursor-not-allowed disabled:opacity-50"
+                                                >
+                                                  {registrationActions[
+                                                    registration.id
+                                                  ] === "cancel"
+                                                    ? "Anulowanie..."
+                                                    : "Anuluj"}
+                                                </button>
+                                              )}
                                               </div>
                                             </td>
                                           )}
@@ -2410,14 +2486,20 @@ export default function AdminEventsPage() {
                                             {registration.customer_phone}
                                           </td>
                                           <td className="px-4 py-4">
-                                            <span className={getStatusClass(registration.registration_status)}>
-                                              {translateRegistrationStatus(registration.registration_status)}
+                                            <span
+                                              className={getEventRegistrationStatusBadgeClass(
+                                                registration.registration_status
+                                              )}
+                                            >
+                                              {
+                                                getEventRegistrationStatusPresentation(
+                                                  registration.registration_status
+                                                ).label
+                                              }
                                             </span>
                                           </td>
                                           <td className="px-4 py-4 text-zinc-300">
-                                            {registration.payment_status === "paid_on_site"
-                                              ? "Opłacone"
-                                              : "Płatność na miejscu"}
+                                            {getPaymentStatusLabel(registration.payment_status)}
                                           </td>
                                         </tr>
                                       ))}

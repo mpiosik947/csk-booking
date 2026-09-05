@@ -8,6 +8,8 @@ import {
   parsePublicEventAvailability,
   type PublicEventAvailability,
 } from "../../lib/public-event-availability";
+import { getEventRegistrationStatusPresentation } from "../../lib/event-registration-status";
+import { hasWarsawEventStarted } from "../../lib/event-time";
 
 type Event = PublicEventAvailability;
 
@@ -152,8 +154,24 @@ export default function EventsPage() {
   }, []);
 
   function getEventStatus(eventItem: Event) {
+    if (hasWarsawEventStarted(eventItem.event_date, eventItem.start_time)) {
+      return {
+        label: "Zapisy zakończone",
+        className:
+          "inline-flex rounded-full border border-[#343a31] bg-[#171a17] px-3 py-1 text-xs font-semibold text-[#a9ada4]",
+      };
+    }
+
     const { directlyAvailableSpots } =
       getPublicRegistrationAvailability(eventItem);
+
+    if (eventItem.reserve_count > 0) {
+      return {
+        label: "Lista rezerwowa",
+        className:
+          "inline-flex rounded-full border border-[#806a32] bg-[#2b2618] px-3 py-1 text-xs font-semibold text-[#e1c477]",
+      };
+    }
 
     if (directlyAvailableSpots <= 0) {
       return {
@@ -305,10 +323,7 @@ export default function EventsPage() {
         endTime: eventItem.end_time,
         location: eventItem.location,
         price: Number(eventItem.price),
-        status:
-          registrationStatus === "reserve"
-            ? "Lista rezerwowa"
-            : "Zapisany",
+        status: getEventRegistrationStatusPresentation(registrationStatus).label,
       });
 
       if (!confirmationEmailSent) {
@@ -346,17 +361,21 @@ export default function EventsPage() {
   const selectedEvent = events.find((event) => event.id === selectedEventId);
 
   function EventDetails({ event }: { event: Event }) {
-    const participantsCount = isLoggedIn ? event.registered_count : null;
-    const reserveCount = isLoggedIn ? event.reserve_count : null;
+    const participantsCount = event.registered_count;
+    const reserveCount = event.reserve_count;
     const { directlyAvailableSpots, requiresReserveList } =
       getPublicRegistrationAvailability(event);
-    const publicFreePlaces = isLoggedIn ? directlyAvailableSpots : null;
-    const isFull = isLoggedIn && requiresReserveList;
-    const status = isLoggedIn ? getEventStatus(event) : null;
+    const publicFreePlaces = directlyAvailableSpots;
+    const isFull = requiresReserveList;
+    const eventStarted = hasWarsawEventStarted(
+      event.event_date,
+      event.start_time
+    );
+    const status = getEventStatus(event);
 
     return (
       <div className="min-w-0">
-        {status && <span className={status.className}>{status.label}</span>}
+        <span className={status.className}>{status.label}</span>
 
         <h2 className="mt-4 break-words text-2xl font-bold text-[#f2efe4] sm:text-3xl">
           {event.title}
@@ -388,38 +407,30 @@ export default function EventsPage() {
           <div>
             <p className="text-[#858c7f]">Miejsca</p>
             <p className="mt-1 font-semibold text-[#f2efe4]">
-              {isLoggedIn
-                ? `${participantsCount} / ${event.max_participants}`
-                : `Limit: ${event.max_participants}`}
+              {participantsCount} / {event.max_participants}
             </p>
           </div>
         </div>
 
         <div className="mt-5">
-          {isLoggedIn ? (
-            <div className="rounded-xl border border-[#30372c] bg-[#141814] p-4">
-              <p className="text-[#858c7f]">Wolne miejsca</p>
-              <p
-                className={
-                  isFull
-                    ? "font-semibold text-[#e0a0a0]"
-                    : "font-semibold text-[#a9d4ad]"
-                }
-              >
-                {publicFreePlaces}
-              </p>
+          <div className="rounded-xl border border-[#30372c] bg-[#141814] p-4">
+            <p className="text-[#858c7f]">Wolne miejsca</p>
+            <p
+              className={
+                isFull
+                  ? "font-semibold text-[#e0a0a0]"
+                  : "font-semibold text-[#a9d4ad]"
+              }
+            >
+              {publicFreePlaces}
+            </p>
 
-              {reserveCount !== null && reserveCount > 0 && (
-                <p className="mt-2 text-[#e1c477]">
-                  Lista rezerwowa: {reserveCount}
-                </p>
-              )}
-            </div>
-          ) : (
-            <div className="rounded-xl border border-[#343a31] bg-[#171a17] p-4 text-[#a9ada4]">
-              Zaloguj się, aby sprawdzić aktualną dostępność i zapisać się.
-            </div>
-          )}
+            {reserveCount > 0 && (
+              <p className="mt-2 text-[#e1c477]">
+                Lista rezerwowa: {reserveCount}
+              </p>
+            )}
+          </div>
         </div>
 
         <div className="mt-6 border-t border-[#30372c] pt-5">
@@ -431,7 +442,11 @@ export default function EventsPage() {
         </div>
 
         <div className="mt-6">
-          {loading ? null : !isLoggedIn ? (
+          {loading ? null : eventStarted ? (
+            <div className="rounded-xl border border-[#343a31] bg-[#171a17] p-4 text-center font-semibold text-[#a9ada4]">
+              Zapisy na to szkolenie są zakończone.
+            </div>
+          ) : !isLoggedIn ? (
             <div className="grid gap-3 sm:grid-cols-2">
               <a
                 href="/login?redirectTo=%2Fevents"
@@ -792,13 +807,9 @@ export default function EventsPage() {
 
             <div className="grid gap-3">
               {events.map((event) => {
-                const participantsCount = isLoggedIn
-                  ? event.registered_count
-                  : null;
-                const reserveCount = isLoggedIn
-                  ? event.reserve_count
-                  : null;
-                const status = isLoggedIn ? getEventStatus(event) : null;
+                const participantsCount = event.registered_count;
+                const reserveCount = event.reserve_count;
+                const status = getEventStatus(event);
                 const isSelected = selectedEventId === event.id;
                 const detailsId = `event-details-${event.id}`;
                 const summaryId = `event-summary-${event.id}`;
@@ -848,25 +859,17 @@ export default function EventsPage() {
                           {Number(event.price).toFixed(0)} zł
                         </span>
                         <span className="text-[#a9ada4]">
-                          {isLoggedIn
-                            ? `${participantsCount} / ${event.max_participants}`
-                            : `Limit: ${event.max_participants}`}
+                          {participantsCount} / {event.max_participants}
                         </span>
                       </span>
 
                       <span className="flex min-w-0 items-center justify-between gap-3 md:justify-end">
                         <span className="min-w-0">
-                          {status ? (
-                            <span className={status.className}>
-                              {status.label}
-                            </span>
-                          ) : (
-                            <span className="inline-flex rounded-full border border-[#343a31] bg-[#171a17] px-3 py-1 text-xs font-semibold text-[#a9ada4]">
-                              Dostępność po zalogowaniu
-                            </span>
-                          )}
+                          <span className={status.className}>
+                            {status.label}
+                          </span>
 
-                          {reserveCount !== null && reserveCount > 0 && (
+                          {reserveCount > 0 && (
                             <span className="mt-2 block text-xs font-semibold text-[#e1c477]">
                               Lista rezerwowa: {reserveCount}
                             </span>

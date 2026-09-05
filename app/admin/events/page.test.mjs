@@ -180,6 +180,69 @@ test("event registration payment uses only the controlled minimal RPC", async ()
   assert.equal((paymentAction.match(/mark_event_registration_paid/g) ?? []).length, 1);
 });
 
+test("participant management requests and validates only the minimal operational DTO", async () => {
+  const source = await readAdminPage();
+  const loadRegistrations = functionSource(
+    source,
+    "async function loadRegistrations(",
+    "function openCreateConfirmation()"
+  );
+
+  assert.doesNotMatch(loadRegistrations, /\.select\(\s*["'`]\*["'`]\s*\)/);
+  for (const field of [
+    "id",
+    "customer_name",
+    "customer_email",
+    "customer_phone",
+    "registration_status",
+    "payment_status",
+    "created_at",
+  ]) {
+    assert.match(loadRegistrations, new RegExp(`\\b${field}\\b`));
+  }
+  for (const forbiddenField of [
+    "user_id",
+    "promotion_token",
+    "promotion_claim_id",
+    "promotion_last_error_code",
+    "admin_note",
+    "address",
+  ]) {
+    assert.doesNotMatch(loadRegistrations, new RegExp(`\\b${forbiddenField}\\b`));
+  }
+  assert.match(loadRegistrations, /parseAdminEventRegistrations\(data\)/);
+  assert.match(loadRegistrations, /Nie udało się poprawnie wczytać zapisów/);
+});
+
+test("admin participant statuses, actions, and payments use canonical helpers", async () => {
+  const source = await readAdminPage();
+
+  assert.match(source, /getEventRegistrationStatusPresentation/);
+  assert.match(source, /getEventRegistrationStatusBadgeClass/);
+  assert.match(source, /getPaymentStatusLabel\(registration\.payment_status\)/);
+  assert.match(source, /\.adminCanApprove/);
+  assert.match(source, /\.adminCanMarkPayment/);
+  assert.match(source, /\.adminCanCancel/);
+  assert.doesNotMatch(source, /function translateRegistrationStatus/);
+  assert.doesNotMatch(
+    source,
+    /registration\.payment_status === "paid_on_site"\s*\?/
+  );
+});
+
+test("admin cancellation refreshes participant state after reserve promotion", async () => {
+  const source = await readAdminPage();
+  const cancellation = functionSource(
+    source,
+    "async function cancelRegistration(",
+    "async function markRegistrationPaid("
+  );
+
+  assert.match(cancellation, /data\.promotion\.attempted/);
+  assert.match(cancellation, /await reloadSelectedRegistrations\(\)/);
+  assert.match(cancellation, /registration_status: "cancelled"/);
+});
+
 test("event card actions use the dashboard palette without a blue edit accent", async () => {
   const source = await readAdminPage();
   const actions = functionSource(

@@ -1,6 +1,12 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import {
+  EVENT_REGISTRATION_STATUS,
+  getEventRegistrationStatusBadgeClass,
+  getEventRegistrationStatusPresentation,
+} from "../../lib/event-registration-status";
+import { isEventCancellationBeforeCutoff } from "../../lib/event-time";
 import { getPaymentStatusLabel } from "../../lib/payment-status";
 import { supabase } from "../../lib/supabase";
 import { reportClientError } from "../../lib/safe-client-error";
@@ -40,13 +46,6 @@ type CancellationResponse = {
 };
 
 const WARSAW_TIME_ZONE = "Europe/Warsaw";
-const ACTIVE_REGISTRATION_STATUSES = new Set([
-  "registered",
-  "approved",
-  "reserve",
-  "participant",
-]);
-
 const warsawDateTimeFormatter = new Intl.DateTimeFormat("en-GB", {
   timeZone: WARSAW_TIME_ZONE,
   year: "numeric",
@@ -136,7 +135,8 @@ function isActiveEventRegistration(
   return Boolean(
     warsawNowKey &&
       eventTimeKeys &&
-      ACTIVE_REGISTRATION_STATUSES.has(item.registration_status) &&
+      getEventRegistrationStatusPresentation(item.registration_status)
+        .userCanCancel &&
       eventTimeKeys.endKey > warsawNowKey
   );
 }
@@ -145,7 +145,7 @@ function getEventHistoryLabel(
   item: EventRegistration,
   warsawNowKey: string | null
 ) {
-  if (item.registration_status === "cancelled") {
+  if (item.registration_status === EVENT_REGISTRATION_STATUS.CANCELLED) {
     return "Zapis anulowany";
   }
 
@@ -154,56 +154,18 @@ function getEventHistoryLabel(
   if (
     !warsawNowKey ||
     !eventTimeKeys ||
-    !ACTIVE_REGISTRATION_STATUSES.has(item.registration_status) ||
+    !getEventRegistrationStatusPresentation(item.registration_status)
+      .userCanCancel ||
     eventTimeKeys.endKey > warsawNowKey
   ) {
     return "Archiwalne";
   }
 
-  if (item.registration_status === "reserve") {
+  if (item.registration_status === EVENT_REGISTRATION_STATUS.RESERVE) {
     return "Lista rezerwowa — termin minął";
   }
 
   return "Szkolenie zakończone";
-}
-
-function translateStatus(status: string) {
-  if (status === "registered") return "Zapisany";
-  if (status === "approved") return "Zatwierdzony";
-  if (status === "reserve") return "Rezerwowy";
-  if (status === "participant") return "Uczestnik";
-  if (status === "cancelled") return "Anulowany";
-  return status;
-}
-
-function getStatusClass(status: string) {
-  if (
-    status === "registered" ||
-    status === "approved" ||
-    status === "participant"
-  ) {
-    return "rounded-full border border-[#3f6848] bg-[#1b2a1d] px-3 py-1 text-xs font-semibold text-[#a9d4ad]";
-  }
-
-  if (status === "reserve") {
-    return "rounded-full border border-[#806a32] bg-[#2b2618] px-3 py-1 text-xs font-semibold text-[#e1c477]";
-  }
-
-  if (status === "cancelled") {
-    return "rounded-full border border-[#744545] bg-[#2a1b1b] px-3 py-1 text-xs font-semibold text-[#e0a0a0]";
-  }
-
-  return "rounded-full border border-[#343a31] bg-[#171a17] px-3 py-1 text-xs font-semibold text-[#858c7f]";
-}
-
-function canCancelEvent(eventDate: string, startTime: string) {
-  const eventDateTime = new Date(`${eventDate}T${startTime.slice(0, 5)}:00`);
-  const now = new Date();
-
-  const differenceInMilliseconds = eventDateTime.getTime() - now.getTime();
-  const differenceInHours = differenceInMilliseconds / (1000 * 60 * 60);
-
-  return differenceInHours >= 72;
 }
 
 function getMessageClass(message: string) {
@@ -219,11 +181,11 @@ function getMessageClass(message: string) {
 }
 
 function getEventHistoryClass(status: string) {
-  if (status === "cancelled") {
+  if (status === EVENT_REGISTRATION_STATUS.CANCELLED) {
     return "border-[#744545] bg-[#2a1b1b] text-[#e0a0a0]";
   }
 
-  if (status === "reserve") {
+  if (status === EVENT_REGISTRATION_STATUS.RESERVE) {
     return "border-[#806a32] bg-[#2b2618] text-[#e1c477]";
   }
 
@@ -308,7 +270,14 @@ export default function MyEventsPage() {
       return;
     }
 
-    if (!canCancelEvent(item.events.event_date, item.events.start_time)) {
+    if (
+      !getEventRegistrationStatusPresentation(item.registration_status)
+        .userCanCancel ||
+      !isEventCancellationBeforeCutoff(
+        item.events.event_date,
+        item.events.start_time
+      )
+    ) {
       setMessage(
         "Anulacja online możliwa tylko do 72h przed szkoleniem. Skontaktuj się telefonicznie z organizatorem."
       );
@@ -483,14 +452,15 @@ export default function MyEventsPage() {
                     return null;
                   }
 
-                  const canCancel = canCancelEvent(
-                    event.event_date,
-                    event.start_time
-                  );
-                  const isTooLateToCancel = !canCancelEvent(
-                    event.event_date,
-                    event.start_time
-                  );
+                  const canCancel =
+                    getEventRegistrationStatusPresentation(
+                      item.registration_status
+                    ).userCanCancel &&
+                    isEventCancellationBeforeCutoff(
+                      event.event_date,
+                      event.start_time
+                    );
+                  const isTooLateToCancel = !canCancel;
                   const isExpanded = expandedEventId === item.id;
 
                   return (
@@ -512,11 +482,15 @@ export default function MyEventsPage() {
                             </span>
                             <span className="mt-2 inline-flex">
                               <span
-                                className={getStatusClass(
+                                className={getEventRegistrationStatusBadgeClass(
                                   item.registration_status
                                 )}
                               >
-                                {translateStatus(item.registration_status)}
+                                {
+                                  getEventRegistrationStatusPresentation(
+                                    item.registration_status
+                                  ).label
+                                }
                               </span>
                             </span>
                           </span>
