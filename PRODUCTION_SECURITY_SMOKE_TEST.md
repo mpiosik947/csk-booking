@@ -1630,3 +1630,66 @@ DONE
 HISTORICAL SNAPSHOT RESIDUAL:
 CONFIRMED
 ```
+
+---
+
+# EVENTS-8A PRODUCTION SMOKE
+
+**Date:** 2026-09-05
+
+**Production implementation:** `1e42f57 — fix: align event status and cancellation ux`
+
+The smoke was executed against the deployed Vercel application and the linked
+production database. All persistent records used by the test were synthetic
+and carried the unique marker
+`[TEST][EVENTS-8A][evt8a-mtouoga1-5ecc37f8]`. Database mutation checks were
+performed inside explicit transactions ending in `ROLLBACK`. The persistent UI
+fixture was removed by a fail-closed cleanup and followed by an independent
+read-only zero-residue check.
+
+## Results
+
+| Test | Result | Evidence |
+|---|---|---|
+| Status consistency | PASS | Production `/my-events` rendered `registered` as `Zapisany`, `approved` as `Zatwierdzony`, `reserve` as `Lista rezerwowa`, and `cancelled` as `Zapis anulowany`. `/admin/events` rendered the same four business states with the matching participant/action model. `/events` used availability states rather than reinterpreting participant statuses. |
+| Cancellation cutoff | PASS | A production transaction created three synthetic registrations at `>72h`, exactly `72h`, and `<72h` from the event start in `Europe/Warsaw`. The first two cancellations succeeded; the third returned the controlled backend denial and left the registration unchanged. The deployed frontend uses the same `Europe/Warsaw` instant calculation and exposes the CTA only when the remaining time is at least 72 hours. |
+| Public availability | PASS | Both anon and authenticated production views returned the same authoritative values from `get_public_event_availability_v1()`: registered/approved `1 / 5`, cancelled `0 / 5`, sold-out `1 / 1` with reserve count 1, and the promotion case `1 / 2` with reserve count 1. Transactional cancellation changed `1/3` to `0/3`; reserve promotion changed registered/reserve/available from `1/1/1` to `2/0/0`. |
+| Availability source | PASS | The deployed `/events` client calls only `get_public_event_availability_v1()` and contains no public `event_registrations` count. The production RPC returned exactly the approved aggregate keys and no registration rows or identity/contact/token fields. |
+| Public event flow | PASS | Logged-out and logged-in `/events` loaded without 5xx. Available, sold-out, reserve-list, and closed states rendered controlled Polish UX. A user already registered for a synthetic event received no second registration CTA; the backend duplicate call was controlled and `changed=false`. |
+| Registration / overbooking | PASS | A rollback-only production test registered a fresh synthetic user into an available event (`registered`) and into a full event (`reserve`). The full event remained at capacity with `available_spots=0`; reserve count increased without overbooking. |
+| My Events | PASS | The synthetic user saw registered, approved, reserve, and cancelled states, payment labels, promotion-related reserve state, and cancellation eligibility. The UI displayed the 72-hour rule and did not offer an inconsistent action for a state outside its eligibility contract. |
+| Admin Events | PASS | The synthetic administrator loaded all six events, authoritative participant/reserve/cancelled counts, payment states, and the expected approve/pay/cancel actions. The participant query exposed only the operational DTO: id, name, email, phone, registration status, payment status, and creation time. Address, permits, tokens, admin notes, and profile data were absent. |
+| Payment and promotion | PASS | In rollback-only production calls, `mark_event_registration_paid(uuid)` set the expected payment state and `confirm_event_reserve_promotion(text)` atomically moved one record from reserve to registered. Both mutations were rolled back. |
+| Security regression | PASS | An ordinary authenticated user was redirected from direct `/admin/events` access to `/dashboard`. Owner-scoped RLS exposed only the user's own registration in the mixed participant fixture. Availability remained complete despite that RLS scope. No service-role credential was used by the browser, no participant PII appeared on public `/events`, and the two existing registration SELECT policies remained unchanged. |
+| Existing flows | PASS | Registration, duplicate registration, reserve placement, promotion, cancellation, payment marking, sold-out protection, and authoritative availability all passed against current production contracts. No email-delivery endpoint was invoked because all mutating contract checks were deliberately rollback-only. |
+| Cleanup | PASS | Fail-closed cleanup required exactly 2 Auth users, 2 profiles, 2 identities, 6 events, and 8 registrations for the run before deletion. The independent post-check returned `remaining_synthetic_fixture = 0` and `cleanup_confirmed = true`, including Auth users, profiles, events, registrations, and matching audit records. |
+
+## Data and safety conclusion
+
+No application code, production schema, migration, RLS, ACL, configuration, or
+deployment was changed. Transactional checks left no mutations. The only
+persistent production writes were the explicitly synthetic smoke fixture and
+its exact cleanup; no real customer record was read for test assertions or
+modified.
+
+## Final result
+
+```text
+EVENTS-8A PRODUCTION SMOKE:
+PASS
+
+EVENTS-8A STATUS:
+FULLY IMPLEMENTED / PROD PASS
+
+STATUS CONSISTENCY:
+PASS
+
+CANCELLATION TIME CONSISTENCY:
+PASS
+
+PUBLIC AVAILABILITY:
+PASS
+
+MINIMAL PARTICIPANT DTO:
+PASS
+```
