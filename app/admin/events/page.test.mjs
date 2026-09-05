@@ -17,7 +17,7 @@ function functionSource(source, startMarker, endMarker) {
   return source.slice(start, end);
 }
 
-test("admin events uses the normalized relational event contract", async () => {
+test("admin events uses the bounded backend event contract", async () => {
   const source = await readAdminPage();
   const loadEvents = functionSource(
     source,
@@ -27,32 +27,18 @@ test("admin events uses the normalized relational event contract", async () => {
 
   assert.match(source, /type AdminEvent[\s\S]*from "\.\.\/\.\.\/\.\.\/lib\/admin\/events\/event-management"/);
   assert.match(source, /useState<AdminEvent\[\]>\(\[\]\)/);
-  assert.match(loadEvents, /\.from\("events"\)/);
-  assert.doesNotMatch(loadEvents, /\.select\(\s*["'`]\*["'`]\s*\)/);
-  for (const field of [
-    "id",
-    "title",
-    "description",
-    "event_date",
-    "start_time",
-    "end_time",
-    "location",
-    "price",
-    "max_participants",
-    "is_active",
-    "created_at",
-    "event_lanes",
-    "lane_id",
-    "shooting_lanes",
-    "display_order",
-  ]) {
-    assert.match(loadEvents, new RegExp(`\\b${field}\\b`));
-  }
+  assert.match(loadEvents, /\.rpc\("admin_list_events_v1"/);
+  assert.match(loadEvents, /p_search:eventSearch\|\|null/);
+  assert.match(loadEvents, /p_scope:eventScope/);
+  assert.match(loadEvents, /p_sort:eventSortOrder/);
+  assert.match(loadEvents, /p_page:eventPage/);
+  assert.match(loadEvents, /p_page_size:EVENT_LIST_PAGE_SIZE/);
   assert.doesNotMatch(loadEvents, /event_registrations|customer_|user_id/);
-  assert.match(loadEvents, /normalizeAdminEvent\(record\)/);
+  assert.doesNotMatch(loadEvents, /\.from\("events"\)|\.select\(/);
+  assert.match(loadEvents, /parseAdminEventList\(data\)/);
 });
 
-test("event list uses the PostgREST column hint for the self-referencing parent lane", async () => {
+test("event hierarchy is returned by the single scalable event RPC", async () => {
   const source = await readAdminPage();
   const loadEvents = functionSource(
     source,
@@ -60,15 +46,8 @@ test("event list uses the PostgREST column hint for the self-referencing parent 
     "async function loadRegistrations("
   );
 
-  assert.match(
-    loadEvents,
-    /parent_lane:shooting_lanes!parent_lane_id\s*\(\s*id,\s*name,\s*type,\s*is_active,\s*display_order,\s*resource_kind,\s*parent_lane_id\s*\)/
-  );
-  assert.doesNotMatch(
-    loadEvents,
-    /parent_lane:shooting_lanes!shooting_lanes_parent_lane_id_fkey/
-  );
-  assert.match(loadEvents, /event_lanes\s*\([\s\S]*shooting_lanes\s*\(/);
+  assert.match(loadEvents, /admin_list_events_v1/);
+  assert.doesNotMatch(loadEvents, /parent_lane:shooting_lanes|event_lanes\s*\(/);
   assert.match(loadEvents, /if \(error\)[\s\S]*EVENTS_LOAD_ERROR_MESSAGE/);
 });
 
@@ -82,11 +61,10 @@ test("event loading fails closed without replacing a valid list", async () => {
   const safeMessage = "Nie udało się poprawnie wczytać listy szkoleń.";
 
   assert.equal((loadEvents.match(/setEvents\(/g) ?? []).length, 1);
-  assert.equal((loadEvents.match(/setMessage\(EVENTS_LOAD_ERROR_MESSAGE\)/g) ?? []).length, 3);
+  assert.equal((loadEvents.match(/setMessage\(EVENTS_LOAD_ERROR_MESSAGE\)/g) ?? []).length, 2);
   assert.match(loadEvents, /if \(error\)[\s\S]*setMessage\(EVENTS_LOAD_ERROR_MESSAGE\);[\s\S]*return;/);
-  assert.match(loadEvents, /if \(!Array\.isArray\(data\)\)[\s\S]*return;/);
-  assert.match(loadEvents, /if \(!normalized\.ok\)[\s\S]*setMessage\(EVENTS_LOAD_ERROR_MESSAGE\);[\s\S]*return;/);
-  assert.ok(loadEvents.indexOf("normalizeAdminEvent(record)") < loadEvents.indexOf("setEvents(normalizedEvents)"));
+  assert.match(loadEvents, /if \(!parsed\)[\s\S]*setMessage\(EVENTS_LOAD_ERROR_MESSAGE\);[\s\S]*return;/);
+  assert.ok(loadEvents.indexOf("parseAdminEventList(data)") < loadEvents.indexOf("setEvents(parsed.items)"));
   assert.match(
     source,
     new RegExp(
@@ -115,7 +93,7 @@ test("event loading ignores stale responses and clears only its own old error", 
   assert.doesNotMatch(loadEvents, /setMessage\(""\)/);
 });
 
-test("event list controls are local, accessible, and keep event loading unchanged", async () => {
+test("event list controls are URL-backed and executed by the bounded RPC", async () => {
   const source = await readAdminPage();
   const loadEvents = functionSource(
     source,
@@ -129,24 +107,27 @@ test("event list controls are local, accessible, and keep event loading unchange
   assert.match(source, /<option value="latest">Najpóźniejsze terminy<\/option>/);
   assert.match(source, /htmlFor="event-sort-order"/);
   assert.match(source, /id="event-sort-order"/);
-  assert.match(source, /useState<EventStatusFilter>\("all"\)/);
-  assert.match(source, /Status/);
+  assert.match(source, /useState<AdminEventScope>\("upcoming"\)/);
+  assert.match(source, /Zakres/);
   assert.match(source, /<option value="all">Wszystkie<\/option>/);
-  assert.match(source, /<option value="active">Aktywne<\/option>/);
-  assert.match(source, /<option value="hidden">Ukryte<\/option>/);
+  assert.match(source, /<option value="upcoming">Nadchodzące<\/option>/);
+  assert.match(source, /<option value="past">Minione<\/option>/);
+  assert.match(source, /<option value="inactive">Nieaktywne<\/option>/);
   assert.match(source, /htmlFor="event-status-filter"/);
   assert.match(source, /id="event-status-filter"/);
-  assert.match(source, /const visibleEvents = sortAdminEvents\([\s\S]*filterAdminEvents\(events, eventStatusFilter\)/);
+  assert.match(source, /const visibleEvents = events/);
   assert.match(source, /visibleEvents\.map\(\(event\) =>/);
-  assert.doesNotMatch(loadEvents, /eventSortOrder|eventStatusFilter|sortAdminEvents|filterAdminEvents/);
-  assert.doesNotMatch(source, /onChange=\{[^}]*loadEvents/);
+  assert.match(loadEvents, /eventSortOrder|eventScope|eventSearch|eventPage/);
+  assert.match(source, /window\.history\.pushState/);
+  assert.match(source, /window\.addEventListener\("popstate"/);
 });
 
 test("event status filter has safe empty states and preserves V2 management RPCs", async () => {
   const source = await readAdminPage();
 
-  assert.match(source, /Brak aktywnych szkoleń\./);
-  assert.match(source, /Brak ukrytych szkoleń\./);
+  assert.match(source, /Brak nadchodzących szkoleń\./);
+  assert.match(source, /Brak minionych szkoleń\./);
+  assert.match(source, /Brak nieaktywnych szkoleń\./);
   assert.match(source, /Brak szkoleń\./);
   assert.match(source, /\.rpc\(\s*"admin_create_event_v2",\s*payload\s*\)/);
   assert.match(source, /\.rpc\(\s*"admin_update_event_v2",\s*payload\.value\s*\)/);
@@ -185,21 +166,15 @@ test("participant management requests and validates only the minimal operational
   const loadRegistrations = functionSource(
     source,
     "async function loadRegistrations(",
-    "function openCreateConfirmation()"
+    "function openRegistrations("
   );
 
+  assert.match(loadRegistrations, /\.rpc\("admin_list_event_registrations_v1"/);
   assert.doesNotMatch(loadRegistrations, /\.select\(\s*["'`]\*["'`]\s*\)/);
-  for (const field of [
-    "id",
-    "customer_name",
-    "customer_email",
-    "customer_phone",
-    "registration_status",
-    "payment_status",
-    "created_at",
-  ]) {
-    assert.match(loadRegistrations, new RegExp(`\\b${field}\\b`));
-  }
+  assert.match(loadRegistrations, /p_status:nextStatus\|\|null/);
+  assert.match(loadRegistrations, /p_payment_status:nextPayment\|\|null/);
+  assert.match(loadRegistrations, /p_page:nextPage/);
+  assert.match(loadRegistrations, /p_page_size:EVENT_PARTICIPANT_PAGE_SIZE/);
   for (const forbiddenField of [
     "user_id",
     "promotion_token",
@@ -210,7 +185,10 @@ test("participant management requests and validates only the minimal operational
   ]) {
     assert.doesNotMatch(loadRegistrations, new RegExp(`\\b${forbiddenField}\\b`));
   }
-  assert.match(loadRegistrations, /parseAdminEventRegistrations\(data\)/);
+  assert.match(loadRegistrations, /parseParticipantList\(data\)/);
+  assert.match(source, /participantSummary\.registeredCount/);
+  assert.match(source, /participantSummary\.reserveCount/);
+  assert.match(source, /participantTotal > EVENT_PARTICIPANT_PAGE_SIZE/);
   assert.match(loadRegistrations, /Nie udało się poprawnie wczytać zapisów/);
 });
 
@@ -662,8 +640,8 @@ test("event hierarchy presentation keeps dormant resources out and prepares acti
   assert.match(source, /normalizeActiveEventLanes/);
   assert.match(loadActiveLanes, /resource_kind,parent_lane_id/);
   assert.match(loadActiveLanes, /\.eq\("is_active", true\)/);
-  assert.match(loadEvents, /parent_lane:shooting_lanes!parent_lane_id/);
-  assert.doesNotMatch(loadEvents, /shooting_lanes_parent_lane_id_fkey/);
+  assert.match(loadEvents, /admin_list_events_v1/);
+  assert.doesNotMatch(loadEvents, /parent_lane:shooting_lanes/);
   assert.match(source, /lane\.displayName/);
   assert.match(source, /HierarchyResourceLabel/);
   assert.match(source, /isPosition: lane\.isPosition/);

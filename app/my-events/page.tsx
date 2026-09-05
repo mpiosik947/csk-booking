@@ -10,23 +10,16 @@ import { isEventCancellationBeforeCutoff } from "../../lib/event-time";
 import { getPaymentStatusLabel } from "../../lib/payment-status";
 import { supabase } from "../../lib/supabase";
 import { reportClientError } from "../../lib/safe-client-error";
+import {
+  buildEventSearchParams,
+  EVENT_LIST_PAGE_SIZE,
+  parseMyEventList,
+  parsePageNumber,
+  type MyEventRegistration,
+  type MyEventScope,
+} from "../../lib/event-read-contracts";
 
-type EventRegistration = {
-  id: string;
-  registration_status: string;
-  payment_status: string;
-  created_at: string;
-  events: {
-    id: string;
-    title: string;
-    description: string;
-    event_date: string;
-    start_time: string;
-    end_time: string;
-    location: string;
-    price: number;
-  } | null;
-};
+type EventRegistration = MyEventRegistration;
 
 type CancellationResponse = {
   success?: boolean;
@@ -194,6 +187,11 @@ function getEventHistoryClass(status: string) {
 
 export default function MyEventsPage() {
   const [items, setItems] = useState<EventRegistration[]>([]);
+  const [filtersReady, setFiltersReady] = useState(false);
+  const [scope, setScope] = useState<MyEventScope>("upcoming");
+  const [statusFilter, setStatusFilter] = useState("");
+  const [page, setPage] = useState(1);
+  const [totalItems, setTotalItems] = useState(0);
   const [loading, setLoading] = useState(true);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [message, setMessage] = useState("");
@@ -208,11 +206,38 @@ export default function MyEventsPage() {
   }
 
   useEffect(() => {
+    const applyUrl = () => {
+      const params = new URLSearchParams(window.location.search);
+      const parsedScope = params.get("scope") ?? "upcoming";
+      const parsedStatus = params.get("status") ?? "";
+      const parsedPage = parsePageNumber(params.get("page"));
+      if (!(["upcoming", "history"] as string[]).includes(parsedScope) ||
+          !["", "registered", "approved", "reserve", "cancelled"].includes(parsedStatus) || parsedPage === null) {
+        setMessage("Nieprawidłowe filtry szkoleń w adresie strony.");
+        setLoading(false);
+        setFiltersReady(false);
+        return;
+      }
+      setScope(parsedScope as MyEventScope);
+      setStatusFilter(parsedStatus);
+      setPage(parsedPage);
+      setFiltersReady(true);
+    };
+    applyUrl();
+    window.addEventListener("popstate", applyUrl);
+    return () => window.removeEventListener("popstate", applyUrl);
+  }, []);
+
+  useEffect(() => {
+    if (!filtersReady) return;
+    let active = true;
     async function loadMyEvents() {
+      setLoading(true);
       const {
         data: { user },
       } = await supabase.auth.getUser();
 
+      if (!active) return;
       if (!user) {
         setIsLoggedIn(false);
         setLoading(false);
@@ -221,29 +246,11 @@ export default function MyEventsPage() {
 
       setIsLoggedIn(true);
 
-      const { data, error } = await supabase
-        .from("event_registrations")
-        .select(
-          `
-          id,
-          registration_status,
-          payment_status,
-          created_at,
-          events (
-            id,
-            title,
-            description,
-            event_date,
-            start_time,
-            end_time,
-            location,
-            price
-          )
-        `
-        )
-        .eq("user_id", user.id)
-        .order("created_at", { ascending: false });
+      const { data, error } = await supabase.rpc("get_my_event_registrations_v1", {
+        p_scope: scope, p_status: statusFilter || null, p_page: page, p_page_size: EVENT_LIST_PAGE_SIZE,
+      });
 
+      if (!active) return;
       if (error) {
         reportClientError("My events read failed", error);
         setMessage("Nie udało się pobrać zapisów na szkolenia. Spróbuj ponownie.");
@@ -251,12 +258,29 @@ export default function MyEventsPage() {
         return;
       }
 
-      setItems((data as any) ?? []);
+      const parsed = parseMyEventList(data);
+      if (!parsed) {
+        setMessage("Nie udało się poprawnie wczytać zapisów na szkolenia.");
+        setLoading(false);
+        return;
+      }
+      setItems(parsed.items);
+      setTotalItems(parsed.total);
       setLoading(false);
     }
 
-    loadMyEvents();
-  }, []);
+    void loadMyEvents();
+    return () => { active = false; };
+  }, [filtersReady, page, scope, statusFilter]);
+
+  function updateFilters(nextScope: MyEventScope, nextStatus: string, nextPage = 1) {
+    const params = buildEventSearchParams({ scope: nextScope === "upcoming" ? null : nextScope, status: nextStatus, page: nextPage });
+    const query = params.toString();
+    window.history.pushState(null, "", `${window.location.pathname}${query ? `?${query}` : ""}`);
+    setScope(nextScope);
+    setStatusFilter(nextStatus);
+    setPage(nextPage);
+  }
 
   async function cancelRegistration(item: EventRegistration) {
     if (cancellingRegistrationIds.current.has(item.id)) {
@@ -348,7 +372,7 @@ export default function MyEventsPage() {
   }
 
   const warsawNowKey = getWarsawDateTimeKey(new Date());
-  const activeEvents = items
+  const activeEvents = (scope === "upcoming" ? items : [])
     .filter((item) => isActiveEventRegistration(item, warsawNowKey))
     .sort((firstItem, secondItem) => {
       const firstStartKey = getEventTimeKeys(firstItem.events)?.startKey ?? "";
@@ -356,7 +380,7 @@ export default function MyEventsPage() {
 
       return firstStartKey.localeCompare(secondStartKey);
     });
-  const eventHistory = items
+  const eventHistory = (scope === "history" ? items : [])
     .filter((item) => !isActiveEventRegistration(item, warsawNowKey))
     .sort((firstItem, secondItem) => {
       const firstEndKey = getEventTimeKeys(firstItem.events)?.endKey ?? "";
@@ -380,6 +404,21 @@ export default function MyEventsPage() {
             możesz anulować samodzielnie najpóźniej 72 godziny przed terminem.
           </p>
         </header>
+
+        <section className="mt-6 grid gap-4 rounded-2xl border border-[#30372c] bg-[#191e19] p-4 sm:grid-cols-2" aria-label="Filtry moich szkoleń">
+          <div>
+            <label htmlFor="my-events-scope" className="mb-2 block text-sm font-semibold">Zakres</label>
+            <select id="my-events-scope" value={scope} onChange={(event) => updateFilters(event.target.value as MyEventScope, statusFilter, 1)} className="min-h-11 w-full rounded-xl border border-[#3b4237] bg-[#090b09] px-4 py-3">
+              <option value="upcoming">Nadchodzące</option><option value="history">Historia</option>
+            </select>
+          </div>
+          <div>
+            <label htmlFor="my-events-status" className="mb-2 block text-sm font-semibold">Status</label>
+            <select id="my-events-status" value={statusFilter} onChange={(event) => updateFilters(scope, event.target.value, 1)} className="min-h-11 w-full rounded-xl border border-[#3b4237] bg-[#090b09] px-4 py-3">
+              <option value="">Wszystkie statusy</option><option value="registered">Zapisany</option><option value="approved">Zatwierdzony</option><option value="reserve">Lista rezerwowa</option><option value="cancelled">Anulowany</option>
+            </select>
+          </div>
+        </section>
 
         {loading && (
           <div
@@ -651,6 +690,14 @@ export default function MyEventsPage() {
                   ))}
                 </div>
               </section>
+            )}
+
+            {!loading && isLoggedIn && (
+              <nav className="mt-8 flex flex-wrap items-center justify-between gap-3" aria-label="Stronicowanie moich szkoleń">
+                <button type="button" disabled={page<=1} onClick={() => updateFilters(scope,statusFilter,page-1)} className="min-h-11 rounded-xl border border-[#495044] px-4 py-2 font-semibold disabled:opacity-50">Poprzednia</button>
+                <span className="text-sm text-[#a9ada4]">Strona {page} z {Math.max(1,Math.ceil(totalItems/EVENT_LIST_PAGE_SIZE))} · {totalItems} zapisów</span>
+                <button type="button" disabled={page*EVENT_LIST_PAGE_SIZE>=totalItems} onClick={() => updateFilters(scope,statusFilter,page+1)} className="min-h-11 rounded-xl border border-[#495044] px-4 py-2 font-semibold disabled:opacity-50">Następna</button>
+              </nav>
             )}
           </div>
         )}

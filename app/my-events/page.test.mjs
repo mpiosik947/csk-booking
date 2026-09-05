@@ -44,11 +44,17 @@ test("cancellation CTA matches the Warsaw 72-hour backend boundary", async () =>
 test("my events keeps owner scope and refreshes the local cancellation state", async () => {
   const source = await readPage();
 
-  assert.match(source, /\.from\("event_registrations"\)/);
-  assert.match(source, /\.eq\("user_id", user\.id\)/);
+  assert.match(source, /\.rpc\("get_my_event_registrations_v1"/);
+  assert.match(source, /p_scope: scope/);
+  assert.match(source, /p_status: statusFilter \|\| null/);
+  assert.match(source, /p_page: page/);
+  assert.match(source, /p_page_size: EVENT_LIST_PAGE_SIZE/);
+  assert.doesNotMatch(source, /\.from\("event_registrations"\)/);
   assert.match(source, /setItems\(\(currentItems\) =>/);
   assert.match(source, /data\.cancellation\?\.newStatus \?\? "cancelled"/);
   assert.doesNotMatch(source, /\.update\(|\.insert\(/);
+  assert.match(source, /window\.history\.pushState/);
+  assert.match(source, /window\.addEventListener\("popstate"/);
 });
 
 test("public, my, and admin screens share one status presentation source", async () => {

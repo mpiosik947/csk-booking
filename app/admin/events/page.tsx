@@ -6,32 +6,35 @@ import {
   buildCreateEventPayload,
   buildSetEventActivePayload,
   buildUpdateEventPayload,
-  filterAdminEvents,
   getEditableEventLanes,
   getEventManagementMessage,
   normalizeActiveEventLanes,
-  normalizeAdminEvent,
-  sortAdminEvents,
   type AdminEvent,
   type AdminEventLane,
   type CreateEventRpcPayload,
   type EventManagementMessage,
-  type EventStatusFilter,
   type EventSortOrder,
   validateEventForm,
   validateEventRpcResult,
 } from "../../../lib/admin/events/event-management";
-import {
-  parseAdminEventRegistrations,
-  type AdminEventRegistration,
-} from "../../../lib/admin/events/event-registrations";
+import type { AdminEventRegistration } from "../../../lib/admin/events/event-registrations";
 import {
   EVENT_REGISTRATION_STATUS,
   getEventRegistrationStatusBadgeClass,
   getEventRegistrationStatusPresentation,
 } from "../../../lib/event-registration-status";
-import { getPaymentStatusLabel } from "../../../lib/payment-status";
+import { getPaymentStatusLabel, PAYMENT_STATUSES } from "../../../lib/payment-status";
 import { supabase } from "../../../lib/supabase";
+import {
+  buildEventSearchParams,
+  EVENT_LIST_PAGE_SIZE,
+  EVENT_PARTICIPANT_PAGE_SIZE,
+  parseAdminEventList,
+  parsePageNumber,
+  parseParticipantList,
+  type AdminEventScope,
+  type ParticipantSummary,
+} from "../../../lib/event-read-contracts";
 
 type RegistrationAction = "approve" | "cancel" | "payment";
 
@@ -100,28 +103,6 @@ type CancelRegistrationResult = {
 };
 
 type Registration = AdminEventRegistration;
-
-function getPaidRegistrationsCount(registrations: Registration[]) {
-  return registrations.filter(
-    (registration) =>
-      getEventRegistrationStatusPresentation(registration.registration_status)
-        .occupiesPlace
-  ).length;
-}
-
-function getReserveRegistrationsCount(registrations: Registration[]) {
-  return registrations.filter(
-    (registration) =>
-      registration.registration_status === EVENT_REGISTRATION_STATUS.RESERVE
-  ).length;
-}
-
-function getCancelledRegistrationsCount(registrations: Registration[]) {
-  return registrations.filter(
-    (registration) =>
-      registration.registration_status === EVENT_REGISTRATION_STATUS.CANCELLED
-  ).length;
-}
 
 function getParticipantRegistrations(registrations: Registration[]) {
   return registrations.filter(
@@ -259,10 +240,18 @@ export default function AdminEventsPage() {
   const [events, setEvents] = useState<AdminEvent[]>([]);
   const [eventSortOrder, setEventSortOrder] =
     useState<EventSortOrder>("nearest");
-  const [eventStatusFilter, setEventStatusFilter] =
-    useState<EventStatusFilter>("all");
+  const [eventScope, setEventScope] = useState<AdminEventScope>("upcoming");
+  const [eventSearch, setEventSearch] = useState("");
+  const [eventPage, setEventPage] = useState(1);
+  const [eventTotal, setEventTotal] = useState(0);
+  const [eventFiltersReady, setEventFiltersReady] = useState(false);
   const [selectedEventId, setSelectedEventId] = useState("");
   const [registrations, setRegistrations] = useState<Registration[]>([]);
+  const [participantStatus, setParticipantStatus] = useState("");
+  const [participantPayment, setParticipantPayment] = useState("");
+  const [participantPage, setParticipantPage] = useState(1);
+  const [participantTotal, setParticipantTotal] = useState(0);
+  const [participantSummary, setParticipantSummary] = useState<ParticipantSummary>({ registeredCount: 0, reserveCount: 0, cancelledCount: 0, paidCount: 0 });
   const [message, setMessage] = useState("");
   const [userRole, setUserRole] = useState("");
   const [activeLanes, setActiveLanes] = useState<AdminEventLane[]>([]);
@@ -351,14 +340,51 @@ export default function AdminEventsPage() {
 
   useEffect(() => {
     componentMountedRef.current = true;
-    void loadEvents();
     void loadRole();
+
+    const applyUrl = () => {
+      const params = new URLSearchParams(window.location.search);
+      const scope = params.get("scope") ?? "upcoming";
+      const sort = params.get("sort") ?? "nearest";
+      const search = (params.get("q") ?? "").trim();
+      const page = parsePageNumber(params.get("page"));
+      if (!["all","upcoming","past","inactive"].includes(scope) || !["nearest","latest"].includes(sort) || search.length>100 || page===null) {
+        setMessage("Nieprawidłowe filtry szkoleń w adresie strony.");
+        setLoading(false);
+        return;
+      }
+      setEventScope(scope as AdminEventScope);
+      setEventSortOrder(sort as EventSortOrder);
+      setEventSearch(search);
+      setEventPage(page);
+      setEventFiltersReady(true);
+    };
+    applyUrl();
+    window.addEventListener("popstate", applyUrl);
 
     return () => {
       componentMountedRef.current = false;
       activeLanesRequestRef.current += 1;
+      window.removeEventListener("popstate", applyUrl);
     };
+    // loadRole is intentionally called once after the mounted guard is active.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    if (eventFiltersReady) void loadEvents();
+    // loadEvents reads exactly the filter state listed below and owns stale-request protection.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [eventFiltersReady, eventPage, eventScope, eventSearch, eventSortOrder]);
+
+  function updateEventFilters(changes: Partial<{search:string;scope:AdminEventScope;sort:EventSortOrder;page:number}>) {
+    const next={search:eventSearch,scope:eventScope,sort:eventSortOrder,page:eventPage,...changes};
+    if (changes.page===undefined) next.page=1;
+    const params=buildEventSearchParams({q:next.search,scope:next.scope==='upcoming'?null:next.scope,sort:next.sort==='nearest'?null:next.sort,page:next.page});
+    const query=params.toString();
+    window.history.pushState(null,"",`${window.location.pathname}${query?`?${query}`:""}`);
+    setEventSearch(next.search);setEventScope(next.scope);setEventSortOrder(next.sort);setEventPage(next.page);
+  }
 
   async function loadRole() {
     const { data, error } = await supabase.rpc("get_my_role");
@@ -429,43 +455,10 @@ export default function AdminEventsPage() {
 
   async function loadEvents() {
     const requestId = ++eventsLoadRequestRef.current;
-    const { data, error } = await supabase
-      .from("events")
-      .select(`
-        id,
-        title,
-        description,
-        event_date,
-        start_time,
-        end_time,
-        location,
-        price,
-        max_participants,
-        is_active,
-        created_at,
-        event_lanes (
-          lane_id,
-          shooting_lanes (
-            id,
-            name,
-            type,
-            is_active,
-            display_order,
-            resource_kind,
-            parent_lane_id,
-            parent_lane:shooting_lanes!parent_lane_id (
-              id,
-              name,
-              type,
-              is_active,
-              display_order,
-              resource_kind,
-              parent_lane_id
-            )
-          )
-        )
-      `)
-      .order("event_date", { ascending: true });
+    setLoading(true);
+    const { data, error } = await supabase.rpc("admin_list_events_v1", {
+      p_search:eventSearch||null,p_scope:eventScope,p_sort:eventSortOrder,p_page:eventPage,p_page_size:EVENT_LIST_PAGE_SIZE,
+    });
 
     if (
       !componentMountedRef.current ||
@@ -481,48 +474,23 @@ export default function AdminEventsPage() {
       return;
     }
 
-    if (!Array.isArray(data)) {
+    const parsed=parseAdminEventList(data);
+    if (!parsed) {
       setMessage(EVENTS_LOAD_ERROR_MESSAGE);
       return;
     }
-
-    const normalizedEvents: AdminEvent[] = [];
-
-    for (const record of data) {
-      const normalized = normalizeAdminEvent(record);
-
-      if (!normalized.ok) {
-        setMessage(EVENTS_LOAD_ERROR_MESSAGE);
-        return;
-      }
-
-      normalizedEvents.push(normalized.value);
-    }
-
-    setEvents(normalizedEvents);
+    setEvents(parsed.items);
+    setEventTotal(parsed.total);
     setMessage((current) =>
       current === EVENTS_LOAD_ERROR_MESSAGE ? "" : current
     );
   }
 
-  async function loadRegistrations(eventId: string) {
+  async function loadRegistrations(eventId: string, nextPage=1, nextStatus=participantStatus, nextPayment=participantPayment) {
     setSelectedEventId(eventId);
-
-    const { data, error } = await supabase
-      .from("event_registrations")
-      .select(
-        `
-        id,
-        customer_name,
-        customer_email,
-        customer_phone,
-        registration_status,
-        payment_status,
-        created_at
-      `
-      )
-      .eq("event_id", eventId)
-      .order("created_at", { ascending: false });
+    const { data, error } = await supabase.rpc("admin_list_event_registrations_v1", {
+      p_event_id:eventId,p_status:nextStatus||null,p_payment_status:nextPayment||null,p_page:nextPage,p_page_size:EVENT_PARTICIPANT_PAGE_SIZE,
+    });
 
     if (error) {
       console.error("Event registrations loading failed", { code: error.code });
@@ -530,7 +498,7 @@ export default function AdminEventsPage() {
       return;
     }
 
-    const parsedRegistrations = parseAdminEventRegistrations(data);
+    const parsedRegistrations = parseParticipantList(data);
 
     if (!parsedRegistrations) {
       console.error("Event registrations returned invalid data");
@@ -538,7 +506,33 @@ export default function AdminEventsPage() {
       return;
     }
 
-    setRegistrations(parsedRegistrations);
+    setRegistrations(parsedRegistrations.items);
+    setParticipantPage(parsedRegistrations.page);
+    setParticipantTotal(parsedRegistrations.total);
+    setParticipantSummary(parsedRegistrations.summary);
+  }
+
+  function openRegistrations(eventId: string) {
+    setParticipantStatus("");
+    setParticipantPayment("");
+    void loadRegistrations(eventId, 1, "", "");
+  }
+
+  function updateParticipantFilters(next: {
+    status?: string;
+    payment?: string;
+    page?: number;
+  }) {
+    if (!selectedEventId) {
+      return;
+    }
+
+    const nextStatus = next.status ?? participantStatus;
+    const nextPayment = next.payment ?? participantPayment;
+    const nextPage = next.page ?? 1;
+    setParticipantStatus(nextStatus);
+    setParticipantPayment(nextPayment);
+    void loadRegistrations(selectedEventId, nextPage, nextStatus, nextPayment);
   }
 
   function openCreateConfirmation() {
@@ -1346,10 +1340,7 @@ export default function AdminEventsPage() {
   const selectedCreateLanes = activeLanes.filter((lane) =>
     createLaneIds.includes(lane.id)
   );
-  const visibleEvents = sortAdminEvents(
-    filterAdminEvents(events, eventStatusFilter),
-    eventSortOrder
-  );
+  const visibleEvents = events;
 
   return (
     <main className="min-h-screen bg-[#141814] text-[#f2efe4]">
@@ -1689,7 +1680,11 @@ export default function AdminEventsPage() {
             </p>
           </div>
 
-          <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
+          <div className="grid w-full gap-2 sm:w-auto sm:grid-cols-3">
+            <label htmlFor="event-search" className="flex w-full flex-col gap-2 text-sm font-semibold text-[#a9ada4] sm:w-56">
+              Szukaj
+              <input id="event-search" type="search" maxLength={100} value={eventSearch} onChange={(event)=>updateEventFilters({search:event.target.value})} placeholder="Nazwa szkolenia" className="min-h-11 w-full rounded-xl border border-[#30372c] bg-[#191e19] px-4 py-2 text-[#f2efe4]" />
+            </label>
             <label
               htmlFor="event-sort-order"
               className="flex w-full flex-col gap-2 text-sm font-semibold text-[#a9ada4] sm:w-56"
@@ -1698,9 +1693,7 @@ export default function AdminEventsPage() {
               <select
                 id="event-sort-order"
                 value={eventSortOrder}
-                onChange={(event) =>
-                  setEventSortOrder(event.target.value as EventSortOrder)
-                }
+                onChange={(event) => updateEventFilters({sort:event.target.value as EventSortOrder})}
                 className="min-h-11 w-full rounded-xl border border-[#30372c] bg-[#191e19] px-4 py-2 text-[#f2efe4] outline-none transition hover:border-[#536143] focus-visible:border-[#536143] focus-visible:ring-2 focus-visible:ring-[#d7c895]"
               >
                 <option value="nearest">Najbliższe terminy</option>
@@ -1712,18 +1705,17 @@ export default function AdminEventsPage() {
               htmlFor="event-status-filter"
               className="flex w-full flex-col gap-2 text-sm font-semibold text-[#a9ada4] sm:w-48"
             >
-              Status
+              Zakres
               <select
                 id="event-status-filter"
-                value={eventStatusFilter}
-                onChange={(event) =>
-                  setEventStatusFilter(event.target.value as EventStatusFilter)
-                }
+                value={eventScope}
+                onChange={(event) => updateEventFilters({scope:event.target.value as AdminEventScope})}
                 className="min-h-11 w-full rounded-xl border border-[#30372c] bg-[#191e19] px-4 py-2 text-[#f2efe4] outline-none transition hover:border-[#536143] focus-visible:border-[#536143] focus-visible:ring-2 focus-visible:ring-[#d7c895]"
               >
                 <option value="all">Wszystkie</option>
-                <option value="active">Aktywne</option>
-                <option value="hidden">Ukryte</option>
+                <option value="upcoming">Nadchodzące</option>
+                <option value="past">Minione</option>
+                <option value="inactive">Nieaktywne</option>
               </select>
             </label>
           </div>
@@ -1731,11 +1723,7 @@ export default function AdminEventsPage() {
 
         {visibleEvents.length === 0 && !loading ? (
           <div className="rounded-xl border border-[#30372c] bg-[#191e19] p-6 text-[#a9ada4]">
-            {eventStatusFilter === "active"
-              ? "Brak aktywnych szkoleń."
-              : eventStatusFilter === "hidden"
-                ? "Brak ukrytych szkoleń."
-                : "Brak szkoleń."}
+            {eventScope === "upcoming" ? "Brak nadchodzących szkoleń." : eventScope === "past" ? "Brak minionych szkoleń." : eventScope === "inactive" ? "Brak nieaktywnych szkoleń." : "Brak szkoleń."}
           </div>
         ) : (
           <div className="grid gap-6">
@@ -1743,14 +1731,11 @@ export default function AdminEventsPage() {
             const selectedRegistrations =
               selectedEventId === event.id ? registrations : [];
 
-            const activeRegistrationsCount =
-              getPaidRegistrationsCount(selectedRegistrations);
+            const activeRegistrationsCount = selectedEventId===event.id ? participantSummary.registeredCount : 0;
 
-            const reserveRegistrationsCount =
-              getReserveRegistrationsCount(selectedRegistrations);
+            const reserveRegistrationsCount = selectedEventId===event.id ? participantSummary.reserveCount : 0;
 
-            const cancelledRegistrationsCount =
-              getCancelledRegistrationsCount(selectedRegistrations);
+            const cancelledRegistrationsCount = selectedEventId===event.id ? participantSummary.cancelledCount : 0;
 
             const participantRegistrations =
               getParticipantRegistrations(selectedRegistrations);
@@ -2134,7 +2119,7 @@ export default function AdminEventsPage() {
 
                         <button
                           type="button"
-                          onClick={() => loadRegistrations(event.id)}
+                          onClick={() => openRegistrations(event.id)}
                           className="rounded-xl border border-[#30372c] bg-[#141814] px-4 py-3 text-sm font-semibold text-[#a9ada4] transition hover:border-[#536143] hover:text-[#f2efe4] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d7c895] focus-visible:ring-offset-2 focus-visible:ring-offset-[#141814]"
                         >
                           Pokaż zapisanych
@@ -2171,6 +2156,42 @@ export default function AdminEventsPage() {
                           Lista zapisanych osób
                         </h3>
 
+                        <div className="mb-5 grid gap-3 sm:grid-cols-2">
+                          <label className="flex flex-col gap-2 text-sm font-semibold text-zinc-400">
+                            Status zapisu
+                            <select
+                              value={participantStatus}
+                              onChange={(event) =>
+                                updateParticipantFilters({ status: event.target.value })
+                              }
+                              className="min-h-11 rounded-xl border border-zinc-800 bg-zinc-900 px-3 text-zinc-100"
+                            >
+                              <option value="">Wszystkie</option>
+                              <option value="registered">Zapisany</option>
+                              <option value="approved">Zatwierdzony</option>
+                              <option value="reserve">Lista rezerwowa</option>
+                              <option value="cancelled">Anulowany</option>
+                            </select>
+                          </label>
+                          <label className="flex flex-col gap-2 text-sm font-semibold text-zinc-400">
+                            Status płatności
+                            <select
+                              value={participantPayment}
+                              onChange={(event) =>
+                                updateParticipantFilters({ payment: event.target.value })
+                              }
+                              className="min-h-11 rounded-xl border border-zinc-800 bg-zinc-900 px-3 text-zinc-100"
+                            >
+                              <option value="">Wszystkie</option>
+                              {PAYMENT_STATUSES.map((paymentStatus) => (
+                                <option key={paymentStatus} value={paymentStatus}>
+                                  {getPaymentStatusLabel(paymentStatus)}
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+                        </div>
+
                         {registrations.length === 0 ? (
                           <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-4 text-zinc-400">
                             Brak zapisanych osób.
@@ -2190,7 +2211,7 @@ export default function AdminEventsPage() {
                                   </div>
 
                                   <span className="rounded-full bg-green-950 px-3 py-1 text-xs font-semibold text-green-300">
-                                    {participantRegistrations.length} / {event.max_participants}
+                                    {activeRegistrationsCount} / {event.max_participants}
                                   </span>
                                 </div>
 
@@ -2334,7 +2355,7 @@ export default function AdminEventsPage() {
                                   </div>
 
                                   <span className="rounded-full bg-yellow-950 px-3 py-1 text-xs font-semibold text-yellow-300">
-                                    {reserveRegistrations.length}
+                                    {reserveRegistrationsCount}
                                   </span>
                                 </div>
 
@@ -2358,7 +2379,7 @@ export default function AdminEventsPage() {
                                       {reserveRegistrations.map((registration, index) => (
                                         <tr key={registration.id} className="border-b border-zinc-900">
                                           <td className="px-4 py-4 font-bold text-yellow-300">
-                                            #{index + 1}
+                                             #{(participantPage - 1) * EVENT_PARTICIPANT_PAGE_SIZE + index + 1}
                                           </td>
                                           <td className="px-4 py-4 font-semibold">
                                             {registration.customer_name}
@@ -2457,7 +2478,7 @@ export default function AdminEventsPage() {
                                   </div>
 
                                   <span className="rounded-full bg-red-950 px-3 py-1 text-xs font-semibold text-red-300">
-                                    {cancelledRegistrations.length}
+                                    {cancelledRegistrationsCount}
                                   </span>
                                 </div>
 
@@ -2510,6 +2531,32 @@ export default function AdminEventsPage() {
                             )}
                           </div>
                         )}
+
+                        {participantTotal > EVENT_PARTICIPANT_PAGE_SIZE && (
+                          <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-zinc-800 pt-4">
+                            <p className="text-sm text-zinc-400">
+                              Strona {participantPage} z {Math.ceil(participantTotal / EVENT_PARTICIPANT_PAGE_SIZE)}
+                            </p>
+                            <div className="flex gap-2">
+                              <button
+                                type="button"
+                                disabled={participantPage <= 1}
+                                onClick={() => updateParticipantFilters({ page: participantPage - 1 })}
+                                className="rounded-lg border border-zinc-700 px-3 py-2 text-sm disabled:opacity-40"
+                              >
+                                Poprzednia
+                              </button>
+                              <button
+                                type="button"
+                                disabled={participantPage * EVENT_PARTICIPANT_PAGE_SIZE >= participantTotal}
+                                onClick={() => updateParticipantFilters({ page: participantPage + 1 })}
+                                className="rounded-lg border border-zinc-700 px-3 py-2 text-sm disabled:opacity-40"
+                              >
+                                Następna
+                              </button>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     )}
                   </>
@@ -2517,6 +2564,32 @@ export default function AdminEventsPage() {
               </div>
             );
             })}
+          </div>
+        )}
+
+        {eventTotal > EVENT_LIST_PAGE_SIZE && (
+          <div className="mt-6 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[#30372c] bg-[#191e19] p-4">
+            <p className="text-sm text-[#a9ada4]">
+              Strona {eventPage} z {Math.ceil(eventTotal / EVENT_LIST_PAGE_SIZE)}
+            </p>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                disabled={eventPage <= 1}
+                onClick={() => updateEventFilters({ page: eventPage - 1 })}
+                className="rounded-lg border border-[#536143] px-3 py-2 text-sm disabled:opacity-40"
+              >
+                Poprzednia
+              </button>
+              <button
+                type="button"
+                disabled={eventPage * EVENT_LIST_PAGE_SIZE >= eventTotal}
+                onClick={() => updateEventFilters({ page: eventPage + 1 })}
+                className="rounded-lg border border-[#536143] px-3 py-2 text-sm disabled:opacity-40"
+              >
+                Następna
+              </button>
+            </div>
           </div>
         )}
 

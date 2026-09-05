@@ -5,11 +5,16 @@ import { supabase } from "../../lib/supabase";
 import { reportClientError } from "../../lib/safe-client-error";
 import {
   getPublicRegistrationAvailability,
-  parsePublicEventAvailability,
   type PublicEventAvailability,
 } from "../../lib/public-event-availability";
 import { getEventRegistrationStatusPresentation } from "../../lib/event-registration-status";
 import { hasWarsawEventStarted } from "../../lib/event-time";
+import {
+  buildEventSearchParams,
+  EVENT_LIST_PAGE_SIZE,
+  parsePageNumber,
+  parsePublicEventList,
+} from "../../lib/event-read-contracts";
 
 type Event = PublicEventAvailability;
 
@@ -77,26 +82,31 @@ function getAlreadyRegisteredMessage(code: string) {
   return "Masz już aktywny zapis na to szkolenie.";
 }
 
-async function fetchPublicEvents() {
+async function fetchPublicEvents(search: string, page: number) {
   const { data, error } = await supabase.rpc(
-    "get_public_event_availability_v1"
+    "get_public_event_list_v2",
+    { p_search: search || null, p_scope: "upcoming", p_page: page, p_page_size: EVENT_LIST_PAGE_SIZE }
   );
 
   if (error) {
     return { events: null, error };
   }
 
-  const events = parsePublicEventAvailability(data);
+  const result = parsePublicEventList(data);
 
-  return events
-    ? { events, error: null }
-    : { events: null, error: new Error("Invalid public event response") };
+  return result
+    ? { result, error: null }
+    : { result: null, error: new Error("Invalid public event response") };
 }
 
 export default function EventsPage() {
   const [events, setEvents] = useState<Event[]>([]);
   const [selectedEventId, setSelectedEventId] = useState("");
   const [loading, setLoading] = useState(true);
+  const [filtersReady, setFiltersReady] = useState(false);
+  const [search, setSearch] = useState("");
+  const [page, setPage] = useState(1);
+  const [totalEvents, setTotalEvents] = useState(0);
   const [loadError, setLoadError] = useState(false);
   const [message, setMessage] = useState("");
   const [messageIsInformation, setMessageIsInformation] = useState(false);
@@ -128,17 +138,41 @@ export default function EventsPage() {
   }, [registrationSuccess]);
 
   useEffect(() => {
+    const applyUrl = () => {
+      const params = new URLSearchParams(window.location.search);
+      const parsedPage = parsePageNumber(params.get("page"));
+      const parsedSearch = (params.get("q") ?? "").trim();
+      if (parsedPage === null || parsedSearch.length > 100) {
+        setLoadError(true);
+        setLoading(false);
+        setFiltersReady(false);
+        return;
+      }
+      setSearch(parsedSearch);
+      setPage(parsedPage);
+      setFiltersReady(true);
+    };
+    applyUrl();
+    window.addEventListener("popstate", applyUrl);
+    return () => window.removeEventListener("popstate", applyUrl);
+  }, []);
+
+  useEffect(() => {
+    if (!filtersReady) return;
+    let active = true;
     async function loadData() {
+      setLoading(true);
+      setLoadError(false);
       const {
         data: { user },
       } = await supabase.auth.getUser();
 
-      if (user) {
-        setUserId(user.id);
-      }
+      if (!active) return;
+      setUserId(user?.id ?? "");
 
-      const { events: publicEvents, error } = await fetchPublicEvents();
+      const { result, error } = await fetchPublicEvents(search, page);
 
+      if (!active) return;
       setLoading(false);
 
       if (error) {
@@ -147,11 +181,22 @@ export default function EventsPage() {
         return;
       }
 
-      setEvents(publicEvents ?? []);
+      setEvents(result?.items ?? []);
+      setTotalEvents(result?.total ?? 0);
+      setSelectedEventId("");
     }
 
-    loadData();
-  }, []);
+    void loadData();
+    return () => { active = false; };
+  }, [filtersReady, page, search]);
+
+  function updateList(searchValue: string, pageValue = 1) {
+    const params = buildEventSearchParams({ q: searchValue, page: pageValue });
+    const query = params.toString();
+    window.history.pushState(null, "", `${window.location.pathname}${query ? `?${query}` : ""}`);
+    setSearch(searchValue);
+    setPage(pageValue);
+  }
 
   function getEventStatus(eventItem: Event) {
     if (hasWarsawEventStarted(eventItem.event_date, eventItem.start_time)) {
@@ -305,14 +350,15 @@ export default function EventsPage() {
         console.error("Event registration confirmation request failed");
       }
 
-      const { events: refreshedEvents, error: refreshError } =
-        await fetchPublicEvents();
+      const { result: refreshedResult, error: refreshError } =
+        await fetchPublicEvents(search, page);
 
-      if (refreshError || !refreshedEvents) {
+      if (refreshError || !refreshedResult) {
         reportClientError("Public event availability refresh failed", refreshError);
         setLoadError(true);
       } else {
-        setEvents(refreshedEvents);
+        setEvents(refreshedResult.items);
+        setTotalEvents(refreshedResult.total);
       }
 
       setRegistrationConfirmation(null);
@@ -763,6 +809,17 @@ export default function EventsPage() {
           </div>
         )}
 
+        <section className="mb-6 rounded-2xl border border-[#30372c] bg-[#191e19] p-4" aria-label="Filtry szkoleń">
+          <label htmlFor="public-event-search" className="mb-2 block text-sm font-semibold text-[#f2efe4]">Szukaj szkolenia</label>
+          <div className="flex flex-col gap-3 sm:flex-row">
+            <input id="public-event-search" type="search" value={search} maxLength={100}
+              onChange={(event) => updateList(event.target.value, 1)}
+              placeholder="Nazwa szkolenia"
+              className="min-h-11 min-w-0 flex-1 rounded-xl border border-[#3b4237] bg-[#090b09] px-4 py-3 text-[#f2efe4]" />
+            {search ? <button type="button" onClick={() => updateList("", 1)} className="min-h-11 rounded-xl border border-[#495044] px-4 py-2 font-semibold">Wyczyść</button> : null}
+          </div>
+        </section>
+
         {loading && (
           <div
             role="status"
@@ -900,6 +957,12 @@ export default function EventsPage() {
                 <EventDetails event={selectedEvent} />
               </section>
             )}
+
+            <nav className="mt-6 flex flex-wrap items-center justify-between gap-3" aria-label="Stronicowanie szkoleń">
+              <button type="button" disabled={page <= 1} onClick={() => updateList(search, page - 1)} className="min-h-11 rounded-xl border border-[#495044] px-4 py-2 font-semibold disabled:opacity-50">Poprzednia</button>
+              <span className="text-sm text-[#a9ada4]">Strona {page} z {Math.max(1, Math.ceil(totalEvents / EVENT_LIST_PAGE_SIZE))} · {totalEvents} szkoleń</span>
+              <button type="button" disabled={page * EVENT_LIST_PAGE_SIZE >= totalEvents} onClick={() => updateList(search, page + 1)} className="min-h-11 rounded-xl border border-[#495044] px-4 py-2 font-semibold disabled:opacity-50">Następna</button>
+            </nav>
           </section>
         )}
 
