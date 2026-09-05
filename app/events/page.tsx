@@ -3,24 +3,13 @@
 import { useEffect, useRef, useState } from "react";
 import { supabase } from "../../lib/supabase";
 import { reportClientError } from "../../lib/safe-client-error";
+import {
+  getPublicRegistrationAvailability,
+  parsePublicEventAvailability,
+  type PublicEventAvailability,
+} from "../../lib/public-event-availability";
 
-type EventRegistration = {
-  id: string;
-  registration_status: string;
-};
-
-type Event = {
-  id: string;
-  title: string;
-  description: string;
-  event_date: string;
-  start_time: string;
-  end_time: string;
-  location: string;
-  price: number;
-  max_participants: number;
-  event_registrations?: EventRegistration[];
-};
+type Event = PublicEventAvailability;
 
 type RegistrationSuccess = {
   title: string;
@@ -86,6 +75,22 @@ function getAlreadyRegisteredMessage(code: string) {
   return "Masz już aktywny zapis na to szkolenie.";
 }
 
+async function fetchPublicEvents() {
+  const { data, error } = await supabase.rpc(
+    "get_public_event_availability_v1"
+  );
+
+  if (error) {
+    return { events: null, error };
+  }
+
+  const events = parsePublicEventAvailability(data);
+
+  return events
+    ? { events, error: null }
+    : { events: null, error: new Error("Invalid public event response") };
+}
+
 export default function EventsPage() {
   const [events, setEvents] = useState<Event[]>([]);
   const [selectedEventId, setSelectedEventId] = useState("");
@@ -130,32 +135,7 @@ export default function EventsPage() {
         setUserId(user.id);
       }
 
-      const publicEventFields = `
-        id,
-        title,
-        description,
-        event_date,
-        start_time,
-        end_time,
-        location,
-        price,
-        max_participants
-      `;
-
-      const eventFields = user
-        ? `${publicEventFields},
-          event_registrations (
-            id,
-            registration_status
-          )
-        `
-        : publicEventFields;
-
-      const { data, error } = await supabase
-        .from("events")
-        .select(eventFields)
-        .eq("is_active", true)
-        .order("event_date", { ascending: true });
+      const { events: publicEvents, error } = await fetchPublicEvents();
 
       setLoading(false);
 
@@ -165,31 +145,17 @@ export default function EventsPage() {
         return;
       }
 
-      setEvents((data as any) ?? []);
+      setEvents(publicEvents ?? []);
     }
 
     loadData();
   }, []);
 
-  function getParticipantsCount(eventItem: Event) {
-    return (eventItem.event_registrations ?? []).filter(
-      (registration) =>
-        registration.registration_status !== "cancelled" &&
-        registration.registration_status !== "reserve"
-    ).length;
-  }
-
-  function getReserveCount(eventItem: Event) {
-    return (eventItem.event_registrations ?? []).filter(
-      (registration) => registration.registration_status === "reserve"
-    ).length;
-  }
-
   function getEventStatus(eventItem: Event) {
-    const participantsCount = getParticipantsCount(eventItem);
-    const freePlaces = eventItem.max_participants - participantsCount;
+    const { directlyAvailableSpots } =
+      getPublicRegistrationAvailability(eventItem);
 
-    if (freePlaces <= 0) {
+    if (directlyAvailableSpots <= 0) {
       return {
         label: "Pełne",
         className:
@@ -197,7 +163,7 @@ export default function EventsPage() {
       };
     }
 
-    if (freePlaces <= 3) {
+    if (directlyAvailableSpots <= 3) {
       return {
         label: "Ostatnie miejsca",
         className:
@@ -321,22 +287,15 @@ export default function EventsPage() {
         console.error("Event registration confirmation request failed");
       }
 
-      setEvents((currentEvents) =>
-        currentEvents.map((event) =>
-          event.id === eventItem.id
-            ? {
-                ...event,
-                event_registrations: [
-                  ...(event.event_registrations ?? []),
-                  {
-                    id: registrationResult.registrationId,
-                    registration_status: registrationStatus,
-                  },
-                ],
-              }
-            : event
-        )
-      );
+      const { events: refreshedEvents, error: refreshError } =
+        await fetchPublicEvents();
+
+      if (refreshError || !refreshedEvents) {
+        reportClientError("Public event availability refresh failed", refreshError);
+        setLoadError(true);
+      } else {
+        setEvents(refreshedEvents);
+      }
 
       setRegistrationConfirmation(null);
       setRegistrationSuccess({
@@ -387,20 +346,12 @@ export default function EventsPage() {
   const selectedEvent = events.find((event) => event.id === selectedEventId);
 
   function EventDetails({ event }: { event: Event }) {
-    const participantsCount = isLoggedIn ? getParticipantsCount(event) : null;
-    const reserveCount = isLoggedIn ? getReserveCount(event) : null;
-    const freePlaces =
-      participantsCount === null
-        ? null
-        : event.max_participants - participantsCount;
-    const hasReserveList = reserveCount !== null && reserveCount > 0;
-    const publicFreePlaces =
-      freePlaces === null
-        ? null
-        : hasReserveList
-          ? 0
-          : Math.max(freePlaces, 0);
-    const isFull = publicFreePlaces !== null && publicFreePlaces <= 0;
+    const participantsCount = isLoggedIn ? event.registered_count : null;
+    const reserveCount = isLoggedIn ? event.reserve_count : null;
+    const { directlyAvailableSpots, requiresReserveList } =
+      getPublicRegistrationAvailability(event);
+    const publicFreePlaces = isLoggedIn ? directlyAvailableSpots : null;
+    const isFull = isLoggedIn && requiresReserveList;
     const status = isLoggedIn ? getEventStatus(event) : null;
 
     return (
@@ -842,10 +793,10 @@ export default function EventsPage() {
             <div className="grid gap-3">
               {events.map((event) => {
                 const participantsCount = isLoggedIn
-                  ? getParticipantsCount(event)
+                  ? event.registered_count
                   : null;
                 const reserveCount = isLoggedIn
-                  ? getReserveCount(event)
+                  ? event.reserve_count
                   : null;
                 const status = isLoggedIn ? getEventStatus(event) : null;
                 const isSelected = selectedEventId === event.id;
