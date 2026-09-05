@@ -1,7 +1,7 @@
 ﻿"use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import AdminShell from "../_components/AdminShell";
 import {
   getPaymentStatusBadgeClass,
@@ -13,13 +13,19 @@ import {
 } from "../../../lib/reservation-status";
 import { supabase } from "../../../lib/supabase";
 import {
-  getReportDateRange,
+  buildAdminReservationCsv,
+  buildReportSearchParams,
+  countReportDaysInclusive,
   getWarsawToday,
   parseAdminReservationReport,
+  parseAdminReservationExport,
+  parseReportFiltersFromSearchParams,
+  reportFiltersEqual,
   REPORT_DETAIL_PAGE_SIZE,
+  REPORT_EXPORT_MAX_ROWS,
+  type AdminReportFilters,
   type AdminReservationReport,
   type ReportDetail,
-  type ReportMode,
 } from "../../../lib/admin/reports";
 import { reportClientError } from "../../../lib/safe-client-error";
 
@@ -34,20 +40,54 @@ function formatTimeRange(startTime: string, endTime: string) {
 export default function AdminReportsPage() {
   const today = getWarsawToday();
 
-  const [reportMode, setReportMode] = useState<ReportMode>("day");
-  const [selectedDate, setSelectedDate] = useState(today);
+  const [filters, setFilters] = useState<AdminReportFilters>({
+    startDate: today,
+    endDate: today,
+    resourceId: null,
+    reservationStatus: null,
+    paymentStatus: null,
+    bookingType: null,
+  });
+  const [filtersReady, setFiltersReady] = useState(false);
   const [report, setReport] = useState<AdminReservationReport | null>(null);
   const [detailOffset, setDetailOffset] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [exporting, setExporting] = useState(false);
   const [hasAccess, setHasAccess] = useState(false);
   const [reportReady, setReportReady] = useState(false);
   const [message, setMessage] = useState("");
+  const [exportMessage, setExportMessage] = useState("");
   const reportRequestRef = useRef(0);
 
-  const range = useMemo(
-    () => getReportDateRange(reportMode, selectedDate),
-    [reportMode, selectedDate],
-  );
+  useEffect(() => {
+    const applyUrlFilters = () => {
+      const parsed = parseReportFiltersFromSearchParams(
+        new URLSearchParams(window.location.search),
+        today,
+      );
+      if (!parsed.ok) {
+        setMessage("Nieprawidłowe filtry raportu w adresie strony.");
+        setLoading(false);
+        setFiltersReady(false);
+        return;
+      }
+      setDetailOffset(0);
+      setFilters(parsed.filters);
+      setFiltersReady(true);
+    };
+    applyUrlFilters();
+    window.addEventListener("popstate", applyUrlFilters);
+    return () => window.removeEventListener("popstate", applyUrlFilters);
+  }, [today]);
+
+  const updateFilters = (changes: Partial<AdminReportFilters>) => {
+    setDetailOffset(0);
+    setExportMessage("");
+    const next = { ...filters, ...changes };
+    const query = buildReportSearchParams(next).toString();
+    window.history.pushState(null, "", `${window.location.pathname}?${query}`);
+    setFilters(next);
+  };
 
   const loadReport = useCallback(async () => {
     const requestId = ++reportRequestRef.current;
@@ -55,9 +95,9 @@ export default function AdminReportsPage() {
     setMessage("");
     setHasAccess(false);
     setReportReady(false);
-    setReport(null);
 
-    if (!range) {
+    const days = countReportDaysInclusive(filters.startDate, filters.endDate);
+    if (days === null || days > 366) {
       setMessage("Nieprawidłowy zakres raportu.");
       setLoading(false);
       return;
@@ -97,10 +137,14 @@ export default function AdminReportsPage() {
     setHasAccess(true);
 
     const { data, error } = await supabase.rpc(
-      "admin_get_reservation_report_v1",
+      "admin_get_reservation_report_v2",
       {
-        p_start_date: range.startDate,
-        p_end_date: range.endDate,
+        p_start_date: filters.startDate,
+        p_end_date: filters.endDate,
+        p_resource_id: filters.resourceId,
+        p_reservation_status: filters.reservationStatus,
+        p_payment_status: filters.paymentStatus,
+        p_booking_type: filters.bookingType,
         p_detail_limit: REPORT_DETAIL_PAGE_SIZE,
         p_detail_offset: detailOffset,
       },
@@ -116,7 +160,7 @@ export default function AdminReportsPage() {
     }
 
     const parsedReport = parseAdminReservationReport(data);
-    if (!parsedReport) {
+    if (!parsedReport || !reportFiltersEqual(parsedReport.filters, filters)) {
       setMessage("Nie udało się pobrać kompletnego zestawu danych raportu.");
       setLoading(false);
       return;
@@ -125,13 +169,60 @@ export default function AdminReportsPage() {
     setReport(parsedReport);
     setReportReady(true);
     setLoading(false);
-  }, [detailOffset, range]);
+  }, [detailOffset, filters]);
 
   useEffect(() => {
     // Report data is an external Supabase resource synchronized to the selected range.
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    void loadReport();
-  }, [loadReport]);
+    if (filtersReady) void loadReport();
+  }, [filtersReady, loadReport]);
+
+  const exportCsv = async () => {
+    const exportFilters = filters;
+    setExporting(true);
+    setExportMessage("");
+    const { data, error } = await supabase.rpc(
+      "admin_get_reservation_report_export_v1",
+      {
+        p_start_date: exportFilters.startDate,
+        p_end_date: exportFilters.endDate,
+        p_resource_id: exportFilters.resourceId,
+        p_reservation_status: exportFilters.reservationStatus,
+        p_payment_status: exportFilters.paymentStatus,
+        p_booking_type: exportFilters.bookingType,
+      },
+    );
+    if (error) {
+      reportClientError("Admin reservation report export failed", error);
+      setExportMessage("Nie udało się przygotować eksportu CSV.");
+      setExporting(false);
+      return;
+    }
+    const parsed = parseAdminReservationExport(data);
+    if (!parsed) {
+      setExportMessage("Nie udało się przygotować eksportu CSV.");
+      setExporting(false);
+      return;
+    }
+    if (!parsed.ok) {
+      setExportMessage(
+        `Eksport obejmuje ${parsed.total} rekordów. Zawęź filtry do maksymalnie ${REPORT_EXPORT_MAX_ROWS}.`,
+      );
+      setExporting(false);
+      return;
+    }
+    const blob = new Blob([buildAdminReservationCsv(parsed.export.rows)], {
+      type: "text/csv;charset=utf-8",
+    });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `rezerwacje-${exportFilters.startDate}-${exportFilters.endDate}.csv`;
+    anchor.click();
+    URL.revokeObjectURL(url);
+    setExportMessage(`Wyeksportowano ${parsed.export.total} rekordów.`);
+    setExporting(false);
+  };
 
 
   const reservations: ReportDetail[] = report?.details ?? [];
@@ -159,51 +250,76 @@ export default function AdminReportsPage() {
             <p className="text-xs font-bold uppercase tracking-[0.25em] text-[#d7c895]">Parametry raportu</p>
             <h2 id="report-range-heading" className="mt-2 text-xl font-bold">Zakres raportu</h2>
           </div>
-          <div className="grid gap-5 md:grid-cols-2">
+          <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
           <div>
-            <label htmlFor="report-mode" className="mb-2 block text-sm font-semibold text-[#d8dbd3]">
-              Zakres raportu
+            <label htmlFor="report-from" className="mb-2 block text-sm font-semibold text-[#d8dbd3]">
+              Data od
             </label>
-
-            <select
-              id="report-mode"
-              value={reportMode}
-              onChange={(event) => {
-                setDetailOffset(0);
-                setReportMode(event.target.value as ReportMode);
-              }}
-              className="min-h-11 w-full rounded-xl border border-[#3b4237] bg-[#090b09] px-4 py-3 text-[#f2efe4] outline-none focus:border-[#8b986f] focus-visible:ring-2 focus-visible:ring-[#8b986f]/30"
-            >
-              <option value="day">Dzień</option>
-              <option value="week">Tydzień</option>
-              <option value="month">Miesiąc</option>
-              <option value="year">Rok</option>
-            </select>
-          </div>
-
-          <div>
-            <label htmlFor="report-date" className="mb-2 block text-sm font-semibold text-[#d8dbd3]">
-              Data odniesienia
-            </label>
-
             <input
-              id="report-date"
+              id="report-from"
               type="date"
-              value={selectedDate}
+              value={filters.startDate}
               onChange={(event) => {
-                setDetailOffset(0);
-                setSelectedDate(event.target.value);
+                updateFilters({ startDate: event.target.value });
               }}
               className="min-h-11 w-full rounded-xl border border-[#3b4237] bg-[#090b09] px-4 py-3 text-[#f2efe4] outline-none focus:border-[#8b986f] focus-visible:ring-2 focus-visible:ring-[#8b986f]/30"
             />
           </div>
 
-          <div className="rounded-xl border border-[#30372c] bg-[#090b09] p-4 text-sm text-[#a9ada4] md:col-span-2">
-            Wybrany zakres:{" "}
-            <span className="font-semibold text-[#c7d6b2]">
-              {range ? `${range.startDate} - ${range.endDate}` : "Nieprawidłowy"}
-            </span>
+          <div>
+            <label htmlFor="report-to" className="mb-2 block text-sm font-semibold text-[#d8dbd3]">
+              Data do
+            </label>
+            <input
+              id="report-to"
+              type="date"
+              value={filters.endDate}
+              onChange={(event) => {
+                updateFilters({ endDate: event.target.value });
+              }}
+              className="min-h-11 w-full rounded-xl border border-[#3b4237] bg-[#090b09] px-4 py-3 text-[#f2efe4] outline-none focus:border-[#8b986f] focus-visible:ring-2 focus-visible:ring-[#8b986f]/30"
+            />
           </div>
+
+          <div>
+            <label htmlFor="report-resource" className="mb-2 block text-sm font-semibold text-[#d8dbd3]">Oś lub stanowisko</label>
+            <select id="report-resource" value={filters.resourceId ?? ""} onChange={(event) => updateFilters({ resourceId: event.target.value || null })} className="min-h-11 w-full rounded-xl border border-[#3b4237] bg-[#090b09] px-4 py-3 text-[#f2efe4]">
+              <option value="">Wszystkie zasoby</option>
+              {report?.filterOptions.resources.map((resource) => (
+                <option key={resource.id} value={resource.id}>{resource.displayName}</option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label htmlFor="report-status" className="mb-2 block text-sm font-semibold text-[#d8dbd3]">Status rezerwacji</label>
+            <select id="report-status" value={filters.reservationStatus ?? ""} onChange={(event) => updateFilters({ reservationStatus: (event.target.value || null) as AdminReportFilters["reservationStatus"] })} className="min-h-11 w-full rounded-xl border border-[#3b4237] bg-[#090b09] px-4 py-3 text-[#f2efe4]">
+              <option value="">Wszystkie statusy</option>
+              <option value="confirmed">Potwierdzone</option><option value="completed">Zakończone</option><option value="cancelled">Anulowane</option><option value="no_show">Nieobecności</option>
+            </select>
+          </div>
+
+          <div>
+            <label htmlFor="report-payment" className="mb-2 block text-sm font-semibold text-[#d8dbd3]">Status płatności</label>
+            <select id="report-payment" value={filters.paymentStatus ?? ""} onChange={(event) => updateFilters({ paymentStatus: (event.target.value || null) as AdminReportFilters["paymentStatus"] })} className="min-h-11 w-full rounded-xl border border-[#3b4237] bg-[#090b09] px-4 py-3 text-[#f2efe4]">
+              <option value="">Wszystkie płatności</option>
+              <option value="paid">Opłacone</option><option value="paid_on_site">Opłacone na miejscu</option><option value="unpaid">Nieopłacone</option><option value="pay_on_site">Płatność na miejscu</option><option value="free">Gratis</option><option value="voucher">Voucher</option>
+            </select>
+          </div>
+
+          <div>
+            <label htmlFor="report-type" className="mb-2 block text-sm font-semibold text-[#d8dbd3]">Typ rezerwacji</label>
+            <select id="report-type" value={filters.bookingType ?? ""} onChange={(event) => updateFilters({ bookingType: (event.target.value || null) as AdminReportFilters["bookingType"] })} className="min-h-11 w-full rounded-xl border border-[#3b4237] bg-[#090b09] px-4 py-3 text-[#f2efe4]">
+              <option value="">Wszystkie typy</option><option value="whole_lane">Cała oś</option><option value="single_position">Pojedyncze stanowisko</option>
+            </select>
+          </div>
+
+          <div className="flex flex-col gap-3 md:col-span-2 xl:col-span-3 sm:flex-row">
+            <button type="button" onClick={() => updateFilters({ startDate: today, endDate: today, resourceId: null, reservationStatus: null, paymentStatus: null, bookingType: null })} className="min-h-11 rounded-xl border border-[#495044] px-5 py-3 text-sm font-semibold">Wyczyść filtry</button>
+            <button type="button" disabled={!reportReady || exporting} onClick={() => void exportCsv()} className="min-h-11 rounded-xl border border-[#8b986f] bg-[#1b211b] px-5 py-3 text-sm font-semibold text-[#e8eddc] disabled:opacity-50">{exporting ? "Przygotowywanie CSV..." : "Eksportuj CSV"}</button>
+          </div>
+
+          {exportMessage ? <p role="status" className="text-sm text-[#c7d6b2] md:col-span-2 xl:col-span-3">{exportMessage}</p> : null}
           </div>
         </section>
 

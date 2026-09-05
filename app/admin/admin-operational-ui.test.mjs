@@ -24,7 +24,7 @@ test("reports retain calculations and use a local scroll region for the detailed
   const content = await source("./reports/page.tsx");
 
   assert.match(content, /<AdminShell/);
-  assert.match(content, /admin_get_reservation_report_v1/);
+  assert.match(content, /admin_get_reservation_report_v2/);
   assert.match(content, /parseAdminReservationReport/);
   assert.match(content, /summary\.plannedRevenue/);
   assert.match(content, /summary\.paidRevenue/);

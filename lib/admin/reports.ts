@@ -7,6 +7,50 @@ export const REPORT_OPENING_END = "20:00";
 export const REPORT_OPEN_MINUTES_PER_DAY = 12 * 60;
 export const REPORT_DETAIL_PAGE_SIZE = 50;
 export const REPORT_MAX_RANGE_DAYS = 366;
+export const REPORT_EXPORT_MAX_ROWS = 5000;
+
+export const REPORT_RESERVATION_STATUS_FILTERS = [
+  "confirmed",
+  "completed",
+  "cancelled",
+  "no_show",
+] as const;
+export const REPORT_PAYMENT_STATUS_FILTERS = [
+  "pay_on_site",
+  "paid",
+  "paid_on_site",
+  "unpaid",
+  "free",
+  "voucher",
+] as const;
+export const REPORT_BOOKING_TYPE_FILTERS = [
+  "whole_lane",
+  "single_position",
+] as const;
+
+export type ReportReservationStatusFilter =
+  (typeof REPORT_RESERVATION_STATUS_FILTERS)[number];
+export type ReportPaymentStatusFilter =
+  (typeof REPORT_PAYMENT_STATUS_FILTERS)[number];
+export type ReportBookingTypeFilter =
+  (typeof REPORT_BOOKING_TYPE_FILTERS)[number];
+
+export type AdminReportFilters = {
+  startDate: string;
+  endDate: string;
+  resourceId: string | null;
+  reservationStatus: ReportReservationStatusFilter | null;
+  paymentStatus: ReportPaymentStatusFilter | null;
+  bookingType: ReportBookingTypeFilter | null;
+};
+
+export type ReportFilterResource = {
+  id: string;
+  name: string;
+  resourceKind: "lane" | "position";
+  parentLaneId: string | null;
+  displayName: string;
+};
 
 export type ReportMode = "day" | "week" | "month" | "year";
 
@@ -58,6 +102,9 @@ export type ReportDetail = {
 };
 
 export type AdminReservationReport = {
+  contractVersion: 2;
+  filters: AdminReportFilters;
+  filterOptions: { resources: ReportFilterResource[] };
   range: {
     startDate: string;
     endDate: string;
@@ -94,6 +141,23 @@ export type AdminReservationReport = {
     positionParentNameBasis: "current_configuration";
     capacityBasis: "current_configuration";
   };
+};
+
+export type AdminReservationExportRow = {
+  reservationDate: string;
+  startTime: string;
+  endTime: string;
+  resourceLabel: string;
+  bookingType: ReportBookingTypeFilter;
+  reservationStatus: string;
+  paymentStatus: string;
+  totalPrice: number;
+};
+
+export type AdminReservationExport = {
+  rows: AdminReservationExportRow[];
+  total: number;
+  maxRows: typeof REPORT_EXPORT_MAX_ROWS;
 };
 
 const DATE_PATTERN = /^(\d{4})-(\d{2})-(\d{2})$/;
@@ -155,6 +219,88 @@ function validTime(value: unknown): value is string {
 
 function formatTime(value: string) {
   return value.slice(0, 5);
+}
+
+function isOneOf<T extends readonly string[]>(
+  value: unknown,
+  allowed: T,
+): value is T[number] {
+  return typeof value === "string" && allowed.includes(value);
+}
+
+function nullableFilter<T extends readonly string[]>(
+  value: unknown,
+  allowed: T,
+): value is T[number] | null {
+  return value === null || isOneOf(value, allowed);
+}
+
+type SearchParamsReader = { get(name: string): string | null };
+
+export function parseReportFiltersFromSearchParams(
+  params: SearchParamsReader,
+  defaultDate: string,
+): { ok: true; filters: AdminReportFilters } | { ok: false } {
+  if (!parseDate(defaultDate)) return { ok: false };
+
+  const startDate = params.get("from") ?? defaultDate;
+  const endDate = params.get("to") ?? defaultDate;
+  const resourceId = params.get("lane") || null;
+  const reservationStatus = params.get("status") || null;
+  const paymentStatus = params.get("payment") || null;
+  const bookingType = params.get("type") || null;
+  const days = countReportDaysInclusive(startDate, endDate);
+
+  if (
+    days === null ||
+    days > REPORT_MAX_RANGE_DAYS ||
+    (resourceId !== null && !UUID_PATTERN.test(resourceId)) ||
+    !nullableFilter(
+      reservationStatus,
+      REPORT_RESERVATION_STATUS_FILTERS,
+    ) ||
+    !nullableFilter(paymentStatus, REPORT_PAYMENT_STATUS_FILTERS) ||
+    !nullableFilter(bookingType, REPORT_BOOKING_TYPE_FILTERS)
+  ) {
+    return { ok: false };
+  }
+
+  return {
+    ok: true,
+    filters: {
+      startDate,
+      endDate,
+      resourceId,
+      reservationStatus,
+      paymentStatus,
+      bookingType,
+    },
+  };
+}
+
+export function buildReportSearchParams(filters: AdminReportFilters) {
+  const params = new URLSearchParams();
+  params.set("from", filters.startDate);
+  params.set("to", filters.endDate);
+  if (filters.resourceId) params.set("lane", filters.resourceId);
+  if (filters.reservationStatus) params.set("status", filters.reservationStatus);
+  if (filters.paymentStatus) params.set("payment", filters.paymentStatus);
+  if (filters.bookingType) params.set("type", filters.bookingType);
+  return params;
+}
+
+export function reportFiltersEqual(
+  left: AdminReportFilters,
+  right: AdminReportFilters,
+) {
+  return (
+    left.startDate === right.startDate &&
+    left.endDate === right.endDate &&
+    left.resourceId === right.resourceId &&
+    left.reservationStatus === right.reservationStatus &&
+    left.paymentStatus === right.paymentStatus &&
+    left.bookingType === right.bookingType
+  );
 }
 
 export function getWarsawToday(now = new Date()) {
@@ -267,12 +413,15 @@ export function parseAdminReservationReport(
 ): AdminReservationReport | null {
   if (!isRecord(value) || value.ok !== true || value.code !== "ok") return null;
   if (
-    value.contract_version !== 1 ||
+    value.contract_version !== 2 ||
     !isRecord(value.range) ||
     !isRecord(value.summary) ||
     !Array.isArray(value.details) ||
     !isRecord(value.pagination) ||
-    !isRecord(value.history)
+    !isRecord(value.history) ||
+    !isRecord(value.filters) ||
+    !isRecord(value.filter_options) ||
+    !Array.isArray(value.filter_options.resources)
   ) {
     return null;
   }
@@ -281,7 +430,33 @@ export function parseAdminReservationReport(
   const summary = value.summary;
   const pagination = value.pagination;
   const history = value.history;
+  const filters = value.filters;
   const details = value.details.map(parseDetail);
+  const resources = value.filter_options.resources.map((resource) => {
+    if (
+      !isRecord(resource) ||
+      typeof resource.id !== "string" ||
+      !UUID_PATTERN.test(resource.id) ||
+      typeof resource.name !== "string" ||
+      !resource.name.trim() ||
+      (resource.resource_kind !== "lane" &&
+        resource.resource_kind !== "position") ||
+      (resource.parent_lane_id !== null &&
+        (typeof resource.parent_lane_id !== "string" ||
+          !UUID_PATTERN.test(resource.parent_lane_id))) ||
+      typeof resource.display_name !== "string" ||
+      !resource.display_name.trim()
+    ) {
+      return null;
+    }
+    return {
+      id: resource.id,
+      name: resource.name,
+      resourceKind: resource.resource_kind,
+      parentLaneId: resource.parent_lane_id,
+      displayName: resource.display_name,
+    } satisfies ReportFilterResource;
+  });
   const countFields = [
     summary.active_reservation_count,
     summary.completed_reservation_count,
@@ -315,11 +490,23 @@ export function parseAdminReservationReport(
     !isFiniteNonNegative(summary.paid_revenue) ||
     !isFiniteNonNegative(summary.outstanding_revenue) ||
     details.some((detail) => detail === null) ||
+    resources.some((resource) => resource === null) ||
     details.length > Number(pagination.limit) ||
     Number(pagination.offset) + details.length > Number(pagination.total) ||
     history.name_basis !== "reservation_snapshot" ||
     history.position_parent_name_basis !== "current_configuration" ||
-    history.capacity_basis !== "current_configuration"
+    history.capacity_basis !== "current_configuration" ||
+    filters.start_date !== range.start_date ||
+    filters.end_date !== range.end_date ||
+    (filters.resource_id !== null &&
+      (typeof filters.resource_id !== "string" ||
+        !UUID_PATTERN.test(filters.resource_id))) ||
+    !nullableFilter(
+      filters.reservation_status,
+      REPORT_RESERVATION_STATUS_FILTERS,
+    ) ||
+    !nullableFilter(filters.payment_status, REPORT_PAYMENT_STATUS_FILTERS) ||
+    !nullableFilter(filters.booking_type, REPORT_BOOKING_TYPE_FILTERS)
   ) {
     return null;
   }
@@ -344,6 +531,20 @@ export function parseAdminReservationReport(
   }
 
   return {
+    contractVersion: 2,
+    filters: {
+      startDate: filters.start_date as string,
+      endDate: filters.end_date as string,
+      resourceId: filters.resource_id as string | null,
+      reservationStatus:
+        filters.reservation_status as ReportReservationStatusFilter | null,
+      paymentStatus:
+        filters.payment_status as ReportPaymentStatusFilter | null,
+      bookingType: filters.booking_type as ReportBookingTypeFilter | null,
+    },
+    filterOptions: {
+      resources: resources as ReportFilterResource[],
+    },
     range: {
       startDate: range.start_date as string,
       endDate: range.end_date as string,
@@ -394,6 +595,115 @@ export function parseAdminReservationReport(
       capacityBasis: "current_configuration",
     },
   };
+}
+
+function parseExportRow(value: unknown): AdminReservationExportRow | null {
+  if (
+    !isRecord(value) ||
+    !parseDate(value.reservation_date) ||
+    !validTime(value.start_time) ||
+    !validTime(value.end_time) ||
+    typeof value.resource_label !== "string" ||
+    !value.resource_label.trim() ||
+    !isOneOf(value.booking_type, REPORT_BOOKING_TYPE_FILTERS) ||
+    typeof value.reservation_status !== "string" ||
+    typeof value.payment_status !== "string" ||
+    !isFiniteNonNegative(value.total_price)
+  ) {
+    return null;
+  }
+  return {
+    reservationDate: value.reservation_date as string,
+    startTime: formatTime(value.start_time),
+    endTime: formatTime(value.end_time),
+    resourceLabel: value.resource_label,
+    bookingType: value.booking_type,
+    reservationStatus: value.reservation_status,
+    paymentStatus: value.payment_status,
+    totalPrice: value.total_price,
+  };
+}
+
+export function parseAdminReservationExport(
+  value: unknown,
+):
+  | { ok: true; export: AdminReservationExport }
+  | { ok: false; code: "export_too_large"; total: number; maxRows: number }
+  | null {
+  if (!isRecord(value) || typeof value.code !== "string") return null;
+  if (value.ok === false && value.code === "export_too_large") {
+    if (
+      !isNonNegativeInteger(value.total) ||
+      value.max_rows !== REPORT_EXPORT_MAX_ROWS
+    ) {
+      return null;
+    }
+    return {
+      ok: false,
+      code: "export_too_large",
+      total: value.total,
+      maxRows: REPORT_EXPORT_MAX_ROWS,
+    };
+  }
+  if (
+    value.ok !== true ||
+    value.code !== "ok" ||
+    value.contract_version !== 1 ||
+    value.max_rows !== REPORT_EXPORT_MAX_ROWS ||
+    !isNonNegativeInteger(value.total) ||
+    !Array.isArray(value.rows) ||
+    value.rows.length !== value.total ||
+    value.rows.length > REPORT_EXPORT_MAX_ROWS
+  ) {
+    return null;
+  }
+  const rows = value.rows.map(parseExportRow);
+  if (rows.some((row) => row === null)) return null;
+  return {
+    ok: true,
+    export: {
+      rows: rows as AdminReservationExportRow[],
+      total: value.total,
+      maxRows: REPORT_EXPORT_MAX_ROWS,
+    },
+  };
+}
+
+function neutralizeCsvFormula(value: string) {
+  return /^[\u0000-\u0020]*[=+\-@]/u.test(value) ? `'${value}` : value;
+}
+
+function quoteCsvCell(value: string | number) {
+  const safe = neutralizeCsvFormula(String(value));
+  return `"${safe.replaceAll('"', '""')}"`;
+}
+
+export function buildAdminReservationCsv(rows: AdminReservationExportRow[]) {
+  const header = [
+    "Data rezerwacji",
+    "Godzina od",
+    "Godzina do",
+    "Zasób",
+    "Typ rezerwacji",
+    "Status rezerwacji",
+    "Status płatności",
+    "Kwota PLN",
+  ];
+  const body = rows.map((row) =>
+    [
+      row.reservationDate,
+      row.startTime,
+      row.endTime,
+      row.resourceLabel,
+      row.bookingType,
+      row.reservationStatus,
+      row.paymentStatus,
+      row.totalPrice,
+    ]
+      .map(quoteCsvCell)
+      .join(";"),
+  );
+  return `\uFEFF${[header.map(quoteCsvCell).join(";"), ...body].join("\r\n")}\r\n`;
 }
 
 export function calculateHierarchyUtilization(

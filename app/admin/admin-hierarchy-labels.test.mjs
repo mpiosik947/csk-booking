@@ -18,7 +18,7 @@ test("all operational admin surfaces request and resolve hierarchy metadata", as
     const content = await source(file);
 
     if (name === "Reports") {
-      assert.match(content, /admin_get_reservation_report_v1/);
+      assert.match(content, /admin_get_reservation_report_v2/);
       assert.match(content, /reservation\.laneDisplayName/);
       assert.doesNotMatch(content, /\.from\("shooting_lanes"\)/);
       continue;
@@ -59,7 +59,7 @@ test("reservations keep exports, actions and cancellation RPC while using full l
 test("reports change only the grouping label and retain totals without extra rows", async () => {
   const content = await source("./reports/page.tsx");
 
-  assert.match(content, /admin_get_reservation_report_v1/);
+  assert.match(content, /admin_get_reservation_report_v2/);
   assert.match(content, /summary\.activeReservationCount/);
   assert.match(content, /summary\.plannedRevenue/);
   assert.match(content, /summary\.topResource/);
