@@ -1229,3 +1229,70 @@ PASS
 CLEAN-004 STATUS:
 FULLY REMEDIATED / PROD PASS
 ```
+
+---
+
+# CLEAN-005 PROFILE UPDATE HARDENING PRODUCTION SMOKE
+
+**Date:** 2026-09-05
+
+**Production commit:** `fe1783b — security: harden profile updates`
+
+**Production migration:** `20260905100000_harden_profile_direct_updates.sql`
+
+The database smoke used dynamically generated UUIDs, synthetic
+`example.invalid` identities and the `[TEST][CLEAN-005]` marker. The primary
+30-check matrix ran in one transaction and ended with `ROLLBACK`. A separate
+employee positive-path transaction ended with the expected controlled
+`CLEAN005_EMPLOYEE_CONTROLLED_RPC_PASS_ROLLBACK` exception. No real customer
+record was read or changed.
+
+## Results
+
+| Check | Result | Evidence |
+|---|---|---|
+| Migration | PASS | Read-only production history check returned `migration_present = true` for `20260905100000`. |
+| Profile RLS and owner | PASS | `profiles` remains PostgreSQL-owned with RLS enabled; no direct `UPDATE` policy remains. |
+| Client table ACL | PASS | `authenticated` has profile `SELECT, INSERT` without `UPDATE`, `DELETE`, `TRUNCATE`, `REFERENCES`, `TRIGGER` or `MAINTAIN`; `anon` and `PUBLIC` have no profile table privilege. The managed `service_role` baseline is unchanged. |
+| Anonymous direct update | PASS | Direct profile `UPDATE` was denied. |
+| Ordinary-user cross-profile update | PASS | User A could not update User B. |
+| Ordinary-user self direct update | PASS | Direct self-update was denied; self service must use the allowlisted RPC. |
+| Instructor direct update | PASS | Direct arbitrary profile `UPDATE` was denied. |
+| Employee direct update | PASS | Direct arbitrary profile `UPDATE` was denied. |
+| Admin direct update | PASS | Direct changes to `role`, `verification_status`, `email`, `phone`, `user_id`, `created_at` and `admin_note` were denied. A complete before/after row comparison confirmed no field changed. |
+| Self-service RPC | PASS | `update_my_profile_v1(...)` updated only the synthetic owner's allowlisted contact/address and declaration fields. Its signature exposes no target-user or privileged-field parameter. |
+| Privileged-field integrity | PASS | Self-service left `role`, `verification_status` control, `admin_note`, `user_id`, identity key and internal timestamps outside the caller-controlled update contract. User A could not target User B. |
+| Account application path | PASS | The deployed `/account` view loaded without a browser console error. The application save path calls `update_my_profile_v1` and contains no `.from("profiles").update(...)` fallback; the same RPC succeeded dynamically in the transactional smoke. No real account save was performed. |
+| Admin controlled role RPC | PASS | `admin_set_user_role_v1` changed only the expected synthetic role and produced exactly one trusted audit entry. |
+| Admin controlled verification RPC | PASS | `update_profile_verification` changed the expected synthetic verification state and produced exactly one trusted audit entry. |
+| Admin controlled note RPC | PASS | `admin_set_user_note_v1` changed the expected synthetic note and produced exactly one trusted audit entry. |
+| Employee controlled RPCs | PASS | As an authenticated `pracownik`, the synthetic operator successfully used `update_profile_contact_details` and `update_profile_verification`; each changed the intended fields and produced exactly one audit with the operator's `auth.uid()`. |
+| Audit integrity and idempotency | PASS | Audits used the authenticated actor and database-side execution path. Repeating the same admin-note operation returned the controlled `no_change` result and did not create a duplicate audit. No direct client insertion into `audit_logs` was used. |
+| Cross-user isolation | PASS | The denied User A statements left User B's complete profile row byte-for-byte equivalent at the JSON row level. |
+| SEC-009 lifecycle regression | PASS | `anonymize_my_account_v1()` completed for the synthetic lifecycle user through its trusted SECURITY DEFINER path; it did not depend on client table `UPDATE`. |
+| Secret/error review | PASS | The test and report contain no JWT, Authorization header, service-role key or real-user PII. Client-facing account behavior remained controlled; no raw database error was exposed through the application UI. |
+| Primary transaction | PASS | The SQL Editor returned 30 result rows and the final assertion block raised no failure; all 30 checks passed before the explicit `ROLLBACK`. |
+| Employee transaction | PASS | The terminal exception was exactly `CLEAN005_EMPLOYEE_CONTROLLED_RPC_PASS_ROLLBACK`, proving both employee positive paths and forcing rollback. |
+| Independent cleanup | PASS | Final read-only check returned `synthetic_auth_users = 0`, `synthetic_profiles = 0`, `synthetic_audit_logs = 0` and `remaining_synthetic_fixture = 0`. |
+
+## Security conclusion
+
+All tested application roles are denied direct profile updates. Self-service,
+admin and employee workflows remain available only through their controlled
+RPC contracts, with field allowlisting, trusted actor attribution and
+idempotent auditing. The account lifecycle remains compatible with SEC-009.
+
+No application code, configuration, production schema, migration, RLS or ACL
+was changed during this smoke. Production writes were limited to synthetic
+rows inside transactions that were fully rolled back; all post-checks were
+read-only.
+
+## CLEAN-005 final result
+
+```text
+CLEAN-005 PRODUCTION SMOKE:
+PASS
+
+CLEAN-005 STATUS:
+FULLY REMEDIATED / PROD PASS
+```
