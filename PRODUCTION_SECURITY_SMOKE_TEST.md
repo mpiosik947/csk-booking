@@ -1296,3 +1296,63 @@ PASS
 CLEAN-005 STATUS:
 FULLY REMEDIATED / PROD PASS
 ```
+
+---
+
+# ADMIN CALENDAR SINGLE POSITION RESERVATIONS PRODUCTION SMOKE
+
+**Date:** 2026-09-05
+
+**Production commit:** `e60482a — fix: show position reservations in admin calendar`
+
+The production smoke used one uniquely marked synthetic lane family, one
+synthetic Auth/profile identity and three synthetic reservations. The family
+contained a root lane, an active child position and an inactive historical
+child position. All observations were made through the deployed admin Calendar
+UI or its authenticated production feed. The fixture was removed with an
+exact-ID, fail-closed cleanup followed by an independent zero-residue check.
+
+## Results
+
+| Check | Result | Evidence |
+|---|---|---|
+| Production deployment | PASS | The deployed Calendar exhibited the hierarchy-aware behavior introduced by `e60482a`: a parent filter returned its direct child reservation and a child filter remained exact. |
+| Whole-lane reservation | PASS | Day view showed the synthetic root reservation at `10:00–11:00`. |
+| Single-position reservation | PASS | Day view showed the child reservation exactly once at `11:00–12:00`, under the `Parent — Position 1` label. |
+| Child UUID preservation | PASS | The authenticated feed returned exactly two entries with distinct lane IDs: the root UUID and the original child UUID. No projection to the parent or a sibling UUID occurred. |
+| Day view | PASS | Parent scope rendered one root lane entry and one child-position entry, each exactly once. |
+| Week view | PASS | The week of 31 August–6 September rendered the same two reservations on 5 September, without duplication. |
+| Month view | PASS | 5 September reported exactly `Rezerwacje: 2` and 17% occupancy. The count comprises one root and one child reservation; the child was included once and was not double-counted. |
+| Parent filter | PASS | Selecting the synthetic parent displayed the parent and its active child position, with both corresponding reservations. |
+| Child filter | PASS | Selecting the child UUID displayed only `Parent — Position 1` and its single reservation. The root reservation and other children were absent. |
+| Inactive child history | PASS | After enabling historical entries for 4 September, the inactive child appeared as `Zasób historyczny` and its completed reservation was visible once with the `Zakończona` status. |
+| No sibling projection | PASS | Exact child scope returned one child lane and one entry; no root or sibling reservation was rendered. |
+| Anonymous access | PASS | A direct unauthenticated request to `/api/admin/calendar-feed` returned HTTP 401. |
+| Ordinary-user access | PASS | A real production request authenticated as the synthetic ordinary user returned HTTP 403. |
+| Instructor restriction | PASS | A real production request authenticated as the synthetic instructor returned HTTP 200 with `entries=0` for a reservation-only query; lane metadata remained available but reservation data did not. |
+| PII contract | PASS | The admin feed entry shape remained limited to calendar fields (`date`, times, ID, label, lane metadata, status/type and shooter count). No email, phone, address, token or profile field was added by the bugfix. |
+| Cleanup | PASS | Fail-closed cleanup targeted only the run's exact UUIDs. Final post-check returned `remaining_synthetic_fixture = 0` and `cleanup_confirmed = true`. |
+
+## Security and data conclusion
+
+The production parent filter now includes direct child positions, while a
+child filter remains exact. Reservations retain their source lane UUID and
+hierarchy label, so neither sibling projection nor monthly double-counting was
+observed. The established access boundary also remained intact: anonymous and
+ordinary users cannot read the admin feed, and instructors receive no
+reservation entries.
+
+No application code, configuration, schema, migration or deployment was
+changed during this smoke. Production writes were limited to the uniquely
+marked synthetic fixture and its exact-ID cleanup. The final read-only
+verification confirmed zero remaining synthetic fixture.
+
+## Final result
+
+```text
+ADMIN CALENDAR SINGLE POSITION PRODUCTION SMOKE:
+PASS
+
+BUG STATUS:
+FULLY FIXED / PROD PASS
+```
