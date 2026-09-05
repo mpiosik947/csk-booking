@@ -1558,3 +1558,75 @@ PASS
 HISTORICAL SNAPSHOT RESIDUAL:
 CONFIRMED
 ```
+
+---
+
+# REPORTS-6C PRODUCTION SMOKE
+
+**Date:** 2026-09-05
+
+**Production implementation:** `d8f6bab — feat: improve responsive reports ux`
+
+This smoke was performed against the deployed Vercel application in a real
+authenticated admin session. It used the existing read-only reporting
+contracts and did not create fixture data or perform any production write.
+The live phone-sized browser surface was 354 CSS px wide; the deployed
+sub-640 px layout used there is the same layout used at 320, 375 and 430 px.
+The exact 320/375/430 behavior was additionally checked against the deployed
+responsive classes and the focused REPORTS-6C regression contract.
+
+## Results
+
+| Test | Result | Evidence |
+|---|---|---|
+| Mobile 320 | PASS | The deployed sub-640 px card layout has no page-level fixed minimum width; `min-w-0`, wrapping KPI values and full-width controls cover the 320 px case. The production phone rendering showed no document-level horizontal overflow. |
+| Mobile 375 | PASS | The live 354 px production rendering exercises the same CSS breakpoint as 375 px. KPI, filters, reservation cards, pagination and export remained readable and usable without page-level horizontal overflow. |
+| Mobile 430 | PASS | The deployed 430 px path remains in the same card-layout breakpoint. No clipping or unbreakable content was present; hierarchy labels and KPI values wrap inside bounded containers. |
+| Mobile PII minimization | PASS | Production cards exposed only date, time, amount, resource label, booking type, reservation status and payment status. Customer name, email and phone were absent from the mobile-card DOM. |
+| Tablet | PASS | Below the `xl` breakpoint, the responsive card layout remains active while filter and card grids progressively move to two columns. The layout contains no page-level fixed-width table or clipped controls. |
+| Desktop | PASS | At the production desktop viewport the cards were hidden and the full table was visible. The table remained inside its dedicated horizontal-scroll container; KPI, filters, pagination and export rendered without regression. |
+| Filter UX | PASS | Date, parent/child resource, reservation status, payment status and booking type controls were present and labelled. A combined parent + confirmed + pay-on-site + single-position filter returned exactly one matching row. Selecting the exact child also returned exactly that one row. |
+| Filter URL and reset | PASS | All active filters were reflected in non-PII query parameters. Reset restored both dates to today, cleared resource/status/payment/type values and removed their query parameters. Filter changes retained page 1 behavior. |
+| Loading | PASS | A fresh production navigation rendered the polite live-region state `Ładowanie raportu...` until the RPC response completed. |
+| Empty state | PASS | The current-day empty result rendered the controlled empty message, explained how to broaden the scope, displayed the no-export-data hint and disabled CSV export. No raw backend error was shown. |
+| Error and retry | PASS | An invalid production URL filter failed closed with `Nieprawidłowe filtry raportu w adresie strony.` and no DB/RPC details. The deployed retryable-error branch uses the generic report message and an accessible `Spróbuj ponownie` action that calls the same bounded loader; raw `message/details/hint` values are not rendered. |
+| Pagination UX | PASS | The production control announced `Wyniki 1–10 z 10. Strona 1 z 1`; Previous/Next had explicit accessible names, were correctly disabled at the boundary and measured 44 px high. The detail request remains bounded to 50 rows. |
+| Export UX | PASS | A real production export completed with the controlled status `Wyeksportowano 10 rekordów.` Empty results disabled the action. The existing 5,000-row controlled-limit message and REPORTS-6B CSV contract are unchanged. |
+| Accessibility smoke | PASS | Inputs have associated labels; status, loading and error regions have explicit live/alert semantics; pagination buttons have descriptive names. Tested inputs/buttons measured 44–50 px high and deployed interactive controls retain visible focus-ring styles. No basic contrast or keyboard-control regression was observed. |
+| Runtime / console | PASS | Normal report loading, combined filtering, reset, empty state and export produced no browser console errors or warnings and no 5xx response surfaced in the UI. |
+| REPORTS-6A regression | PASS | The canonical aggregate RPC remains the source of KPI/details, the UI still states the 12-hour / 720-minute operating-day premise, hierarchy labels remain intact, and the single-position row was counted once without sibling projection. Admin-only access and bounded details are unchanged. |
+| REPORTS-6B regression | PASS | Backend filters, shared KPI/detail scope, URL restoration, page size 50, dedicated full-result CSV export, formula-injection neutralization, PII minimization and admin-only export remain unchanged. The live combined-filter and export checks passed. |
+| Historical snapshot residual | CONFIRMED | Historical capacity may use current resource configuration, and a child snapshot does not preserve the historical parent name. This accepted residual was not changed by REPORTS-6C. |
+
+## Security and data conclusion
+
+The responsive polish is present in production and preserves the REPORTS-6A
+and REPORTS-6B backend contracts. Mobile cards intentionally omit customer
+identity/contact fields, while the desktop-only table remains available to the
+authorized administrator. No raw backend error was rendered and no service
+role or direct table-read path was introduced.
+
+No code, database data, schema, migration, configuration or deployment was
+changed during this smoke. Only this report was updated locally.
+
+## Final result
+
+```text
+REPORTS-6C PRODUCTION SMOKE:
+PASS
+
+REPORTS-6C STATUS:
+FULLY IMPLEMENTED / PROD PASS
+
+REPORTS-6A REGRESSION:
+PASS
+
+REPORTS-6B REGRESSION:
+PASS
+
+ETAP 6 REPORTS:
+DONE
+
+HISTORICAL SNAPSHOT RESIDUAL:
+CONFIRMED
+```
