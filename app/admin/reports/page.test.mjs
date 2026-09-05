@@ -90,3 +90,51 @@ test("details are bounded and retain hierarchy labels and snapshot disclosure", 
   assert.match(source, /Historyczne obłożenie jest szacowane według aktualnej konfiguracji zasobów\./);
   assert.match(source, /dla stanowiska prefiks osi nadrzędnej jest aktualny\./);
 });
+
+test("mobile details use PII-minimal cards while desktop retains the table", () => {
+  assert.match(source, /Rezerwacje w okresie — widok kart/);
+  assert.match(source, /className="grid gap-4 xl:hidden"/);
+  assert.match(source, /xl:block/);
+  assert.match(source, /getBookingTypeLabel\(reservation\.resourceKind\)/);
+  for (const label of ["Zasób", "Typ", "Status", "Płatność"]) {
+    assert.match(source, new RegExp(`>${label}<`));
+  }
+  assert.match(source, /reservation\.reservationDate/);
+  assert.match(source, /formatTimeRange\(reservation\.startTime, reservation\.endTime\)/);
+  assert.match(source, /reservation\.totalPrice\.toFixed\(0\)/);
+
+  const mobileCards = source.slice(
+    source.indexOf('aria-label="Rezerwacje w okresie — widok kart"'),
+    source.indexOf('aria-label="Tabela rezerwacji w okresie"'),
+  );
+  assert.doesNotMatch(mobileCards, /customerName|customerEmail|customerPhone/);
+});
+
+test("mobile controls have touch targets, focus states and explicit pagination", () => {
+  assert.match(source, /Strona \{currentPage\} z \{totalPages\}/);
+  assert.match(source, /aria-label="Stronicowanie raportu"/);
+  assert.match(source, /aria-label="Poprzednia strona raportu"/);
+  assert.match(source, /aria-label="Następna strona raportu"/);
+  assert.ok((source.match(/min-h-11/g) ?? []).length >= 10);
+  assert.ok((source.match(/focus-visible:ring-2/g) ?? []).length >= 4);
+  assert.match(source, /grid grid-cols-2 gap-3 sm:flex/);
+});
+
+test("export, loading, empty and error states are explicit and controlled", () => {
+  assert.match(source, /hasExportableRows/);
+  assert.match(source, /disabled=\{!hasExportableRows \|\| exporting\}/);
+  assert.match(source, /Brak danych do eksportu dla aktywnych filtrów\./);
+  assert.match(source, /Brak rezerwacji zgodnych z aktywnymi filtrami\./);
+  assert.match(source, /role="status" aria-live="polite"/);
+  assert.match(source, /Spróbuj ponownie/);
+  assert.match(source, /onClick=\{\(\) => void loadReport\(\)\}/);
+  assert.doesNotMatch(source, /error\.message|error\.details|error\.hint/);
+});
+
+test("responsive layout avoids page-level horizontal overflow", () => {
+  assert.match(source, /grid min-w-0 gap-5/);
+  assert.match(source, /grid min-w-0 gap-4 sm:grid-cols-2 xl:grid-cols-4/);
+  assert.match(source, /break-words text-2xl font-bold tabular-nums/);
+  assert.match(source, /max-w-full overflow-x-auto/);
+  assert.match(source, /w-full rounded-xl/);
+});

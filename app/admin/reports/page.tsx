@@ -37,6 +37,10 @@ function formatTimeRange(startTime: string, endTime: string) {
   return `${startTime.slice(0, 5)}-${endTime.slice(0, 5)}`;
 }
 
+function getBookingTypeLabel(resourceKind: ReportDetail["resourceKind"]) {
+  return resourceKind === "position" ? "Pojedyncze stanowisko" : "Cała oś";
+}
+
 export default function AdminReportsPage() {
   const today = getWarsawToday();
 
@@ -232,6 +236,16 @@ export default function AdminReportsPage() {
     report &&
       report.pagination.offset + report.details.length < report.pagination.total,
   );
+  const currentPage = report
+    ? Math.floor(report.pagination.offset / REPORT_DETAIL_PAGE_SIZE) + 1
+    : 1;
+  const totalPages = report
+    ? Math.max(1, Math.ceil(report.pagination.total / REPORT_DETAIL_PAGE_SIZE))
+    : 1;
+  const hasExportableRows = Boolean(
+    reportReady && report && report.pagination.total > 0,
+  );
+  const retryableError = message.startsWith("Nie udało się");
 
   return (
     <AdminShell
@@ -250,7 +264,7 @@ export default function AdminReportsPage() {
             <p className="text-xs font-bold uppercase tracking-[0.25em] text-[#d7c895]">Parametry raportu</p>
             <h2 id="report-range-heading" className="mt-2 text-xl font-bold">Zakres raportu</h2>
           </div>
-          <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
+          <div className="grid min-w-0 gap-5 md:grid-cols-2 xl:grid-cols-3">
           <div>
             <label htmlFor="report-from" className="mb-2 block text-sm font-semibold text-[#d8dbd3]">
               Data od
@@ -314,24 +328,31 @@ export default function AdminReportsPage() {
             </select>
           </div>
 
-          <div className="flex flex-col gap-3 md:col-span-2 xl:col-span-3 sm:flex-row">
-            <button type="button" onClick={() => updateFilters({ startDate: today, endDate: today, resourceId: null, reservationStatus: null, paymentStatus: null, bookingType: null })} className="min-h-11 rounded-xl border border-[#495044] px-5 py-3 text-sm font-semibold">Wyczyść filtry</button>
-            <button type="button" disabled={!reportReady || exporting} onClick={() => void exportCsv()} className="min-h-11 rounded-xl border border-[#8b986f] bg-[#1b211b] px-5 py-3 text-sm font-semibold text-[#e8eddc] disabled:opacity-50">{exporting ? "Przygotowywanie CSV..." : "Eksportuj CSV"}</button>
+          <div className="flex flex-col gap-3 md:col-span-2 sm:flex-row xl:col-span-3">
+            <button type="button" onClick={() => updateFilters({ startDate: today, endDate: today, resourceId: null, reservationStatus: null, paymentStatus: null, bookingType: null })} className="min-h-11 w-full rounded-xl border border-[#495044] px-5 py-3 text-sm font-semibold transition hover:border-[#8b986f] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d7c895] sm:w-auto">Wyczyść filtry</button>
+            <button type="button" aria-describedby={!hasExportableRows && reportReady ? "report-export-empty" : undefined} disabled={!hasExportableRows || exporting} onClick={() => void exportCsv()} className="min-h-11 w-full rounded-xl border border-[#8b986f] bg-[#1b211b] px-5 py-3 text-sm font-semibold text-[#e8eddc] transition hover:bg-[#242c23] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d7c895] disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto">{exporting ? "Przygotowywanie CSV..." : "Eksportuj CSV"}</button>
           </div>
 
+          {reportReady && report?.pagination.total === 0 ? <p id="report-export-empty" className="text-sm text-[#a9ada4] md:col-span-2 xl:col-span-3">Brak danych do eksportu dla aktywnych filtrów.</p> : null}
           {exportMessage ? <p role="status" className="text-sm text-[#c7d6b2] md:col-span-2 xl:col-span-3">{exportMessage}</p> : null}
           </div>
         </section>
 
         {loading && (
-          <div className="rounded-xl border border-[#30372c] bg-[#101310] p-6 text-[#a9ada4]">
-            Ładowanie raportu...
+          <div role="status" aria-live="polite" className="flex min-h-24 items-center gap-3 rounded-xl border border-[#30372c] bg-[#101310] p-6 text-[#d8dbd3]">
+            <span aria-hidden="true" className="size-5 animate-spin rounded-full border-2 border-[#495044] border-t-[#d7c895]" />
+            <span>Ładowanie raportu...</span>
           </div>
         )}
 
         {!loading && message && (
-          <div role="alert" className="rounded-xl border border-[#744545] bg-[#2a1b1b] p-4 text-sm font-semibold text-[#e0a0a0]">
-            {message}
+          <div role="alert" className="rounded-xl border border-[#744545] bg-[#2a1b1b] p-4 text-sm text-[#e0a0a0]">
+            <p className="font-semibold">{message}</p>
+            {retryableError ? (
+              <button type="button" onClick={() => void loadReport()} className="mt-4 min-h-11 w-full rounded-xl border border-[#a86f6f] px-4 py-2 font-semibold transition hover:bg-[#3a2222] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#e0a0a0] sm:w-auto">
+                Spróbuj ponownie
+              </button>
+            ) : null}
           </div>
         )}
 
@@ -340,51 +361,51 @@ export default function AdminReportsPage() {
             <section aria-labelledby="report-kpi-heading" className="mb-8">
               <p className="text-xs font-bold uppercase tracking-[0.25em] text-[#d7c895]">Podsumowanie</p>
               <h2 id="report-kpi-heading" className="mb-4 mt-2 text-xl font-bold">Kluczowe wskaźniki</h2>
-              <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-              <div className="rounded-[1.25rem] border border-[#30372c] bg-[#101310] p-5">
+              <div className="grid min-w-0 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+              <div className="min-w-0 rounded-[1.25rem] border border-[#30372c] bg-[#101310] p-5">
                 <p className="text-sm text-[#a9ada4]">Rezerwacje aktywne</p>
-                <p className="mt-3 text-3xl font-bold">
+                <p className="mt-3 break-words text-2xl font-bold tabular-nums sm:text-3xl">
                   {summary.activeReservationCount}
                 </p>
               </div>
 
-              <div className="rounded-[1.25rem] border border-[#36523a] bg-[#111b13] p-5">
+              <div className="min-w-0 rounded-[1.25rem] border border-[#36523a] bg-[#111b13] p-5">
                 <p className="text-sm text-[#a9ada4]">Przychód planowany</p>
-                <p className="mt-3 text-3xl font-bold text-[#a9c58f]">
+                <p className="mt-3 break-words text-2xl font-bold tabular-nums text-[#a9c58f] sm:text-3xl">
                   {summary.plannedRevenue.toFixed(0)} zł
                 </p>
               </div>
 
-              <div className="rounded-[1.25rem] border border-[#36523a] bg-[#111b13] p-5">
+              <div className="min-w-0 rounded-[1.25rem] border border-[#36523a] bg-[#111b13] p-5">
                 <p className="text-sm text-[#a9ada4]">Przychód opłacony</p>
-                <p className="mt-3 text-3xl font-bold text-[#a9c58f]">
+                <p className="mt-3 break-words text-2xl font-bold tabular-nums text-[#a9c58f] sm:text-3xl">
                   {summary.paidRevenue.toFixed(0)} zł
                 </p>
               </div>
 
-              <div className="rounded-[1.25rem] border border-[#5b5335] bg-[#1d1a10] p-5">
+              <div className="min-w-0 rounded-[1.25rem] border border-[#5b5335] bg-[#1d1a10] p-5">
                 <p className="text-sm text-[#a9ada4]">Obłożenie osi</p>
-                <p className="mt-3 text-3xl font-bold text-[#d7c895]">
+                <p className="mt-3 break-words text-2xl font-bold tabular-nums text-[#d7c895] sm:text-3xl">
                   {summary.occupancyPercent}%
                 </p>
               </div>
-              <div className="rounded-[1.25rem] border border-[#5b5335] bg-[#1d1a10] p-5">
+              <div className="min-w-0 rounded-[1.25rem] border border-[#5b5335] bg-[#1d1a10] p-5">
                 <p className="text-sm text-[#a9ada4]">Nieopłacone / na miejscu</p>
-                <p className="mt-3 text-3xl font-bold text-[#d7c895]">
+                <p className="mt-3 break-words text-2xl font-bold tabular-nums text-[#d7c895] sm:text-3xl">
                   {summary.outstandingRevenue.toFixed(0)} zł
                 </p>
               </div>
 
-              <div className="rounded-[1.25rem] border border-[#603d3d] bg-[#211515] p-5">
+              <div className="min-w-0 rounded-[1.25rem] border border-[#603d3d] bg-[#211515] p-5">
                 <p className="text-sm text-[#a9ada4]">Anulowane</p>
-                <p className="mt-3 text-3xl font-bold text-[#d99b9b]">
+                <p className="mt-3 break-words text-2xl font-bold tabular-nums text-[#d99b9b] sm:text-3xl">
                   {summary.cancelledReservationCount}
                 </p>
               </div>
 
-              <div className="rounded-[1.25rem] border border-[#5b5335] bg-[#1d1a10] p-5">
+              <div className="min-w-0 rounded-[1.25rem] border border-[#5b5335] bg-[#1d1a10] p-5">
                 <p className="text-sm text-[#a9ada4]">Nieobecności</p>
-                <p className="mt-3 text-3xl font-bold text-[#d7c895]">
+                <p className="mt-3 break-words text-2xl font-bold tabular-nums text-[#d7c895] sm:text-3xl">
                   {summary.noShowReservationCount}
                 </p>
               </div>
@@ -433,107 +454,91 @@ export default function AdminReportsPage() {
 
               {reservations.length === 0 ? (
                 <div className="rounded-xl border border-[#30372c] bg-[#090b09] p-6 text-center">
-                  <p className="font-semibold text-[#d8dbd3]">Brak rezerwacji w wybranym okresie.</p>
-                  <p className="mt-2 text-sm text-[#858b82]">Wybierz inny zakres raportu albo datę odniesienia.</p>
+                  <p className="font-semibold text-[#d8dbd3]">Brak rezerwacji zgodnych z aktywnymi filtrami.</p>
+                  <p className="mt-2 text-sm text-[#a9ada4]">Zmień zakres lub wyczyść filtry, aby zobaczyć inne wyniki.</p>
                 </div>
               ) : (
-                <div className="max-w-full overflow-x-auto overscroll-x-contain rounded-xl border border-[#30372c]" tabIndex={0} aria-label="Tabela rezerwacji w okresie">
-                  <table className="w-full min-w-[1100px] text-left text-sm">
-                    <thead className="bg-[#090b09]">
-                      <tr className="border-b border-[#30372c] text-[#a9ada4]">
-                        <th className="py-3 pr-4">Data</th>
-                        <th className="py-3 pr-4">Godzina</th>
-                        <th className="py-3 pr-4">Oś</th>
-                        <th className="py-3 pr-4">Klient</th>
-                        <th className="py-3 pr-4">Email</th>
-                        <th className="py-3 pr-4">Telefon</th>
-                        <th className="py-3 pr-4">Cena</th>
-                        <th className="py-3 pr-4">Status</th>
-                        <th className="py-3 pr-4">Płatność</th>
-                      </tr>
-                    </thead>
+                <>
+                  <div className="grid gap-4 xl:hidden" aria-label="Rezerwacje w okresie — widok kart">
+                    {reservations.map((reservation) => (
+                      <article key={reservation.id} className="min-w-0 rounded-xl border border-[#3b4237] bg-[#090b09] p-4">
+                        <div className="flex min-w-0 flex-col gap-1 border-b border-[#30372c] pb-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
+                          <div className="min-w-0">
+                            <p className="font-bold text-[#f2efe4]">{reservation.reservationDate}</p>
+                            <p className="mt-1 font-semibold tabular-nums text-[#d8dbd3]">{formatTimeRange(reservation.startTime, reservation.endTime)}</p>
+                          </div>
+                          <p className="break-words text-sm font-semibold text-[#a9c58f] sm:text-right">{reservation.totalPrice.toFixed(0)} zł</p>
+                        </div>
+                        <dl className="mt-4 grid min-w-0 gap-4 text-sm sm:grid-cols-2">
+                          <div className="min-w-0">
+                            <dt className="text-[#a9ada4]">Zasób</dt>
+                            <dd className="mt-1 break-words font-semibold text-[#f2efe4]">{reservation.laneDisplayName}</dd>
+                          </div>
+                          <div>
+                            <dt className="text-[#a9ada4]">Typ</dt>
+                            <dd className="mt-1 font-semibold text-[#d8dbd3]">{getBookingTypeLabel(reservation.resourceKind)}</dd>
+                          </div>
+                          <div>
+                            <dt className="mb-2 text-[#a9ada4]">Status</dt>
+                            <dd><span className={getBadgeClass(getReservationStatusBadgeClass(reservation.reservationStatus))}>{getReservationStatusLabel(reservation.reservationStatus)}</span></dd>
+                          </div>
+                          <div>
+                            <dt className="mb-2 text-[#a9ada4]">Płatność</dt>
+                            <dd><span className={getBadgeClass(getPaymentStatusBadgeClass(reservation.paymentStatus))}>{getPaymentStatusLabel(reservation.paymentStatus)}</span></dd>
+                          </div>
+                        </dl>
+                      </article>
+                    ))}
+                  </div>
 
-                    <tbody>
-                      {reservations.map((reservation) => (
-                        <tr
-                          key={reservation.id}
-                          className="border-b border-[#30372c] text-[#d8dbd3] transition last:border-0 hover:bg-[#181d18]"
-                        >
-                          <td className="py-4 pr-4 font-medium text-[#f2efe4]">
-                            {reservation.reservationDate}
-                          </td>
-
-                          <td className="py-4 pr-4 font-semibold">
-                            {formatTimeRange(
-                              reservation.startTime,
-                              reservation.endTime,
-                            )}
-                          </td>
-
-                          <td className="py-4 pr-4">
-                            {reservation.laneDisplayName}
-                          </td>
-
-                          <td className="py-4 pr-4 font-semibold">
-                            {reservation.customerName ?? "-"}
-                          </td>
-
-                          <td className="py-4 pr-4">
-                            {reservation.customerEmail ?? "-"}
-                          </td>
-
-                          <td className="py-4 pr-4">
-                            {reservation.customerPhone ?? "-"}
-                          </td>
-
-                          <td className="py-4 pr-4 text-right font-semibold text-[#a9c58f]">
-                            {reservation.totalPrice.toFixed(0)} zł
-                          </td>
-
-                          <td className="py-4 pr-4">
-                            <span
-                              className={getBadgeClass(
-                                getReservationStatusBadgeClass(
-                                  reservation.reservationStatus,
-                                ),
-                              )}
-                            >
-                              {getReservationStatusLabel(
-                                reservation.reservationStatus,
-                              )}
-                            </span>
-                          </td>
-
-                          <td className="py-4 pr-4">
-                            <span
-                              className={getBadgeClass(
-                                getPaymentStatusBadgeClass(
-                                  reservation.paymentStatus,
-                                ),
-                              )}
-                            >
-                              {getPaymentStatusLabel(
-                                reservation.paymentStatus,
-                              )}
-                            </span>
-                          </td>
+                  <div className="hidden max-w-full overflow-x-auto overscroll-x-contain rounded-xl border border-[#30372c] xl:block" tabIndex={0} aria-label="Tabela rezerwacji w okresie">
+                    <table className="w-full min-w-[1180px] text-left text-sm">
+                      <thead className="bg-[#090b09]">
+                        <tr className="border-b border-[#30372c] text-[#a9ada4]">
+                          <th className="py-3 pl-4 pr-4">Data</th>
+                          <th className="py-3 pr-4">Godzina</th>
+                          <th className="py-3 pr-4">Zasób</th>
+                          <th className="py-3 pr-4">Typ</th>
+                          <th className="py-3 pr-4">Klient</th>
+                          <th className="py-3 pr-4">Email</th>
+                          <th className="py-3 pr-4">Telefon</th>
+                          <th className="py-3 pr-4">Cena</th>
+                          <th className="py-3 pr-4">Status</th>
+                          <th className="py-3 pr-4">Płatność</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                      </thead>
+
+                      <tbody>
+                        {reservations.map((reservation) => (
+                          <tr key={reservation.id} className="border-b border-[#30372c] text-[#d8dbd3] transition last:border-0 hover:bg-[#181d18]">
+                            <td className="py-4 pl-4 pr-4 font-medium text-[#f2efe4]">{reservation.reservationDate}</td>
+                            <td className="py-4 pr-4 font-semibold tabular-nums">{formatTimeRange(reservation.startTime, reservation.endTime)}</td>
+                            <td className="py-4 pr-4">{reservation.laneDisplayName}</td>
+                            <td className="py-4 pr-4">{getBookingTypeLabel(reservation.resourceKind)}</td>
+                            <td className="py-4 pr-4 font-semibold">{reservation.customerName ?? "-"}</td>
+                            <td className="py-4 pr-4">{reservation.customerEmail ?? "-"}</td>
+                            <td className="py-4 pr-4">{reservation.customerPhone ?? "-"}</td>
+                            <td className="py-4 pr-4 text-right font-semibold text-[#a9c58f]">{reservation.totalPrice.toFixed(0)} zł</td>
+                            <td className="py-4 pr-4"><span className={getBadgeClass(getReservationStatusBadgeClass(reservation.reservationStatus))}>{getReservationStatusLabel(reservation.reservationStatus)}</span></td>
+                            <td className="py-4 pr-4"><span className={getBadgeClass(getPaymentStatusBadgeClass(reservation.paymentStatus))}>{getPaymentStatusLabel(reservation.paymentStatus)}</span></td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </>
               )}
 
               {report.pagination.total > 0 ? (
-                <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <nav aria-label="Stronicowanie raportu" className="mt-5 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                   <p className="text-sm text-[#a9ada4]">
                     Wyniki {report.pagination.offset + 1}–
                     {Math.min(
                       report.pagination.offset + report.details.length,
                       report.pagination.total,
-                    )} z {report.pagination.total}
+                    )} z {report.pagination.total}. <span className="font-semibold text-[#d8dbd3]">Strona {currentPage} z {totalPages}</span>
                   </p>
-                  <div className="flex gap-3">
+                  <div className="grid grid-cols-2 gap-3 sm:flex">
                     <button
                       type="button"
                       disabled={!hasPreviousPage || loading}
@@ -542,7 +547,8 @@ export default function AdminReportsPage() {
                           Math.max(0, offset - REPORT_DETAIL_PAGE_SIZE),
                         )
                       }
-                      className="min-h-11 rounded-xl border border-[#495044] px-4 py-2 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-50"
+                      aria-label="Poprzednia strona raportu"
+                      className="min-h-11 w-full rounded-xl border border-[#495044] px-4 py-2 text-sm font-semibold transition hover:border-[#8b986f] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d7c895] disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
                     >
                       Poprzednia
                     </button>
@@ -554,12 +560,13 @@ export default function AdminReportsPage() {
                           offset + REPORT_DETAIL_PAGE_SIZE,
                         )
                       }
-                      className="min-h-11 rounded-xl border border-[#495044] px-4 py-2 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-50"
+                      aria-label="Następna strona raportu"
+                      className="min-h-11 w-full rounded-xl border border-[#495044] px-4 py-2 text-sm font-semibold transition hover:border-[#8b986f] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d7c895] disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
                     >
                       Następna
                     </button>
                   </div>
-                </div>
+                </nav>
               ) : null}
             </section>
           </>
