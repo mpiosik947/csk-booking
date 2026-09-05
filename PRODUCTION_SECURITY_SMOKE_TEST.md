@@ -1356,3 +1356,62 @@ PASS
 BUG STATUS:
 FULLY FIXED / PROD PASS
 ```
+
+---
+
+# PUBLIC EVENT AVAILABILITY PRODUCTION SMOKE
+
+**Date:** 2026-09-05
+
+**Production commit:** `fbddb5c — fix: use authoritative public event availability`
+
+**Production migration:** `20260905120000_add_public_event_availability_v1.sql`
+
+The production database smoke used a uniquely marked synthetic event, five
+synthetic Auth/profile identities and synthetic event registrations. All data
+changes ran in one transaction. The terminal exception was exactly
+`PUBLIC_EVENT_AVAILABILITY_SMOKE_ALL_PASS_ROLLBACK`, deliberately forcing a
+rollback after every assertion had passed. No real event, registration or user
+record was used.
+
+## Results
+
+| Check | Result | Evidence |
+|---|---|---|
+| Migration | PASS | A read-only production history check returned `migration_present = true` for `20260905120000`. |
+| Public RPC ACL | PASS | `anon` and `authenticated` have `EXECUTE`; `PUBLIC` and `service_role` do not. The ACL matches the deployed migration. |
+| Function security | PASS | The deployed zero-argument RPC is `STABLE`, `SECURITY DEFINER`, owned by `postgres`, and has `search_path=pg_catalog, public, pg_temp`. |
+| PII-free contract | PASS | The response contained only `event_id`, public event presentation fields, `max_participants`, `registered_count`, `reserve_count`, `available_spots` and `sold_out`. It contained no registration ID, user ID, customer identity/contact data, admin note or token field. |
+| Authoritative count | PASS | With capacity 10 and three occupying registrations, both anonymous and authenticated calls returned `registered_count=3` and `available_spots=7`. |
+| Owner-scoped RLS independence | PASS | The ordinary user could directly see only their own one registration, while the public RPC returned the complete aggregate of three. Anonymous and authenticated aggregate rows were identical. |
+| Reserve semantics | PASS | One reserve registration produced `reserve_count=1` without reducing `available_spots`; occupying statuses remained exactly `registered` and `approved`. |
+| Sold out | PASS | At ten occupying registrations the RPC returned `registered_count=10`, `available_spots=0` and `sold_out=true`; availability never became negative. |
+| Controlled cancellation | PASS | Owner cancellation through `cancel_event_registration` reduced the occupying count from 3 to 2 and increased availability from 7 to 8. |
+| Reserve promotion | PASS | Owner confirmation through `confirm_event_reserve_promotion` moved the test registration from reserve to registered: reserve count fell to 0, registered count rose to 3 and availability returned to 7. |
+| Production `/events` | PASS | The deployed page loaded without a 5xx and rendered availability states/counts. Its deployed call site uses `get_public_event_availability_v1()` and contains no direct `event_registrations` query or client-side participant counting. The anonymous RPC contract returned the same authoritative aggregate as the authenticated call; the existing UI may still defer detailed count presentation until login. |
+| No-overbooking regression | PASS | When the synthetic event was full, `register_for_event` did not create an eleventh occupying registration; it returned the controlled reserve outcome. The authoritative result remained `registered_count=10`, `available_spots=0`, with the new registration counted only in `reserve_count`. |
+| Transaction rollback | PASS | The terminal result was the expected controlled exception `PUBLIC_EVENT_AVAILABILITY_SMOKE_ALL_PASS_ROLLBACK`; therefore the complete synthetic fixture was rolled back. |
+| Independent cleanup | PASS | A separate read-only post-check returned zero synthetic Auth users, profiles, events, event registrations and audit rows, with `remaining_synthetic_fixture=0`. |
+
+## Security and data conclusion
+
+Public availability is computed from the complete registration set inside the
+dedicated PII-free database contract and is independent of owner-scoped
+`event_registrations` RLS. The public reader does not expose registration rows
+or identity/contact data, and the atomic registration writer remains the
+authoritative overbooking control.
+
+No application code, configuration, schema, migration or deployment was
+changed during this smoke. Production writes were limited to the uniquely
+marked synthetic fixture inside a transaction that was fully rolled back; the
+independent post-check confirmed zero residue.
+
+## Final result
+
+```text
+PUBLIC EVENT AVAILABILITY PRODUCTION SMOKE:
+PASS
+
+BUG STATUS:
+FULLY FIXED / PROD PASS
+```
