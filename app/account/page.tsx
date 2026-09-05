@@ -54,6 +54,16 @@ type PermissionValues = {
   qualificationHunter: boolean;
 };
 
+type UpdateMyProfileResult = {
+  ok: boolean;
+  changed: boolean;
+  code: string;
+  declarations_changed?: boolean;
+  verification_status?: string | null;
+  permissions_verified?: boolean;
+  permissions_verified_at?: string | null;
+};
+
 function havePermissionValuesChanged(
   initialValues: PermissionValues | null,
   currentValues: PermissionValues
@@ -480,35 +490,32 @@ export default function AccountPage() {
       return;
     }
 
-    const { error: profileError } = await supabase
-      .from("profiles")
-      .update({
-        phone: phone.trim(),
-        postal_code: postalCode,
-        city: city.trim(),
-        street: street.trim(),
-        house_number: houseNumber.trim(),
-        apartment_number: apartmentNumber.trim() || null,
-
-        permission_sport: permissionSport,
-        permission_collector: permissionCollector,
-        permission_hunting: permissionHunting,
-        permission_training: permissionTraining,
-        permission_personal_protection: permissionPersonalProtection,
-        permission_other: permissionOther,
-
-        qualification_instructor: qualificationInstructor,
-        qualification_range_officer: qualificationRangeOfficer,
-        qualification_pzss_license: qualificationPzssLicense,
-        qualification_hunter: qualificationHunter,
-
-        updated_at: new Date().toISOString(),
-      })
-      .eq("user_id", user.id);
+    const { data: profileResultData, error: profileError } = await supabase.rpc(
+      "update_my_profile_v1",
+      {
+        p_phone: phone.trim(),
+        p_postal_code: postalCode,
+        p_city: city.trim(),
+        p_street: street.trim(),
+        p_house_number: houseNumber.trim(),
+        p_apartment_number: apartmentNumber.trim() || null,
+        p_permission_sport: permissionSport,
+        p_permission_collector: permissionCollector,
+        p_permission_hunting: permissionHunting,
+        p_permission_training: permissionTraining,
+        p_permission_personal_protection: permissionPersonalProtection,
+        p_permission_other: permissionOther,
+        p_qualification_instructor: qualificationInstructor,
+        p_qualification_range_officer: qualificationRangeOfficer,
+        p_qualification_pzss_license: qualificationPzssLicense,
+        p_qualification_hunter: qualificationHunter,
+      }
+    );
 
     setSavingProfile(false);
 
-    if (profileError) {
+    const profileResult = profileResultData as UpdateMyProfileResult | null;
+    if (profileError || !profileResult?.ok) {
       reportClientError("Account profile update failed", profileError);
       setMessage(
         "Dane konta zapisane, ale nie udało się zaktualizować profilu. Spróbuj ponownie."
@@ -516,10 +523,10 @@ export default function AccountPage() {
       return;
     }
 
-    if (permissionsChanged) {
-      setVerificationStatus("pending");
-      setPermissionsVerified(false);
-      setPermissionsVerifiedAt("");
+    if (permissionsChanged || profileResult.declarations_changed) {
+      setVerificationStatus(profileResult.verification_status ?? "pending");
+      setPermissionsVerified(profileResult.permissions_verified ?? false);
+      setPermissionsVerifiedAt(profileResult.permissions_verified_at ?? "");
       setPermissionsVerificationNote("");
       setInitialPermissionValues(currentPermissionValues);
       setMessage(
