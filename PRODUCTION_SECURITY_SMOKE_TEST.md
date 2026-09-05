@@ -1481,3 +1481,80 @@ PASS
 BUG STATUS:
 FULLY FIXED / PROD PASS
 ```
+
+---
+
+# REPORTS-6B PRODUCTION SMOKE
+
+**Date:** 2026-09-05
+
+**Production commit:** `b9b79d5 — feat: add report filters and safe csv export`
+
+**Production migration:** `20260905170000_add_admin_reservation_report_filters_export.sql`
+
+The smoke used one uniquely marked synthetic Auth/profile identity, one
+synthetic parent family with two positions, one standalone lane and 72
+synthetic reservations. Four of those reservations were isolated CSV formula
+injection cases. No real customer, reservation or resource was read or
+modified as fixture data.
+
+## Results
+
+| Test | Result | Evidence |
+|---|---|---|
+| Migration and RPC presence | PASS | Remote migration history contains `20260905170000`; the deployed report v2 and export v1 signatures both exist. |
+| Authorization | PASS | The production role matrix returned data only for `admin`; `pracownik`, `instruktor` and ordinary `user` received `not_allowed`. An unauthenticated direct URL request returned `307` to `/login?redirectTo=%2Fadmin%2Freports`. |
+| Function ACL | PASS | `authenticated` has EXECUTE on report v2 and export v1. `anon`, `PUBLIC` and `service_role` do not. The private shared helper is not a browser contract. |
+| RLS / browser trust boundary | PASS | No REPORTS-6B table policy exists and no table RLS policy was widened. The deployed browser flow used the authenticated reporting RPC; no service-role client or raw reservations bulk fetch was introduced. |
+| Date filters | PASS | Exact `from`, exact `to`, and the inclusive two-day `from+to` range returned respectively 7, 1 and 8 controlled fixture rows. KPI and details totals matched each range. |
+| Parent filter | PASS | Selecting the synthetic parent returned its three root rows and the three rows belonging to its two children, excluded the standalone resource, retained effective capacity 2 and produced 600 non-double-counted occupied minutes. |
+| Child filter | PASS | Selecting the exact child returned only its two rows, retained the child UUID and effective capacity 1, and returned neither the parent nor sibling. |
+| Booking type | PASS | The controlled date returned 4 whole-lane and 3 single-position rows. Combining the child with `single_position` returned only the two exact child rows. |
+| Reservation status | PASS | All supported canonical filters passed: `confirmed=3`, `completed=2`, grouped `cancelled=1`, and `no_show=1`. KPI and detail totals were consistent. |
+| Payment status | PASS | All supported filters passed: `paid=2`, `paid_on_site=1`, `unpaid=1`, `pay_on_site=1`, `free=1`, and `voucher=1`. Canonical unfiltered revenue was planned 420 PLN, paid 280 PLN and outstanding/on-site 140 PLN. |
+| Combined filters | PASS | Date + parent + whole-lane + confirmed + paid returned exactly one row, one active reservation and 100 PLN planned/paid revenue. The server filter echo exactly matched the request. |
+| Pagination | PASS | A 60-row fixture returned 50 rows on page 1 and 10 on page 2, with no duplicate IDs, stable ordering and identical KPI summaries. Changing a filter on page 2 reset the UI to page 1. |
+| URL state | PASS | Query parameters restored all six filters after reload. Browser back/forward restored the previous/next status and payment state. Reset returned both dates to today and removed lane/status/payment/type values. No PII appeared in the URL. |
+| CSV filter scope | PASS | A combined child/status/payment/type export contained exactly the one matching row. A separate 60-row export contained all 60 filtered rows rather than only the current 50-row page. |
+| CSV format | PASS | The actual production download used UTF-8 BOM, semicolon separators, CRLF records and quoted cells. Quotes, semicolons, embedded newline, Unicode and Polish text were preserved correctly. |
+| CSV formula injection | PASS | Four actual downloaded cells beginning with `=`, `+`, `-` and `@` were each prefixed with an apostrophe before CSV quoting. The multiline `-` case remained one quoted logical CSV field. |
+| PII minimization | PASS | CSV headers and rows contained no email, phone, address, permits, tokens, admin note, profile data, user ID or reservation ID. Aggregate KPI/filter contracts contained no identity/contact fields. |
+| Export limit | PASS | The deployed definition enforces `v_total > 5000`, returns controlled `export_too_large` with `max_rows=5000`, and omits the rows payload above the limit. No 5,000-row production load test was performed. |
+| Empty result | PASS | An empty date returned zero details, zero canonical revenue and a valid empty export array without runtime or 5xx error. |
+| REPORTS-6A regression | PASS | The production matrix retained the 08:00–20:00 / 720-minute day, civil-day calculations across spring/autumn DST, whole-lane and position hierarchy semantics, effective-capacity accounting, interval-union occupancy without double counting, admin-only access and 50-row bounded details. |
+| Frontend | PASS | `/admin/reports` rendered KPI, details, all filters, reset, pagination and export. Combined filters showed the expected one-row state; pagination showed 50/10; export success messages matched the result counts. No runtime or 5xx error occurred. |
+| Cleanup | PASS | Fail-closed pre-check identified exactly 1 Auth user, 1 profile, 1 identity, 4 lanes, 4 booking rules, 4 pricing rules, 72 reservations and 0 audits. Cleanup removed only those exact UUIDs. |
+| Independent cleanup confirmation | PASS | A separate read-only post-check returned synthetic Auth users `0`, profiles `0`, lanes `0`, reservations `0`, with `remaining_synthetic_fixture=0` and `cleanup_confirmed=true`. |
+
+## Security and scalability conclusion
+
+The production UI and database use one shared server-side filter contract for
+aggregate KPI and details. KPI are independent of the 50-row page, while CSV
+uses a separate PII-minimal full-result contract bounded at 5,000 rows. The
+browser never receives raw unbounded reservation datasets and does not use a
+service-role credential.
+
+The known `REPORTS-HISTORY-SNAPSHOT` residual is unchanged: historical
+capacity can use current resource configuration, and a child snapshot does not
+contain the historical parent name. This is not a REPORTS-6B failure.
+
+No code, schema, migration, configuration or deployment was changed during the
+smoke. Production writes were restricted to the uniquely identified synthetic
+fixture and its exact cleanup. The final independent check confirmed zero
+residue.
+
+## Final result
+
+```text
+REPORTS-6B PRODUCTION SMOKE:
+PASS
+
+REPORTS-6B STATUS:
+FULLY IMPLEMENTED / PROD PASS
+
+REPORTS-6A REGRESSION:
+PASS
+
+HISTORICAL SNAPSHOT RESIDUAL:
+CONFIRMED
+```
