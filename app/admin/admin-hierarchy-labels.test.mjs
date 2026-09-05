@@ -17,6 +17,13 @@ test("all operational admin surfaces request and resolve hierarchy metadata", as
   for (const [name, file] of surfaces) {
     const content = await source(file);
 
+    if (name === "Reports") {
+      assert.match(content, /admin_get_reservation_report_v1/);
+      assert.match(content, /reservation\.laneDisplayName/);
+      assert.doesNotMatch(content, /\.from\("shooting_lanes"\)/);
+      continue;
+    }
+
     assert.match(content, /resource_kind/, `${name} resource_kind`);
     assert.match(content, /parent_lane_id/, `${name} parent_lane_id`);
     assert.match(content, /display_order/, `${name} display_order`);
@@ -52,11 +59,12 @@ test("reservations keep exports, actions and cancellation RPC while using full l
 test("reports change only the grouping label and retain totals without extra rows", async () => {
   const content = await source("./reports/page.tsx");
 
-  assert.match(content, /const activeReservations = reservations\.filter/);
-  assert.match(content, /const paidReservations = activeReservations\.filter/);
-  assert.match(content, /const totalRevenue = activeReservations\.reduce/);
-  assert.match(content, /const topLane = Object\.entries\(/);
-  assert.match(content, /const laneName = getLaneName\(reservation\)/);
+  assert.match(content, /admin_get_reservation_report_v1/);
+  assert.match(content, /summary\.activeReservationCount/);
+  assert.match(content, /summary\.plannedRevenue/);
+  assert.match(content, /summary\.topResource/);
+  assert.match(content, /reservation\.laneDisplayName/);
+  assert.doesNotMatch(content, /\.from\("reservations"\)/);
   assert.doesNotMatch(content, /flatMap|buildLaneHierarchyDisplayModel/);
 });
 

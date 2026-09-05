@@ -24,14 +24,17 @@ test("reports retain calculations and use a local scroll region for the detailed
   const content = await source("./reports/page.tsx");
 
   assert.match(content, /<AdminShell/);
-  assert.match(content, /const totalRevenue = activeReservations\.reduce/);
-  assert.match(content, /const paidRevenue = paidReservations\.reduce/);
-  assert.match(content, /const occupancy =/);
-  assert.match(content, /const topLane = Object\.entries/);
-  assert.match(content, /getLaneName\(reservation\)/);
+  assert.match(content, /admin_get_reservation_report_v1/);
+  assert.match(content, /parseAdminReservationReport/);
+  assert.match(content, /summary\.plannedRevenue/);
+  assert.match(content, /summary\.paidRevenue/);
+  assert.match(content, /summary\.occupancyPercent/);
+  assert.match(content, /summary\.topResource/);
+  assert.match(content, /reservation\.laneDisplayName/);
   assert.match(content, /aria-label="Tabela rezerwacji w okresie"/);
   assert.match(content, /overflow-x-auto/);
   assert.doesNotMatch(content, /overflow-x-auto[^\n]*<main/);
+  assert.doesNotMatch(content, /\.from\("reservations"\)/);
 });
 
 test("check-in retains token lookup and operational actions with an explicit empty state", async () => {
