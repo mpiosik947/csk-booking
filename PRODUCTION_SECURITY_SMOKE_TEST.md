@@ -1359,6 +1359,72 @@ FULLY FIXED / PROD PASS
 
 ---
 
+# REPORTS-6A PRODUCTION SMOKE
+
+**Date:** 2026-09-05
+
+**Production commit:** `282edff — feat: add scalable admin reservation reports`
+
+**Production migration:** `20260905150000_add_admin_reservation_reports_v1.sql`
+
+The database portion used four uniquely generated synthetic Auth/profile
+identities, a synthetic hierarchy, an inactive historical resource and
+synthetic reservations on dates that cannot overlap current customer data.
+All fixture changes ran inside one transaction. After 25 assertions passed,
+the deliberate terminal exception
+`REPORTS6A_PROD_SMOKE_ALL_25_PASS_ROLLBACK` forced rollback of the complete
+fixture. A separate read-only query then confirmed zero residue.
+
+## Results
+
+| Test | Result | Evidence |
+|---|---|---|
+| Authorization | PASS | The deployed RPC allowed the synthetic admin. Employee, instructor and ordinary-user calls returned controlled `not_allowed`; `anon`, `PUBLIC` and `service_role` have no `EXECUTE`. `/admin/reports` is admin-only in the server-side route map and loaded successfully in a real authenticated admin session. No browser `service_role` use or REPORTS-6A RLS widening was found. |
+| Operating hours / occupancy | PASS | Production returned `opening_start=08:00`, `opening_end=20:00` and exactly `opening_minutes_per_day=720`. The deployed UI independently displayed the same 12-hour capacity premise. The controlled mixed hierarchy produced 300 occupied minutes; a 960-minute denominator was not used. |
+| Date range | PASS | One day returned 1 civil day, a month boundary and year boundary returned 2 days each, and both the spring and autumn DST dates remained one civil day. UI day, week, month and year modes loaded successfully; the year view returned 365 days without off-by-one behavior. |
+| Whole-lane | PASS | A two-hour whole-lane reservation was counted once as a reservation and mapped to the two effective child units without creating an extra root unit. |
+| Single position | PASS | The child reservation appeared exactly once with its child UUID, `resource_kind=position`, parent UUID and `Parent — Position` presentation. It was not projected onto its sibling. |
+| Mixed hierarchy | PASS | Overlapping root `08:00–10:00` and child `09:00–11:00` ranges were unioned per effective unit. The result was 300 occupied minutes, not the double-counted alternative, and the synthetic family increased effective capacity by exactly two. |
+| Cancellation | PASS | The synthetic owner cancelled a future reservation through the existing `cancel_reservation` RPC. The report changed from active occupancy to one cancellation, with zero occupied minutes for that date; the reservation row remained as operational history. |
+| Revenue | PASS | On the controlled fixture, planned revenue was 150 PLN, paid revenue 100 PLN and outstanding/on-site revenue 50 PLN. Cancelled and no-show records did not inflate the canonical planned total. |
+| PII reduction | PASS | Aggregate fields contained no identity/contact data. Detail rows were bounded to the exact existing admin-table DTO. No user ID, address, permit/declaration, admin note, check-in/confirmation/promotion token, JWT or service-role field was returned. |
+| Pagination | PASS | With 55 synthetic detail rows, page 1 returned exactly 50 and page 2 exactly 5. IDs were unique across pages, ordering was stable, and aggregate summary data was identical on both pages. |
+| Large range | PASS | Production RPC calls for 90 days and 365 days completed successfully. The frontend contains one aggregate RPC call with bounded limit/offset and no raw `reservations` table fetch or per-day/per-lane N+1 loop. |
+| Inactive / historical resource | PASS | A reservation for an inactive resource remained visible through `lane_name_snapshot`. The contract explicitly reported `name_basis=reservation_snapshot`, `position_parent_name_basis=current_configuration` and `capacity_basis=current_configuration`. |
+| Frontend | PASS | The deployed `/admin/reports` rendered range controls, KPI cards, hierarchy-aware details, empty-state behavior and pagination controls without a runtime or 5xx error. Day, week, month and year refreshes completed against `admin_get_reservation_report_v1()`. |
+| Migration / function contract | PASS | Production history contains `20260905150000`. The exact RPC is `STABLE SECURITY DEFINER`, owned by `postgres`, with `search_path=pg_catalog, public, pg_temp`; the reporting index and default page size/offset match the migration. |
+| Transaction rollback | PASS | The terminal result was the expected controlled exception `REPORTS6A_PROD_SMOKE_ALL_25_PASS_ROLLBACK`, proving all 25 checks passed before rollback. |
+| Cleanup | PASS | Independent post-check: synthetic Auth users `0`, profiles `0`, lanes `0`, reservations `0`, audits `0`; `remaining_synthetic_fixture=0`, therefore `cleanup_confirmed=true`. |
+
+## Scalability and security conclusion
+
+The production page reads one canonical aggregate/paginated RPC and does not
+bulk-fetch raw reservations in the browser. KPI values are independent of the
+current detail page, pagination is bounded at 50 in the UI, and the tested
+90-day/year ranges completed without timeout or memory errors. No production
+schema, migration, application code, configuration or deployment was changed
+during the smoke.
+
+The documented historical limitation remains intentional: occupancy capacity
+uses current resource configuration, and a position snapshot does not preserve
+the historical parent name. The smoke confirmed this contract rather than
+treating it as a REPORTS-6A failure.
+
+## Final result
+
+```text
+REPORTS-6A PRODUCTION SMOKE:
+PASS
+
+REPORTS-6A STATUS:
+FULLY IMPLEMENTED / PROD PASS
+
+HISTORICAL SNAPSHOT RESIDUAL:
+CONFIRMED
+```
+
+---
+
 # PUBLIC EVENT AVAILABILITY PRODUCTION SMOKE
 
 **Date:** 2026-09-05
