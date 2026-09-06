@@ -1936,3 +1936,59 @@ remaining_synthetic_fixture:
 cleanup_confirmed:
 true
 ```
+
+---
+
+# V1.1-02 EXACT CANCELLATION DEADLINE PRODUCTION SMOKE
+
+**Date:** 2026-09-06
+**Production implementation:** `409e773 — feat: show exact cancellation deadlines`
+
+This was a read-only production verification. No cancellation action was
+submitted, no fixture was created, and no application or database write was
+performed.
+
+## Evidence
+
+| Test | Result | Evidence |
+|---|---|---|
+| Deployment | PASS | The live production pages render the exact-deadline UI introduced by `409e773`; local `main`, `origin/main`, and the tested implementation all resolve to this commit. |
+| Active reservation | PASS | On the dedicated owner account, `/my-reservations` displayed `Samodzielne anulowanie możliwe do: 6 września 2026 20:00 (Europe/Warsaw).` for the reservation on 7 September 2026 at 08:00. `Anuluj rezerwację` and `Dodaj do kalendarza` were both visible and did not collide. |
+| Reservation boundary | PASS | The canonical database rule computes the Warsaw reservation start and permits cancellation when the remaining window is at least 12 hours. The deployed UI helper uses the same 12-hour cutoff and the inclusive comparison `now <= deadline`. Focused tests at the deployed commit confirm before-cutoff ALLOW, exact-cutoff ALLOW, and after-cutoff DENY. |
+| Reservation terminal states | PASS | Production history entries did not show an active cancellation deadline or cancellation CTA. Past/cancelled states remain represented by their status rather than a misleading actionable deadline. |
+| Active event registration | PASS | `/my-events` displayed `Samodzielne anulowanie możliwe do: 9 grudnia 2026 08:00 (Europe/Warsaw).` for an event starting on 12 December 2026 at 08:00. `Anuluj udział` and `Dodaj do kalendarza` remained readable together. |
+| Event boundary | PASS | The deployed UI uses the canonical EVENTS-8A 72-hour rule with the inclusive comparison `now <= deadline`. Focused tests confirm greater than 72 hours ALLOW, exactly 72 hours ALLOW, and less than 72 hours DENY. |
+| Event statuses | PASS | The active `registered` case showed the deadline. Production cancelled/history rows did not show an actionable deadline. Reserve produced a controlled empty state for the tested account, and the deployed status gate limits cancellation/deadline presentation to eligible statuses. |
+| Europe/Warsaw | PASS | Both production strings explicitly identify `Europe/Warsaw`; the displayed deadline is derived from the resource date/time resolved in that zone rather than from a fixed UTC offset. |
+| DST | PASS | The exact deployed helper is covered for CET, CEST, the spring DST gap and the autumn overlap. The focused suite at the production commit passed all DST cases. |
+| Mobile 320/375/430 | PASS | The implementation deployed in `409e773` passed its Playwright viewport matrix at 320, 375 and 430 px. Deadline text wraps, action groups wrap, and the cancellation/calendar controls remain separate. The authenticated in-app production browser itself had a fixed desktop viewport, so the exact-width evidence comes from the deployed commit's automated browser suite rather than viewport resizing during this read-only session. |
+| Focused regression | PASS | `node --test lib/event-time.test.mjs lib/my-reservations.test.mjs app/my-events/page.test.mjs` completed with 20/20 tests passing on the deployed commit, covering boundary semantics, Polish formatting, Warsaw timezone/DST and CTA gating. |
+| Production regression | PASS | Both `/my-reservations` and `/my-events` loaded without a new runtime error. Existing cancellation and Add to Calendar actions remained present for eligible active records; reserve/history states remained controlled. No action that mutates production data was invoked. |
+
+## Final result
+
+```text
+V1.1-02 EXACT CANCELLATION DEADLINE PRODUCTION SMOKE:
+PASS
+
+V1.1-02 STATUS:
+FULLY IMPLEMENTED / PROD PASS
+
+RESERVATION DEADLINE:
+PASS
+
+EVENT DEADLINE:
+PASS
+
+BACKEND / UI CONSISTENCY:
+PASS
+
+BOUNDARY SEMANTICS:
+PASS
+
+EUROPE/WARSAW / DST:
+PASS
+
+MOBILE UX:
+PASS
+```
