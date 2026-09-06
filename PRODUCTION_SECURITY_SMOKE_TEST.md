@@ -1693,3 +1693,84 @@ PASS
 MINIMAL PARTICIPANT DTO:
 PASS
 ```
+
+---
+
+# EVENTS-8B PRODUCTION SMOKE
+
+**Date:** 2026-09-06
+
+**Production implementation:** `963ca72 — feat: add scalable event read contracts`
+
+**Production migration:** `20260905190000_add_scalable_event_read_contracts.sql`
+
+The smoke was executed against the deployed Vercel application and production
+Supabase project. Database contract checks used a unique
+`[TEST][EVENTS-8B][RUN-ID]` marker, four synthetic Auth users, 60 synthetic
+events, and 176 synthetic registrations. The complete fixture lived inside one
+transaction that ended with the controlled exception
+`EVENTS8B_SMOKE_ALL_30_PASS_ROLLBACK`.
+
+## Results
+
+| Test | Result | Evidence |
+|---|---|---|
+| Migration and RPCs | PASS | Production migration history contains `20260905190000`. All four exact functions exist: `get_public_event_list_v2(text,text,integer,integer)`, `admin_list_events_v1(text,text,text,integer,integer)`, `admin_list_event_registrations_v1(uuid,text,text,integer,integer)`, and `get_my_event_registrations_v1(text,text,integer,integer)`. All four are `STABLE SECURITY DEFINER`, owned by `postgres`, with `search_path=pg_catalog, public, pg_temp`. |
+| Public direct contract | PASS | A real anonymous PostgREST request to `get_public_event_list_v2` returned HTTP 200, `contract_version`, filters, pagination and items, with `page_size=50`. No customer, user, registration, email, phone, token or note field was present. |
+| Public list and authoritative availability | PASS | The transactional production fixture returned 58 active future events as bounded pages `20 / 20 / 18`; page 4 was empty. Repeated page 1 was byte-equivalent. For the controlled capacity-200 event, `registered + approved = 80`, `reserve = 20`, cancelled registrations consumed no capacity, and `available_spots = 120` without a negative value. Anon and ordinary authenticated users received identical public aggregates. |
+| Public ACL | PASS | `anon` and `authenticated` have `EXECUTE`; generic `PUBLIC` and `service_role` do not. The deployed browser bundle contains no service-role credential. |
+| Admin event list | PASS | Production `/admin/events` rendered successfully. Search, all/upcoming/past/inactive scope, nearest/latest ordering and URL restoration worked. The controlled DB fixture returned 60 total rows, exactly one past row and one inactive row, with a bounded 20-row first page. Ordinary users received `not_allowed`; the existing employee/instructor behavior remained unchanged. |
+| Admin participants | PASS | Production participant UI rendered status and all supported payment filters plus page-independent registered/reserve/cancelled totals. The fixture returned 121 rows in stable pages of at most 50; page 2 contained 50 rows. Status and payment filters were backend-owned. Summary was independent of page: registered/approved 80, reserve 20, cancelled 21, and paid active registrations 40. |
+| Minimal participant DTO | PASS | The participant RPC returned only `id`, customer name/email/phone, registration status, payment status and creation time—the fields required by the existing operational screen. It returned no profile, address, permits, tokens, admin note or delivery internals. |
+| My Events read contract | PASS | Production `/my-events` rendered the current account's rows and supported upcoming/history and status filters. URL reload and back/forward restored state. The fixture returned only the caller's 55 rows: 46 upcoming and 9 cancelled history rows. The API accepts no caller-supplied user ID; anonymous execution was denied. |
+| Pagination boundaries | PASS | Page 1, later pages and the empty page beyond the last were deterministic and duplicate-free. Page 0 and requested page size 51 returned controlled `invalid_input`. Browser values such as a non-numeric page or unknown filter were normalized safely without runtime errors. |
+| URL state | PASS | `/events`, `/admin/events`, and `/my-events` preserved search/filter state through reload and browser back/forward. Changing filters reset pagination. Query strings contained only search, scope, sort, status and page values—no PII. |
+| Performance contract | PASS | Each deployed list bundle references its single bounded RPC. The admin/my-events bundles contain no direct `event_registrations` read and no `service_role`. Public aggregation was verified against page-only output. The three production indexes exist: `events_active_date_time_id_idx`, `event_registrations_user_created_id_idx`, and `event_registrations_event_payment_created_id_idx`. No disruptive production load test was run. |
+| Authorization | PASS | Admin list and participant contracts denied ordinary users and anonymous callers. My-events remained owner-derived from `auth.uid()`. Instructor behavior was preserved exactly as the current deferred model requires. No table RLS or table ACL was expanded. |
+| Frontend | PASS | `/events`, `/admin/events`, and `/my-events` loaded without 5xx or visible runtime failure. Search, filters, empty states, participant details, URL restoration and controlled invalid parameters worked. Public `/events` used `get_public_event_list_v2`; admin and my-events used the three corresponding bounded RPCs. |
+| EVENTS-8A regression | PASS | Canonical status labels and the Europe/Warsaw 72-hour cancellation contract remain in the deployed client. Public capacity semantics, minimal participant DTO, registration/reserve/promotion/cancellation/payment call-sites and backend overbooking authority are unchanged. The EVENTS-8B migration is additive and does not redefine any EVENTS-8A mutation RPC. |
+| Cleanup | PASS | The final transaction produced `EVENTS8B_SMOKE_ALL_30_PASS_ROLLBACK`. Independent read-only verification returned Auth users 0, profiles 0, events 0, event registrations 0, audit logs 0, `remaining_synthetic_fixture=0`, and `cleanup_confirmed=true`. |
+
+## Harness diagnostics
+
+Two preliminary harness attempts were rolled back before the successful run:
+one exposed an ambiguous test variable named `user_id`, and one used an
+incorrect expected `paid_count`. The correct production contract counts paid
+rows only when their registration status occupies capacity, making the fixture
+value 40 rather than 60. Neither diagnostic represented a product failure, and
+neither left persistent data.
+
+## Safety conclusion
+
+No application code, production schema, migration, RLS, ACL, configuration or
+deployment was changed. No event-management mutation, registration mutation,
+email flow or real customer record was modified. Only this report was changed
+locally.
+
+## Final result
+
+```text
+EVENTS-8B PRODUCTION SMOKE:
+PASS
+
+EVENTS-8B STATUS:
+FULLY IMPLEMENTED / PROD PASS
+
+PUBLIC READ CONTRACT:
+PASS
+
+ADMIN READ CONTRACT:
+PASS
+
+PARTICIPANT PAGINATION:
+PASS
+
+MY EVENTS READ CONTRACT:
+PASS
+
+AUTHORIZATION:
+PASS
+
+EVENTS-8A REGRESSION:
+PASS
+```
