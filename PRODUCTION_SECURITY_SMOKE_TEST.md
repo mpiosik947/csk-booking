@@ -1838,3 +1838,101 @@ PASS
 ETAP 8 EVENTS / TRAININGS:
 DONE
 ```
+
+---
+
+# V1.1-01 ADD TO CALENDAR PRODUCTION SMOKE
+
+**Date:** 2026-09-06
+
+**Production implementation:** `9154d12 — feat: add safe calendar exports`
+
+This was a read-only production check. No reservation, event registration,
+account, fixture, database row, configuration, migration, or deployment was
+created or changed.
+
+## Evidence
+
+| Test | Result | Evidence |
+|---|---|---|
+| Deployment | PASS | Local production HEAD is `9154d12`. The live `/my-events` page exposes the V1.1-01 CTA and therefore serves the deployed calendar-export UI. |
+| Anonymous reservation endpoint | PASS | A real unauthenticated GET to `/api/calendar/reservations/<synthetic-uuid>` returned HTTP `401`, `application/json`, `Cache-Control: no-store`, and the controlled `unauthorized` response. |
+| Anonymous event-registration endpoint | PASS | A real unauthenticated GET to `/api/calendar/event-registrations/<synthetic-uuid>` returned HTTP `401`, `application/json`, `Cache-Control: no-store`, and the controlled `unauthorized` response. |
+| Owner reservation flow | PASS | The dedicated OWNER account `matyldafilip96@gmail.com` had an existing active reservation for 2026-09-07, 08:00–09:00, on `Oś 50 m — nr 1`. The production CTA produced a real 403-byte `csk-rezerwacja.ics` file without an application or console error. No fixture was created. |
+| Reservation ICS response/body inspection | PASS | The raw downloaded file contains `BEGIN:VCALENDAR`, `BEGIN:VEVENT`, `UID`, `DTSTART:20260907T060000Z`, `DTEND:20260907T070000Z`, `SUMMARY`, `DESCRIPTION`, `END:VEVENT` and `END:VCALENDAR`. The September conversion correctly represents 08:00–09:00 Europe/Warsaw as 06:00–07:00 UTC. Reservation location is not part of the current generator contract. |
+| Admin-owned event flow | PASS | The designated admin account `m.piosik94@gmail.com` had an existing future `registered` event. Its production CTA produced a real 1,892-byte `csk-szkolenie.ics` file without an application or console error. This is valid production generator evidence, but it does not replace the specifically requested event-registration evidence for the OWNER account. |
+| Event ICS response/body inspection | PASS | The raw downloaded file contains the complete VCALENDAR/VEVENT structure, pseudonymous UID, title, description and `LOCATION:oś 10mm`. `DTSTART:20261212T070000Z` and `DTEND:20261212T110000Z` correctly represent 08:00–12:00 Europe/Warsaw in winter. |
+| Foreign-owner isolation | NOT COMPLETED | Both dedicated accounts were available and the routes were confirmed statically as strict owner-only: the reservation endpoint uses owner-scoped `get_my_reservations_v2`, while the event endpoint additionally enforces `user_id = auth.uid()`. The browser test surface did not expose record IDs or allow a safe authenticated Bearer request for a foreign record, so an actual production 403/404 was not obtained. No service-role or session-token bypass was used. |
+| Cancelled/reserve CTA matrix | PARTIAL | The deployed source and existing regression suite enforce `registered`/`approved` only and hide cancelled/reserve entries, but the current account did not contain safe production rows for every branch. |
+| ICS injection and PII/secret exclusion | PASS | Both raw production files were inspected. Neither contains either test-account e-mail, phone, address, user/profile UUID, check-in/confirmation/cancellation/JWT/refresh/access token, magic link, admin note, permit data, `ATTENDEE`, or another user's data. UID values are SHA-256-derived pseudonymous identifiers. Injection escaping remains separately covered by local CR/LF, backslash, comma, semicolon, fake `ATTENDEE` and fake VEVENT regression tests. |
+| Europe/Warsaw and DST | PASS | The real September reservation validates CEST (UTC+2) and the real December event validates CET (UTC+1). The deployed generator uses the Europe/Warsaw conversion helper; spring-gap and autumn-overlap boundaries remain covered by the local regression suite. |
+| HTTP headers | PARTIAL | Real successful downloads establish a working 2xx production response and attachment behavior. Exact successful-response headers could not be captured from the in-app Blob download. The deployed route contract sets `Content-Type: text/calendar; charset=utf-8`, attachment `Content-Disposition`, `Cache-Control: private, no-store`, and `X-Content-Type-Options: nosniff`; independent production header evidence remains incomplete. |
+| Mobile 320/375/430 | NOT COMPLETED | The deployed responsive implementation is identical to the committed, passing Playwright matrix, but the authenticated in-app browser could not be resized to all three exact widths during this production check. |
+| No calendar access | PASS | The deployed feature is a same-origin `.ics` download. The implementation contains no Google, Apple, or Microsoft Calendar API, calendar OAuth scope, `webcal` subscription, or permission prompt. |
+| Production mutation | PASS | No write path was invoked. No synthetic fixture or cleanup was required. |
+
+## Assessment
+
+No production defect was observed. The smoke cannot receive a PASS because the
+required reservation flow, foreign-owner checks, downloaded ICS byte/header
+inspection, malicious production input, and exact mobile viewport matrix were
+not actually executed. Treat this as an **incomplete production verification**,
+not evidence that the deployed implementation is broken.
+
+The previous result was **INCOMPLETE EVIDENCE — NO DEFECT CONFIRMED**.
+This completion used the two dedicated existing accounts supplied by the
+project owner. It added real raw-file evidence for both production generators,
+PII/secret exclusion and summer/winter timezone conversion. It did not create
+or modify a reservation, event registration, event, profile or Auth user.
+
+The result remains PARTIAL because the OWNER account had no active eligible
+event registration, successful Blob-response headers could not be captured by
+the browser automation interface, and the same-record foreign Bearer requests
+could not be performed without exposing or bypassing session credentials.
+These are missing production evidence, not confirmed defects.
+
+## Final result
+
+```text
+V1.1-01 ADD TO CALENDAR PRODUCTION SMOKE:
+PARTIAL
+
+V1.1-01 STATUS:
+PRODUCTION EVIDENCE PARTIAL
+
+OWNER ACCOUNT:
+matyldafilip96@gmail.com
+
+OWNER RESERVATION ICS:
+PASS
+
+OWNER EVENT REGISTRATION ICS:
+FAIL — OWNER ACCOUNT HAS NO ACTIVE ELIGIBLE EVENT REGISTRATION
+
+FOREIGN PRINCIPAL:
+m.piosik94@gmail.com
+
+FOREIGN RESERVATION ACCESS:
+FAIL — PRODUCTION DENIAL NOT EXECUTED
+
+FOREIGN EVENT ACCESS:
+FAIL — PRODUCTION DENIAL NOT EXECUTED
+
+PII / SECRET EXCLUSION:
+PASS
+
+HTTP NO-STORE:
+FAIL — OWNER SUCCESS HEADERS NOT CAPTURED
+
+TIMEZONE / DST:
+PASS
+
+NO CALENDAR PERMISSIONS:
+PASS
+
+remaining_synthetic_fixture:
+0
+
+cleanup_confirmed:
+true
+```
