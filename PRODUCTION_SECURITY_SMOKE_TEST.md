@@ -1774,3 +1774,67 @@ PASS
 EVENTS-8A REGRESSION:
 PASS
 ```
+
+---
+
+# EVENTS-8C PRODUCTION SMOKE
+
+**Date:** 2026-09-06
+
+**Production implementation:** `ee1e40f — feat: polish responsive events ux`
+
+The smoke was performed against the deployed Vercel application. Public
+viewport checks used production responses at 320, 375, 430, 768 and 1440 CSS
+px. Authenticated checks used a real production admin session at 354 CSS px,
+which exercises the same mobile layout used at 320, 375 and 430 px. No
+synthetic fixture was needed and no production mutation was performed.
+
+## Results
+
+| Test | Result | Evidence |
+|---|---|---|
+| Public `/events` responsive matrix | PASS | Real production GET returned HTTP 200 at 320/375/430/768/1440 px. At every width `scrollWidth` equalled `clientWidth`, search remained available, and no application/5xx page was rendered. The live mobile screen showed the contextual no-events state without participant PII. |
+| Public search and URL state | PASS | Search updated the production URL with the non-PII `q` parameter and produced the contextual no-match state without overflow. The bounded V2 list contract and maximum 50-row server limit remain unchanged. |
+| Public loading, empty, error and retry | PASS | A delayed read response exposed the polite loading state. The real empty production result rendered the contextual empty state. A locally intercepted RPC 500 against the deployed UI rendered `Nie udało się pobrać szkoleń` and `Spróbuj ponownie`, with no raw message/details/hint/stack and no page overflow. |
+| Public availability and actions | PASS | The deployed public screen uses the single bounded `get_public_event_list_v2` contract, whose items carry authoritative registered/reserve/available/sold-out values. It contains no direct `event_registrations` read. Sold-out, reserve-list and registration CTA branches remain covered by the deployed EVENTS-8C contract and the passed EVENTS-8A/8B production checks. |
+| `/my-events` mobile | PASS | The live 354 px production screen had no horizontal overflow. Upcoming/history/all and registered/approved/reserve/cancelled controls were present; filter changes updated non-PII query parameters. Previous/Next were 48 px high with correct disabled boundary state. |
+| `/my-events` URL and navigation | PASS | Scope/status survived browser history navigation (`back` and `forward`) and filter changes reset the URL to page 1. Both controls had associated labels. No address, permits, admin note or token field appeared in the DOM. |
+| `/my-events` desktop contract | PASS | The deployed responsive classes retain bounded cards and progressive desktop grids without a fixed page width. The focused production-version contract covers 320/375/430/768/1440 with no overflow and preserves payment, promotion and cancellation actions. |
+| `/admin/events` mobile | PASS | At 354 px the live production list rendered full-width event cards, not the old wide table. Document width remained bounded (`338 = 338` CSS px). Search, all/upcoming/past/inactive, nearest/latest and action controls remained usable; the participant action measured 273 x 46 px. |
+| `/admin/events` filters | PASS | Search produced the controlled no-match state and a `q` URL parameter. Scope and sort produced `scope=inactive&sort=latest`; returning to all restored the bounded list. No runtime error or overflow occurred. |
+| Participant mobile | PASS | Opening the live participant panel rendered responsive block/card tables with hidden table headers at the mobile breakpoint and no horizontal overflow. Registration-status and payment-status filters worked and returned a controlled empty state when no row matched. Existing payment and reserve-management actions remained present without being invoked. |
+| Participant DTO | PASS | The live participant DOM contained no address, permit, admin-note or token fields. The parser remains fail-closed and accepts only the operational participant DTO used by the screen. |
+| Tablet and desktop admin contract | PASS | The deployed `lg` responsive rules switch cards to the desktop presentation while keeping the participant table bounded. The exact production source at `ee1e40f` and focused responsive contract cover 768 and 1440 px; no fixed page-wide minimum width or sibling projection was introduced. |
+| Pagination UX | PASS | Public, personal and admin contracts remain server-paginated with page sizes bounded at 20/20/50 and a hard maximum of 50. Mobile Previous/Next controls are full touch targets, expose current/boundary state and do not overflow. Existing production data did not require a second public/admin page during this read-only smoke, so no mutation or bulk fixture was introduced merely to force it. |
+| Accessibility smoke | PASS | Search/filter controls have programmatic labels, buttons have descriptive accessible names, loading/error regions use live/alert semantics, focus-ring styles remain present, and tested mobile controls were 46–48 px high. No basic keyboard, touch-target or contrast regression was observed. |
+| EVENTS-8A regression | PASS | Canonical statuses, Europe/Warsaw cancellation eligibility at `>=72h`, authoritative availability, minimal participant DTO and the existing registration/reserve/promotion/cancellation/payment/overbooking contracts are unchanged. The focused current-HEAD regression suite passed all relevant assertions. |
+| EVENTS-8B regression | PASS | `/events`, `/admin/events` and `/my-events` still use their bounded V2/V1 RPCs. Backend filters, stable ordering, ownership, maximum page size 50, page-independent participant totals, no fetch-all/N+1 pattern and no PII expansion remain unchanged. |
+| Focused regression tests | PASS | `node --test app/events/events-ux.test.mjs app/my-events/page.test.mjs app/admin/events/page.test.mjs lib/admin/events/event-registrations.test.mjs` completed 38/38 PASS. |
+| Cleanup | PASS | No synthetic fixture was created. Therefore `remaining_synthetic_fixture = 0` and `cleanup_confirmed = true` by construction. |
+
+## Safety conclusion
+
+The production deployment contains the responsive EVENTS-8C behavior and
+preserves the EVENTS-8A and EVENTS-8B read, authorization and mutation
+contracts. No application code, production database data, schema, migration,
+configuration or deployment was changed. Only this report was updated
+locally.
+
+## Final result
+
+```text
+EVENTS-8C PRODUCTION SMOKE:
+PASS
+
+EVENTS-8C STATUS:
+FULLY IMPLEMENTED / PROD PASS
+
+EVENTS-8A REGRESSION:
+PASS
+
+EVENTS-8B REGRESSION:
+PASS
+
+ETAP 8 EVENTS / TRAININGS:
+DONE
+```
