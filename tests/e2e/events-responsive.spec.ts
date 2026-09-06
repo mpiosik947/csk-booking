@@ -295,10 +295,31 @@ test.describe.serial("EVENTS-8C responsive UX", () => {
     const forbidden = await guardLocalRequests(page);
     await login(page);
     await mockRpc(page, "get_my_event_registrations_v1", myPayload);
+    let calendarRequestWasAuthenticated = false;
+    await page.route("**/api/calendar/event-registrations/*", async (route) => {
+      calendarRequestWasAuthenticated = route.request().headers().authorization?.startsWith("Bearer ") ?? false;
+      await route.fulfill({
+        status: 200,
+        contentType: "text/calendar; charset=utf-8",
+        headers: {
+          "Content-Disposition": 'attachment; filename="csk-szkolenie.ics"',
+          "Cache-Control": "private, no-store",
+          "X-Content-Type-Options": "nosniff",
+        },
+        body: "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nEND:VCALENDAR\r\n",
+      });
+    });
     await page.goto("/my-events");
     await expect(page.getByText("[TEST] Moje szkolenie")).toBeVisible();
     await page.getByRole("button", { name: /\[TEST\] Moje szkolenie/u }).click();
     await expect(page.getByRole("button", { name: "Anuluj udział" })).toBeVisible();
+    const downloadPromise = page.waitForEvent("download");
+    await page.getByRole("button", { name: "Dodaj do kalendarza" }).click();
+    const download = await downloadPromise;
+    expect(download.suggestedFilename()).toBe("csk-szkolenie.ics");
+    expect(calendarRequestWasAuthenticated).toBe(true);
+    await page.getByLabel("Status").selectOption("reserve");
+    await expect(page.getByRole("button", { name: "Dodaj do kalendarza" })).toHaveCount(0);
     await page.getByLabel("Status").selectOption("approved");
     await expect(page).toHaveURL(/status=approved/u);
     await page.getByLabel("Zakres").selectOption("history");

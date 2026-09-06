@@ -18,6 +18,7 @@ import {
   type MyEventRegistration,
   type MyEventScope,
 } from "../../lib/event-read-contracts";
+import { AddToCalendarButton } from "../_components/AddToCalendarButton";
 
 type EventRegistration = MyEventRegistration;
 
@@ -522,6 +523,11 @@ export default function MyEventsPage() {
                     );
                   const isTooLateToCancel = !canCancel;
                   const isExpanded = expandedEventId === item.id;
+                  const canAddToCalendar =
+                    item.registration_status ===
+                      EVENT_REGISTRATION_STATUS.REGISTERED ||
+                    item.registration_status ===
+                      EVENT_REGISTRATION_STATUS.APPROVED;
 
                   return (
                     <article
@@ -644,18 +650,27 @@ export default function MyEventsPage() {
                             </div>
                           </div>
 
-                          {canCancel && (
-                            <div className="mt-6">
-                              <button
-                                type="button"
-                                disabled={processingId === item.id}
-                                onClick={() => cancelRegistration(item)}
-                                className="inline-flex min-h-12 items-center justify-center rounded-xl border border-[#744545] px-5 py-3 text-sm font-semibold text-[#e0a0a0] transition hover:bg-[#2a1b1b] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#e0a0a0] focus-visible:ring-offset-2 focus-visible:ring-offset-[#191e19] disabled:cursor-not-allowed disabled:opacity-60"
-                              >
-                                {processingId === item.id
-                                  ? "Anulowanie..."
-                                  : "Anuluj udział"}
-                              </button>
+                          {(canAddToCalendar || canCancel) && (
+                            <div className="mt-6 flex flex-wrap items-start gap-3">
+                              {canAddToCalendar && (
+                                <AddToCalendarButton
+                                  endpoint={`/api/calendar/event-registrations/${item.id}`}
+                                  filename="csk-szkolenie.ics"
+                                />
+                              )}
+
+                              {canCancel && (
+                                <button
+                                  type="button"
+                                  disabled={processingId === item.id}
+                                  onClick={() => cancelRegistration(item)}
+                                  className="inline-flex min-h-12 items-center justify-center rounded-xl border border-[#744545] px-5 py-3 text-sm font-semibold text-[#e0a0a0] transition hover:bg-[#2a1b1b] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#e0a0a0] focus-visible:ring-offset-2 focus-visible:ring-offset-[#191e19] disabled:cursor-not-allowed disabled:opacity-60"
+                                >
+                                  {processingId === item.id
+                                    ? "Anulowanie..."
+                                    : "Anuluj udział"}
+                                </button>
+                              )}
                             </div>
                           )}
 

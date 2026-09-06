@@ -14,6 +14,7 @@ import {
   type MyReservation as Reservation,
 } from "../../lib/my-reservations";
 import { reportClientError } from "../../lib/safe-client-error";
+import { AddToCalendarButton } from "../_components/AddToCalendarButton";
 
 type CancelReservationRpcResult = {
   changed: boolean;
@@ -647,19 +648,26 @@ export default function MyReservationsPage() {
                             </p>
                           )}
 
-                          {reservation.reservation_status ===
-                            RESERVATION_STATUS.CONFIRMED && (
-                              <button
-                                type="button"
-                                onClick={() => cancelReservation(reservation)}
-                                disabled={cancellingReservationId !== null}
-                                className="mt-5 inline-flex min-h-11 items-center justify-center rounded-xl border border-[#744545] px-4 py-2 text-sm font-semibold text-[#e0a0a0] transition hover:bg-[#2a1b1b] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#e0a0a0] focus-visible:ring-offset-2 focus-visible:ring-offset-[#191e19] disabled:cursor-not-allowed disabled:opacity-60"
-                              >
-                                {cancellingReservationId === reservation.id
-                                  ? "Anulowanie…"
-                                  : "Anuluj rezerwację"}
-                              </button>
-                            )}
+                          <div className="mt-5 flex flex-wrap items-start gap-3">
+                            <AddToCalendarButton
+                              endpoint={`/api/calendar/reservations/${reservation.id}`}
+                              filename="csk-rezerwacja.ics"
+                            />
+
+                            {reservation.reservation_status ===
+                              RESERVATION_STATUS.CONFIRMED && (
+                                <button
+                                  type="button"
+                                  onClick={() => cancelReservation(reservation)}
+                                  disabled={cancellingReservationId !== null}
+                                  className="inline-flex min-h-11 items-center justify-center rounded-xl border border-[#744545] px-4 py-2 text-sm font-semibold text-[#e0a0a0] transition hover:bg-[#2a1b1b] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#e0a0a0] focus-visible:ring-offset-2 focus-visible:ring-offset-[#191e19] disabled:cursor-not-allowed disabled:opacity-60"
+                                >
+                                  {cancellingReservationId === reservation.id
+                                    ? "Anulowanie…"
+                                    : "Anuluj rezerwację"}
+                                </button>
+                              )}
+                          </div>
                         </div>
 
                         <div className="rounded-2xl border border-[#30372c] bg-[#171a17] p-4 text-center">
