@@ -193,6 +193,8 @@ export default function MyEventsPage() {
   const [page, setPage] = useState(1);
   const [totalItems, setTotalItems] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [message, setMessage] = useState("");
   const [processingId, setProcessingId] = useState("");
@@ -211,7 +213,7 @@ export default function MyEventsPage() {
       const parsedScope = params.get("scope") ?? "upcoming";
       const parsedStatus = params.get("status") ?? "";
       const parsedPage = parsePageNumber(params.get("page"));
-      if (!(["upcoming", "history"] as string[]).includes(parsedScope) ||
+      if (!(["upcoming", "history", "all"] as string[]).includes(parsedScope) ||
           !["", "registered", "approved", "reserve", "cancelled"].includes(parsedStatus) || parsedPage === null) {
         setMessage("Nieprawidłowe filtry szkoleń w adresie strony.");
         setLoading(false);
@@ -233,6 +235,7 @@ export default function MyEventsPage() {
     let active = true;
     async function loadMyEvents() {
       setLoading(true);
+      setLoadError(false);
       const {
         data: { user },
       } = await supabase.auth.getUser();
@@ -254,6 +257,7 @@ export default function MyEventsPage() {
       if (error) {
         reportClientError("My events read failed", error);
         setMessage("Nie udało się pobrać zapisów na szkolenia. Spróbuj ponownie.");
+        setLoadError(true);
         setLoading(false);
         return;
       }
@@ -261,17 +265,19 @@ export default function MyEventsPage() {
       const parsed = parseMyEventList(data);
       if (!parsed) {
         setMessage("Nie udało się poprawnie wczytać zapisów na szkolenia.");
+        setLoadError(true);
         setLoading(false);
         return;
       }
       setItems(parsed.items);
       setTotalItems(parsed.total);
+      setMessage("");
       setLoading(false);
     }
 
     void loadMyEvents();
     return () => { active = false; };
-  }, [filtersReady, page, scope, statusFilter]);
+  }, [filtersReady, page, reloadKey, scope, statusFilter]);
 
   function updateFilters(nextScope: MyEventScope, nextStatus: string, nextPage = 1) {
     const params = buildEventSearchParams({ scope: nextScope === "upcoming" ? null : nextScope, status: nextStatus, page: nextPage });
@@ -372,7 +378,7 @@ export default function MyEventsPage() {
   }
 
   const warsawNowKey = getWarsawDateTimeKey(new Date());
-  const activeEvents = (scope === "upcoming" ? items : [])
+  const activeEvents = (scope === "upcoming" || scope === "all" ? items : [])
     .filter((item) => isActiveEventRegistration(item, warsawNowKey))
     .sort((firstItem, secondItem) => {
       const firstStartKey = getEventTimeKeys(firstItem.events)?.startKey ?? "";
@@ -380,7 +386,7 @@ export default function MyEventsPage() {
 
       return firstStartKey.localeCompare(secondStartKey);
     });
-  const eventHistory = (scope === "history" ? items : [])
+  const eventHistory = (scope === "history" || scope === "all" ? items : [])
     .filter((item) => !isActiveEventRegistration(item, warsawNowKey))
     .sort((firstItem, secondItem) => {
       const firstEndKey = getEventTimeKeys(firstItem.events)?.endKey ?? "";
@@ -409,7 +415,7 @@ export default function MyEventsPage() {
           <div>
             <label htmlFor="my-events-scope" className="mb-2 block text-sm font-semibold">Zakres</label>
             <select id="my-events-scope" value={scope} onChange={(event) => updateFilters(event.target.value as MyEventScope, statusFilter, 1)} className="min-h-11 w-full rounded-xl border border-[#3b4237] bg-[#090b09] px-4 py-3">
-              <option value="upcoming">Nadchodzące</option><option value="history">Historia</option>
+              <option value="upcoming">Nadchodzące</option><option value="history">Historia</option><option value="all">Wszystkie</option>
             </select>
           </div>
           <div>
@@ -471,16 +477,31 @@ export default function MyEventsPage() {
             className={`mt-8 ${getMessageClass(message)}`}
           >
             {message}
+            {loadError && (
+              <button
+                type="button"
+                onClick={() => setReloadKey((current) => current + 1)}
+                className="mt-4 min-h-12 w-full rounded-xl border border-[#a45f5f] px-5 py-3 font-semibold transition hover:bg-[#382323] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#e0a0a0] sm:w-auto"
+              >
+                Spróbuj ponownie
+              </button>
+            )}
           </div>
         )}
 
         {!loading && isLoggedIn && (
           <div className="mt-8">
-            <h2 className="text-2xl font-bold">Aktywne szkolenia</h2>
+            {scope !== "history" && (
+              <>
+            <h2 className="text-2xl font-bold">
+              {scope === "all" ? "Nadchodzące szkolenia" : "Aktywne szkolenia"}
+            </h2>
 
             {activeEvents.length === 0 ? (
               <div className="mt-4 rounded-2xl border border-[#30372c] bg-[#191e19] p-6 text-[#a9ada4]">
-                Nie masz obecnie aktywnych szkoleń.
+                {statusFilter
+                  ? "Brak szkoleń o wybranym statusie w tym zakresie."
+                  : "Nie masz obecnie aktywnych szkoleń."}
               </div>
             ) : (
               <div className="mt-4 space-y-4">
@@ -652,8 +673,10 @@ export default function MyEventsPage() {
                 })}
               </div>
             )}
+              </>
+            )}
 
-            {eventHistory.length > 0 && (
+            {(scope === "history" || eventHistory.length > 0) && (
               <section className="mt-10" aria-labelledby="event-history-heading">
                 <h2
                   id="event-history-heading"
@@ -662,8 +685,15 @@ export default function MyEventsPage() {
                   Historia szkoleń
                 </h2>
 
-                <div className="mt-4 space-y-3">
-                  {eventHistory.map((item) => (
+                {eventHistory.length === 0 ? (
+                  <div className="mt-4 rounded-2xl border border-[#30372c] bg-[#191e19] p-6 text-[#a9ada4]">
+                    {statusFilter
+                      ? "Brak historycznych szkoleń o wybranym statusie."
+                      : "Historia szkoleń jest pusta."}
+                  </div>
+                ) : (
+                  <div className="mt-4 space-y-3">
+                    {eventHistory.map((item) => (
                     <article
                       key={item.id}
                       className="rounded-xl border border-[#30372c] bg-[#171a17] p-4"
@@ -687,16 +717,17 @@ export default function MyEventsPage() {
                         </span>
                       </div>
                     </article>
-                  ))}
-                </div>
+                    ))}
+                  </div>
+                )}
               </section>
             )}
 
             {!loading && isLoggedIn && (
-              <nav className="mt-8 flex flex-wrap items-center justify-between gap-3" aria-label="Stronicowanie moich szkoleń">
-                <button type="button" disabled={page<=1} onClick={() => updateFilters(scope,statusFilter,page-1)} className="min-h-11 rounded-xl border border-[#495044] px-4 py-2 font-semibold disabled:opacity-50">Poprzednia</button>
-                <span className="text-sm text-[#a9ada4]">Strona {page} z {Math.max(1,Math.ceil(totalItems/EVENT_LIST_PAGE_SIZE))} · {totalItems} zapisów</span>
-                <button type="button" disabled={page*EVENT_LIST_PAGE_SIZE>=totalItems} onClick={() => updateFilters(scope,statusFilter,page+1)} className="min-h-11 rounded-xl border border-[#495044] px-4 py-2 font-semibold disabled:opacity-50">Następna</button>
+              <nav className="mt-8 grid grid-cols-2 gap-3 sm:flex sm:flex-wrap sm:items-center sm:justify-between" aria-label="Stronicowanie moich szkoleń">
+                <span className="col-span-2 text-center text-sm text-[#a9ada4] sm:order-2">Strona {page} z {Math.max(1,Math.ceil(totalItems/EVENT_LIST_PAGE_SIZE))} · {totalItems} zapisów</span>
+                <button type="button" disabled={page<=1} onClick={() => updateFilters(scope,statusFilter,page-1)} className="min-h-12 w-full rounded-xl border border-[#495044] px-4 py-2 font-semibold disabled:opacity-50 sm:order-1 sm:w-auto">Poprzednia</button>
+                <button type="button" disabled={page*EVENT_LIST_PAGE_SIZE>=totalItems} onClick={() => updateFilters(scope,statusFilter,page+1)} className="min-h-12 w-full rounded-xl border border-[#495044] px-4 py-2 font-semibold disabled:opacity-50 sm:order-3 sm:w-auto">Następna</button>
               </nav>
             )}
           </div>

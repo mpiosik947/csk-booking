@@ -108,6 +108,7 @@ export default function EventsPage() {
   const [page, setPage] = useState(1);
   const [totalEvents, setTotalEvents] = useState(0);
   const [loadError, setLoadError] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
   const [message, setMessage] = useState("");
   const [messageIsInformation, setMessageIsInformation] = useState(false);
   const [registrationSuccess, setRegistrationSuccess] =
@@ -188,7 +189,7 @@ export default function EventsPage() {
 
     void loadData();
     return () => { active = false; };
-  }, [filtersReady, page, search]);
+  }, [filtersReady, page, reloadKey, search]);
 
   function updateList(searchValue: string, pageValue = 1) {
     const params = buildEventSearchParams({ q: searchValue, page: pageValue });
@@ -835,13 +836,22 @@ export default function EventsPage() {
             role="alert"
             className="rounded-2xl border border-[#744545] bg-[#2a1b1b] p-6 text-[#e0a0a0]"
           >
-            Nie udało się pobrać szkoleń. Spróbuj ponownie później.
+            <p>Nie udało się pobrać szkoleń. Spróbuj ponownie później.</p>
+            <button
+              type="button"
+              onClick={() => setReloadKey((current) => current + 1)}
+              className="mt-4 min-h-12 w-full rounded-xl border border-[#a45f5f] px-5 py-3 font-semibold transition hover:bg-[#382323] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#e0a0a0] sm:w-auto"
+            >
+              Spróbuj ponownie
+            </button>
           </div>
         )}
 
         {!loading && !loadError && events.length === 0 && (
           <div className="rounded-2xl border border-[#30372c] bg-[#191e19] p-6 text-[#a9ada4]">
-            Brak dostępnych szkoleń.
+            {search
+              ? "Brak szkoleń pasujących do wyszukiwania."
+              : "Brak dostępnych szkoleń."}
           </div>
         )}
 
@@ -958,10 +968,10 @@ export default function EventsPage() {
               </section>
             )}
 
-            <nav className="mt-6 flex flex-wrap items-center justify-between gap-3" aria-label="Stronicowanie szkoleń">
-              <button type="button" disabled={page <= 1} onClick={() => updateList(search, page - 1)} className="min-h-11 rounded-xl border border-[#495044] px-4 py-2 font-semibold disabled:opacity-50">Poprzednia</button>
-              <span className="text-sm text-[#a9ada4]">Strona {page} z {Math.max(1, Math.ceil(totalEvents / EVENT_LIST_PAGE_SIZE))} · {totalEvents} szkoleń</span>
-              <button type="button" disabled={page * EVENT_LIST_PAGE_SIZE >= totalEvents} onClick={() => updateList(search, page + 1)} className="min-h-11 rounded-xl border border-[#495044] px-4 py-2 font-semibold disabled:opacity-50">Następna</button>
+            <nav className="mt-6 grid grid-cols-2 gap-3 sm:flex sm:flex-wrap sm:items-center sm:justify-between" aria-label="Stronicowanie szkoleń">
+              <span className="col-span-2 text-center text-sm text-[#a9ada4] sm:order-2">Strona {page} z {Math.max(1, Math.ceil(totalEvents / EVENT_LIST_PAGE_SIZE))} · {totalEvents} szkoleń</span>
+              <button type="button" disabled={page <= 1} onClick={() => updateList(search, page - 1)} className="min-h-12 w-full rounded-xl border border-[#495044] px-4 py-2 font-semibold disabled:opacity-50 sm:order-1 sm:w-auto">Poprzednia</button>
+              <button type="button" disabled={page * EVENT_LIST_PAGE_SIZE >= totalEvents} onClick={() => updateList(search, page + 1)} className="min-h-12 w-full rounded-xl border border-[#495044] px-4 py-2 font-semibold disabled:opacity-50 sm:order-3 sm:w-auto">Następna</button>
             </nav>
           </section>
         )}

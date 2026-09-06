@@ -10,7 +10,7 @@ export type PublicEventFilters = { search: string; scope: "upcoming" | "all"; pa
 export type AdminEventScope = "all" | "upcoming" | "past" | "inactive";
 export type AdminEventFilters = { search: string; scope: AdminEventScope; sort: "nearest" | "latest"; page: number };
 export type ParticipantFilters = { status: string; paymentStatus: string; page: number };
-export type MyEventScope = "upcoming" | "history";
+export type MyEventScope = "upcoming" | "history" | "all";
 export type MyEventFilters = { scope: MyEventScope; status: string; page: number };
 
 export type MyEventRegistration = {

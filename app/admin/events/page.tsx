@@ -245,12 +245,14 @@ export default function AdminEventsPage() {
   const [eventPage, setEventPage] = useState(1);
   const [eventTotal, setEventTotal] = useState(0);
   const [eventFiltersReady, setEventFiltersReady] = useState(false);
+  const [eventsLoadError, setEventsLoadError] = useState(false);
   const [selectedEventId, setSelectedEventId] = useState("");
   const [registrations, setRegistrations] = useState<Registration[]>([]);
   const [participantStatus, setParticipantStatus] = useState("");
   const [participantPayment, setParticipantPayment] = useState("");
   const [participantPage, setParticipantPage] = useState(1);
   const [participantTotal, setParticipantTotal] = useState(0);
+  const [participantsLoadError, setParticipantsLoadError] = useState(false);
   const [participantSummary, setParticipantSummary] = useState<ParticipantSummary>({ registeredCount: 0, reserveCount: 0, cancelledCount: 0, paidCount: 0 });
   const [message, setMessage] = useState("");
   const [userRole, setUserRole] = useState("");
@@ -456,6 +458,7 @@ export default function AdminEventsPage() {
   async function loadEvents() {
     const requestId = ++eventsLoadRequestRef.current;
     setLoading(true);
+    setEventsLoadError(false);
     const { data, error } = await supabase.rpc("admin_list_events_v1", {
       p_search:eventSearch||null,p_scope:eventScope,p_sort:eventSortOrder,p_page:eventPage,p_page_size:EVENT_LIST_PAGE_SIZE,
     });
@@ -470,12 +473,14 @@ export default function AdminEventsPage() {
     setLoading(false);
 
     if (error) {
+      setEventsLoadError(true);
       setMessage(EVENTS_LOAD_ERROR_MESSAGE);
       return;
     }
 
     const parsed=parseAdminEventList(data);
     if (!parsed) {
+      setEventsLoadError(true);
       setMessage(EVENTS_LOAD_ERROR_MESSAGE);
       return;
     }
@@ -488,12 +493,14 @@ export default function AdminEventsPage() {
 
   async function loadRegistrations(eventId: string, nextPage=1, nextStatus=participantStatus, nextPayment=participantPayment) {
     setSelectedEventId(eventId);
+    setParticipantsLoadError(false);
     const { data, error } = await supabase.rpc("admin_list_event_registrations_v1", {
       p_event_id:eventId,p_status:nextStatus||null,p_payment_status:nextPayment||null,p_page:nextPage,p_page_size:EVENT_PARTICIPANT_PAGE_SIZE,
     });
 
     if (error) {
       console.error("Event registrations loading failed", { code: error.code });
+      setParticipantsLoadError(true);
       setMessage("Nie udało się pobrać zapisów. Spróbuj ponownie.");
       return;
     }
@@ -502,6 +509,7 @@ export default function AdminEventsPage() {
 
     if (!parsedRegistrations) {
       console.error("Event registrations returned invalid data");
+      setParticipantsLoadError(true);
       setMessage("Nie udało się poprawnie wczytać zapisów. Spróbuj ponownie.");
       return;
     }
@@ -510,6 +518,12 @@ export default function AdminEventsPage() {
     setParticipantPage(parsedRegistrations.page);
     setParticipantTotal(parsedRegistrations.total);
     setParticipantSummary(parsedRegistrations.summary);
+    setMessage((current) =>
+      current.startsWith("Nie udało się pobrać zapisów") ||
+      current.startsWith("Nie udało się poprawnie wczytać zapisów")
+        ? ""
+        : current
+    );
   }
 
   function openRegistrations(eventId: string) {
@@ -1366,7 +1380,18 @@ export default function AdminEventsPage() {
         </div>
 
         {message && (
-          <div className={`mb-6 ${getMessageClass(message)}`}>{message}</div>
+          <div className={`mb-6 ${getMessageClass(message)}`}>
+            <p>{message}</p>
+            {eventsLoadError && (
+              <button
+                type="button"
+                onClick={() => void loadEvents()}
+                className="mt-3 min-h-12 w-full rounded-xl border border-current px-4 py-2 font-semibold sm:w-auto"
+              >
+                Spróbuj ponownie
+              </button>
+            )}
+          </div>
         )}
 
         {toggleMessage && (
@@ -1672,7 +1697,7 @@ export default function AdminEventsPage() {
           </div>
         )}
 
-        <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+        <div className="mb-4 flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
           <div>
             <h2 className="text-xl font-bold text-[#f2efe4]">Lista szkoleń</h2>
             <p className="mt-1 text-sm text-[#858c7f]">
@@ -1680,7 +1705,7 @@ export default function AdminEventsPage() {
             </p>
           </div>
 
-          <div className="grid w-full gap-2 sm:w-auto sm:grid-cols-3">
+          <div className="grid w-full gap-2 sm:grid-cols-3 xl:w-auto">
             <label htmlFor="event-search" className="flex w-full flex-col gap-2 text-sm font-semibold text-[#a9ada4] sm:w-56">
               Szukaj
               <input id="event-search" type="search" maxLength={100} value={eventSearch} onChange={(event)=>updateEventFilters({search:event.target.value})} placeholder="Nazwa szkolenia" className="min-h-11 w-full rounded-xl border border-[#30372c] bg-[#191e19] px-4 py-2 text-[#f2efe4]" />
@@ -2192,7 +2217,18 @@ export default function AdminEventsPage() {
                           </label>
                         </div>
 
-                        {registrations.length === 0 ? (
+                        {participantsLoadError ? (
+                          <div role="alert" className="rounded-xl border border-red-900 bg-red-950/20 p-4 text-red-300">
+                            <p>Nie udało się wczytać uczestników.</p>
+                            <button
+                              type="button"
+                              onClick={() => void loadRegistrations(event.id, participantPage, participantStatus, participantPayment)}
+                              className="mt-3 min-h-12 w-full rounded-lg border border-red-800 px-4 py-2 font-semibold sm:w-auto"
+                            >
+                              Spróbuj ponownie
+                            </button>
+                          </div>
+                        ) : registrations.length === 0 ? (
                           <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-4 text-zinc-400">
                             Brak zapisanych osób.
                           </div>
@@ -2215,9 +2251,9 @@ export default function AdminEventsPage() {
                                   </span>
                                 </div>
 
-                                <div className="overflow-x-auto">
-                                  <table className="min-w-full text-sm">
-                                    <thead>
+                                <div>
+                                  <table className="block w-full text-sm lg:table">
+                                    <thead className="hidden lg:table-header-group">
                                       <tr className="border-b border-zinc-800 text-left text-zinc-500">
                                         <th className="px-4 py-3">Imię i nazwisko</th>
                                         <th className="px-4 py-3">E-mail</th>
@@ -2230,19 +2266,23 @@ export default function AdminEventsPage() {
                                       </tr>
                                     </thead>
 
-                                    <tbody>
+                                    <tbody className="grid gap-3 lg:table-row-group">
                                       {participantRegistrations.map((registration) => (
-                                        <tr key={registration.id} className="border-b border-zinc-900">
-                                          <td className="px-4 py-4 font-semibold">
+                                        <tr key={registration.id} className="grid min-w-0 gap-3 rounded-xl border border-green-900/70 bg-zinc-950/40 p-4 lg:table-row lg:rounded-none lg:border-x-0 lg:border-t-0 lg:bg-transparent lg:p-0">
+                                          <td className="min-w-0 break-words font-semibold lg:px-4 lg:py-4">
+                                            <span className="mb-1 block text-xs font-normal text-zinc-500 lg:hidden">Imię i nazwisko</span>
                                             {registration.customer_name}
                                           </td>
-                                          <td className="px-4 py-4 text-zinc-300">
+                                          <td className="min-w-0 break-all text-zinc-300 lg:px-4 lg:py-4">
+                                            <span className="mb-1 block text-xs text-zinc-500 lg:hidden">E-mail</span>
                                             {registration.customer_email}
                                           </td>
-                                          <td className="px-4 py-4 text-zinc-300">
+                                          <td className="min-w-0 break-words text-zinc-300 lg:px-4 lg:py-4">
+                                            <span className="mb-1 block text-xs text-zinc-500 lg:hidden">Telefon</span>
                                             {registration.customer_phone}
                                           </td>
-                                          <td className="px-4 py-4">
+                                          <td className="lg:px-4 lg:py-4">
+                                            <span className="mb-1 block text-xs text-zinc-500 lg:hidden">Status</span>
                                             <span
                                               className={getEventRegistrationStatusBadgeClass(
                                                 registration.registration_status
@@ -2255,12 +2295,14 @@ export default function AdminEventsPage() {
                                               }
                                             </span>
                                           </td>
-                                          <td className="px-4 py-4 text-zinc-300">
+                                          <td className="text-zinc-300 lg:px-4 lg:py-4">
+                                            <span className="mb-1 block text-xs text-zinc-500 lg:hidden">Płatność</span>
                                             {getPaymentStatusLabel(registration.payment_status)}
                                           </td>
                                           {canManageEvents && (
-                                            <td className="px-4 py-4">
-                                              <div className="flex flex-wrap gap-2">
+                                            <td className="lg:px-4 lg:py-4">
+                                              <span className="mb-2 block text-xs text-zinc-500 lg:hidden">Akcje</span>
+                                              <div className="grid gap-2 sm:grid-cols-3 lg:flex lg:flex-wrap">
                                               {getEventRegistrationStatusPresentation(
                                                 registration.registration_status
                                               ).adminCanApprove && (
@@ -2276,7 +2318,7 @@ export default function AdminEventsPage() {
                                                       registration.id
                                                     ]
                                                   )}
-                                                  className="rounded-lg border border-green-800 px-3 py-2 text-xs text-green-300 hover:bg-green-950 disabled:cursor-not-allowed disabled:opacity-50"
+                                                  className="min-h-12 rounded-lg border border-green-800 px-3 py-2 text-xs text-green-300 hover:bg-green-950 disabled:cursor-not-allowed disabled:opacity-50"
                                                 >
                                                   {registrationActions[
                                                     registration.id
@@ -2301,7 +2343,7 @@ export default function AdminEventsPage() {
                                                       registration.id
                                                     ]
                                                   )}
-                                                  className="rounded-lg border border-blue-800 px-3 py-2 text-xs text-blue-300 hover:bg-blue-950 disabled:cursor-not-allowed disabled:opacity-50"
+                                                  className="min-h-12 rounded-lg border border-blue-800 px-3 py-2 text-xs text-blue-300 hover:bg-blue-950 disabled:cursor-not-allowed disabled:opacity-50"
                                                 >
                                                   Opłacone
                                                 </button>
@@ -2322,7 +2364,7 @@ export default function AdminEventsPage() {
                                                       registration.id
                                                     ]
                                                   )}
-                                                  className="rounded-lg border border-red-800 px-3 py-2 text-xs text-red-300 hover:bg-red-950 disabled:cursor-not-allowed disabled:opacity-50"
+                                                  className="min-h-12 rounded-lg border border-red-800 px-3 py-2 text-xs text-red-300 hover:bg-red-950 disabled:cursor-not-allowed disabled:opacity-50"
                                                 >
                                                   {registrationActions[
                                                     registration.id
@@ -2359,9 +2401,9 @@ export default function AdminEventsPage() {
                                   </span>
                                 </div>
 
-                                <div className="overflow-x-auto">
-                                  <table className="min-w-full text-sm">
-                                    <thead>
+                                <div>
+                                  <table className="block w-full text-sm lg:table">
+                                    <thead className="hidden lg:table-header-group">
                                       <tr className="border-b border-zinc-800 text-left text-zinc-500">
                                         <th className="px-4 py-3">Kolejka</th>
                                         <th className="px-4 py-3">Imię i nazwisko</th>
@@ -2375,22 +2417,27 @@ export default function AdminEventsPage() {
                                       </tr>
                                     </thead>
 
-                                    <tbody>
+                                    <tbody className="grid gap-3 lg:table-row-group">
                                       {reserveRegistrations.map((registration, index) => (
-                                        <tr key={registration.id} className="border-b border-zinc-900">
-                                          <td className="px-4 py-4 font-bold text-yellow-300">
+                                        <tr key={registration.id} className="grid min-w-0 gap-3 rounded-xl border border-yellow-900/70 bg-zinc-950/40 p-4 lg:table-row lg:rounded-none lg:border-x-0 lg:border-t-0 lg:bg-transparent lg:p-0">
+                                          <td className="font-bold text-yellow-300 lg:px-4 lg:py-4">
+                                            <span className="mb-1 block text-xs font-normal text-zinc-500 lg:hidden">Kolejka</span>
                                              #{(participantPage - 1) * EVENT_PARTICIPANT_PAGE_SIZE + index + 1}
                                           </td>
-                                          <td className="px-4 py-4 font-semibold">
+                                          <td className="min-w-0 break-words font-semibold lg:px-4 lg:py-4">
+                                            <span className="mb-1 block text-xs font-normal text-zinc-500 lg:hidden">Imię i nazwisko</span>
                                             {registration.customer_name}
                                           </td>
-                                          <td className="px-4 py-4 text-zinc-300">
+                                          <td className="min-w-0 break-all text-zinc-300 lg:px-4 lg:py-4">
+                                            <span className="mb-1 block text-xs text-zinc-500 lg:hidden">E-mail</span>
                                             {registration.customer_email}
                                           </td>
-                                          <td className="px-4 py-4 text-zinc-300">
+                                          <td className="min-w-0 break-words text-zinc-300 lg:px-4 lg:py-4">
+                                            <span className="mb-1 block text-xs text-zinc-500 lg:hidden">Telefon</span>
                                             {registration.customer_phone}
                                           </td>
-                                          <td className="px-4 py-4">
+                                          <td className="lg:px-4 lg:py-4">
+                                            <span className="mb-1 block text-xs text-zinc-500 lg:hidden">Status</span>
                                             <span
                                               className={getEventRegistrationStatusBadgeClass(
                                                 registration.registration_status
@@ -2403,12 +2450,14 @@ export default function AdminEventsPage() {
                                               }
                                             </span>
                                           </td>
-                                          <td className="px-4 py-4 text-zinc-300">
+                                          <td className="text-zinc-300 lg:px-4 lg:py-4">
+                                            <span className="mb-1 block text-xs text-zinc-500 lg:hidden">Płatność</span>
                                             {getPaymentStatusLabel(registration.payment_status)}
                                           </td>
                                           {canManageEvents && (
-                                            <td className="px-4 py-4">
-                                              <div className="flex flex-wrap gap-2">
+                                            <td className="lg:px-4 lg:py-4">
+                                              <span className="mb-2 block text-xs text-zinc-500 lg:hidden">Akcje</span>
+                                              <div className="grid gap-2 sm:grid-cols-2 lg:flex lg:flex-wrap">
                                               {getEventRegistrationStatusPresentation(
                                                 registration.registration_status
                                               ).adminCanMarkPayment && (
@@ -2424,7 +2473,7 @@ export default function AdminEventsPage() {
                                                       registration.id
                                                     ]
                                                   )}
-                                                  className="rounded-lg border border-blue-800 px-3 py-2 text-xs text-blue-300 hover:bg-blue-950 disabled:cursor-not-allowed disabled:opacity-50"
+                                                  className="min-h-12 rounded-lg border border-blue-800 px-3 py-2 text-xs text-blue-300 hover:bg-blue-950 disabled:cursor-not-allowed disabled:opacity-50"
                                                 >
                                                   Opłacone
                                                 </button>
@@ -2445,7 +2494,7 @@ export default function AdminEventsPage() {
                                                       registration.id
                                                     ]
                                                   )}
-                                                  className="rounded-lg border border-red-800 px-3 py-2 text-xs text-red-300 hover:bg-red-950 disabled:cursor-not-allowed disabled:opacity-50"
+                                                  className="min-h-12 rounded-lg border border-red-800 px-3 py-2 text-xs text-red-300 hover:bg-red-950 disabled:cursor-not-allowed disabled:opacity-50"
                                                 >
                                                   {registrationActions[
                                                     registration.id
@@ -2482,9 +2531,9 @@ export default function AdminEventsPage() {
                                   </span>
                                 </div>
 
-                                <div className="overflow-x-auto">
-                                  <table className="min-w-full text-sm">
-                                    <thead>
+                                <div>
+                                  <table className="block w-full text-sm lg:table">
+                                    <thead className="hidden lg:table-header-group">
                                       <tr className="border-b border-zinc-800 text-left text-zinc-500">
                                         <th className="px-4 py-3">Imię i nazwisko</th>
                                         <th className="px-4 py-3">E-mail</th>
@@ -2494,19 +2543,23 @@ export default function AdminEventsPage() {
                                       </tr>
                                     </thead>
 
-                                    <tbody>
+                                    <tbody className="grid gap-3 lg:table-row-group">
                                       {cancelledRegistrations.map((registration) => (
-                                        <tr key={registration.id} className="border-b border-zinc-900">
-                                          <td className="px-4 py-4 font-semibold">
+                                        <tr key={registration.id} className="grid min-w-0 gap-3 rounded-xl border border-red-900/70 bg-zinc-950/40 p-4 lg:table-row lg:rounded-none lg:border-x-0 lg:border-t-0 lg:bg-transparent lg:p-0">
+                                          <td className="min-w-0 break-words font-semibold lg:px-4 lg:py-4">
+                                            <span className="mb-1 block text-xs font-normal text-zinc-500 lg:hidden">Imię i nazwisko</span>
                                             {registration.customer_name}
                                           </td>
-                                          <td className="px-4 py-4 text-zinc-300">
+                                          <td className="min-w-0 break-all text-zinc-300 lg:px-4 lg:py-4">
+                                            <span className="mb-1 block text-xs text-zinc-500 lg:hidden">E-mail</span>
                                             {registration.customer_email}
                                           </td>
-                                          <td className="px-4 py-4 text-zinc-300">
+                                          <td className="min-w-0 break-words text-zinc-300 lg:px-4 lg:py-4">
+                                            <span className="mb-1 block text-xs text-zinc-500 lg:hidden">Telefon</span>
                                             {registration.customer_phone}
                                           </td>
-                                          <td className="px-4 py-4">
+                                          <td className="lg:px-4 lg:py-4">
+                                            <span className="mb-1 block text-xs text-zinc-500 lg:hidden">Status</span>
                                             <span
                                               className={getEventRegistrationStatusBadgeClass(
                                                 registration.registration_status
@@ -2519,7 +2572,8 @@ export default function AdminEventsPage() {
                                               }
                                             </span>
                                           </td>
-                                          <td className="px-4 py-4 text-zinc-300">
+                                          <td className="text-zinc-300 lg:px-4 lg:py-4">
+                                            <span className="mb-1 block text-xs text-zinc-500 lg:hidden">Płatność</span>
                                             {getPaymentStatusLabel(registration.payment_status)}
                                           </td>
                                         </tr>
@@ -2533,16 +2587,16 @@ export default function AdminEventsPage() {
                         )}
 
                         {participantTotal > EVENT_PARTICIPANT_PAGE_SIZE && (
-                          <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-zinc-800 pt-4">
-                            <p className="text-sm text-zinc-400">
+                          <div className="mt-5 grid grid-cols-2 gap-3 border-t border-zinc-800 pt-4 sm:flex sm:flex-wrap sm:items-center sm:justify-between">
+                            <p className="col-span-2 text-center text-sm text-zinc-400 sm:order-1">
                               Strona {participantPage} z {Math.ceil(participantTotal / EVENT_PARTICIPANT_PAGE_SIZE)}
                             </p>
-                            <div className="flex gap-2">
+                            <div className="col-span-2 grid grid-cols-2 gap-2 sm:order-2 sm:flex">
                               <button
                                 type="button"
                                 disabled={participantPage <= 1}
                                 onClick={() => updateParticipantFilters({ page: participantPage - 1 })}
-                                className="rounded-lg border border-zinc-700 px-3 py-2 text-sm disabled:opacity-40"
+                                className="min-h-12 w-full rounded-lg border border-zinc-700 px-3 py-2 text-sm disabled:opacity-40 sm:w-auto"
                               >
                                 Poprzednia
                               </button>
@@ -2550,7 +2604,7 @@ export default function AdminEventsPage() {
                                 type="button"
                                 disabled={participantPage * EVENT_PARTICIPANT_PAGE_SIZE >= participantTotal}
                                 onClick={() => updateParticipantFilters({ page: participantPage + 1 })}
-                                className="rounded-lg border border-zinc-700 px-3 py-2 text-sm disabled:opacity-40"
+                                className="min-h-12 w-full rounded-lg border border-zinc-700 px-3 py-2 text-sm disabled:opacity-40 sm:w-auto"
                               >
                                 Następna
                               </button>
@@ -2568,16 +2622,16 @@ export default function AdminEventsPage() {
         )}
 
         {eventTotal > EVENT_LIST_PAGE_SIZE && (
-          <div className="mt-6 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[#30372c] bg-[#191e19] p-4">
-            <p className="text-sm text-[#a9ada4]">
+          <div className="mt-6 grid grid-cols-2 gap-3 rounded-xl border border-[#30372c] bg-[#191e19] p-4 sm:flex sm:flex-wrap sm:items-center sm:justify-between">
+            <p className="col-span-2 text-center text-sm text-[#a9ada4] sm:order-1">
               Strona {eventPage} z {Math.ceil(eventTotal / EVENT_LIST_PAGE_SIZE)}
             </p>
-            <div className="flex gap-2">
+            <div className="col-span-2 grid grid-cols-2 gap-2 sm:order-2 sm:flex">
               <button
                 type="button"
                 disabled={eventPage <= 1}
                 onClick={() => updateEventFilters({ page: eventPage - 1 })}
-                className="rounded-lg border border-[#536143] px-3 py-2 text-sm disabled:opacity-40"
+                className="min-h-12 w-full rounded-lg border border-[#536143] px-3 py-2 text-sm disabled:opacity-40 sm:w-auto"
               >
                 Poprzednia
               </button>
@@ -2585,7 +2639,7 @@ export default function AdminEventsPage() {
                 type="button"
                 disabled={eventPage * EVENT_LIST_PAGE_SIZE >= eventTotal}
                 onClick={() => updateEventFilters({ page: eventPage + 1 })}
-                className="rounded-lg border border-[#536143] px-3 py-2 text-sm disabled:opacity-40"
+                className="min-h-12 w-full rounded-lg border border-[#536143] px-3 py-2 text-sm disabled:opacity-40 sm:w-auto"
               >
                 Następna
               </button>
