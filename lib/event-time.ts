@@ -1,5 +1,6 @@
 export const EVENT_TIME_ZONE = "Europe/Warsaw" as const;
 export const EVENT_CANCELLATION_CUTOFF_HOURS = 72 as const;
+export const RESERVATION_CANCELLATION_CUTOFF_HOURS = 12 as const;
 
 const DATE_PATTERN = /^(\d{4})-(\d{2})-(\d{2})$/;
 const TIME_PATTERN = /^(\d{2}):(\d{2})(?::(\d{2}))?(?:\.\d+)?$/;
@@ -15,6 +16,16 @@ const warsawPartsFormatter = new Intl.DateTimeFormat("en-GB", {
   second: "2-digit",
   hourCycle: "h23",
   numberingSystem: "latn",
+});
+
+const cancellationDeadlineFormatter = new Intl.DateTimeFormat("pl-PL", {
+  timeZone: EVENT_TIME_ZONE,
+  year: "numeric",
+  month: "long",
+  day: "numeric",
+  hour: "2-digit",
+  minute: "2-digit",
+  hourCycle: "h23",
 });
 
 type DateTimeParts = {
@@ -138,17 +149,66 @@ export function hasWarsawEventStarted(
   return !eventStart || now.getTime() >= eventStart.getTime();
 }
 
+export function getWarsawCancellationDeadline(
+  eventDate: string,
+  startTime: string,
+  cutoffHours: number
+) {
+  const eventStart = getWarsawEventStartInstant(eventDate, startTime);
+
+  if (!eventStart || !Number.isFinite(cutoffHours) || cutoffHours < 0) {
+    return null;
+  }
+
+  return new Date(
+    eventStart.getTime() - cutoffHours * MILLISECONDS_PER_HOUR
+  );
+}
+
+export function formatWarsawCancellationDeadline(
+  eventDate: string,
+  startTime: string,
+  cutoffHours: number
+) {
+  const deadline = getWarsawCancellationDeadline(
+    eventDate,
+    startTime,
+    cutoffHours
+  );
+
+  return deadline
+    ? `${cancellationDeadlineFormatter.format(deadline)} (Europe/Warsaw)`
+    : null;
+}
+
+export function isBeforeWarsawCancellationCutoff(
+  eventDate: string,
+  startTime: string,
+  cutoffHours: number,
+  now = new Date()
+) {
+  const deadline = getWarsawCancellationDeadline(
+    eventDate,
+    startTime,
+    cutoffHours
+  );
+
+  return Boolean(
+    deadline &&
+      Number.isFinite(now.getTime()) &&
+      now.getTime() <= deadline.getTime()
+  );
+}
+
 export function isEventCancellationBeforeCutoff(
   eventDate: string,
   startTime: string,
   now = new Date()
 ) {
-  const eventStart = getWarsawEventStartInstant(eventDate, startTime);
-
-  if (!eventStart) return false;
-
-  return (
-    eventStart.getTime() - now.getTime() >=
-    EVENT_CANCELLATION_CUTOFF_HOURS * MILLISECONDS_PER_HOUR
+  return isBeforeWarsawCancellationCutoff(
+    eventDate,
+    startTime,
+    EVENT_CANCELLATION_CUTOFF_HOURS,
+    now
   );
 }

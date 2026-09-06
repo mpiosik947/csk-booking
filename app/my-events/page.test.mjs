@@ -35,7 +35,12 @@ test("cancellation CTA matches the Warsaw 72-hour backend boundary", async () =>
   );
 
   assert.match(source, /isEventCancellationBeforeCutoff/);
+  assert.match(source, /formatWarsawCancellationDeadline/);
+  assert.match(source, /EVENT_CANCELLATION_CUTOFF_HOURS/);
   assert.match(source, /\.userCanCancel/);
+  assert.match(source, /Samodzielne anulowanie możliwe do:/);
+  assert.match(source, /Termin samodzielnego anulowania minął/);
+  assert.match(source, /Europe\/Warsaw/);
   assert.doesNotMatch(source, /new Date\(`\$\{eventDate\}T/);
   assert.match(cancellation, /\/api\/cancel-event-registration/);
   assert.match(cancellation, /registration_status:[\s\S]*"cancelled"/);

@@ -6,7 +6,11 @@ import {
   getEventRegistrationStatusBadgeClass,
   getEventRegistrationStatusPresentation,
 } from "../../lib/event-registration-status";
-import { isEventCancellationBeforeCutoff } from "../../lib/event-time";
+import {
+  EVENT_CANCELLATION_CUTOFF_HOURS,
+  formatWarsawCancellationDeadline,
+  isEventCancellationBeforeCutoff,
+} from "../../lib/event-time";
 import { getPaymentStatusLabel } from "../../lib/payment-status";
 import { supabase } from "../../lib/supabase";
 import { reportClientError } from "../../lib/safe-client-error";
@@ -378,7 +382,8 @@ export default function MyEventsPage() {
     }
   }
 
-  const warsawNowKey = getWarsawDateTimeKey(new Date());
+  const now = new Date();
+  const warsawNowKey = getWarsawDateTimeKey(now);
   const activeEvents = (scope === "upcoming" || scope === "all" ? items : [])
     .filter((item) => isActiveEventRegistration(item, warsawNowKey))
     .sort((firstItem, secondItem) => {
@@ -513,15 +518,29 @@ export default function MyEventsPage() {
                     return null;
                   }
 
-                  const canCancel =
+                  const hasCancellableStatus =
                     getEventRegistrationStatusPresentation(
                       item.registration_status
-                    ).userCanCancel &&
-                    isEventCancellationBeforeCutoff(
-                      event.event_date,
-                      event.start_time
-                    );
-                  const isTooLateToCancel = !canCancel;
+                    ).userCanCancel;
+                  const cancellationDeadline = hasCancellableStatus
+                    ? formatWarsawCancellationDeadline(
+                        event.event_date,
+                        event.start_time,
+                        EVENT_CANCELLATION_CUTOFF_HOURS
+                      )
+                    : null;
+                  const canCancel = Boolean(
+                    hasCancellableStatus &&
+                      cancellationDeadline &&
+                      isEventCancellationBeforeCutoff(
+                        event.event_date,
+                        event.start_time,
+                        now
+                      )
+                  );
+                  const isTooLateToCancel = Boolean(
+                    hasCancellableStatus && cancellationDeadline && !canCancel
+                  );
                   const isExpanded = expandedEventId === item.id;
                   const canAddToCalendar =
                     item.registration_status ===
@@ -650,6 +669,12 @@ export default function MyEventsPage() {
                             </div>
                           </div>
 
+                          {canCancel && cancellationDeadline && (
+                            <div className="mt-6 break-words rounded-xl border border-[#806a32] bg-[#2b2618] p-4 text-sm font-semibold text-[#e1c477]">
+                              Samodzielne anulowanie możliwe do: {cancellationDeadline}.
+                            </div>
+                          )}
+
                           {(canAddToCalendar || canCancel) && (
                             <div className="mt-6 flex flex-wrap items-start gap-3">
                               {canAddToCalendar && (
@@ -675,10 +700,9 @@ export default function MyEventsPage() {
                           )}
 
                           {isTooLateToCancel && (
-                            <div className="mt-6 rounded-xl border border-[#806a32] bg-[#2b2618] p-4 text-sm font-semibold text-[#e1c477]">
-                              Anulacja online niedostępna. Zostało mniej niż 72
-                              godziny do wydarzenia — skontaktuj się
-                              telefonicznie z organizatorem.
+                            <div className="mt-6 break-words rounded-xl border border-[#806a32] bg-[#2b2618] p-4 text-sm font-semibold text-[#e1c477]">
+                              Termin samodzielnego anulowania minął ({cancellationDeadline}).
+                              Skontaktuj się telefonicznie z organizatorem.
                             </div>
                           )}
                         </div>

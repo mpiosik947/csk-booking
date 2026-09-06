@@ -14,6 +14,11 @@ import {
   type MyReservation as Reservation,
 } from "../../lib/my-reservations";
 import { reportClientError } from "../../lib/safe-client-error";
+import {
+  RESERVATION_CANCELLATION_CUTOFF_HOURS,
+  formatWarsawCancellationDeadline,
+  isBeforeWarsawCancellationCutoff,
+} from "../../lib/event-time";
 import { AddToCalendarButton } from "../_components/AddToCalendarButton";
 
 type CancelReservationRpcResult = {
@@ -459,7 +464,8 @@ export default function MyReservationsPage() {
     }
   }
 
-  const warsawNowKey = getWarsawDateTimeKey(new Date());
+  const now = new Date();
+  const warsawNowKey = getWarsawDateTimeKey(now);
 
   const activeReservations = reservations
     .filter((reservation) => isActiveReservation(reservation, warsawNowKey))
@@ -573,6 +579,30 @@ export default function MyReservationsPage() {
                   const checkInUrl = reservation.check_in_token
                     ? getCheckInUrl(reservation.check_in_token, siteUrl)
                     : "";
+                  const hasCancellableState =
+                    normalizeReservationStatus(
+                      reservation.reservation_status
+                    ) === RESERVATION_STATUS.CONFIRMED &&
+                    (reservation.attendance_status === null ||
+                      reservation.attendance_status === "planned") &&
+                    !reservation.checked_in_at;
+                  const cancellationDeadline = hasCancellableState
+                    ? formatWarsawCancellationDeadline(
+                        reservation.reservation_date,
+                        reservation.start_time,
+                        RESERVATION_CANCELLATION_CUTOFF_HOURS
+                      )
+                    : null;
+                  const canCancel = Boolean(
+                    hasCancellableState &&
+                      cancellationDeadline &&
+                      isBeforeWarsawCancellationCutoff(
+                        reservation.reservation_date,
+                        reservation.start_time,
+                        RESERVATION_CANCELLATION_CUTOFF_HOURS,
+                        now
+                      )
+                  );
 
                   return (
                     <article
@@ -631,13 +661,13 @@ export default function MyReservationsPage() {
                             </span>
                           </div>
 
-                          {reservation.reservation_status ===
-                            RESERVATION_STATUS.CONFIRMED && (
-                              <p className="mt-4 rounded-xl border border-[#806a32] bg-[#2b2618] p-3 text-sm text-[#e1c477]">
-                                Rezerwację można anulować najpóźniej 12 godzin
-                                przed rozpoczęciem.
-                              </p>
-                            )}
+                          {cancellationDeadline && (
+                            <p className="mt-4 break-words rounded-xl border border-[#806a32] bg-[#2b2618] p-3 text-sm text-[#e1c477]">
+                              {canCancel
+                                ? `Samodzielne anulowanie możliwe do: ${cancellationDeadline}.`
+                                : `Termin samodzielnego anulowania minął (${cancellationDeadline}). Skontaktuj się telefonicznie z obsługą.`}
+                            </p>
+                          )}
 
                           {reservation.checked_in_at && (
                             <p className="mt-3 text-xs text-[#858c7f]">
@@ -654,19 +684,18 @@ export default function MyReservationsPage() {
                               filename="csk-rezerwacja.ics"
                             />
 
-                            {reservation.reservation_status ===
-                              RESERVATION_STATUS.CONFIRMED && (
-                                <button
-                                  type="button"
-                                  onClick={() => cancelReservation(reservation)}
-                                  disabled={cancellingReservationId !== null}
-                                  className="inline-flex min-h-11 items-center justify-center rounded-xl border border-[#744545] px-4 py-2 text-sm font-semibold text-[#e0a0a0] transition hover:bg-[#2a1b1b] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#e0a0a0] focus-visible:ring-offset-2 focus-visible:ring-offset-[#191e19] disabled:cursor-not-allowed disabled:opacity-60"
-                                >
-                                  {cancellingReservationId === reservation.id
-                                    ? "Anulowanie…"
-                                    : "Anuluj rezerwację"}
-                                </button>
-                              )}
+                            {canCancel && (
+                              <button
+                                type="button"
+                                onClick={() => cancelReservation(reservation)}
+                                disabled={cancellingReservationId !== null}
+                                className="inline-flex min-h-11 items-center justify-center rounded-xl border border-[#744545] px-4 py-2 text-sm font-semibold text-[#e0a0a0] transition hover:bg-[#2a1b1b] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#e0a0a0] focus-visible:ring-offset-2 focus-visible:ring-offset-[#191e19] disabled:cursor-not-allowed disabled:opacity-60"
+                              >
+                                {cancellingReservationId === reservation.id
+                                  ? "Anulowanie…"
+                                  : "Anuluj rezerwację"}
+                              </button>
+                            )}
                           </div>
                         </div>
 
