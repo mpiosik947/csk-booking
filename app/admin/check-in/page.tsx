@@ -15,6 +15,11 @@ import {
   getReservationStatusLabel,
 } from "../../../lib/reservation-status";
 import { getLaneRelationDisplay } from "../../../lib/admin/lane-relation-display";
+import {
+  getWarsawDateISO,
+  isExpectedTodayReservation,
+  isValidIsoDate,
+} from "../../../lib/admin/action-queues.js";
 import { getReservationAttendanceActions } from "../../../lib/reservation-operational-state";
 import { reportClientError } from "../../../lib/safe-client-error";
 import AdminShell from "../_components/AdminShell";
@@ -148,10 +153,6 @@ const VERIFIED_NOTE =
 
 const INCOMPLETE_NOTE =
   "Nie zakończono pełnej weryfikacji uprawnień. Klient poinformowany o konieczności okazania wymaganych dokumentów przy kolejnej wizycie. Konto pozostaje niezweryfikowane.";
-
-function todayISODate() {
-  return new Date().toISOString().slice(0, 10);
-}
 
 function normalizeTime(time: string | null) {
   if (!time) return "";
@@ -532,6 +533,8 @@ function CheckInContent() {
   const router = useRouter();
   const params = useSearchParams();
   const token = params.get("token");
+  const paramsKey = params.toString();
+  const expectedOnly = params.get("attendance") === "expected";
 
   const [reservations, setReservations] = useState<Reservation[]>([]);
   const [selectedReservation, setSelectedReservation] =
@@ -543,7 +546,10 @@ function CheckInContent() {
   const [currentUserId, setCurrentUserId] = useState("");
   const [currentUserRole, setCurrentUserRole] = useState<UserRole | "">("");
 
-  const [dateFilter, setDateFilter] = useState(todayISODate());
+  const [dateFilter, setDateFilter] = useState(() => {
+    const requestedDate = params.get("date");
+    return isValidIsoDate(requestedDate) ? requestedDate! : getWarsawDateISO();
+  });
   const [search, setSearch] = useState("");
 
   const [message, setMessage] = useState("");
@@ -560,6 +566,38 @@ function CheckInContent() {
   const isInstructor = currentUserRole === "instruktor";
   const canVerifyProfiles = isAdmin || isEmployee;
   const canCancelReservations = isAdmin || isEmployee;
+
+  useEffect(() => {
+    const applyHistoryDate = () => {
+      const requestedDate = new URLSearchParams(window.location.search).get("date");
+      setDateFilter(
+        isValidIsoDate(requestedDate) ? requestedDate! : getWarsawDateISO()
+      );
+    };
+
+    window.addEventListener("popstate", applyHistoryDate);
+    return () => window.removeEventListener("popstate", applyHistoryDate);
+  }, []);
+
+  function updateQueueFilters(next: {
+    date?: string;
+    attendance?: "expected" | "all";
+  }) {
+    const nextParams = new URLSearchParams(paramsKey);
+    const nextDate = next.date ?? dateFilter;
+    const nextAttendance = next.attendance ?? (expectedOnly ? "expected" : "all");
+
+    nextParams.delete("token");
+    nextParams.set("date", isValidIsoDate(nextDate) ? nextDate : getWarsawDateISO());
+    if (nextAttendance === "expected") {
+      nextParams.set("attendance", "expected");
+    } else {
+      nextParams.delete("attendance");
+    }
+    nextParams.set("page", "1");
+    setDateFilter(nextParams.get("date") ?? getWarsawDateISO());
+    window.history.pushState(null, "", `${window.location.pathname}?${nextParams}`);
+  }
 
   async function loadCurrentUser() {
     const {
@@ -737,11 +775,15 @@ function CheckInContent() {
   const filteredReservations = useMemo(() => {
     const phrase = search.trim().toLowerCase();
 
-    if (!phrase) {
-      return reservations;
-    }
-
     return reservations.filter((reservation) => {
+      if (expectedOnly && !isExpectedTodayReservation(reservation)) {
+        return false;
+      }
+
+      if (!phrase) {
+        return true;
+      }
+
       const profile = reservation.user_id
         ? profilesByUserId[reservation.user_id]
         : null;
@@ -770,7 +812,7 @@ function CheckInContent() {
         qualifications.includes(phrase)
       );
     });
-  }, [reservations, search, profilesByUserId]);
+  }, [reservations, search, profilesByUserId, expectedOnly]);
 
   async function refreshReservationAfterAttendance(reservationId: string) {
     const { data, error } = await supabase
@@ -1247,7 +1289,7 @@ function CheckInContent() {
               id="check-in-date"
               type="date"
               value={dateFilter}
-              onChange={(event) => setDateFilter(event.target.value)}
+              onChange={(event) => updateQueueFilters({ date: event.target.value })}
               className="min-h-11 w-full rounded-xl border border-[#3b4237] bg-[#090b09] px-4 py-3 text-white outline-none focus:border-[#8b986f] focus-visible:ring-2 focus-visible:ring-[#8b986f]/30"
             />
           </div>
@@ -1274,6 +1316,30 @@ function CheckInContent() {
           >
             {loading ? "Odświeżanie..." : "Odśwież"}
           </button>
+          </div>
+
+          <div className="mt-5 border-t border-[#30372c] pt-5">
+            <p id="check-in-attendance-filter-label" className="mb-3 text-sm font-semibold text-[#d8dbd3]">
+              Stan obsługi
+            </p>
+            <div className="flex flex-wrap gap-2" aria-labelledby="check-in-attendance-filter-label">
+              <button
+                type="button"
+                onClick={() => updateQueueFilters({ attendance: "all" })}
+                aria-pressed={!expectedOnly}
+                className={!expectedOnly ? "min-h-11 rounded-full border border-[#8b986f] bg-[#313a29] px-4 py-2 text-sm font-semibold text-[#f2efe4]" : "min-h-11 rounded-full border border-[#3b4237] bg-[#090b09] px-4 py-2 text-sm font-semibold text-[#a9ada4] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d7c895]"}
+              >
+                Wszystkie
+              </button>
+              <button
+                type="button"
+                onClick={() => updateQueueFilters({ attendance: "expected" })}
+                aria-pressed={expectedOnly}
+                className={expectedOnly ? "min-h-11 rounded-full border border-[#8b986f] bg-[#313a29] px-4 py-2 text-sm font-semibold text-[#f2efe4]" : "min-h-11 rounded-full border border-[#3b4237] bg-[#090b09] px-4 py-2 text-sm font-semibold text-[#a9ada4] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d7c895]"}
+              >
+                Oczekiwani
+              </button>
+            </div>
           </div>
         </section>
       )}

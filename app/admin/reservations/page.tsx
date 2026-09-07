@@ -11,8 +11,10 @@ import {
 
 import {
   PAYMENT_STATUS,
+  PAYMENT_STATUSES,
   getPaymentStatusLabel,
   getPaymentStatusBadgeClass,
+  isPaymentStatus,
 } from "../../../lib/payment-status";
 import {
   completeReservation,
@@ -23,6 +25,7 @@ import {
 } from "../../../lib/reservation-actions";
 import { getReservationAttendanceActions } from "../../../lib/reservation-operational-state";
 import { getLaneRelationDisplay } from "../../../lib/admin/lane-relation-display";
+import { isValidIsoDate } from "../../../lib/admin/action-queues.js";
 import AdminShell from "../_components/AdminShell";
 import { reportClientError } from "../../../lib/safe-client-error";
 
@@ -89,6 +92,14 @@ const statusOptions = [
   { label: "Zakończone", value: RESERVATION_STATUS.COMPLETED },
   { label: "No-show", value: RESERVATION_STATUS.NO_SHOW },
   { label: "Anulowane", value: RESERVATION_STATUS.CANCELLED },
+];
+
+const paymentOptions = [
+  { label: "Wszystkie", value: "all" },
+  ...PAYMENT_STATUSES.map((value) => ({
+    label: getPaymentStatusLabel(value),
+    value,
+  })),
 ];
 
 function normalizeTime(time: string | null) {
@@ -167,6 +178,7 @@ function getCancellationErrorMessage(error: {
 function buildUrlParams(params: {
   search: string;
   statusFilter: string;
+  paymentFilter: string;
   dateFilter: string;
   sort: ReservationSort;
 }) {
@@ -180,12 +192,20 @@ function buildUrlParams(params: {
     urlParams.set("status", params.statusFilter);
   }
 
+  if (params.paymentFilter !== "all") {
+    urlParams.set("payment", params.paymentFilter);
+  }
+
   if (params.dateFilter) {
     urlParams.set("date", params.dateFilter);
   }
 
   if (params.sort !== DEFAULT_SORT) {
     urlParams.set("sort", params.sort);
+  }
+
+  if (urlParams.size > 0) {
+    urlParams.set("page", "1");
   }
 
   return urlParams.toString();
@@ -256,6 +276,7 @@ export default function AdminReservationsPage() {
 
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [paymentFilter, setPaymentFilter] = useState("all");
   const [dateFilter, setDateFilter] = useState("");
   const [sort, setSort] = useState<ReservationSort>(DEFAULT_SORT);
   const [urlParamsLoaded, setUrlParamsLoaded] = useState(false);
@@ -267,24 +288,40 @@ export default function AdminReservationsPage() {
   }, [sort]);
 
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
+    const applyUrlParams = () => {
+      const params = new URLSearchParams(window.location.search);
 
-    const searchParam = params.get("search") || "";
-    const statusParam = params.get("status") || "all";
-    const dateParam = params.get("date") || "";
-    const sortParam = params.get("sort");
+      const searchParam = params.get("search") || "";
+      const statusParam = params.get("status") || "all";
+      const paymentParam = params.get("payment") || "all";
+      const dateParam = params.get("date") || "";
+      const sortParam = params.get("sort");
 
-    setSearch(searchParam);
-    setStatusFilter(statusParam);
-    setDateFilter(dateParam);
+      setSearch(searchParam.slice(0, 80));
+      setStatusFilter(
+        statusOptions.some((option) => option.value === statusParam)
+          ? statusParam
+          : "all"
+      );
+      setPaymentFilter(
+        paymentParam === "all" || isPaymentStatus(paymentParam)
+          ? paymentParam
+          : "all"
+      );
+      setDateFilter(isValidIsoDate(dateParam) ? dateParam : "");
 
-    if (isReservationSort(sortParam)) {
-      setSort(sortParam);
-    } else {
-      setSort(DEFAULT_SORT);
-    }
+      if (isReservationSort(sortParam)) {
+        setSort(sortParam);
+      } else {
+        setSort(DEFAULT_SORT);
+      }
 
-    setUrlParamsLoaded(true);
+      setUrlParamsLoaded(true);
+    };
+
+    applyUrlParams();
+    window.addEventListener("popstate", applyUrlParams);
+    return () => window.removeEventListener("popstate", applyUrlParams);
   }, []);
 
   const loadReservations = useCallback(async () => {
@@ -394,6 +431,10 @@ export default function AdminReservationsPage() {
       }
     }
 
+    if (paymentFilter !== "all") {
+      query = query.eq("payment_status", paymentFilter);
+    }
+
     if (dateFilter) {
       query = query.eq("reservation_date", dateFilter);
     }
@@ -418,7 +459,7 @@ export default function AdminReservationsPage() {
           .order("name", {
             ascending: true,
             referencedTable: "shooting_lanes",
-          } as any)
+          })
           .order("reservation_date", { ascending: false })
           .order("start_time", { ascending: false });
         break;
@@ -456,7 +497,7 @@ export default function AdminReservationsPage() {
     }
 
     setReservations((data ?? []) as unknown as Reservation[]);
-  }, [search, statusFilter, dateFilter, sort]);
+  }, [search, statusFilter, paymentFilter, dateFilter, sort]);
 
   useEffect(() => {
     if (!urlParamsLoaded) return;
@@ -464,6 +505,7 @@ export default function AdminReservationsPage() {
     const params = buildUrlParams({
       search,
       statusFilter,
+      paymentFilter,
       dateFilter,
       sort,
     });
@@ -473,7 +515,7 @@ export default function AdminReservationsPage() {
       : window.location.pathname;
 
     window.history.replaceState(null, "", nextUrl);
-  }, [search, statusFilter, dateFilter, sort, urlParamsLoaded]);
+  }, [search, statusFilter, paymentFilter, dateFilter, sort, urlParamsLoaded]);
 
   useEffect(() => {
     if (!urlParamsLoaded) return;
@@ -672,6 +714,7 @@ export default function AdminReservationsPage() {
   function resetFilters() {
     setSearch("");
     setStatusFilter("all");
+    setPaymentFilter("all");
     setDateFilter("");
     setSort(DEFAULT_SORT);
   }
@@ -845,6 +888,30 @@ export default function AdminReservationsPage() {
                   }
                 >
                   {status.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="mt-5 border-t border-[#30372c] pt-5">
+            <p id="reservation-payment-filter-label" className="mb-3 text-sm font-semibold text-[#d8dbd3]">
+              Status płatności
+            </p>
+
+            <div className="flex flex-wrap gap-2" aria-labelledby="reservation-payment-filter-label">
+              {paymentOptions.map((payment) => (
+                <button
+                  key={payment.value}
+                  type="button"
+                  onClick={() => setPaymentFilter(payment.value)}
+                  aria-pressed={paymentFilter === payment.value}
+                  className={
+                    paymentFilter === payment.value
+                      ? "min-h-11 rounded-full border border-[#8b986f] bg-[#313a29] px-4 py-2 text-sm font-semibold text-[#f2efe4] shadow-[inset_0_0_0_1px_rgba(215,200,149,0.12)]"
+                      : "min-h-11 rounded-full border border-[#3b4237] bg-[#090b09] px-4 py-2 text-sm font-semibold text-[#a9ada4] transition hover:border-[#66724f] hover:text-[#f2efe4] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d7c895]"
+                  }
+                >
+                  {payment.label}
                 </button>
               ))}
             </div>

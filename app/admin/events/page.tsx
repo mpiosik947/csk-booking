@@ -23,7 +23,7 @@ import {
   getEventRegistrationStatusBadgeClass,
   getEventRegistrationStatusPresentation,
 } from "../../../lib/event-registration-status";
-import { getPaymentStatusLabel, PAYMENT_STATUSES } from "../../../lib/payment-status";
+import { getPaymentStatusLabel, isPaymentStatus, PAYMENT_STATUSES } from "../../../lib/payment-status";
 import { supabase } from "../../../lib/supabase";
 import {
   buildEventSearchParams,
@@ -350,6 +350,9 @@ export default function AdminEventsPage() {
       const sort = params.get("sort") ?? "nearest";
       const search = (params.get("q") ?? "").trim();
       const page = parsePageNumber(params.get("page"));
+      const requestedParticipantStatus = params.get("participantStatus") ?? "";
+      const requestedParticipantPayment = params.get("participantPayment") ?? "";
+      const requestedParticipantPage = parsePageNumber(params.get("participantPage"));
       if (!["all","upcoming","past","inactive"].includes(scope) || !["nearest","latest"].includes(sort) || search.length>100 || page===null) {
         setMessage("Nieprawidłowe filtry szkoleń w adresie strony.");
         setLoading(false);
@@ -359,6 +362,17 @@ export default function AdminEventsPage() {
       setEventSortOrder(sort as EventSortOrder);
       setEventSearch(search);
       setEventPage(page);
+      setParticipantStatus(
+        ["registered", "approved", "reserve", "cancelled"].includes(requestedParticipantStatus)
+          ? requestedParticipantStatus
+          : ""
+      );
+      setParticipantPayment(
+        isPaymentStatus(requestedParticipantPayment)
+          ? requestedParticipantPayment
+          : ""
+      );
+      setParticipantPage(requestedParticipantPage ?? 1);
       setEventFiltersReady(true);
     };
     applyUrl();
@@ -383,6 +397,9 @@ export default function AdminEventsPage() {
     const next={search:eventSearch,scope:eventScope,sort:eventSortOrder,page:eventPage,...changes};
     if (changes.page===undefined) next.page=1;
     const params=buildEventSearchParams({q:next.search,scope:next.scope==='upcoming'?null:next.scope,sort:next.sort==='nearest'?null:next.sort,page:next.page});
+    if (participantStatus) params.set("participantStatus", participantStatus);
+    if (participantPayment) params.set("participantPayment", participantPayment);
+    if (participantPage > 1) params.set("participantPage", String(participantPage));
     const query=params.toString();
     window.history.pushState(null,"",`${window.location.pathname}${query?`?${query}`:""}`);
     setEventSearch(next.search);setEventScope(next.scope);setEventSortOrder(next.sort);setEventPage(next.page);
@@ -527,9 +544,7 @@ export default function AdminEventsPage() {
   }
 
   function openRegistrations(eventId: string) {
-    setParticipantStatus("");
-    setParticipantPayment("");
-    void loadRegistrations(eventId, 1, "", "");
+    void loadRegistrations(eventId, participantPage, participantStatus, participantPayment);
   }
 
   function updateParticipantFilters(next: {
@@ -544,6 +559,14 @@ export default function AdminEventsPage() {
     const nextStatus = next.status ?? participantStatus;
     const nextPayment = next.payment ?? participantPayment;
     const nextPage = next.page ?? 1;
+    const params = new URLSearchParams(window.location.search);
+    if (nextStatus) params.set("participantStatus", nextStatus);
+    else params.delete("participantStatus");
+    if (nextPayment) params.set("participantPayment", nextPayment);
+    else params.delete("participantPayment");
+    params.set("participantPage", String(nextPage));
+    params.set("page", "1");
+    window.history.pushState(null, "", `${window.location.pathname}?${params}`);
     setParticipantStatus(nextStatus);
     setParticipantPayment(nextPayment);
     void loadRegistrations(selectedEventId, nextPage, nextStatus, nextPayment);
@@ -1745,6 +1768,12 @@ export default function AdminEventsPage() {
             </label>
           </div>
         </div>
+
+        {participantStatus === "reserve" && !selectedEventId && (
+          <div role="status" className="mb-4 rounded-xl border border-[#806a32] bg-[#2b2618] p-4 text-sm text-[#e1c477]">
+            Preset „Lista rezerwowa” jest aktywny. Otwórz zapisy wybranego szkolenia, aby zobaczyć wyłącznie osoby na liście rezerwowej.
+          </div>
+        )}
 
         {visibleEvents.length === 0 && !loading ? (
           <div className="rounded-xl border border-[#30372c] bg-[#191e19] p-6 text-[#a9ada4]">

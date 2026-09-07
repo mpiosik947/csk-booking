@@ -71,10 +71,7 @@ test("instructor is fail-closed for check-in navigation and customer dashboard r
     dashboard,
     /canReadCustomerOperations[\s\S]*?\.from\("reservations"\)/
   );
-  assert.match(
-    dashboard,
-    /canReadCustomerOperations[\s\S]*?get_reservation_customer_profiles_v1/
-  );
+  assert.doesNotMatch(dashboard, /get_reservation_customer_profiles_v1/);
   assert.doesNotMatch(dashboard, /\.from\("profiles"\)/);
   assert.match(
     dashboard,

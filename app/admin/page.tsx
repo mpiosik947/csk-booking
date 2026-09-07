@@ -3,10 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { supabase } from "../../lib/supabase";
-import {
-  RESERVATION_STATUS,
-  isCancelledReservationStatus,
-} from "../../lib/reservation-status";
+import { isCancelledReservationStatus } from "../../lib/reservation-status";
 import {
   PAYMENT_STATUS,
   isPaidPaymentStatus,
@@ -14,6 +11,12 @@ import {
 import AdminShell from "./_components/AdminShell";
 import { getLaneRelationDisplay } from "../../lib/admin/lane-relation-display";
 import { reportClientError } from "../../lib/safe-client-error";
+import {
+  buildAdminActionQueueLinks,
+  getWarsawDateISO,
+  isExpectedTodayReservation,
+  isUnpaidActionReservation,
+} from "../../lib/admin/action-queues.js";
 
 type Role = "admin" | "pracownik" | "instruktor" | "user";
 
@@ -51,11 +54,6 @@ type Reservation = {
         parent_lane?: unknown;
       }[]
     | null;
-};
-
-type Profile = {
-  user_id: string;
-  verification_status: string | null;
 };
 
 type EventRegistrationSummary = {
@@ -133,20 +131,13 @@ const adminTiles: AdminTile[] = [
   },
 ];
 
-function getLocalDateISO(date = new Date()) {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
-}
-
 function getMonthRange(date = new Date()) {
   const firstDay = new Date(date.getFullYear(), date.getMonth(), 1);
   const lastDay = new Date(date.getFullYear(), date.getMonth() + 1, 0);
 
   return {
-    start: getLocalDateISO(firstDay),
-    end: getLocalDateISO(lastDay),
+    start: getWarsawDateISO(firstDay),
+    end: getWarsawDateISO(lastDay),
   };
 }
 
@@ -251,7 +242,7 @@ function StatCard({
   variant = "default",
 }: {
   title: string;
-  value: string | number;
+  value?: string | number;
   description?: string;
   href?: string;
   tone?: "default" | "green" | "yellow" | "red" | "blue";
@@ -280,7 +271,9 @@ function StatCard({
       className={`h-full min-h-12 rounded-2xl border p-5 transition hover:border-[#536143] ${cardClass}`}
     >
       <p className="text-sm text-[#a9ada4]">{title}</p>
-      <p className={`mt-2 text-3xl font-bold ${valueClass}`}>{value}</p>
+      {value !== undefined && (
+        <p className={`mt-2 text-3xl font-bold ${valueClass}`}>{value}</p>
+      )}
       {description && (
         <p className="mt-2 text-xs leading-5 text-[#858c7f]">{description}</p>
       )}
@@ -347,8 +340,9 @@ function AdminModuleTile({
 }
 
 export default function AdminPage() {
-  const today = getLocalDateISO();
+  const today = getWarsawDateISO();
   const monthRange = getMonthRange();
+  const queueLinks = buildAdminActionQueueLinks();
 
   const [loading, setLoading] = useState(true);
   const [role, setRole] = useState<Role | null>(null);
@@ -356,7 +350,6 @@ export default function AdminPage() {
 
   const [todayReservations, setTodayReservations] = useState<Reservation[]>([]);
   const [monthReservations, setMonthReservations] = useState<Reservation[]>([]);
-  const [profiles, setProfiles] = useState<Profile[]>([]);
   const [upcomingEvents, setUpcomingEvents] = useState<EventSummary[]>([]);
 
   useEffect(() => {
@@ -498,35 +491,10 @@ export default function AdminPage() {
 
     const loadedTodayReservations =
       (todayReservationsResult.data ?? []) as unknown as Reservation[];
-    const operationalProfiles: Profile[] = [];
-
-    if (canReadCustomerOperations && loadedTodayReservations.length > 0) {
-      const reservationIds = Array.from(
-        new Set(loadedTodayReservations.map((item) => item.id))
-      );
-
-      for (let index = 0; index < reservationIds.length; index += 100) {
-        const { data: profileData, error: profileError } = await supabase.rpc(
-          "get_reservation_customer_profiles_v1",
-          { p_reservation_ids: reservationIds.slice(index, index + 100) }
-        );
-
-        if (profileError) {
-          reportClientError("Dashboard operational profile read failed", profileError);
-          setMessage("Nie udało się pobrać statusów profili dla dzisiejszych rezerwacji.");
-          setLoading(false);
-          return;
-        }
-
-        operationalProfiles.push(...((profileData ?? []) as Profile[]));
-      }
-    }
-
     setTodayReservations(loadedTodayReservations);
     setMonthReservations(
       (monthReservationsResult.data ?? []) as unknown as Reservation[]
     );
-    setProfiles(operationalProfiles);
     setUpcomingEvents(
       (upcomingEventsResult.data ?? []) as unknown as EventSummary[]
     );
@@ -547,28 +515,12 @@ export default function AdminPage() {
     (reservation) => !isCancelledReservationStatus(reservation.reservation_status)
   );
 
-  const pendingCheckIns = activeTodayReservations.filter(
-    (reservation) =>
-      reservation.attendance_status === "planned" ||
-      reservation.attendance_status === null
-  );
+  const pendingCheckIns = todayReservations.filter(isExpectedTodayReservation);
 
-  const noShowToday = todayReservations.filter(
-    (reservation) =>
-      reservation.attendance_status === "no_show" ||
-      reservation.reservation_status === RESERVATION_STATUS.NO_SHOW
-  );
-
-  const unpaidToday = activeTodayReservations.filter(
-    (reservation) => reservation.payment_status === PAYMENT_STATUS.UNPAID
-  );
+  const unpaidToday = todayReservations.filter(isUnpaidActionReservation);
 
   const payOnSiteToday = activeTodayReservations.filter(
     (reservation) => reservation.payment_status === PAYMENT_STATUS.PAY_ON_SITE
-  );
-
-  const unverifiedUsers = profiles.filter(
-    (profile) => profile.verification_status !== "verified"
   );
 
   const todayRevenue = activeTodayReservations
@@ -607,24 +559,6 @@ export default function AdminPage() {
 
   const paymentToCollectToday = payOnSiteToday.reduce(
     (sum, reservation) => sum + Number(reservation.price ?? 0),
-    0
-  );
-
-  const unverifiedProfileIds = new Set(
-    unverifiedUsers.map((profile) => profile.user_id)
-  );
-
-  const unverifiedTodayReservations = activeTodayReservations.filter(
-    (reservation) =>
-      reservation.user_id && unverifiedProfileIds.has(reservation.user_id)
-  );
-
-  const upcomingEventsWithReserve = upcomingEvents.filter(
-    (eventItem) => getEventReserveCount(eventItem) > 0
-  );
-
-  const upcomingEventsReserveCount = upcomingEventsWithReserve.reduce(
-    (sum, eventItem) => sum + getEventReserveCount(eventItem),
     0
   );
 
@@ -692,43 +626,37 @@ export default function AdminPage() {
 
               <div className="mt-4 grid gap-4 md:grid-cols-2">
                 <StatCard
-                  title="Niezweryfikowani dziś"
-                  value={unverifiedTodayReservations.length}
-                  description="Klienci z dzisiejszą rezerwacją i niepełną weryfikacją."
-                  href={role === "admin" ? "/admin/users" : "/admin/check-in"}
-                  tone={unverifiedTodayReservations.length > 0 ? "yellow" : "green"}
+                  title="Oczekiwani dzisiaj"
+                  value={pendingCheckIns.length}
+                  description="Potwierdzone wizyty zaplanowane na dziś, jeszcze bez check-in."
+                  href={queueLinks.expectedToday}
+                  tone={pendingCheckIns.length > 0 ? "yellow" : "green"}
                   variant="alert"
                 />
 
                 <StatCard
-                  title="Nieopłacone dziś"
+                  title="Nieopłacone"
                   value={unpaidToday.length}
-                  description="Rezerwacje ze statusem nieopłacona."
-                  href="/admin/check-in"
+                  description="Dzisiejsze potwierdzone rezerwacje ze statusem nieopłacona."
+                  href={queueLinks.unpaid}
                   tone={unpaidToday.length > 0 ? "red" : "green"}
                   variant="alert"
                 />
 
                 <StatCard
-                  title="Lista rezerwowa szkoleń"
-                  value={upcomingEventsReserveCount}
-                  description={
-                    upcomingEventsWithReserve.length > 0
-                      ? `${upcomingEventsWithReserve.length} najbliższe szkolenia z rezerwą.`
-                      : "Brak rezerwy w najbliższych szkoleniach."
-                  }
-                  href="/admin/events"
-                  tone={upcomingEventsReserveCount > 0 ? "yellow" : "green"}
+                  title="Lista rezerwowa eventów"
+                  description="Otwórz szkolenia z przygotowanym filtrem uczestników: lista rezerwowa."
+                  href={queueLinks.eventReserve}
+                  tone="yellow"
                   variant="alert"
                 />
 
                 <StatCard
-                  title="No-show dzisiaj"
-                  value={noShowToday.length}
-                  description="Klienci oznaczeni jako nieobecni."
-                  href="/admin/check-in"
-                  tone={noShowToday.length > 0 ? "red" : "green"}
-                  variant="alert"
+                  title="Dzisiejsze rezerwacje"
+                  value={todayReservations.length}
+                  description="Wszystkie rezerwacje z dzisiejszą datą, także zakończone i anulowane."
+                  href={queueLinks.todayReservations}
+                  tone="blue"
                 />
               </div>
                 </section>
