@@ -2052,3 +2052,53 @@ PASS
 KNOWN LIMITATION:
 GLOBAL EVENT RESERVE COUNT NOT IMPLEMENTED
 ```
+
+---
+
+# V1.1-04 HOME TEST WARNING PRODUCTION SMOKE
+
+**Date:** 2026-09-07
+**Production commit:** `21c4c4e — feat: add prominent test mode warning`
+
+This was a read-only production verification. No application configuration,
+database record or deployment was changed.
+
+## Evidence
+
+| Test | Result | Evidence |
+|---|---|---|
+| Home HTTP response | PASS | A direct production GET to `/` returned HTTP 200 with `text/html; charset=utf-8`; no 5xx occurred. |
+| Warning presence | PASS | The rendered production DOM contains one labelled region with the `h2` heading `UWAGA — SYSTEM W WERSJI TESTOWEJ` and a textual `TEST` badge. |
+| Message clarity | PASS | The live content states that CSK has not officially opened, the application is in test mode, current reservations and training registrations are not binding, they do not confirm a real appointment, and the official launch will be announced separately. |
+| Placement | PASS | DOM order and measured element geometry put the warning immediately after the hero and completely before the two primary CTA. No popup or competing footer warning was present. |
+| Booking CTA | PASS | `Zarezerwuj termin` retained `/booking`; direct production navigation returned HTTP 200 without a 5xx. |
+| Events CTA | PASS | `Szkolenia i eventy` retained `/events`; direct production navigation returned HTTP 200 without a 5xx. |
+| Authentication navigation | PASS | `Zaloguj się` retained `/login` and `Rejestracja` retained `/register`; both production destinations returned HTTP 200 without a 5xx. |
+| Responsive 320 px | PASS | The warning and both CTA were visible, document horizontal overflow was exactly 0 px, and the warning ended before the CTA. |
+| Responsive 375 px | PASS | The warning and both CTA were visible, document horizontal overflow was exactly 0 px, and the warning ended before the CTA. |
+| Responsive 430 px | PASS | The warning and both CTA were visible, document horizontal overflow was exactly 0 px, and the warning ended before the CTA. |
+| Responsive 768 px | PASS | The warning and both CTA were visible, document horizontal overflow was exactly 0 px, and the warning ended before the CTA. |
+| Responsive 1440 px | PASS | The warning and both CTA were visible, document horizontal overflow was exactly 0 px, and the warning ended before the CTA. |
+| Other screens and flows | PASS | The deployed change is home-page-only. This smoke made no mutation and observed no regression in the public booking, events, login or registration destinations. |
+
+## Final result
+
+```text
+V1.1-04 HOME TEST WARNING PRODUCTION SMOKE:
+PASS
+
+V1.1-04 STATUS:
+FULLY IMPLEMENTED / PROD PASS
+
+HOME WARNING:
+PASS
+
+MESSAGE CLARITY:
+PASS
+
+MOBILE:
+PASS
+
+HOME CTA REGRESSION:
+PASS
+```
