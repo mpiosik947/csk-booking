@@ -1992,3 +1992,63 @@ PASS
 MOBILE UX:
 PASS
 ```
+
+---
+
+# V1.1-03 ADMIN ACTION QUEUES PRODUCTION SMOKE
+
+**Date:** 2026-09-07
+**Production commit:** `f824145 — feat: add admin action queues`
+
+This was a read-only production verification. No queue action, reservation,
+check-in, event registration or other production mutation was submitted. No
+synthetic fixture was required.
+
+## Evidence
+
+| Test | Result | Evidence |
+|---|---|---|
+| Admin dashboard | PASS | The authenticated administrator opened `/admin`. The `Wymaga uwagi` section exposed `Oczekiwani dzisiaj` (1), `Nieopłacone` (0), `Lista rezerwowa eventów` (without a misleading global count) and `Dzisiejsze rezerwacje` (1). |
+| Expected today | PASS | The dashboard link opened `/admin/check-in?date=2026-09-07&attendance=expected&page=1`. The Warsaw date matched the production day, the `Oczekiwani` preset was visibly active, and the list contained the one confirmed reservation without an attendance start. Reload preserved the date, preset and page. The deployed canonical predicate excludes already checked-in/no-show/completed records. |
+| Unpaid | PASS | The link opened `/admin/reservations?status=confirmed&payment=unpaid&date=2026-09-07&page=1`. `Potwierdzone` and `Nieopłacone` were visibly active, the result was the expected controlled empty state, and reload preserved all filters. The backend query applies both confirmed-status and unpaid-payment predicates, so cancelled records are excluded. |
+| Today reservations | PASS | The link opened the reservation list for the exact Warsaw date `2026-09-07` with page 1. The production result contained exactly the one dashboard-counted reservation for that date; status and payment remained unfiltered. No off-by-one behavior was observed. |
+| Event reserve queue | PASS / PARTIAL | The link opened `/admin/events?participantStatus=reserve&participantPage=1&page=1` and displayed the explicit active-preset notice. Production had no upcoming event to select, so a live participant row could not be inspected. The deployed flow applies the reserve status only after selecting an event, uses bounded participant pagination and excludes non-reserve rows. The intentionally absent global reserve count remains the documented limitation. |
+| URL state | PASS | All deep links contain only operational date/status/payment/page values—no PII, token or user ID. Reload preserved tested filters. Invalid reservation values rendered safely and fell back to the default `Wszystkie` state without a runtime error. The deployed browser test also verifies back navigation and page reset to 1. |
+| Authorization | PASS | Admin access worked. A direct `/admin` request from the existing ordinary-user session was redirected to `/dashboard`. Destination permissions remain server-enforced; no service-role browser path, RLS change or ACL change is part of `f824145`. |
+| Mobile 320/375/430 | PASS | The exact deployed commit contains and passes the Playwright viewport matrix at 320, 375 and 430 px, asserting no document-level horizontal overflow and visible queue controls. Queue cards use the same sub-768 responsive grid with touch-sized links. The authenticated in-app production browser had a fixed desktop viewport, so exact-width evidence comes from the deployed commit's automated browser suite. |
+| Tablet/desktop | PASS | The live desktop dashboard rendered all four queue cards without clipping or overlap. The deployed responsive grid switches to two columns from the medium breakpoint while retaining wrapped labels and counts. |
+| Regression | PASS | Production Check-in, Reservations and Events destinations loaded without 5xx or raw errors. Existing filters and bounded pagination remained active. No production data mutation was executed. |
+
+## Final result
+
+```text
+V1.1-03 ADMIN ACTION QUEUES PRODUCTION SMOKE:
+PASS
+
+V1.1-03 STATUS:
+PARTIAL / PROD PASS
+
+EXPECTED TODAY:
+PASS
+
+UNPAID:
+PASS
+
+TODAY RESERVATIONS:
+PASS
+
+EVENT RESERVE QUEUE:
+PARTIAL
+
+DEEPLINK / URL STATE:
+PASS
+
+MOBILE UX:
+PASS
+
+AUTHORIZATION:
+PASS
+
+KNOWN LIMITATION:
+GLOBAL EVENT RESERVE COUNT NOT IMPLEMENTED
+```
