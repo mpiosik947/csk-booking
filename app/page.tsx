@@ -172,6 +172,44 @@ export default function Home() {
           </p>
         </header>
 
+        <section
+          aria-labelledby="test-mode-warning-title"
+          className="mt-6 rounded-2xl border-2 border-[#b89545] bg-[#2b2416] p-4 text-left shadow-lg shadow-black/20 sm:p-5"
+        >
+          <div className="flex min-w-0 items-start gap-3 sm:gap-4">
+            <span className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-[#b89545] bg-[#3a301c] text-[#f0d17b]">
+              <AppIcon name="warning" className="h-6 w-6" />
+            </span>
+            <div className="min-w-0 flex-1">
+              <span className="inline-flex rounded-full border border-[#d2b66f] bg-[#42351d] px-2.5 py-1 text-[0.7rem] font-bold tracking-[0.18em] text-[#f0d17b]">
+                TEST
+              </span>
+              <h2
+                id="test-mode-warning-title"
+                className="mt-2 text-lg font-extrabold leading-tight text-[#f5df9e] sm:text-xl"
+              >
+                UWAGA — SYSTEM W WERSJI TESTOWEJ
+              </h2>
+              <div className="mt-3 space-y-2 text-sm leading-6 text-[#e2dccb] sm:text-base">
+                <p>Strzelnica CSK nie została jeszcze oficjalnie uruchomiona.</p>
+                <p>
+                  Aplikacja działa obecnie w trybie testowym i służy do
+                  sprawdzania systemu rezerwacji.
+                </p>
+                <p className="font-semibold text-[#f2e8ca]">
+                  Rezerwacje oraz zapisy na szkolenia utworzone obecnie w
+                  aplikacji nie są wiążące i nie oznaczają potwierdzenia
+                  rzeczywistego terminu.
+                </p>
+                <p>
+                  O oficjalnym uruchomieniu rezerwacji poinformujemy osobnym
+                  komunikatem.
+                </p>
+              </div>
+            </div>
+          </div>
+        </section>
+
         <div className="mt-7 grid gap-4 md:grid-cols-2">
           <a
             href="/booking"
@@ -391,23 +429,6 @@ export default function Home() {
           </div>
         </div>
 
-        <div className="mt-6 flex gap-4 rounded-2xl border border-[#6f5a2e] bg-[#242015] p-4 text-left">
-          <AppIcon
-            name="warning"
-            className="mt-0.5 h-6 w-6 shrink-0 text-[#d2b66f]"
-          />
-          <div>
-            <h2 className="text-xs font-bold tracking-[0.16em] text-[#d7c895]">
-              WERSJA TESTOWA
-            </h2>
-            <p className="mt-1 text-sm text-[#c8c0ab]">
-              System w fazie sprawdzania.
-            </p>
-            <p className="mt-1 text-sm text-[#9f9b8f]">
-              Rezerwacje mogą wymagać potwierdzenia telefonicznego.
-            </p>
-          </div>
-        </div>
       </section>
     </main>
   );
