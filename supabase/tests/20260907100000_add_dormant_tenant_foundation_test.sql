@@ -300,13 +300,24 @@ begin
     and pg_catalog.to_regprocedure('public.get_check_in_reservation_v1(uuid)') is not null,
     'Booking, Events, Reports and Check-in contracts must not be replaced.');
 
-  perform pg_temp.record_result(30, 'Foundation adds no tenant column to business tables',
-    not exists (
+  perform pg_temp.record_result(30, 'Later ownership remains limited to approved SAAS-9B-2 tables',
+    (select pg_catalog.count(*) = 8
+     from information_schema.columns
+     where table_schema = 'public' and column_name = 'tenant_id'
+       and table_name in (
+         'shooting_lanes', 'reservations', 'lane_blocks', 'events',
+         'event_lanes', 'event_registrations', 'email_deliveries', 'audit_logs'
+       ))
+    and not exists (
       select 1 from information_schema.columns
       where table_schema = 'public' and column_name = 'tenant_id'
-        and table_name not in ('tenant_memberships')
+        and table_name not in (
+          'tenant_memberships', 'shooting_lanes', 'reservations', 'lane_blocks',
+          'events', 'event_lanes', 'event_registrations', 'email_deliveries',
+          'audit_logs'
+        )
     ),
-    'SAAS-9B-1 must not begin business ownership backfill.');
+    'Tenant ownership must not spread outside the approved SAAS-9B-2 scope.');
 end;
 $tests$;
 
