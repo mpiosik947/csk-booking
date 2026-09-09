@@ -10,6 +10,7 @@ import {
 } from "../../lib/payment-status";
 import AdminShell from "./_components/AdminShell";
 import { getLaneRelationDisplay } from "../../lib/admin/lane-relation-display";
+import { hydrateReservationLaneParents } from "../../lib/admin/lane-parent-hydration";
 import { reportClientError } from "../../lib/safe-client-error";
 import {
   buildAdminActionQueueLinks,
@@ -402,10 +403,7 @@ export default function AdminPage() {
           payment_status,
           attendance_status,
           shooting_lanes (
-            id, name, resource_kind, parent_lane_id, display_order, is_active,
-            parent_lane:shooting_lanes!parent_lane_id (
-              id, name, resource_kind, parent_lane_id, display_order, is_active
-            )
+            id, name, resource_kind, parent_lane_id, display_order, is_active
           )
               `
             )
@@ -432,10 +430,7 @@ export default function AdminPage() {
           payment_status,
           attendance_status,
           shooting_lanes (
-            id, name, resource_kind, parent_lane_id, display_order, is_active,
-            parent_lane:shooting_lanes!parent_lane_id (
-              id, name, resource_kind, parent_lane_id, display_order, is_active
-            )
+            id, name, resource_kind, parent_lane_id, display_order, is_active
           )
               `
             )
@@ -491,9 +486,27 @@ export default function AdminPage() {
 
     const loadedTodayReservations =
       (todayReservationsResult.data ?? []) as unknown as Reservation[];
-    setTodayReservations(loadedTodayReservations);
+    const loadedMonthReservations =
+      (monthReservationsResult.data ?? []) as unknown as Reservation[];
+    let hydratedReservations: Reservation[];
+
+    try {
+      hydratedReservations = await hydrateReservationLaneParents(supabase, [
+        ...loadedTodayReservations,
+        ...loadedMonthReservations,
+      ]);
+    } catch (error) {
+      reportClientError("Admin dashboard lane parent read failed", error);
+      setMessage("Nie udało się pobrać danych osi dla rezerwacji.");
+      setLoading(false);
+      return;
+    }
+
+    setTodayReservations(
+      hydratedReservations.slice(0, loadedTodayReservations.length)
+    );
     setMonthReservations(
-      (monthReservationsResult.data ?? []) as unknown as Reservation[]
+      hydratedReservations.slice(loadedTodayReservations.length)
     );
     setUpcomingEvents(
       (upcomingEventsResult.data ?? []) as unknown as EventSummary[]

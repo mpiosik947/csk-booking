@@ -28,10 +28,15 @@ test("all operational admin surfaces request and resolve hierarchy metadata", as
     assert.match(content, /parent_lane_id/, `${name} parent_lane_id`);
     assert.match(content, /display_order/, `${name} display_order`);
     assert.match(content, /is_active/, `${name} is_active`);
-    assert.match(
+    assert.doesNotMatch(
       content,
       /parent_lane:shooting_lanes!parent_lane_id/,
-      `${name} explicit parent relation`
+      `${name} avoids ambiguous self-relationship embeds`
+    );
+    assert.match(
+      content,
+      /hydrateReservationLaneParents/,
+      `${name} hydrates parents through the shared batch reader`
     );
     assert.match(content, /getLaneRelationDisplay/, `${name} shared resolver`);
     assert.match(content, /\.displayName/, `${name} full display name`);

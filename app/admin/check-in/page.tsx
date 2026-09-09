@@ -15,6 +15,7 @@ import {
   getReservationStatusLabel,
 } from "../../../lib/reservation-status";
 import { getLaneRelationDisplay } from "../../../lib/admin/lane-relation-display";
+import { hydrateReservationLaneParents } from "../../../lib/admin/lane-parent-hydration";
 import {
   getWarsawDateISO,
   isExpectedTodayReservation,
@@ -692,10 +693,7 @@ function CheckInContent() {
         completed_at,
         price,
         shooting_lanes (
-          id, name, resource_kind, parent_lane_id, display_order, is_active,
-          parent_lane:shooting_lanes!parent_lane_id (
-            id, name, resource_kind, parent_lane_id, display_order, is_active
-          )
+          id, name, resource_kind, parent_lane_id, display_order, is_active
         )
       `
       )
@@ -707,18 +705,31 @@ function CheckInContent() {
 
     const { data, error } = await query;
 
-    setLoading(false);
-
     if (error) {
       reportClientError("Check-in reservations read failed", error);
       setMessage("Nie udało się pobrać rezerwacji. Spróbuj ponownie.");
+      setLoading(false);
       return;
     }
 
     const loadedReservations = (data ?? []) as unknown as Reservation[];
+    let hydratedReservations: Reservation[];
 
-    setReservations(loadedReservations);
-    await loadProfilesForReservations(loadedReservations);
+    try {
+      hydratedReservations = await hydrateReservationLaneParents(
+        supabase,
+        loadedReservations
+      );
+    } catch (parentError) {
+      reportClientError("Check-in lane parent read failed", parentError);
+      setMessage("Nie udało się pobrać danych osi dla rezerwacji.");
+      setLoading(false);
+      return;
+    }
+
+    setReservations(hydratedReservations);
+    await loadProfilesForReservations(hydratedReservations);
+    setLoading(false);
   }
 
   async function loadReservationByToken(checkInToken: string) {
@@ -834,10 +845,7 @@ function CheckInContent() {
         completed_at,
         price,
         shooting_lanes (
-          id, name, resource_kind, parent_lane_id, display_order, is_active,
-          parent_lane:shooting_lanes!parent_lane_id (
-            id, name, resource_kind, parent_lane_id, display_order, is_active
-          )
+          id, name, resource_kind, parent_lane_id, display_order, is_active
         )
       `
       )
@@ -849,7 +857,19 @@ function CheckInContent() {
       return false;
     }
 
-    const refreshedReservation = data as unknown as Reservation;
+    let refreshedReservation: Reservation;
+
+    try {
+      [refreshedReservation] = await hydrateReservationLaneParents(supabase, [
+        data as unknown as Reservation,
+      ]);
+    } catch (parentError) {
+      reportClientError(
+        "Refreshing reservation lane parent read failed",
+        parentError
+      );
+      return false;
+    }
 
     setReservations((current) =>
       current.map((item) =>

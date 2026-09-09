@@ -25,6 +25,10 @@ import {
 } from "../../../lib/reservation-actions";
 import { getReservationAttendanceActions } from "../../../lib/reservation-operational-state";
 import { getLaneRelationDisplay } from "../../../lib/admin/lane-relation-display";
+import {
+  hydrateLaneRows,
+  hydrateReservationLaneParents,
+} from "../../../lib/admin/lane-parent-hydration";
 import { isValidIsoDate } from "../../../lib/admin/action-queues.js";
 import AdminShell from "../_components/AdminShell";
 import { reportClientError } from "../../../lib/safe-client-error";
@@ -341,19 +345,22 @@ export default function AdminReservationsPage() {
           resource_kind,
           parent_lane_id,
           display_order,
-          is_active,
-          parent_lane:shooting_lanes!parent_lane_id (
-            id,
-            name,
-            resource_kind,
-            parent_lane_id,
-            display_order,
-            is_active
-          )
+          is_active
         `);
 
       if (!laneError && laneData) {
-        matchingLaneIds = laneData
+        let hydratedLanes;
+
+        try {
+          hydratedLanes = await hydrateLaneRows(supabase, laneData);
+        } catch (error) {
+          reportClientError("Admin reservation lane search parent read failed", error);
+          setMessage("Nie udało się pobrać danych osi. Spróbuj ponownie.");
+          setLoading(false);
+          return;
+        }
+
+        matchingLaneIds = hydratedLanes
           .filter((lane) =>
             getLaneRelationDisplay(lane)
               ?.displayName.toLocaleLowerCase("pl")
@@ -389,15 +396,7 @@ export default function AdminReservationsPage() {
           resource_kind,
           parent_lane_id,
           display_order,
-          is_active,
-          parent_lane:shooting_lanes!parent_lane_id (
-            id,
-            name,
-            resource_kind,
-            parent_lane_id,
-            display_order,
-            is_active
-          )
+          is_active
         )
       `
     );
@@ -488,15 +487,25 @@ export default function AdminReservationsPage() {
 
     const { data, error } = await query;
 
-    setLoading(false);
-
     if (error) {
       reportClientError("Admin reservations read failed", error);
       setMessage("Nie udało się pobrać rezerwacji. Spróbuj ponownie.");
+      setLoading(false);
       return;
     }
 
-    setReservations((data ?? []) as unknown as Reservation[]);
+    try {
+      const hydratedReservations = await hydrateReservationLaneParents(
+        supabase,
+        (data ?? []) as unknown as Reservation[]
+      );
+      setReservations(hydratedReservations);
+    } catch (parentError) {
+      reportClientError("Admin reservations lane parent read failed", parentError);
+      setMessage("Nie udało się pobrać danych osi dla rezerwacji.");
+    } finally {
+      setLoading(false);
+    }
   }, [search, statusFilter, paymentFilter, dateFilter, sort]);
 
   useEffect(() => {

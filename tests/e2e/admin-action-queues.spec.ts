@@ -97,4 +97,31 @@ test.describe.serial("V1.1-03 admin action queues", () => {
     await page.goBack();
     await expect(page).toHaveURL(/\/admin$/u);
   });
+
+  test("operational admin split reads and unaffected modules load without server errors", async ({ page }) => {
+    const serverErrors: string[] = [];
+    page.on("response", (response) => {
+      if (response.status() >= 500) {
+        serverErrors.push(`${response.status()} ${response.url()}`);
+      }
+    });
+
+    await login(page);
+
+    for (const [path, heading] of [
+      ["/admin", "Dashboard operacyjny"],
+      ["/admin/reservations", "Rezerwacje"],
+      ["/admin/check-in", "Check-in i obsługa wizyt"],
+      ["/admin/calendar", "Kalendarz obłożenia"],
+      ["/admin/reports", "Raport"],
+      ["/admin/events", "Eventy i szkolenia"],
+      ["/admin/lane-configuration", "Konfiguracja osi"],
+      ["/booking", "Zarezerwuj oś"],
+    ] as const) {
+      await page.goto(path);
+      await expect(page.getByRole("heading", { name: heading, exact: true })).toBeVisible();
+    }
+
+    expect(serverErrors).toEqual([]);
+  });
 });
