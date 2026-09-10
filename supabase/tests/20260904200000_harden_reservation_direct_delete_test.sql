@@ -182,9 +182,9 @@ begin
   perform pg_temp.record_result(3, 'Only exact SELECT policies remain',
     (select pg_catalog.count(*) = 2 from pg_catalog.pg_policies where schemaname = 'public' and tablename = 'reservations')
     and not exists (select 1 from pg_catalog.pg_policies where schemaname = 'public' and tablename = 'reservations' and cmd <> 'SELECT')
-    and exists (select 1 from pg_catalog.pg_policies where schemaname = 'public' and tablename = 'reservations' and policyname = 'Admins and staff can view all reservations' and cmd = 'SELECT' and qual = 'is_admin_or_employee()')
-    and exists (select 1 from pg_catalog.pg_policies where schemaname = 'public' and tablename = 'reservations' and policyname = 'Users can view own reservations' and cmd = 'SELECT' and qual = '(user_id = auth.uid())'),
-    'Polityka DELETE ma nie istnieć, a obie polityki SELECT pozostać bez zmian.');
+    and exists (select 1 from pg_catalog.pg_policies where schemaname = 'public' and tablename = 'reservations' and policyname = 'Tenant admin and employee can view reservations' and cmd = 'SELECT' and qual like '%has_tenant_role_v1%admin%employee%')
+    and exists (select 1 from pg_catalog.pg_policies where schemaname = 'public' and tablename = 'reservations' and policyname = 'Tenant members can view own reservations' and cmd = 'SELECT' and qual like '%user_id%auth.uid%is_tenant_member_v1%'),
+    'Polityka DELETE ma nie istnieć, a obie tenant-aware polityki SELECT muszą pozostać ścisłe.');
 
   perform pg_temp.record_result(4, 'authenticated reservation ACL is SELECT-only',
     pg_catalog.has_table_privilege('authenticated', 'public.reservations', 'SELECT')

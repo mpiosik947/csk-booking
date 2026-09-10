@@ -261,17 +261,17 @@ begin
     'No application server contract needs these tables yet.');
 
   perform pg_temp.record_result(26, 'Only approved tenant authorization helpers are SECURITY DEFINER',
-    (select pg_catalog.count(*)=4
+    (select pg_catalog.count(*)=5
      from pg_catalog.pg_proc procedure
      join pg_catalog.pg_namespace namespace on namespace.oid=procedure.pronamespace
      where namespace.nspname='public' and procedure.prosecdef
-       and procedure.proname in ('is_tenant_member_v1','has_tenant_role_v1','get_my_tenant_role_v1','active_single_tenant_id_v1'))
+       and procedure.proname in ('is_tenant_member_v1','has_tenant_role_v1','get_my_tenant_role_v1','active_single_tenant_id_v1','is_active_public_tenant_v1'))
     and not exists(
       select 1 from pg_catalog.pg_proc procedure
       join pg_catalog.pg_namespace namespace on namespace.oid=procedure.pronamespace
       where namespace.nspname='public' and procedure.prosecdef
         and procedure.proname like '%tenant%'
-        and procedure.proname not in ('is_tenant_member_v1','has_tenant_role_v1','get_my_tenant_role_v1','active_single_tenant_id_v1')
+        and procedure.proname not in ('is_tenant_member_v1','has_tenant_role_v1','get_my_tenant_role_v1','active_single_tenant_id_v1','is_active_public_tenant_v1')
     ),
     'No tenant management writer may be introduced in SAAS-9C-1.');
 

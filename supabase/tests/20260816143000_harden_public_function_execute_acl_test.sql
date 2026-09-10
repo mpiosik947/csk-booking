@@ -77,6 +77,7 @@ insert into expected_function_acl values
   ('public.get_reservation_customer_profiles_v1(uuid[])','C',false,true,false),
   ('public.handle_new_user()','E',false,false,false),
   ('public.has_tenant_role_v1(uuid,text[])','B',false,true,false),
+  ('public.is_active_public_tenant_v1(uuid)','B',true,true,false),
   ('public.is_admin_or_employee()','C',false,true,false),
   ('public.is_admin_or_staff()','C',false,true,false),
   ('public.is_admin()','C',false,true,false),
@@ -203,8 +204,8 @@ begin
     and procedure.proname<>'csk_sec002_default_acl_probe';
 
   perform pg_temp.record_result(1,'Complete public function inventory',
-    (select pg_catalog.count(*)=85 from pg_temp.expected_function_acl)
-    and v_actual_count=85
+    (select pg_catalog.count(*)=86 from pg_temp.expected_function_acl)
+    and v_actual_count=86
     and not exists(
       select 1 from pg_temp.expected_function_acl expected
       where pg_catalog.to_regprocedure(expected.signature) is null
@@ -220,7 +221,7 @@ begin
           where pg_catalog.to_regprocedure(expected.signature)=procedure.oid
         )
     ),
-    'The exact 77-function inventory has no missing or unexpected signature.');
+    'The exact 86-function inventory has no missing or unexpected signature.');
 
   perform pg_temp.record_result(2,'PUBLIC executes no public function',
     not exists(
@@ -241,8 +242,8 @@ begin
       where pg_catalog.has_function_privilege('anon',expected.signature,'EXECUTE')
         is distinct from expected.anon_execute
     )
-    and (select pg_catalog.count(*)=4 from pg_temp.expected_function_acl where anon_execute),
-    'anon can execute only the four intended non-PII public readers.');
+    and (select pg_catalog.count(*)=5 from pg_temp.expected_function_acl where anon_execute),
+    'anon can execute only the five intended non-PII public readers/policy helpers.');
 
   perform pg_temp.record_result(4,'Exact authenticated ACL matrix',
     not exists(
@@ -250,8 +251,8 @@ begin
       where pg_catalog.has_function_privilege('authenticated',expected.signature,'EXECUTE')
         is distinct from expected.authenticated_execute
     )
-    and (select pg_catalog.count(*)=52 from pg_temp.expected_function_acl where authenticated_execute),
-    'authenticated has exactly the 52 user, policy-helper and internally authorized RPC grants.');
+    and (select pg_catalog.count(*)=53 from pg_temp.expected_function_acl where authenticated_execute),
+    'authenticated has exactly the 53 user, policy-helper and internally authorized RPC grants.');
 
   perform pg_temp.record_result(5,'Exact service_role ACL matrix',
     not exists(
@@ -313,14 +314,14 @@ begin
     'Future functions created by postgres receive no client or PUBLIC EXECUTE.');
 
   perform pg_temp.record_result(8,'Application function creator scope is exact',
-    (select pg_catalog.count(*)=85
+    (select pg_catalog.count(*)=86
       from pg_catalog.pg_proc procedure
       join pg_catalog.pg_namespace namespace on namespace.oid=procedure.pronamespace
       join pg_catalog.pg_roles owner_role on owner_role.oid=procedure.proowner
       where namespace.nspname='public' and procedure.prokind='f'
         and procedure.proname<>'csk_sec002_default_acl_probe'
         and owner_role.rolname='postgres'),
-    'All 85 application functions are owned by postgres, whose public-schema defaults are hardened.');
+    'All 86 application functions are owned by postgres, whose public-schema defaults are hardened.');
 
   perform pg_temp.record_result(9,'New function inherits owner-only execution',
     not pg_catalog.has_function_privilege('anon','public.csk_sec002_default_acl_probe()','EXECUTE')
