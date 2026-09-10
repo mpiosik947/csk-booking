@@ -203,18 +203,13 @@ begin
     ),
     'The shared timestamp trigger must be installed and enabled.');
 
-  perform pg_temp.record_result(19, 'Client and service roles have no tenant ACL',
-    not exists (
-      select 1
-      from (values ('anon'::name), ('authenticated'::name), ('service_role'::name)) role_name(role_name)
-      cross join (values ('public.tenants'::regclass), ('public.tenant_memberships'::regclass)) object_name(object_name)
-      where pg_catalog.has_table_privilege(
-        role_name.role_name,
-        object_name.object_name,
-        'SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN'
-      )
-    ),
-    'Dormant tables are owner/migration managed only.');
+  perform pg_temp.record_result(19, 'Tenant ACL remains minimal after membership activation',
+    not pg_catalog.has_table_privilege('authenticated','public.tenants','SELECT,INSERT,UPDATE,DELETE')
+    and pg_catalog.has_table_privilege('authenticated','public.tenant_memberships','SELECT')
+    and not pg_catalog.has_table_privilege('authenticated','public.tenant_memberships','INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN')
+    and not pg_catalog.has_table_privilege('anon','public.tenant_memberships','SELECT,INSERT,UPDATE,DELETE')
+    and not pg_catalog.has_table_privilege('service_role','public.tenant_memberships','SELECT,INSERT,UPDATE,DELETE'),
+    'Only authenticated self-read may exist on memberships.');
 
   perform pg_temp.record_result(20, 'PUBLIC has no tenant table ACL',
     not exists (
@@ -230,13 +225,10 @@ begin
     ),
     'No generic PUBLIC privilege may exist.');
 
-  perform pg_temp.record_result(21, 'Dormant tables define no RLS allow policy',
-    not exists (
-      select 1 from pg_catalog.pg_policies
-      where schemaname = 'public'
-        and tablename in ('tenants', 'tenant_memberships')
-    ),
-    'No role is authorized before the tenant-aware cutover.');
+  perform pg_temp.record_result(21, 'Membership has one non-recursive self-read policy',
+    not exists(select 1 from pg_catalog.pg_policies where schemaname='public' and tablename='tenants')
+    and (select pg_catalog.count(*)=1 from pg_catalog.pg_policies where schemaname='public' and tablename='tenant_memberships' and cmd='SELECT' and roles=array['authenticated']::name[] and qual like '%user_id%auth.uid%'),
+    'Only the authenticated own-membership policy may exist.');
 
   perform pg_temp.record_result(22, 'Authenticated direct tenant access is ACL-denied',
     pg_temp.role_statement_raises('authenticated', 'select * from public.tenants', '42501')
@@ -268,16 +260,20 @@ begin
     and pg_temp.role_statement_raises('service_role', 'select * from public.tenant_memberships', '42501'),
     'No application server contract needs these tables yet.');
 
-  perform pg_temp.record_result(26, 'No tenant management SECURITY DEFINER RPC was added',
-    not exists (
-      select 1
-      from pg_catalog.pg_proc procedure
-      join pg_catalog.pg_namespace namespace on namespace.oid = procedure.pronamespace
-      where namespace.nspname = 'public'
+  perform pg_temp.record_result(26, 'Only approved tenant authorization helpers are SECURITY DEFINER',
+    (select pg_catalog.count(*)=4
+     from pg_catalog.pg_proc procedure
+     join pg_catalog.pg_namespace namespace on namespace.oid=procedure.pronamespace
+     where namespace.nspname='public' and procedure.prosecdef
+       and procedure.proname in ('is_tenant_member_v1','has_tenant_role_v1','get_my_tenant_role_v1','active_single_tenant_id_v1'))
+    and not exists(
+      select 1 from pg_catalog.pg_proc procedure
+      join pg_catalog.pg_namespace namespace on namespace.oid=procedure.pronamespace
+      where namespace.nspname='public' and procedure.prosecdef
         and procedure.proname like '%tenant%'
-        and procedure.prosecdef
+        and procedure.proname not in ('is_tenant_member_v1','has_tenant_role_v1','get_my_tenant_role_v1','active_single_tenant_id_v1')
     ),
-    'Bootstrap and the runtime guard use tables, constraints and migration-time data only.');
+    'No tenant management writer may be introduced in SAAS-9C-1.');
 
   perform pg_temp.record_result(27, 'Legacy profiles.role remains present',
     exists (

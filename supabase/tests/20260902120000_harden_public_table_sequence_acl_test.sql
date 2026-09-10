@@ -40,7 +40,7 @@ insert into expected_table_acl values
   ('profiles','B','{}','{INSERT,SELECT}','{DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE}'),
   ('reservations','B','{}','{SELECT}','{DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE}'),
   ('shooting_lanes','A','{SELECT}','{SELECT}','{DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE}'),
-  ('tenant_memberships','D','{}','{}','{}'),
+  ('tenant_memberships','D','{}','{SELECT}','{}'),
   ('tenants','D','{}','{}','{}');
 
 create function pg_temp.table_privileges(p_table text,p_role text)
@@ -351,6 +351,7 @@ revoke all privileges on all tables in schema public from public, anon, authenti
 revoke all privileges on all sequences in schema public from public, anon, authenticated;
 grant select on table public.events,public.lane_booking_durations,public.lane_booking_rules,public.lane_pricing_rules,public.shooting_lanes to anon,authenticated;
 grant select on table public.audit_logs,public.event_lanes,public.event_registrations,public.lane_blocks,public.profiles,public.reservations to authenticated;
+grant select on table public.tenant_memberships to authenticated;
 grant insert on table public.profiles to authenticated;
 grant delete on table public.reservations to authenticated;
 revoke delete on table public.reservations from authenticated;
@@ -361,6 +362,7 @@ revoke all privileges on all tables in schema public from public, anon, authenti
 revoke all privileges on all sequences in schema public from public, anon, authenticated;
 grant select on table public.events,public.lane_booking_durations,public.lane_booking_rules,public.lane_pricing_rules,public.shooting_lanes to anon,authenticated;
 grant select on table public.audit_logs,public.event_lanes,public.event_registrations,public.lane_blocks,public.profiles,public.reservations to authenticated;
+grant select on table public.tenant_memberships to authenticated;
 grant insert on table public.profiles to authenticated;
 grant delete on table public.reservations to authenticated;
 revoke delete on table public.reservations from authenticated;

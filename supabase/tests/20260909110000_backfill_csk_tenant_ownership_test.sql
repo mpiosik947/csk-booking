@@ -173,24 +173,34 @@ begin
     and position('profiles' in pg_catalog.pg_get_functiondef('public.get_my_role()'::pg_catalog.regprocedure)) > 0,
     'Legacy role source changed.');
 
-  perform pg_temp.ok(27, 'tenant memberships remain dormant',
-    not exists(select 1 from public.tenant_memberships)
-    and not exists(select 1 from pg_catalog.pg_proc function_record join pg_catalog.pg_namespace namespace on namespace.oid=function_record.pronamespace where namespace.nspname='public' and function_record.prokind='f' and pg_catalog.pg_get_functiondef(function_record.oid) like '%tenant_memberships%' and function_record.proname not in ('set_updated_at')),
-    'Membership authorization was activated.');
+  perform pg_temp.ok(27, 'CSK memberships are activated without replacing legacy auth',
+    not exists(
+      select 1 from public.profiles profile
+      left join public.tenant_memberships membership
+        on membership.tenant_id='c5c00000-0000-4000-8000-000000000001'::uuid and membership.user_id=profile.user_id
+      where membership.user_id is null
+         or membership.role is distinct from public.legacy_profile_role_to_tenant_role_v1(profile.role)
+    )
+    and pg_catalog.to_regprocedure('public.is_tenant_member_v1(uuid)') is not null,
+    'Membership activation or reconciliation differs.');
 
   perform pg_temp.ok(28, 'excluded tables did not receive tenant ownership',
     not exists(select 1 from information_schema.columns where table_schema='public' and column_name='tenant_id' and table_name in ('profiles','lane_booking_rules','lane_booking_durations','lane_pricing_rules','lane_booking_family_configuration_versions','confirmation_email_rate_limits','tenants'))
     and exists(select 1 from pg_catalog.pg_constraint where conrelid='public.tenant_memberships'::pg_catalog.regclass and conname='tenant_memberships_pkey' and contype='p'),
     'Out-of-scope ownership column exists.');
 
-  perform pg_temp.ok(29, 'RLS policies are unchanged',
-    (select pg_catalog.count(*)=22 from pg_catalog.pg_policies where schemaname='public')
-    and (select pg_catalog.md5(coalesce(pg_catalog.string_agg(pg_catalog.concat_ws('|',tablename,policyname,cmd,roles::text,qual,with_check),E'\n' order by tablename,policyname),''))='f5c428bd4e241af39f690c1aafcfad08' from pg_catalog.pg_policies where schemaname='public'),
-    'Policy inventory changed.');
+  perform pg_temp.ok(29, 'only membership RLS was added',
+    (select pg_catalog.md5(coalesce(pg_catalog.string_agg(pg_catalog.concat_ws('|',tablename,policyname,cmd,roles::text,qual,with_check),E'\n' order by tablename,policyname),''))='f5c428bd4e241af39f690c1aafcfad08' from pg_catalog.pg_policies where schemaname='public' and tablename<>'tenant_memberships')
+    and (select pg_catalog.count(*)=1 from pg_catalog.pg_policies where schemaname='public' and tablename='tenant_memberships'),
+    'A business policy changed or the membership policy differs.');
 
-  perform pg_temp.ok(30, 'table ACL is unchanged',
-    (select pg_catalog.md5(coalesce(pg_catalog.string_agg(relation.relname||'|'||coalesce(relation.relacl::text,''),E'\n' order by relation.relname),''))='cc439ed94c9949ad6461925f428940a6' from pg_catalog.pg_class relation join pg_catalog.pg_namespace namespace on namespace.oid=relation.relnamespace where namespace.nspname='public' and relation.relkind in ('r','p')),
-    'Table ACL inventory changed.');
+  perform pg_temp.ok(30, 'only membership self-read table ACL was added',
+    pg_catalog.has_table_privilege('authenticated','public.tenant_memberships','SELECT')
+    and not pg_catalog.has_table_privilege('authenticated','public.tenant_memberships','INSERT,UPDATE,DELETE')
+    and not pg_catalog.has_table_privilege('anon','public.tenant_memberships','SELECT,INSERT,UPDATE,DELETE')
+    and not pg_catalog.has_table_privilege('service_role','public.tenant_memberships','SELECT,INSERT,UPDATE,DELETE')
+    and not pg_catalog.has_table_privilege('authenticated','public.tenants','SELECT,INSERT,UPDATE,DELETE'),
+    'Membership/tenant ACL is broader than the SAAS-9C-1 contract.');
 
   perform pg_temp.ok(31, 'critical RPC definitions are unchanged',
     pg_catalog.md5(pg_catalog.pg_get_functiondef('public.get_my_role()'::pg_catalog.regprocedure))='dc8858eed7d2fd2d1ab47d22b0000b06'
