@@ -741,3 +741,105 @@ READY FOR SAAS-9C IMPLEMENTATION: **NO-GO**
 SECOND TENANT: **NO-GO**
 
 SEC-004: **OPEN**
+
+## SAAS-9B-3R — FINAL APPLICATION DEPLOYMENT AND POST-DEPLOY VERIFICATION
+
+### 56. Checkpoint correction and publication
+
+The unpublished checkpoint was corrected by removing only three trailing whitespace characters from lines 3–5 of `SAAS_9B_3_PRODUCTION_PREFLIGHT_AND_FINAL_PLAN.md`. No wording or implementation changed. The commit was amended with the unchanged message:
+
+```text
+SAAS-9B-3 tenant integrity and PostgREST hierarchy hotfix
+```
+
+The final checkpoint is `2e2b03c1004852a72f253c26e0487b6e9751a985`. It contains exactly the 14 approved SAAS-9B-3/9B-3R files. Before publication, the working tree and staging area were clean, `git diff HEAD^ HEAD --check`, `git show --check --oneline HEAD`, and `git diff --check` all passed, old self-embed runtime usage was zero, and temporary files were zero.
+
+The commit was pushed by a normal fast-forward update to `origin/main`. Local `main` and `origin/main` both resolve to `2e2b03c1004852a72f253c26e0487b6e9751a985`, with divergence `0 0`. No force push, reset, rebase, migration, or production database write was performed during checkpoint publication.
+
+### 57. Application deployment
+
+The relevant Git-connected Vercel deployment context, `Vercel – csk-booking-5nwh`, completed successfully for commit `2e2b03c1004852a72f253c26e0487b6e9751a985` and reported `Deployment has completed`. The production application at `https://csk-booking-5nwh.vercel.app` serves the deployed hotfix.
+
+A separate duplicate Vercel status context named `Vercel – csk-booking` reported failure. It is not the production project used by the application and did not prevent the `csk-booking-5nwh` production deployment. The duplicate integration remains configuration noise to review separately; it is not evidence of a failure of this production deployment.
+
+### 58. PGRST200 regression verification
+
+The three previously affected production surfaces now load successfully without the PostgREST self-relationship error:
+
+| Surface | Result | Evidence |
+|---|---|---|
+| `/admin` | PASS | Dashboard and reservation-backed operational data render without the controlled load failure. |
+| `/admin/reservations` | PASS | Filters and reservation list contract load without `PGRST200`. |
+| `/admin/check-in` | PASS | Check-in surface loads with its controlled empty state and no relationship error. |
+
+The additional `/admin/reservations?search=Stanowisko` smoke exercised a result set containing all five Oś 100 m child positions sharing the same parent. The batch parent hydration completed successfully, preserved child resources, and did not emit `PGRST200`.
+
+Production currently has only one family with multiple child positions, so a live-data smoke across multiple distinct parents was not available without creating production fixture. That branch remains covered by the deployed helper contract and focused local tests. A missing parent is structurally constrained by the validated composite foreign key and remains covered by fail-closed helper tests.
+
+### 59. Full production runtime smoke
+
+| Runtime surface | Result | Evidence |
+|---|---|---|
+| Booking | PASS | Public booking loads all configured lane families. |
+| Login/session | PASS | Login page loads and the existing authenticated admin session remains valid. |
+| Admin dashboard | PASS | Dashboard loads without the previous reservation-query error. |
+| Reservations | PASS | Reservation reader, filters, and empty state render. |
+| Calendar | PASS | Root and child hierarchy, including Oś 100 m positions 1–5, renders. |
+| Reports | PASS | KPI, filters, hierarchy resources, and details surface load. |
+| Events | PASS | Public events and admin events load; hierarchy lane choices include child positions. |
+| Check-in | PASS | Reservation-backed check-in surface loads without the previous error. |
+| Lane configuration | PASS | Six families, five positions, roots, and children render. |
+
+No production mutation or synthetic fixture was required for this application smoke.
+
+### 60. Production database and security post-check
+
+A read-only production catalog/invariant query returned:
+
+```text
+validated_composite_fks = 7
+tenant_indexes = 7
+integrity_triggers = 2
+tenant_mismatches = 0
+pricing_mismatches = 0
+active_tenant_guard = 1
+csk_defaults = 7
+tenant_memberships = 0
+```
+
+The security fingerprints remain identical to the accepted SAAS-9B-2/9B-3 baseline:
+
+- RLS: `f5c428bd4e241af39f690c1aafcfad08`;
+- table ACL: `cf05faffa475999df163338c3c1e805f`;
+- `get_my_role()`: `dc8858eed7d2fd2d1ab47d22b0000b06`;
+- `create_reservation_v2(...)`: `601664ae4957ed0eef29f85ded57a191`.
+
+Therefore the application-only hotfix did not alter RLS, ACL, the legacy role RPC, the reservation writer, tenant integrity objects, temporary CSK defaults, membership state, or the second-active-tenant guard. `profiles.role` remains the active legacy authorization source.
+
+### 61. Final superseding verdict
+
+Sections 54–55 record the historical pre-checkpoint deployment blocker and are superseded by the completed checkpoint, production deployment, and verification above.
+
+WHITESPACE FIX: **PASS**
+
+AMEND: **PASS**
+
+CHECKPOINT COMMIT: **PASS**
+
+PUSH: **PASS**
+
+APPLICATION PRODUCTION DEPLOY: **PASS**
+
+PGRST200 REGRESSION: **RESOLVED**
+
+SAAS-9B-3 POST-DEPLOY VERIFICATION: **PASS**
+
+READY FOR FINAL DOCUMENTATION CHECKPOINT: **YES**
+
+READY FOR SAAS-9C PLANNING: **GO**
+
+READY FOR SAAS-9C IMPLEMENTATION: **NO-GO**
+
+SECOND TENANT: **NO-GO**
+
+SEC-004: **OPEN**
