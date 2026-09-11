@@ -37,7 +37,7 @@ insert into expected_table_acl values
   ('lane_booking_family_configuration_versions','D','{}','{}','{MAINTAIN,REFERENCES,TRIGGER,TRUNCATE}'),
   ('lane_booking_rules','A','{SELECT}','{SELECT}','{DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE}'),
   ('lane_pricing_rules','A','{SELECT}','{SELECT}','{DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE}'),
-  ('profiles','B','{}','{INSERT,SELECT}','{DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE}'),
+  ('profiles','B','{}','{SELECT}','{DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE}'),
   ('reservations','B','{}','{SELECT}','{DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE}'),
   ('shooting_lanes','A','{SELECT}','{SELECT}','{DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE}'),
   ('tenant_memberships','D','{}','{SELECT}','{}'),
@@ -355,6 +355,9 @@ grant select on table public.tenant_memberships to authenticated;
 grant insert on table public.profiles to authenticated;
 grant delete on table public.reservations to authenticated;
 revoke delete on table public.reservations from authenticated;
+-- Preserve the later SAAS-9C-2D profile INSERT hardening when replaying the
+-- older ACL migration contract.
+revoke insert on table public.profiles from authenticated;
 
 alter default privileges for role postgres in schema public revoke all privileges on tables from public, anon, authenticated;
 alter default privileges for role postgres in schema public revoke all privileges on sequences from public, anon, authenticated;
@@ -366,6 +369,7 @@ grant select on table public.tenant_memberships to authenticated;
 grant insert on table public.profiles to authenticated;
 grant delete on table public.reservations to authenticated;
 revoke delete on table public.reservations from authenticated;
+revoke insert on table public.profiles from authenticated;
 
 select pg_temp.record_result(29,'Double application is idempotent',
   (select acl_hash from pg_temp.acl_before_double_apply)=(

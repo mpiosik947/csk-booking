@@ -555,6 +555,223 @@ SECOND TENANT: **NO-GO**
 
 SEC-004: **OPEN**
 
+## SAAS-9C-2D/2E — FINAL TENANT-AWARE RLS COMPLETION PLAN
+
+This section is the binding plan for the remaining SAAS-9C work after the production closure of 9C-2C. It is based on the current repository, the post-reset local catalog, and the deployed 9C-1 through 9C-2C migrations. It supersedes the provisional 9C-2D/2E outline earlier in this document. This is planning only: no policy, ACL, schema, function, application, or production data change is authorized here.
+
+### 24.1 Remaining RLS inventory
+
+The current tenant-owned core tables already use membership-derived policies after 9C-2A/B/C: `shooting_lanes`, `reservations`, `lane_blocks`, `events`, `event_lanes`, and `event_registrations`. Their tenant-private policies call `has_tenant_role_v1(tenant_id, ...)` or require an owner plus active membership. A global `profiles.role` value alone does not satisfy those policies.
+
+The remaining catalog dependencies on global role helpers are exactly:
+
+| Table | Current policy | Global dependency | Classification | Required action |
+|---|---|---|---|---|
+| `audit_logs` | `Admins can view audit logs` | `is_admin()` | A — must fix in 9C-2D | replace with own-tenant admin/employee SELECT; exclude `tenant_id IS NULL` |
+| `profiles` | `Admins can view all profiles` | `is_admin()` | A — must fix in 9C-2D | remove global browse access; keep owner read and use bounded RPC/DTO paths for operational foreign-user data |
+| `profiles` | `Admins can insert profiles` | `is_admin()` | A — must fix in 9C-2D | remove policy and revoke client INSERT after trigger preflight |
+| `lane_booking_rules` | staff SELECT | `is_admin_or_staff()` | A — must fix in 9C-2E | derive tenant from the referenced `shooting_lanes` row; preserve admin/employee/instructor roles |
+| `lane_booking_durations` | staff SELECT | `is_admin_or_employee()` | A — must fix in 9C-2E | derive tenant from the referenced lane; preserve admin/employee only |
+| `lane_pricing_rules` | staff SELECT | `is_admin_or_employee()` | A — must fix in 9C-2E | derive tenant from the referenced lane; preserve admin/employee only |
+| business `SECURITY DEFINER` RPCs | function-body authorization | `is_admin*`, `get_my_role()`, or inline `profiles.role` | B — defer to 9D | inventory and fingerprint now; add trusted target-derived tenant checks in 9D |
+| browser/middleware role presentation | application authorization and navigation | legacy profile role | C — application concern | cut over only in 9E; never credit it as a database boundary |
+| public booking/event reads | intentionally public, active resources only | public predicates/read RPCs | D — intentional public | preserve PII-free behavior; require explicit active-public-tenant scoping |
+
+`tenants`, `tenant_memberships`, and `email_deliveries` do not currently use a global role helper. Their restrictive state is intentional. No additional tenant-owned table or direct-table policy was found that requires a new ownership column in 9C.
+
+### 24.2 `audit_logs` design
+
+Target direct-table SELECT policy:
+
+- active tenant `admin` and `employee` may read rows where `audit_logs.tenant_id` equals a tenant for which the caller has that role;
+- `instructor`, ordinary `user`, inactive/pending/suspended members, users without membership, `anon`, and `PUBLIC` receive no rows;
+- rows with `tenant_id IS NULL` are global/account/platform audit and are not visible to tenant staff;
+- membership must be evaluated through `has_tenant_role_v1(audit_logs.tenant_id, ARRAY['admin','employee'])`, not through `profiles.role`;
+- no INSERT, UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER, or MAINTAIN capability is opened to application roles.
+
+The current authenticated ACL remains SELECT-only. Trusted business functions remain responsible for audit creation. Their target-to-tenant derivation, actor integrity, global-versus-tenant classification, and RLS bypass are binding 9D work. Production preflight must enumerate every distinct `(action, target_type)` and STOP on an unknown classification; no blanket `NULL` or CSK assignment is allowed.
+
+### 24.3 `tenants` design
+
+Keep the present fail-closed direct-table contract in 9C:
+
+- RLS enabled, zero policies, and zero client grants for `PUBLIC`, `anon`, and `authenticated`;
+- no direct metadata INSERT, UPDATE, or DELETE for tenant admins;
+- no public tenant discovery policy is added because the current application has no approved discovery/routing contract;
+- future public routing receives an explicit minimal DTO/RPC in 9E, rather than general table SELECT;
+- preserve `tenants_single_active_runtime_guard` unchanged on INSERT and UPDATE.
+
+This is deliberately more restrictive than a speculative discovery policy and does not prevent the current single-tenant runtime.
+
+### 24.4 `tenant_memberships` design
+
+Keep the current self-read-only table surface:
+
+- authenticated callers may SELECT only rows whose `user_id = auth.uid()`;
+- a tenant admin or employee does not gain general membership-list table access in 9C;
+- no client INSERT, UPDATE, DELETE, role/status mutation, or self-escalation is permitted;
+- another user's membership and every membership of an unrelated tenant remain invisible;
+- only `status = 'active'` satisfies tenant authorization; both valid non-active states `pending` and `suspended` deny privileged access.
+
+If administration of memberships is later required, 9D must provide a tenant-scoped minimal read/write RPC with immutable caller-supplied tenant and user boundaries, audit, and role-transition rules. The compatibility sync bridge is not a browser DML contract.
+
+### 24.5 `profiles` privacy design
+
+`profiles` is global and has no `tenant_id`; granting a tenant admin all columns for all users would recreate cross-tenant disclosure. The direct-table target is therefore owner-read only:
+
+- retain the authenticated owner's SELECT policy;
+- remove the global admin SELECT policy based on `is_admin()`;
+- remove the global admin INSERT policy and revoke authenticated INSERT after verifying the production `on_auth_user_created` trigger and `handle_new_user()` fingerprint;
+- retain no direct UPDATE/DELETE policy, consistent with CLEAN-005 and account lifecycle hardening;
+- do not invent a broad relationship-based profile policy from membership, reservation, or event registration, because it would expose more columns than each operational screen needs.
+
+The current `/register` implementation calls only `supabase.auth.signUp()` with user metadata; it does not insert into `profiles`. Current account/booking/dashboard reads are caller-owned. Admin user listing and reservation-customer lookup already use `admin_list_users_v1()` and `get_reservation_customer_profiles_v1()`. Those functions are `SECURITY DEFINER` and still authorize globally, so their minimal DTO, target-derived tenant relationship, and membership check are mandatory 9D blockers. Tenant-specific verification semantics are not introduced in 9C.
+
+### 24.6 `email_deliveries` exposure
+
+Keep `email_deliveries` server-only: RLS enabled, zero policies, and no direct client/staff grant. The application has no direct browser `.from('email_deliveries')` requirement. Delivery preparation/completion functions bypass RLS and must derive and validate tenant ownership in 9D. Do not broaden staff visibility merely because the table now contains `tenant_id`.
+
+### 24.7 Legacy global-role dependency audit
+
+The final 9C acceptance query must inspect every policy on every public table and fail if a tenant-associated private policy refers to `profiles.role`, `get_my_role()`, `is_admin()`, `is_employee()`, `is_admin_or_employee()`, or `is_admin_or_staff()`. Expected final direct-table result:
+
+| Surface | Uses legacy global role after 2E? | Uses active membership? | Safe direct-table boundary? |
+|---|---:|---:|---:|
+| `shooting_lanes` | no | yes for private staff paths | yes |
+| `reservations` | no | yes, including owner path | yes |
+| `lane_blocks` | no | yes | yes |
+| `events` | no | yes for private staff paths | yes |
+| `event_lanes` | no | yes | yes |
+| `event_registrations` | no | yes, including owner path | yes |
+| `audit_logs` | no | yes, admin/employee only | yes after 2D |
+| `tenants` | no | no direct client access | yes |
+| `tenant_memberships` | no | self-read policy only | yes |
+| `profiles` | no privileged global table policy | owner only | yes after 2D |
+| lane rule/duration/pricing children | no | yes through referenced lane | yes after 2E |
+| `email_deliveries` | no | no direct client access | yes |
+
+A user whose `profiles.role` is `admin`, `pracownik`, or `instruktor` but who has no active membership must receive no tenant-private table access. This proves RLS isolation only; it does not make legacy definer RPCs safe.
+
+### 24.8 Final RLS isolation matrix
+
+| Caller | Tenant A private rows | Tenant B private rows | Global audit | Memberships | Profiles |
+|---|---|---|---|---|---|
+| `ADMIN_A` active | role-authorized A only | deny | deny | own row only | own profile only |
+| `EMPLOYEE_A` active | role-authorized A only | deny | deny | own row only | own profile only |
+| `INSTRUCTOR_A` active | only currently approved lane/event read scope in A | deny | deny | own row only | own profile only |
+| `USER_A` active | owner/private contracts only | deny except its own explicitly modeled row in local fixture | deny | own row only | own profile only |
+| no membership + global admin role | deny | deny | deny | no row | own profile only |
+| pending/suspended member | deny privileged access | deny | deny | own row visible | own profile only |
+| `anon` / `PUBLIC` | documented public active-resource DTOs only | no dormant/private rows | deny | deny | deny |
+
+No second tenant is created or activated in production for verification. Cross-tenant tests use reset-isolated local fixtures only.
+
+### 24.9 `SECURITY DEFINER` boundary and SAAS-9D input
+
+| Path group | Table RLS tenant-aware after 2E? | Definer bypass? | Tenant check today | 9D blocker |
+|---|---:|---:|---|---:|
+| admin user/profile readers (`admin_list_users_v1`, customer-profile DTO) | profile table owner-only | yes | global role / no trusted tenant boundary | yes |
+| audit-producing reservation/event/lane/profile functions | yes for underlying tenant tables | yes | mixed legacy/global authorization | yes |
+| booking and reservation readers/writers | yes | yes | active-single-tenant and/or legacy role in multiple functions | yes |
+| event readers/writers, registration, promotion, payment | yes | yes | known event bypass remains unchanged | yes |
+| lane configuration/block writers | yes, including child rules after 2E | yes | legacy role in multiple functions | yes |
+| reports, calendar, check-in | yes on source tables | yes | global role or unscoped definer queries | yes |
+| email delivery prepare/complete | `email_deliveries` server-only | yes | target/tenant validation incomplete for multi-tenant | yes |
+| public booking/events/check-in readers | public RLS scoped | yes | single-active-tenant compatibility in current contracts | yes before second tenant |
+
+Production preflight must capture owner, `prosecdef`, `proconfig`, ACL, identity arguments, result type, and normalized body hash for every affected function. 9C must not edit these functions. SAAS-9D must derive tenant from a trusted target row or an approved server tenant context, verify active membership/role internally, reject caller-controlled cross-tenant identifiers, and preserve public PII-free contracts.
+
+### 24.10 Proposed SAAS-9C-2D scope
+
+One atomic policy/ACL migration plus focused tests and a report:
+
+1. replace `audit_logs` global admin SELECT with tenant admin/employee own-tenant SELECT and explicit `tenant_id IS NOT NULL`;
+2. remove global privileged `profiles` SELECT and INSERT policies;
+3. revoke authenticated direct INSERT on `profiles` only after the signup-trigger preflight passes;
+4. leave owner profile SELECT, CLEAN-005 update hardening, tenants, memberships, email deliveries, sync bridge, and all definer functions unchanged;
+5. add fail-closed assertions for exact policy count/definitions, ACL, trigger/function fingerprints, and absence of client mutation paths.
+
+### 24.11 Proposed SAAS-9C-2E scope
+
+One separate atomic policy migration plus final audit tests and a report:
+
+1. replace staff SELECT policies on `lane_booking_rules`, `lane_booking_durations`, and `lane_pricing_rules` with membership checks derived through their immutable `lane_id` relationship to `shooting_lanes`;
+2. preserve existing role semantics: rules admin/employee/instructor, durations and pricing admin/employee;
+3. preserve exact current public booking predicates while adding an explicit active-public-tenant constraint through the referenced lane; no wildcard tenant discovery;
+4. run the all-table legacy-helper policy gate and prove that global profile role alone grants no tenant-private RLS access;
+5. publish the complete residual definer-function matrix as the binding SAAS-9D input.
+
+This split isolates profile/audit privacy risk from booking-configuration availability risk and gives each phase an independent rollback and production smoke gate.
+
+### 24.12 Cross-tenant and regression tests
+
+Local SQL tests must cover at least:
+
+- `ADMIN_A`: allowed on authorized A rows; denied B; sees A tenant audit but not B or global audit;
+- `EMPLOYEE_A`: same tenant isolation for its approved scopes, including A audit; denied B;
+- `INSTRUCTOR_A`: only current read scopes, never audit/pricing/durations unless already permitted; denied B;
+- `USER_A`: owner-only private contracts; denied foreign A/B data;
+- no membership, pending membership, and suspended membership: tenant-private access denied even with a privileged global profile role;
+- memberships: self-read allowed, foreign membership denied, self role/status mutation denied, all direct DML denied;
+- profiles: self-read allowed, unrelated global users denied, direct INSERT/UPDATE/DELETE denied; production-equivalent signup still creates exactly one profile through the trusted trigger;
+- audit: A/B/NULL isolation, no direct mutation, trusted existing audit-producing regression tests unchanged;
+- lane rules/durations/pricing: correct A role allow, B deny, dormant tenant public deny, current CSK public booking contract unchanged;
+- direct DML denial, no RLS recursion, stable helper behavior, ACL/owner/search-path fingerprints, Node tests, full DB suite, TypeScript, build, public Booking/Events and operational admin smoke.
+
+The tests must include the approved legacy aliases (`pracownik` ↔ `employee`, `instruktor` ↔ `instructor`) only as bridge behavior; policy authorization consumes membership roles.
+
+### 24.13 Rollback plan
+
+- Each phase is a separate transactional migration with a short `lock_timeout`, exact preflight policy/ACL/function fingerprints, and an expected-change allowlist.
+- Any unexpected policy, grant, trigger, unknown audit classification, role mismatch, cross-tenant allow, recursion, or public contract change raises and rolls back the migration.
+- After production deployment, do not use `migration repair`, manual policy edits, or destructive rollback. Use a reviewed forward migration restoring only the exact prior policy/ACL definitions for the affected phase.
+- A 2D emergency restoration may restore the previous audit/profile policies and authenticated profile INSERT grant only from captured production definitions; it must not remove memberships, tenant ownership, or bridge functions.
+- A 2E emergency restoration affects only the three lane child-table policies. Do not revert 9C-2A/B/C.
+- Zero synthetic fixture must remain after every rollback-only production verification.
+
+### 24.14 Production preflight requirements
+
+Before each production write:
+
+1. local/remote migration history equality, exact SHA-256, and dry-run showing only the approved phase migration;
+2. current policy, ACL, owner, RLS/FORCE-RLS, constraint/index, and all relevant definer-function fingerprints;
+3. production confirmation of `on_auth_user_created` on `auth.users`, `handle_new_user()` owner/security/search path/ACL, and a safe signup/profile lifecycle contract before revoking profile INSERT;
+4. complete audit `(action,target_type,count,tenant_id null/non-null)` classification with UNKNOWN = STOP;
+5. membership/profile/Auth sync counts and zero orphan/duplicate/non-mappable roles;
+6. lane child-to-parent integrity and zero missing/orphan lane references;
+7. current public booking/events and authenticated operational baselines;
+8. catalog lock/risk review; expected risk is low because policy and grant changes are metadata-only, but any long-running conflicting transaction is a STOP condition;
+9. second active tenant guard unchanged and no second active production tenant.
+
+### 24.15 Blockers and phase gates
+
+No data-model blocker remains for local 9C-2D implementation. The following are hard gates rather than design ambiguity:
+
+- production trigger evidence is required before revoking authenticated profile INSERT;
+- every production audit classification must be known before replacing audit visibility;
+- current admin/customer profile RPCs must be explicitly accepted as unchanged 9D blockers, not mistaken for completed isolation;
+- lane child public predicates and role scopes must be captured exactly before 2E;
+- any newly discovered global-helper policy or tenant-owned table outside this inventory requires plan review before implementation.
+
+9C closes direct-table tenant isolation and removes legacy global-role authorization from RLS. It does not close definer-function bypasses, server/application tenant context, or downstream module cutover.
+
+### 24.16 SEC-004 closure boundary
+
+- Completed by 9C: membership foundation, owner/tenant-aware direct-table RLS for Booking, Events, audit, profile privacy, lane configuration children, self-only memberships, and proof that `profiles.role` alone cannot authorize tenant-private table reads.
+- Remaining for 9D: every tenant-sensitive `SECURITY DEFINER` reader/writer, controlled profile/member operations, audit target derivation, email delivery functions, and removal of global-role authorization inside RPC bodies.
+- Remaining for 9E/9F: trusted application tenant context/routing and cutover of Reports, Events, Calendar, Check-in, Booking, and administrative UI/API consumers.
+- SEC-004 can be closed only after 9G cross-tenant security/concurrency testing and the 9H second-tenant readiness audit prove all direct and definer paths tenant-isolated. Until then a second tenant remains prohibited.
+
+SAAS-9C REMAINING PLAN: **READY**
+
+READY FOR SAAS-9C-2D LOCAL IMPLEMENTATION: **GO**
+
+READY FOR SAAS-9D: **NO-GO**
+
+SECOND TENANT: **NO-GO**
+
+SEC-004: **OPEN**
+
 ## SAAS-9C-2C local implementation result — 11 September 2026
 
 The approved local implementation now consists of one atomic policy migration, one focused 64-check SQL suite, the implementation report, and one compatibility-only assertion update in the historical public-availability test. No application code, event RPC, `SECURITY DEFINER`, temporary CSK default, legacy role bridge, or unrelated RLS policy was changed.

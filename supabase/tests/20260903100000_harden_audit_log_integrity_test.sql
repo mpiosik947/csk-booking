@@ -133,14 +133,15 @@ begin
         and owner_role.rolname='postgres'
     ),'Oczekiwano owner postgres i relrowsecurity=true.');
 
-  perform pg_temp.record_result(2,'Only the admin SELECT policy remains',
+  perform pg_temp.record_result(2,'Only the tenant admin and employee SELECT policy remains',
     (select pg_catalog.count(*)=1 from pg_catalog.pg_policies where schemaname='public' and tablename='audit_logs')
     and exists(
       select 1 from pg_catalog.pg_policies
       where schemaname='public' and tablename='audit_logs'
-        and policyname='Admins can view audit logs' and cmd='SELECT'
+        and policyname='Tenant admin and employee can view audit logs' and cmd='SELECT'
         and roles=array['authenticated']::name[]
-        and qual='is_admin()' and with_check is null
+        and qual='((tenant_id IS NOT NULL) AND has_tenant_role_v1(tenant_id, ARRAY[''admin''::text, ''employee''::text]))'
+        and with_check is null
     ),'Nie może istnieć polityka mutacyjna audit_logs.');
 
   perform pg_temp.record_result(3,'Client ACL is exact and service_role baseline is preserved',

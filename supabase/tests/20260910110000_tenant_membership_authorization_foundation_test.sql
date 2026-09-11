@@ -1,7 +1,7 @@
 \set ON_ERROR_STOP on
 \pset format unaligned
 
-select '1..47';
+select '1..48';
 
 begin;
 
@@ -265,22 +265,22 @@ begin
        and qual not like '%is_tenant_member_v1%'
        and qual not like '%has_tenant_role_v1%'),
     'Membership policy is missing, broad, or recursive.');
-  perform pg_temp.ok(42, 'RLS outside approved booking and Events cutovers is unchanged',
-    (select pg_catalog.md5(coalesce(pg_catalog.string_agg(pg_catalog.concat_ws('|',tablename,policyname,cmd,roles::text,qual,with_check),E'\n' order by tablename,policyname),''))='4e56d58f87ebc27bf2995ffd6374031c'
-     from pg_catalog.pg_policies where schemaname='public' and tablename not in ('tenant_memberships','shooting_lanes','reservations','lane_blocks','events','event_lanes','event_registrations')),
-    'RLS changed outside the approved 9C-2 booking and Events tables.');
+  perform pg_temp.ok(42, 'RLS outside approved SAAS-9C cutovers is unchanged',
+    (select pg_catalog.md5(coalesce(pg_catalog.string_agg(pg_catalog.concat_ws('|',tablename,policyname,cmd,roles::text,qual,with_check),E'\n' order by tablename,policyname),''))='d41d8cd98f00b204e9800998ecf8427e'
+     from pg_catalog.pg_policies where schemaname='public' and tablename not in ('tenant_memberships','shooting_lanes','reservations','lane_blocks','events','event_lanes','event_registrations','audit_logs','profiles','lane_booking_rules','lane_booking_durations','lane_pricing_rules')),
+    'RLS changed outside the approved SAAS-9C tables.');
   perform pg_temp.ok(43, 'legacy role helpers remain profiles based',
     pg_catalog.pg_get_functiondef('public.get_my_role()'::regprocedure) like '%public.profiles%'
     and pg_catalog.pg_get_functiondef('public.get_my_role()'::regprocedure) not like '%tenant_memberships%'
     and pg_catalog.pg_get_functiondef('public.is_admin()'::regprocedure) not like '%tenant_memberships%',
     'Legacy runtime authorization source changed early.');
-  perform pg_temp.ok(44, 'only approved booking and Events policies consume tenant helpers',
+  perform pg_temp.ok(44, 'only approved SAAS-9C policies consume tenant helpers',
     not exists(
       select 1 from pg_catalog.pg_policies
-      where schemaname='public' and tablename not in ('tenant_memberships','shooting_lanes','reservations','lane_blocks','events','event_lanes','event_registrations')
+      where schemaname='public' and tablename not in ('tenant_memberships','shooting_lanes','reservations','lane_blocks','events','event_lanes','event_registrations','audit_logs','profiles','lane_booking_rules','lane_booking_durations','lane_pricing_rules')
         and coalesce(qual,'') || coalesce(with_check,'') ~ '(is_tenant_member_v1|has_tenant_role_v1|get_my_tenant_role_v1|is_active_public_tenant_v1)'
     ),
-    'Tenant-aware RLS leaked outside the approved booking and Events tables.');
+    'Tenant-aware RLS leaked outside the approved SAAS-9C tables.');
   perform pg_temp.ok(45, 'active-single-tenant helper returns only CSK',
     public.active_single_tenant_id_v1()=v_csk,
     'Internal single-active bridge did not resolve canonical CSK.');
@@ -303,6 +303,9 @@ begin
     )
     and not exists(select 1 from public.tenant_memberships where tenant_id=v_csk and user_id=v_banned),
     'Bridge activated a currently banned Auth account.');
+  perform pg_temp.ok(47, 'remaining tenant-aware RLS does not trust global role helpers',
+    not exists(select 1 from pg_catalog.pg_policies where schemaname='public' and tablename in ('audit_logs','profiles','lane_booking_rules','lane_booking_durations','lane_pricing_rules') and (coalesce(qual,'')||coalesce(with_check,'')) ~ '\m(is_admin|is_employee|is_admin_or_employee|is_admin_or_staff|get_my_role)\M'),
+    'A remaining tenant policy still trusts a global role helper.');
 end;
 $tests$;
 
@@ -314,8 +317,8 @@ from pg_temp.test_results order by test_order;
 do $assert$
 declare v_failed text;
 begin
-  if (select pg_catalog.count(*) from pg_temp.test_results) <> 46 then
-    raise exception 'SAAS-9C-1 expected exactly 46 transactional checks.';
+  if (select pg_catalog.count(*) from pg_temp.test_results) <> 47 then
+    raise exception 'SAAS-9C-1 expected exactly 47 transactional checks.';
   end if;
   select pg_catalog.string_agg(test_order || '. ' || test_name || ': ' || result,E'\n' order by test_order)
   into v_failed from pg_temp.test_results where not passed;
@@ -335,4 +338,4 @@ begin
 end;
 $cleanup$;
 
-select 'ok 47 - rollback leaves zero SAAS-9C-1 fixture';
+select 'ok 48 - rollback leaves zero SAAS-9C-1 fixture';
