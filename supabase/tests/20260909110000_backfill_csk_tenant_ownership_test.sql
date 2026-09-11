@@ -189,11 +189,12 @@ begin
     and exists(select 1 from pg_catalog.pg_constraint where conrelid='public.tenant_memberships'::pg_catalog.regclass and conname='tenant_memberships_pkey' and contype='p'),
     'Out-of-scope ownership column exists.');
 
-  perform pg_temp.ok(29, 'later approved RLS remains isolated to membership and booking tables',
-    (select pg_catalog.md5(coalesce(pg_catalog.string_agg(pg_catalog.concat_ws('|',tablename,policyname,cmd,roles::text,qual,with_check),E'\n' order by tablename,policyname),''))='d3c02109fea9966d27cfaef2e481f738' from pg_catalog.pg_policies where schemaname='public' and tablename not in ('tenant_memberships','shooting_lanes','reservations','lane_blocks'))
+  perform pg_temp.ok(29, 'later approved RLS remains isolated to membership, booking, and Events tables',
+    (select pg_catalog.md5(coalesce(pg_catalog.string_agg(pg_catalog.concat_ws('|',tablename,policyname,cmd,roles::text,qual,with_check),E'\n' order by tablename,policyname),''))='4e56d58f87ebc27bf2995ffd6374031c' from pg_catalog.pg_policies where schemaname='public' and tablename not in ('tenant_memberships','shooting_lanes','reservations','lane_blocks','events','event_lanes','event_registrations'))
     and (select pg_catalog.count(*)=1 from pg_catalog.pg_policies where schemaname='public' and tablename='tenant_memberships')
-    and (select pg_catalog.count(*)=6 from pg_catalog.pg_policies where schemaname='public' and tablename in ('shooting_lanes','reservations','lane_blocks') and cmd='SELECT'),
-    'RLS changed outside the approved membership/booking phases.');
+    and (select pg_catalog.count(*)=6 from pg_catalog.pg_policies where schemaname='public' and tablename in ('shooting_lanes','reservations','lane_blocks') and cmd='SELECT')
+    and (select pg_catalog.count(*)=6 from pg_catalog.pg_policies where schemaname='public' and tablename in ('events','event_lanes','event_registrations') and cmd='SELECT'),
+    'RLS changed outside the approved membership/booking/Events phases.');
 
   perform pg_temp.ok(30, 'only membership self-read table ACL was added',
     pg_catalog.has_table_privilege('authenticated','public.tenant_memberships','SELECT')

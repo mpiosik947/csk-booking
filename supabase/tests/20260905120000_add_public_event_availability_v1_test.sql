@@ -251,7 +251,14 @@ begin
 
   perform pg_temp.record_result(20, 'No registration SELECT policy was expanded',
     (select pg_catalog.count(*) = 2 from pg_catalog.pg_policies where schemaname = 'public' and tablename = 'event_registrations' and cmd = 'SELECT')
-    and exists (select 1 from pg_catalog.pg_policies where schemaname = 'public' and tablename = 'event_registrations' and policyname = 'Users can view own event registrations' and qual = '(user_id = auth.uid())'),
+    and exists (
+      select 1 from pg_catalog.pg_policies
+      where schemaname = 'public'
+        and tablename = 'event_registrations'
+        and policyname = 'Users can view own event registrations'
+        and qual like '%user_id%auth.uid()%'
+        and qual not like '%is_tenant_member_v1%'
+    ),
     'SEC-008 and owner isolation remain unchanged.');
 
   perform pg_temp.record_result(21, 'Multiple-user aggregate is deterministic and de-duplicated',

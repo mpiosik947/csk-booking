@@ -555,6 +555,256 @@ SECOND TENANT: **NO-GO**
 
 SEC-004: **OPEN**
 
+## SAAS-9C-2C local implementation result — 11 September 2026
+
+The approved local implementation now consists of one atomic policy migration, one focused 64-check SQL suite, the implementation report, and one compatibility-only assertion update in the historical public-availability test. No application code, event RPC, `SECURITY DEFINER`, temporary CSK default, legacy role bridge, or unrelated RLS policy was changed.
+
+The migration replaces only the six Events-domain `SELECT` policies. Public active Events remain visible through the single-active-tenant bridge, staff reads require an active membership with an explicit tenant role, and registration owner read remains `auth.uid() = user_id` without a membership requirement. Direct mutation policies remain absent and target ACL is unchanged.
+
+Local verification is complete. The focused Events/Booking/Admin Node tests passed (267/267), the complete Node suite passed (734/734), TypeScript passed, and the production build passed. A clean local database reset applied the new migration, the focused transactional SQL suite passed 64/64 with `ROLLBACK`, all 25 Supabase DB test files passed (686 tests), the focused Events Playwright suite passed 8/8, the independent fixture post-check returned zero rows in every synthetic category, and `git diff --check` passed. Three historical phase-isolation tests were updated after they exposed stale expectations that allowed only membership/Booking RLS; they now explicitly allow the approved Events tables while continuing to fingerprint every out-of-scope policy.
+
+SAAS-9C-2C LOCAL IMPLEMENTATION: **PASS**
+
+PUBLIC EVENTS CONTRACT: **PASS**
+
+EVENT REGISTRATION PRIVACY: **PASS**
+
+CROSS-TENANT EVENTS RLS: **PASS**
+
+RLS RECURSION: **PASS**
+
+LEGACY SINGLE-TENANT RUNTIME: **PASS**
+
+SECURITY DEFINER EVENT BYPASS: **KNOWN**
+
+READY FOR 9C-2C PRODUCTION PREFLIGHT: **GO**
+
+READY FOR PRODUCTION WRITE: **NO**
+
+READY FOR SAAS-9D: **NO-GO**
+
+SECOND TENANT: **NO-GO**
+
+SEC-004: **OPEN**
+
+## SAAS-9C-2C — EVENTS TENANT-AWARE RLS FINAL PLAN
+
+This section is the final, repository- and production-catalog-backed plan for the Events RLS phase. It supersedes any earlier provisional 9C-2C statement that required tenant membership for customer ownership of an event registration. No implementation, migration, policy change, or production write was performed while preparing it.
+
+### 1. Current Events RLS
+
+Fresh production catalog inspection after the 9C-2A/2B checkpoint confirms RLS enabled on all three target tables and exactly six client policies, all `SELECT`:
+
+| Table | Current policy | Roles | Current predicate |
+|---|---|---|---|
+| `events` | `Public can view active events` | `anon` | `is_active = true` |
+| `events` | `Users can view active events` | `authenticated` | `is_active = true` |
+| `events` | `Admins and staff can view all events` | `authenticated` | legacy global `is_admin_or_staff()` |
+| `event_lanes` | `Admins and staff can view event lanes` | `authenticated` | legacy global `is_admin_or_staff()` |
+| `event_registrations` | `Users can view own event registrations` | `authenticated` | `user_id = auth.uid()` |
+| `event_registrations` | `Admins and staff can view all event registrations` | `authenticated` | legacy global `is_admin_or_staff()` |
+
+There are no client `INSERT`, `UPDATE`, or `DELETE` policies on these tables. Current application-role ACL is also minimal:
+
+- `events`: `anon SELECT`, `authenticated SELECT`;
+- `event_lanes`: `authenticated SELECT` only;
+- `event_registrations`: `authenticated SELECT` only;
+- no `PUBLIC` table grant;
+- `service_role` retains the existing privileged platform baseline and is not an RLS security boundary.
+
+Production volume is currently small: 11 `events` rows (120 kB), 9 `event_lanes` rows (88 kB), and 25 `event_registrations` rows (296 kB). Policy replacement should take only short catalog locks; nevertheless, `lock_timeout` and transactional pre/postflight remain mandatory.
+
+### 2. Final operation matrix
+
+| Table | Operation | Current policy/auth source | Target tenant rule | Owner | Admin | Employee | Instructor | Public | Risk |
+|---|---|---|---|---|---|---|---|---|---|
+| `events` | SELECT | Active-row policies plus global `is_admin_or_staff()` | Public branch: active row and `is_active_public_tenant_v1(tenant_id)`. Staff branch: `has_tenant_role_v1(tenant_id, ARRAY['admin','employee','instructor'])`. | Public active rows only; no ownership field exists. | All events in active membership tenant only. | Same existing operational scope, tenant-scoped. | Preserve existing event read, tenant-scoped; no expansion. | Active event in the guarded active public tenant; no membership. | HIGH: public outage or unpublished cross-tenant disclosure. |
+| `events` | INSERT | No direct policy/ACL; controlled writer | Keep direct deny. Writer migration is SAAS-9D. | DENY | DENY direct | DENY direct | DENY | DENY | HIGH if direct DML is introduced. |
+| `events` | UPDATE | No direct policy/ACL; controlled writers | Keep direct deny. | DENY | DENY direct | DENY direct | DENY | DENY | HIGH. |
+| `events` | DELETE | No direct policy/ACL | Keep direct deny and history. | DENY | DENY | DENY | DENY | DENY | MEDIUM. |
+| `event_lanes` | SELECT | Global `is_admin_or_staff()` | `has_tenant_role_v1(tenant_id, ARRAY['admin','employee','instructor'])`; composite FKs keep event/lane/relation tenant equal. | No direct access. | Same-tenant relations only. | Same-tenant relations only. | Preserve existing read, tenant-scoped. | No direct access; public list RPC remains authoritative. | MEDIUM: relation leakage or broken admin joins. |
+| `event_lanes` | INSERT | No direct policy/ACL; event writer | Keep direct deny; 9D writer derives tenant and validates event/lane equality. | DENY | DENY direct | DENY direct | DENY | DENY | HIGH in legacy definer. |
+| `event_lanes` | UPDATE | No direct policy/ACL | Keep direct deny. | DENY | DENY | DENY | DENY | DENY | MEDIUM. |
+| `event_lanes` | DELETE | No direct policy/ACL; event writer replaces links | Keep direct deny. | DENY | DENY direct | DENY direct | DENY | DENY | MEDIUM. |
+| `event_registrations` | SELECT | Owner predicate plus global `is_admin_or_staff()` | Owner branch stays `user_id = (select auth.uid())`; the row tenant is guaranteed to equal its parent event by validated composite FK. Staff branch uses `has_tenant_role_v1(tenant_id, ARRAY['admin','employee','instructor'])`. | Own rows across tenants, without membership. Never another user's row. | All rows in active membership tenant only. | Same current operational read, tenant-scoped. | Preserve current participant read in own membership tenant; SEC-008 remains deferred. | DENY; no participant PII. | CRITICAL: participant PII and IDOR. |
+| `event_registrations` | INSERT | No direct policy/ACL; `register_for_event` | Keep direct deny. In 9D derive tenant from active public event and write it explicitly; do not require customer membership. | Controlled RPC only. | No direct path. | No direct path. | No direct path. | DENY | CRITICAL until writer cutover. |
+| `event_registrations` | UPDATE | No direct policy/ACL; cancellation/payment/promotion definers | Keep direct deny. | Controlled own cancellation/confirmation only. | Controlled same-tenant RPC in 9D. | Controlled same-tenant RPC in 9D. | Existing own-cancellation semantics only; no staff expansion. | DENY | CRITICAL until RPC tenant binding. |
+| `event_registrations` | DELETE | No direct policy/ACL | Keep direct deny; status lifecycle and history remain. | DENY | DENY | DENY | DENY | DENY | HIGH integrity boundary. |
+
+No policy will trust `profiles.role`, a query parameter, caller-supplied tenant ID, or an event ID without row tenant evaluation.
+
+### 3. Public Events contract
+
+The public UI at `/events` calls only `get_public_event_list_v2(...)`. The RPC returns a bounded PII-free event DTO with authoritative counts and does not return participant IDs, user IDs, contact data, registration IDs, tokens, or admin notes. `get_public_event_availability_v1()` remains the compatibility availability contract.
+
+9C-2C must not require membership for public browsing. Direct `events` compatibility reads remain available to `anon` and `authenticated` only when both predicates hold:
+
+```text
+event.is_active = true
+AND is_active_public_tenant_v1(event.tenant_id)
+```
+
+No public policy is added to `event_lanes` or `event_registrations`. Current `/events` does not directly query `event_lanes`; admin lane relations are returned by the admin definer contract. Public event lane information, if later required, must be added to a reviewed PII-free public DTO rather than exposed through table SELECT.
+
+The boolean public-tenant helper remains a transitional single-active-tenant bridge. Public definers themselves are still unscoped and must be made tenant-aware in 9D before any second tenant can exist.
+
+### 4. Event registration owner rules
+
+Customer identity is global. A user may register for public events belonging to different tenants without becoming staff/member of each tenant. Therefore:
+
+- own direct read: `registration.user_id = auth.uid()`; no membership requirement;
+- tenant integrity: `event_registrations(tenant_id,event_id)` must continue referencing `events(tenant_id,id)`;
+- create: no direct insert; `register_for_event` remains the product path and must eventually derive/write tenant from the selected active event;
+- cancel: no direct update; owner cancellation remains authorized by `auth.uid()`, registration ownership, canonical status and 72-hour rule, regardless of membership;
+- historical/inactive event: the owner must retain access to their own registration and calendar/history data even if tenant membership never existed or tenant public state later changes;
+- another user's registration is always denied, including when both users can browse the same event.
+
+Active membership is required only for privileged tenant staff access. `pending`, `suspended`, missing, orphaned, or wrong-tenant memberships confer no staff access.
+
+### 5. Admin, employee and instructor rules
+
+- `admin`: active `admin` membership in the row tenant; all target-table reads for that tenant, never Tenant B by global legacy role alone.
+- `employee`: active `employee` membership in the row tenant; preserve current event, relation, and participant read scope; no tenant administration.
+- `instructor`: active `instructor` membership in the row tenant; preserve the current read scope on these three tables but do not add any new operation or data field. SEC-008 remains deferred pending the instructor-event assignment model.
+- `user`: public event reads and own registrations only.
+- global `profiles.role` without matching active membership: no staff access.
+
+### 6. Membership status semantics
+
+`has_tenant_role_v1` already requires an active tenant, active membership, and one of the explicit roles. 9C-2C reuses it without adding a helper. A pending/suspended membership, disabled tenant, missing membership, or a role outside the approved array fails closed. Owner event-registration access is intentionally independent of membership status; ownership and composite tenant/event integrity are its boundaries.
+
+### 7. RPC / SECURITY DEFINER matrix
+
+All listed database functions are currently `SECURITY DEFINER` and therefore bypass the new table policies. 9C-2C records but does not repair them.
+
+| RPC/path | RLS applies? | Current authorization | Explicit tenant check now? | Safe during 9C-2C current CSK? | SAAS-9D blocker |
+|---|---:|---|---:|---|---:|
+| `get_public_event_list_v2` | No | anon/auth EXECUTE; public active rows in body | NO | YES only with one active CSK and second-tenant guard | YES |
+| `get_public_event_availability_v1` | No | anon/auth EXECUTE; PII-free aggregate | NO | Same transitional condition | YES |
+| `admin_list_events_v1` | No | global `profiles.role` in admin/pracownik/instruktor | NO | Current single tenant only | YES |
+| `admin_list_event_registrations_v1` | No | global `profiles.role` in admin/pracownik/instruktor | NO | Current single tenant only; contains operational participant PII | YES, CRITICAL |
+| `get_my_event_registrations_v1` | No | `auth.uid()` owner filter | No explicit tenant filter | Owner-safe across tenants if FK integrity remains; still requires 9D review | YES |
+| `register_for_event` | No | authenticated caller/profile; active event/capacity/status checks | NO; insert omits `tenant_id` and uses temporary CSK default | Current CSK only | YES, CRITICAL |
+| `cancel_event_registration` | No | owner for user/instruktor; global admin/pracownik otherwise | NO | Owner branch remains scoped; staff branch current CSK only | YES, CRITICAL |
+| `confirm_event_reserve_promotion` | No | authenticated token owner after SEC-003 | No explicit tenant binding | Current CSK/owner-token contract only | YES |
+| `prepare_event_reserve_promotions` | No | service-only operational path | NO | Current CSK only | YES, CRITICAL |
+| `complete_event_reserve_promotion` | No | service-only claim path | NO | Current CSK only | YES |
+| `mark_event_registration_paid` | No | global admin/pracownik check | NO | Current CSK only | YES, CRITICAL |
+| `admin_create_event_v2` | No | global admin/pracownik check | NO; event/relation writes depend on CSK default | Current CSK only | YES, CRITICAL |
+| `admin_update_event_v2` | No | global admin/pracownik check | NO | Current CSK only | YES, CRITICAL |
+| `admin_set_event_active_v2` | No | global admin/pracownik check | NO | Current CSK only | YES, CRITICAL |
+| calendar feed direct event query | Yes | server-authenticated role plus table RLS | After 9C-2C, yes through policy | YES after regression | No for direct path |
+| event-registration ICS route | Yes | owner ID and table RLS | Owner + FK tenant integrity | YES; must not require membership | No for direct path |
+| confirmation-email direct reads | Yes for user client; service client bypass for rate-limit completion | owner ID plus trusted Auth email | Owner path structurally bound; service path remains privileged | YES current CSK | 9D/9E review |
+
+No RPC body, signature, grant, owner, search path, or implementation changes belong to 9C-2C. The migration must fingerprint all existing definers before and after and fail on any drift.
+
+### 8. Cross-tenant and transition risks
+
+The policy phase can be deployed before 9D only under all current runtime constraints:
+
+1. exactly one active CSK tenant;
+2. no second tenant is created/activated in production;
+3. `tenants_single_active_runtime_guard` remains valid;
+4. temporary CSK defaults remain installed;
+5. all profiles and CSK memberships reconcile exactly;
+6. public/admin/owner event RPC behavior remains current single-tenant only;
+7. SEC-004 stays OPEN and no multi-tenant claim is made.
+
+Direct-table isolation materially improves, but a caller reaching a legacy definer can still bypass RLS. In particular, admin participant reads/writes and event writers remain global-role/ID driven; `register_for_event` writes the CSK default rather than an event-derived tenant. This is acceptable only as a guarded single-tenant transition and is an absolute blocker before a second tenant or SAAS-9E routing cutover.
+
+### 9. Cross-tenant test matrix
+
+Local tests must create dormant Tenant B only inside reset-isolated fixtures; production must not activate or provision Tenant B.
+
+| Case | Required result |
+|---|---|
+| anon public event A | ALLOW active public event DTO/direct compatibility row; no participant PII |
+| anon dormant/inactive tenant B event | DENY / absent |
+| authenticated user without membership | Public active event ALLOW; private/internal rows DENY |
+| User A own registration A | ALLOW |
+| User A own registration B | ALLOW, proving global customer ownership without membership |
+| User A reads User B registration A/B | DENY |
+| Admin A events/lanes/registrations A | ALLOW |
+| Admin A target B | DENY despite global `profiles.role='admin'` |
+| Employee A permitted reads A | ALLOW |
+| Employee A target B | DENY |
+| Instructor A current read scope A | ALLOW, no new fields/operations |
+| Instructor A target B | DENY |
+| no membership global admin/staff role | private tenant reads DENY |
+| pending/suspended A | privileged A reads DENY |
+| cross-tenant event/event_lane/registration ID substitution | DENY; no PII and no existence leak |
+| direct INSERT/UPDATE/DELETE all application roles | DENY |
+
+Focused regression must additionally prove: public availability registered/approved/reserve/cancelled semantics; atomic overbooking protection; registration and duplicate handling; cancellation `>72h`, `=72h`, `<72h`; reserve promotion/confirmation; payment marking; participant DTO minimization; event-registration ICS owner/foreign/cancelled/reserve behavior; admin calendar nested `event_lanes` query; confirmation email owner reads; inactive/historical own records; and unchanged instructor scope.
+
+### 10. Performance
+
+Existing production indexes are sufficient for the policy phase:
+
+- `events_tenant_active_schedule_idx` for public/staff tenant schedule reads;
+- `event_lanes_tenant_event_lane_idx` for tenant/event/lane relations;
+- `event_registrations_tenant_user_created_idx` for tenant-owner/history access;
+- `event_registrations_user_created_id_idx` for global owner cross-tenant reads;
+- `event_registrations_event_payment_created_id_idx` and reserve/active uniqueness indexes for participant/capacity workflows;
+- `events_tenant_id_id_key` plus validated composite event/lane/registration FKs.
+
+No new index is planned. Local `EXPLAIN (COSTS OFF)` must confirm representative public event, staff event, owner registration, staff participant, and nested calendar relation shapes. Production preflight must repeat table sizes/statistics and check long-running transactions/lock blockers.
+
+### 11. Migration and rollback strategy
+
+The future implementation should be one narrow transactional migration dedicated to 9C-2C:
+
+1. set short `lock_timeout` and bounded `statement_timeout`;
+2. preflight exact current six-policy names, roles and predicates;
+3. assert RLS flags, minimal ACL, helper hardening, membership reconciliation, active guard and tenant relationship constraints;
+4. snapshot unrelated-policy, table-ACL and all existing `SECURITY DEFINER` fingerprints;
+5. replace only the six SELECT policies described above;
+6. assert zero target mutation policies and zero target references to legacy global role helpers;
+7. compare every unrelated fingerprint and abort transaction on drift.
+
+Emergency rollback is a separately reviewed migration restoring exactly the six legacy policy definitions captured above. Keep ownership columns, memberships, sync bridge, helpers, composite FKs, indexes, CSK defaults, and active guard. Never use migration repair or weaken policy predicates to accommodate an unsafe definer.
+
+### 12. Production preflight requirements
+
+Before any production push:
+
+- branch/checkpoint and deployed application commit identified;
+- LOCAL=REMOTE before the new migration; dry-run lists only the reviewed 9C-2C migration;
+- exact SHA-256 gate;
+- one active `csk` tenant, active guard present, no second tenant;
+- profile/membership role and status reconciliation with zero unknown/orphan/duplicate/mismatch;
+- zero NULL/non-CSK tenant IDs and zero broken event/event_lane/registration composite relationships;
+- exact current six policies, RLS flags, ACL, owners and default privileges;
+- helper and existing definer owner/search-path/ACL/body fingerprints;
+- current public RPC DTO field allowlists and no PII expansion;
+- fresh volumes, indexes, query plans, lock blockers and recovery readiness;
+- public `/events`, owner `/my-events`, admin `/admin/events`, Calendar, registration/cancellation/promotion/payment/email/ICS baselines;
+- tested exact-policy forward-fix/rollback migration prepared but not applied;
+- full local DB, Node, TypeScript, build, relevant Playwright, audit, ESLint baseline and diff checks PASS.
+
+Post-deploy verification must repeat migration history/dry-run, catalog fingerprints, the full role matrix, public and owner event flows, admin Events/Calendar runtime smoke, PII exclusion, and zero synthetic fixture.
+
+### 13. Blocking issues
+
+No business decision blocks local policy implementation. The owner-without-membership model is approved and required. Engineering STOP conditions are: any policy/ACL/definer drift, membership mismatch, broken composite tenant relation, public Events outage, owner history/ICS regression, participant PII exposure, instructor permission expansion, unexpected direct DML grant/policy, or an unrelated pending migration.
+
+9C-2C does not make event RPCs multi-tenant safe. SAAS-9D remains blocked until those definers are redesigned; second-tenant activation remains prohibited. Production write for 9C-2C requires a separate authorization after local implementation and dedicated preflight.
+
+### 14. Final decision
+
+SAAS-9C-2C TECHNICAL PLAN: **READY**
+
+READY FOR SAAS-9C-2C LOCAL IMPLEMENTATION: **GO**
+
+READY FOR PRODUCTION WRITE: **NO**
+
+READY FOR SAAS-9D: **NO-GO**
+
+SECOND TENANT: **NO-GO**
+
+SEC-004: **OPEN**
+
 ## SAAS-9C-2 — TENANT-AWARE RLS CUTOVER FINAL PLAN
 
 ### 9C-2.1 Evidence base and current architecture
@@ -600,8 +850,8 @@ Legend: `member` means an active membership in an active tenant. `staff` means t
 | `event_lanes` | INSERT | No direct policy; event definers | No direct client policy; 9D writer must enforce event/lane/tenant equality (also protected structurally by composite FKs). | HIGH if definer misses actor tenant. |
 | `event_lanes` | UPDATE | No direct policy | Deny direct client mutation; controlled event writer only in 9D. | MEDIUM. |
 | `event_lanes` | DELETE | No direct policy; event writer may replace links | Deny direct client mutation; controlled writer only. | MEDIUM. |
-| `event_registrations` | SELECT | Own `user_id = auth.uid()`; staff via legacy `is_admin_or_staff()` | User: own row AND active membership in row tenant. Admin/employee: same-tenant all. Instructor: preserve current same-tenant global registration read only; do not widen it, and retain SEC-008 as deferred. Anon: deny. | CRITICAL: participant PII and deferred instructor overbreadth. |
-| `event_registrations` | INSERT | No direct policy; `register_for_event` definer | No direct policy. 9D writer derives tenant from event, verifies membership, and ignores caller tenant. | CRITICAL until 9D. |
+| `event_registrations` | SELECT | Own `user_id = auth.uid()`; staff via legacy `is_admin_or_staff()` | User: own row, with tenant ownership structurally bound to the parent event; membership is not required because customer identity is global and may own registrations in multiple tenants. Admin/employee: same-tenant all. Instructor: preserve current same-tenant registration read only; do not widen it, and retain SEC-008 as deferred. Anon: deny. | CRITICAL: participant PII and deferred instructor overbreadth. |
+| `event_registrations` | INSERT | No direct policy; `register_for_event` definer | No direct policy. 9D writer derives tenant from the selected public/active event, validates event eligibility and ignores caller tenant; it must not require customer membership. | CRITICAL until 9D. |
 | `event_registrations` | UPDATE | No direct policy; cancel/approve/payment/promotion definers | No direct policy. Each 9D function must bind registration, event, actor membership, and role in one tenant. | CRITICAL until 9D. |
 | `event_registrations` | DELETE | No client policy | Deny all application roles; retain controlled status lifecycle/history. | LOW. |
 | `email_deliveries` | SELECT | No client ACL/policy; service role/internal functions only | Keep server-only. User/admin/employee/instructor/anon get no direct read. Operational status must be exposed, if ever needed, through a minimal tenant-bound RPC DTO in 9D. | HIGH if exposed: recipient/provider metadata and delivery state are sensitive. |
@@ -637,8 +887,8 @@ Public `SECURITY DEFINER` RPCs still need an explicit tenant predicate in 9D. Wh
 
 ### 9C-2.4 User ownership and membership status semantics
 
-- A private user-owned row requires both object ownership (`user_id = auth.uid()`) and an active membership in that row's active tenant.
-- A caller with memberships in A and B may read their own rows in A and B. They may not read another user's row in either tenant.
+- An owned reservation requires both object ownership (`user_id = auth.uid()`) and an active membership in the reservation tenant under the already deployed Booking policy.
+- An owned event registration requires object ownership (`user_id = auth.uid()`) plus the existing composite tenant/event integrity constraint, but not tenant membership. A global customer may therefore read their own registrations across public tenant event catalogs while never reading another user's registration.
 - A global legacy role never authorizes tenant data by itself after the relevant 9C-2 policy cutover.
 - Active tenant + active membership is the only membership state that grants tenant-private access.
 - `pending` or `suspended` membership, a missing membership, or a non-active tenant denies private access.
@@ -650,13 +900,13 @@ Public `SECURITY DEFINER` RPCs still need an explicit tenant predicate in 9D. Wh
 - Admin: same-tenant administrative read only; never tenant B on the strength of `profiles.role='admin'`.
 - Employee: same-tenant operational read only where the current `pracownik` contract already allows it. No tenant metadata or membership administration is added.
 - Instructor: preserve only current table permissions—catalog/event/event-lane/event-registration visibility within the same tenant; no reservation-global, audit, email, tenant, or membership access is added. SEC-008 remains deferred and is not widened or claimed as closed.
-- User: documented public reads plus own reservation/event-registration records in active membership tenants.
+- User: documented public reads, own reservations in active membership tenants, and own event registrations across tenants without a membership requirement.
 
 ### 9C-2.6 Helper selection
 
 | Helper | Policy use in 9C-2 | Reason |
 |---|---|---|
-| `is_tenant_member_v1(tenant_id)` | Own reservation/event-registration and authenticated active-data policies | Cheapest boolean membership gate when role is irrelevant. |
+| `is_tenant_member_v1(tenant_id)` | Own reservation and authenticated tenant-private active-data policies; not owner event-registration SELECT | Cheapest boolean membership gate when role is required. Global customer ownership of event registrations intentionally does not consume it. |
 | `has_tenant_role_v1(tenant_id, roles[])` | Staff/admin policies | Enforces active tenant, active membership, and explicit per-tenant role set in one non-recursive call. |
 | `get_my_tenant_role_v1(tenant_id)` | Do not use in row policies | Returning text and comparing it repeatedly is less direct than the boolean helper; retain for application context/UI. |
 | `active_single_tenant_id_v1()` | Internal/definer use only | Current ACL intentionally prevents client invocation. Do not silently broaden it for RLS. Use a minimal public-policy boolean bridge during the single-active phase. |
@@ -678,7 +928,7 @@ Policy expressions should wrap stable scalar auth lookups in scalar subqueries w
 | Path | RLS protected? | Security definer? | Tenant check today | Safe during 9C-2? | 9D required? |
 |---|---:|---:|---|---|---:|
 | Direct `shooting_lanes` / `events` public SELECT | Yes | No | None today; 9C-2 adds active-tenant predicate | Yes after focused public regression | No for direct path; public RPCs still yes |
-| Direct own `reservations` / `event_registrations` SELECT | Yes | No | Ownership only today; 9C-2 adds membership tenant | Yes | No for direct path |
+| Direct own `reservations` / `event_registrations` SELECT | Yes | No | Ownership only today; Booking adds membership for reservations, Events retains global owner self-read and relies on tenant/event FK integrity | Yes | No for direct path |
 | Direct staff reads of reservations/catalog/events/registrations | Yes | No | Global profile role today | Yes after replacing with membership role | No for direct path |
 | `get_public_booking_configuration_v1` | No | Yes | No explicit tenant predicate | Only for current single-active CSK with guard; not second-tenant safe | Yes |
 | `get_public_event_list_v2`, `get_public_event_availability_v1` | No | Yes | No explicit tenant predicate | Same transitional limitation | Yes |
@@ -843,6 +1093,22 @@ SAAS-9C-2 TECHNICAL PLAN: **READY**
 READY FOR SAAS-9C-2 LOCAL IMPLEMENTATION: **GO**
 
 READY FOR PRODUCTION WRITE: **NO**
+
+SECOND TENANT: **NO-GO**
+
+SEC-004: **OPEN**
+
+## SAAS-9C-2C final approval checkpoint
+
+The repository- and production-backed final plan is recorded in **SAAS-9C-2C — EVENTS TENANT-AWARE RLS FINAL PLAN** above. Its owner-without-membership decision and its narrower phase boundaries supersede earlier generic/provisional Events statements in this historical planning document.
+
+SAAS-9C-2C TECHNICAL PLAN: **READY**
+
+READY FOR SAAS-9C-2C LOCAL IMPLEMENTATION: **GO**
+
+READY FOR PRODUCTION WRITE: **NO**
+
+READY FOR SAAS-9D: **NO-GO**
 
 SECOND TENANT: **NO-GO**
 
@@ -1573,6 +1839,22 @@ SYNC BRIDGE: **READY — explicit `pracownik/instruktor` ↔ `employee/instructo
 READY FOR SAAS-9C-1 LOCAL IMPLEMENTATION: **GO**
 
 READY FOR PRODUCTION WRITE: **NO**
+
+SECOND TENANT: **NO-GO**
+
+SEC-004: **OPEN**
+
+## Current next-phase decision — SAAS-9C-2C
+
+SAAS-9C-1 and SAAS-9C-2A/2B are now closed and deployed. The binding next-phase specification is **SAAS-9C-2C — EVENTS TENANT-AWARE RLS FINAL PLAN** in this document; it supersedes the historical 9C-1 readiness wording immediately above and all earlier provisional Events ownership rules.
+
+SAAS-9C-2C TECHNICAL PLAN: **READY**
+
+READY FOR SAAS-9C-2C LOCAL IMPLEMENTATION: **GO**
+
+READY FOR PRODUCTION WRITE: **NO**
+
+READY FOR SAAS-9D: **NO-GO**
 
 SECOND TENANT: **NO-GO**
 

@@ -265,22 +265,22 @@ begin
        and qual not like '%is_tenant_member_v1%'
        and qual not like '%has_tenant_role_v1%'),
     'Membership policy is missing, broad, or recursive.');
-  perform pg_temp.ok(42, 'RLS outside approved booking cutover is unchanged',
-    (select pg_catalog.md5(coalesce(pg_catalog.string_agg(pg_catalog.concat_ws('|',tablename,policyname,cmd,roles::text,qual,with_check),E'\n' order by tablename,policyname),''))='d3c02109fea9966d27cfaef2e481f738'
-     from pg_catalog.pg_policies where schemaname='public' and tablename not in ('tenant_memberships','shooting_lanes','reservations','lane_blocks')),
-    'RLS changed outside the approved 9C-2 booking tables.');
+  perform pg_temp.ok(42, 'RLS outside approved booking and Events cutovers is unchanged',
+    (select pg_catalog.md5(coalesce(pg_catalog.string_agg(pg_catalog.concat_ws('|',tablename,policyname,cmd,roles::text,qual,with_check),E'\n' order by tablename,policyname),''))='4e56d58f87ebc27bf2995ffd6374031c'
+     from pg_catalog.pg_policies where schemaname='public' and tablename not in ('tenant_memberships','shooting_lanes','reservations','lane_blocks','events','event_lanes','event_registrations')),
+    'RLS changed outside the approved 9C-2 booking and Events tables.');
   perform pg_temp.ok(43, 'legacy role helpers remain profiles based',
     pg_catalog.pg_get_functiondef('public.get_my_role()'::regprocedure) like '%public.profiles%'
     and pg_catalog.pg_get_functiondef('public.get_my_role()'::regprocedure) not like '%tenant_memberships%'
     and pg_catalog.pg_get_functiondef('public.is_admin()'::regprocedure) not like '%tenant_memberships%',
     'Legacy runtime authorization source changed early.');
-  perform pg_temp.ok(44, 'only approved booking policies consume tenant helpers',
+  perform pg_temp.ok(44, 'only approved booking and Events policies consume tenant helpers',
     not exists(
       select 1 from pg_catalog.pg_policies
-      where schemaname='public' and tablename not in ('tenant_memberships','shooting_lanes','reservations','lane_blocks')
+      where schemaname='public' and tablename not in ('tenant_memberships','shooting_lanes','reservations','lane_blocks','events','event_lanes','event_registrations')
         and coalesce(qual,'') || coalesce(with_check,'') ~ '(is_tenant_member_v1|has_tenant_role_v1|get_my_tenant_role_v1|is_active_public_tenant_v1)'
     ),
-    'Tenant-aware RLS leaked outside the approved booking tables.');
+    'Tenant-aware RLS leaked outside the approved booking and Events tables.');
   perform pg_temp.ok(45, 'active-single-tenant helper returns only CSK',
     public.active_single_tenant_id_v1()=v_csk,
     'Internal single-active bridge did not resolve canonical CSK.');
