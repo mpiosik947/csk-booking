@@ -555,6 +555,219 @@ SECOND TENANT: **NO-GO**
 
 SEC-004: **OPEN**
 
+# SAAS-9C-2E — FINAL RLS ISOLATION AUDIT (AUTHORITATIVE)
+
+Audit date: 2026-09-11 (Europe/Warsaw).
+
+Repository checkpoint: `5e7452d2243eb911c6eb4fc3d334680ac0202808` (`main`, identical to `origin/main` at audit start).
+
+This section is a read-only final audit of the RLS state deployed through SAAS-9C-2D. It introduces no migration, policy, SQL write, application change, or SAAS-9D implementation.
+
+## 1. Production policy inventory
+
+The production catalog contains exactly 22 policies across the 14 reviewed tables. Every effective policy is `SELECT`; `WITH CHECK` is NULL throughout. There are no direct mutation policies on these surfaces.
+
+| Table | Policy | Command / roles | Effective USING | Tenant-aware? | Global-role ref? | Public? | Safe? |
+|---|---|---|---|---:|---:|---:|---:|
+| `audit_logs` | Tenant admin and employee can view audit logs | SELECT / authenticated | non-NULL row tenant plus active `admin`/`employee` membership | yes | no | no | yes |
+| `event_lanes` | Tenant staff can view event lanes | SELECT / authenticated | active `admin`/`employee`/`instructor` membership in row tenant | yes | no | no | yes |
+| `event_registrations` | Tenant staff can view event registrations | SELECT / authenticated | active `admin`/`employee`/`instructor` membership in row tenant | yes | no | no | yes, with SEC-008 intra-tenant residual unchanged |
+| `event_registrations` | Users can view own event registrations | SELECT / authenticated | `user_id = auth.uid()` | owner-scoped | no | no | yes; deliberately independent of membership |
+| `events` | Authenticated users can view active tenant events | SELECT / authenticated | active event in guarded active public tenant | yes | no | authenticated-public | yes |
+| `events` | Public can view active tenant events | SELECT / anon | active event in guarded active public tenant | yes | no | yes | yes |
+| `events` | Tenant staff can view events | SELECT / authenticated | active `admin`/`employee`/`instructor` membership in row tenant | yes | no | no | yes |
+| `lane_blocks` | Tenant members can view active lane blocks | SELECT / authenticated | active row plus active membership in row tenant | yes | no | no | yes |
+| `lane_blocks` | Tenant staff can view lane blocks | SELECT / authenticated | active `admin`/`employee`/`instructor` membership in row tenant | yes | no | no | yes |
+| `lane_booking_durations` | Public can view active tenant lane durations | SELECT / anon, authenticated | active duration joined to active lane in guarded active public tenant | yes, lane-derived | no | yes | yes |
+| `lane_booking_durations` | Tenant admin and employee can view lane durations | SELECT / authenticated | lane-derived tenant plus active `admin`/`employee` membership | yes, lane-derived | no | no | yes |
+| `lane_booking_rules` | Public can view active tenant lane booking rules | SELECT / anon, authenticated | online rule joined to active, public-bookable lane hierarchy in guarded tenant | yes, lane-derived | no | yes | yes |
+| `lane_booking_rules` | Tenant staff can view lane booking rules | SELECT / authenticated | lane-derived tenant plus active `admin`/`employee`/`instructor` membership | yes, lane-derived | no | no | yes |
+| `lane_pricing_rules` | Public can view active tenant lane pricing rules | SELECT / anon, authenticated | active price joined to active lane in guarded active public tenant | yes, lane-derived | no | yes | yes |
+| `lane_pricing_rules` | Tenant admin and employee can view lane pricing rules | SELECT / authenticated | lane-derived tenant plus active `admin`/`employee` membership | yes, lane-derived | no | no | yes |
+| `profiles` | Tenant admins can view related customer profiles | SELECT / authenticated | active tenant admin plus reservation/event-registration relation to target profile | relation-derived | no | no | yes |
+| `profiles` | Users can view own profile | SELECT / authenticated | `user_id = auth.uid()` | owner-scoped | no | no | yes |
+| `reservations` | Tenant admin and employee can view reservations | SELECT / authenticated | active `admin`/`employee` membership in row tenant | yes | no | no | yes |
+| `reservations` | Tenant members can view own reservations | SELECT / authenticated | owner UID and active membership in row tenant | yes + owner | no | no | yes |
+| `shooting_lanes` | Public can view active tenant shooting lanes | SELECT / anon, authenticated | active lane in guarded active public tenant | yes | no | yes | yes |
+| `shooting_lanes` | Tenant staff can view shooting lanes | SELECT / authenticated | active `admin`/`employee`/`instructor` membership in row tenant | yes | no | no | yes |
+| `tenant_memberships` | Users can view own tenant memberships | SELECT / authenticated | `user_id = auth.uid()` | owner-scoped | no | no | yes |
+| `tenants` | none | none | fail-closed | N/A | no | no | yes |
+| `email_deliveries` | none | none | server-only/fail-closed | N/A | no | no | yes |
+
+All 14 tables have RLS enabled. `profiles` authenticated ACL is SELECT-only; direct INSERT/UPDATE/DELETE/TRUNCATE is absent. `tenant_memberships` authenticated ACL is SELECT-only and its only policy is self-read. `tenants` and `email_deliveries` expose no client table access.
+
+## 2. Global-role reference scan
+
+The production scan of every `public` policy returned zero references to:
+
+- `profiles.role`;
+- `get_my_role()`;
+- `is_admin()`;
+- `is_employee()`;
+- `is_admin_or_employee()`;
+- `is_admin_or_staff()`;
+- legacy instructor/global-role variants.
+
+The only functions called directly by reviewed RLS are the approved tenant helpers: `is_tenant_member_v1`, `has_tenant_role_v1`, `is_active_public_tenant_v1`, plus `auth.uid()`. The helper inventory is postgres-owned, `STABLE SECURITY DEFINER`, fixed to `search_path=pg_catalog, public, pg_temp`, and contains zero global-role references. `PUBLIC` EXECUTE is false for all five helpers. Only the three authenticated membership helpers are executable by authenticated; the public boolean helper is executable by anon/authenticated; `active_single_tenant_id_v1` remains internal.
+
+Result: global `profiles.role` can no longer grant tenant-owned direct-table access through RLS.
+
+## 3. Cross-tenant final matrix
+
+Production has one guarded active tenant and no safe Tenant B identity, so no second production tenant was created. The matrix is proven by the exact deployed predicates, the production effective-role reads, and the existing 64-check transaction/ROLLBACK suite with dormant local Tenant B.
+
+| Identity | Tenant A | Tenant B | Evidence/result |
+|---|---|---|---|
+| `ADMIN_A` | approved admin scope ALLOW | DENY | every staff policy evaluates the row tenant through active membership |
+| `EMPLOYEE_A` | current employee scope ALLOW | DENY | exact role allowlists; no admin-only expansion |
+| `INSTRUCTOR_A` | existing lane/event scope only | DENY | role appears only on approved staff-read policies; pricing/durations/reservations remain narrower |
+| `USER_A` | own reservation/registration/profile only plus documented public/member reads | foreign rows DENY; own event registration remains owner-readable | UID ownership and row-tenant membership where the approved contract requires it |
+| no membership | documented public and self-owned event-registration scope only | privileged DENY | tenant helpers fail closed |
+| pending membership | no privileged scope | DENY | only `status='active'` qualifies |
+| suspended membership | no privileged scope | DENY | only `status='active'` qualifies |
+| global `profiles.role=admin`, no tenant membership | no tenant staff/profile/audit scope | DENY | critical local matrix PASS; production policies contain no global-role reference |
+
+The deliberate owner-only event-registration rule does not confer staff or foreign-user access. SEC-008's broad instructor access inside an assigned/current tenant remains separately deferred and is not claimed as remediated here.
+
+## 4. Public contract verification
+
+Public access remains membership-free only where explicitly required:
+
+- Booking: active shooting lanes, online rules, active durations/pricing and guarded active-tenant hierarchy;
+- Events: active public list and PII-free availability;
+- availability: aggregate contracts remain authoritative;
+- lane configuration: only active/public-bookable subset is visible;
+- private reservations, registrations, profiles, audit, memberships, tenants and email delivery remain non-public.
+
+The production post-deploy smoke rendered Booking with all five expected lanes and loaded public Events without authorization or 5xx errors. Public readers remain `SECURITY DEFINER` boundaries for SAAS-9D review; the direct-table public policies themselves are tenant-guarded.
+
+## 5. Profile privacy verification
+
+Production effective-role verification returned:
+
+- ordinary user: exactly one visible profile, the caller's own;
+- tenant admin: own profile plus only operationally related customer profiles (four visible in the current data set);
+- unrelated global profiles: denied;
+- global admin role alone without active tenant membership: denied by construction and by the local critical matrix;
+- authenticated direct profile mutation: denied.
+
+Admin Users and Check-in remain functional because they use bounded server/RPC read contracts instead of relying on global direct profile browsing. Those legacy definer RPCs still require 9D hardening.
+
+## 6. Audit, membership, tenant and email verification
+
+- Audit: tenant admin/employee SELECT is row-tenant scoped; global `tenant_id IS NULL` audit is denied to tenant staff; user/public denied; no mutation policy was introduced.
+- Membership: self-read only; direct INSERT/UPDATE/DELETE and self role/status escalation remain denied.
+- Tenants: zero policies/client ACL; `tenants_single_active_runtime_guard` remains present.
+- Email deliveries: RLS enabled, zero policies, no anon/authenticated direct SELECT or DML.
+- Integrity triggers, composite tenant constraints, seven temporary CSK defaults, sync bridge, `profiles.role` schema and active-tenant guard are unchanged.
+
+## 7. Complete SECURITY DEFINER boundary
+
+The verified production inventory remains exactly 73 functions, with normalized fingerprint `0dd807bea5ca20cfbaae9434b53d97a4`. The grouped matrix below accounts for all 73 functions; every entry is currently `SECURITY DEFINER` and therefore bypasses table RLS.
+
+| Group (count) | Complete function/RPC inventory | Current global-role dependency | Tenant input/check today | Cross-tenant risk | 9D action |
+|---|---|---|---|---|---|
+| Tenant authorization helpers (5) | `active_single_tenant_id_v1`, `get_my_tenant_role_v1`, `has_tenant_role_v1`, `is_active_public_tenant_v1`, `is_tenant_member_v1` | none | explicit tenant for four; internal active-tenant resolver for one; active membership/tenant checked | low, reviewed helper boundary | retain/version only if context model changes |
+| Legacy global-role helpers (4) | `get_my_role`, `is_admin`, `is_admin_or_employee`, `is_admin_or_staff` | yes, `profiles.role` | no tenant input/check | critical | replace callers with tenant membership checks, then retire from tenant authorization |
+| Lane/config/block family (16) | `admin_create_lane_block`, `admin_create_lane_booking_family_v1`, `admin_get_lane_booking_configuration_v1`, `admin_get_lane_booking_configuration_v2`, `admin_set_lane_block_active`, `admin_set_lane_booking_configuration`, `admin_set_lane_booking_family_configuration_v2`, `admin_update_lane_block`, `get_lane_booking_busy_ranges`, `get_lane_booking_busy_ranges_v2`, `get_lane_booking_busy_ranges_v3`, `lane_booking_family_business_snapshot_v2`, `normalize_lane_booking_family_payload_v2`, `validate_lane_booking_rule_capacity`, `validate_shooting_lane_capacity_change`, `validate_shooting_lane_hierarchy` | admin functions use legacy/global authorization; internal validators do not authorize callers | no explicit tenant parameter; existing targets can derive tenant from lane/root/block; family create cannot | critical for writers/readers; lower for internal validators | derive from trusted existing resource; add explicit tenant only for new-family/list operations; membership role check before work |
+| Reservation/check-in family (9) | `cancel_reservation`, `create_reservation`, `create_reservation_v2`, `get_check_in_reservation_v1`, `get_my_reservations_v2`, `get_reservation_customer_profiles_v1`, `update_reservation_admin_note`, `update_reservation_attendance`, `update_reservation_payment` | mixed owner plus legacy staff/global checks | no tenant input; lane/reservation/token can derive trusted tenant | critical | derive from lane/reservation/token; require owner or tenant role; bind DTO and audit to same tenant |
+| Event family (16) | `admin_create_event`, `admin_create_event_v2`, `admin_list_event_registrations_v1`, `admin_list_events_v1`, `admin_set_event_active`, `admin_set_event_active_v2`, `admin_update_event`, `admin_update_event_v2`, `approve_event_registration`, `cancel_event_registration`, `complete_event_reserve_promotion`, `confirm_event_reserve_promotion`, `get_my_event_registrations_v1`, `mark_event_registration_paid`, `prepare_event_reserve_promotions`, `register_for_event` | mixed owner and legacy global staff checks | no explicit tenant input; existing event/registration can derive; create/list cannot safely infer future tenant | critical | derive for target-based calls; add explicit trusted tenant context for create/list; enforce tenant membership and bind promotion/payment/audit |
+| Reports/users/profile/account family (12) | `admin_get_reservation_report_export_v1`, `admin_get_reservation_report_v1`, `admin_get_reservation_report_v2`, `admin_list_users_v1`, `admin_set_user_note_v1`, `admin_set_user_role_v1`, `anonymize_my_account_v1`, `export_my_data_v1`, `update_my_profile_v1`, `update_profile_contact_details`, `update_profile_identity`, `update_profile_verification` | admin/report/user management is global; self-service is owner-scoped | no tenant input; reports/lists require selected tenant; target-profile actions require tenant relationship; self lifecycle is global owner | critical privacy for admin lists/updates; high for lifecycle review | tenant-bound report/user DTOs; replace global role update with membership-role operation; keep true self/global lifecycle separately scoped |
+| Email delivery family (3) | `check_confirmation_email_rate_limit`, `complete_confirmation_email`, `prepare_confirmation_email` | prepare path depends on current caller/business authorization; completion is claim-based | no tenant input; message type + record/claim must derive and bind tenant | high | validate target-derived tenant before claim, persist tenant on claim, verify completion cannot cross tenant |
+| Public readers (4) | `get_public_booking_configuration_v1`, `get_public_check_in_status_v1`, `get_public_event_availability_v1`, `get_public_event_list_v2` | none | active-single-tenant or bearer-token semantics; no general tenant context | high before second tenant despite PII-minimized outputs | add explicit active tenant/slug context or trusted target derivation without widening data |
+| Internal account/bridge/profile triggers (4) | `handle_new_user`, `prevent_non_admin_profile_privilege_changes`, `sync_csk_membership_role_to_profile`, `sync_profile_role_to_csk_membership` | bridge/profile logic intentionally reads legacy role | fixed CSK compatibility bridge, not general tenant runtime | high if retained for second tenant | review/version provisioning and privilege guard; retire CSK-only sync bridge after application/RPC cutover |
+
+Total: 5 + 4 + 16 + 9 + 16 + 12 + 3 + 4 + 4 = 73.
+
+## 8. Remaining SEC-004 scope
+
+SAAS-9C closed the direct-table authorization layer:
+
+- membership foundation and deterministic legacy mapping;
+- tenant-aware SELECT RLS;
+- profile relationship privacy;
+- tenant audit isolation;
+- preservation of explicitly public contracts;
+- removal of global-role dependencies from every production RLS policy.
+
+SEC-004 remains OPEN because the following are not part of 9C:
+
+- tenant-aware authorization inside 73 `SECURITY DEFINER` functions/RPCs;
+- application tenant context and trusted tenant resolution;
+- tenant-aware routing and selected-tenant UX;
+- controlled writer cutover;
+- retirement of global role helpers and the CSK sync bridge;
+- removal of seven temporary CSK defaults;
+- second-tenant concurrency and end-to-end isolation proof.
+
+## 9. SAAS-9D entry criteria and hardening order
+
+### 9D-1 — Critical reservation/lane writers
+
+1. Version `create_reservation_v2` and derive tenant from `p_lane_id`; ensure the inserted reservation writes that tenant explicitly.
+2. Version cancellation/check-in/payment/attendance/note/customer-profile functions; derive tenant from reservation/token and enforce owner or exact tenant role.
+3. Version lane-block and lane-family update writers; derive tenant from existing lane/root/block.
+4. New lane-family creation must receive a trusted tenant context because no existing resource can supply it.
+
+### 9D-2 — Critical Events writers/readers
+
+1. Existing event/registration operations derive tenant from target ID.
+2. Event create/list operations receive a trusted selected tenant context.
+3. Promotion, payment and participant reads bind event, registration, actor and audit to one tenant.
+4. Preserve owner and public semantics without granting membership-wide registration access.
+
+### 9D-3 — Critical privacy/report/user administration
+
+1. Reports and exports require a selected tenant and tenant-scoped aggregation.
+2. `admin_list_users_v1` must return only users operationally related to that tenant and a minimal DTO.
+3. Role administration must mutate tenant membership role, not treat global `profiles.role` as a future tenant role.
+4. Identity/contact/verification/note operations require explicit tenant relationship plus appropriate membership role; true account-owner operations remain global self-service.
+
+### 9D-4 — Email, public readers and service bypasses
+
+1. Derive and persist tenant through prepare/claim/complete email workflows.
+2. Add an active-tenant context to public booking/event readers without exposing tenant metadata or PII.
+3. Review every service-role flow against the same target-derived tenant invariant.
+
+### 9D-5 — Compatibility retirement gate
+
+1. Prove every authorized writer explicitly supplies or derives tenant.
+2. Remove all seven CSK `tenant_id` defaults in a separate migration.
+3. Cut application role reads to tenant memberships.
+4. Retire legacy role helpers and CSK-only sync bridge only after zero-callsite and reconciliation proof.
+
+No SAAS-9D implementation may begin before a separate technical plan inventories exact signatures, grants, owners, search paths, DTOs, audit effects, compatibility matrix, rollout phases and rollback strategy. A second tenant remains blocked throughout.
+
+## 10. Blocking issues and final decision
+
+No blocker was found in the SAAS-9C RLS layer. The remaining 73-function definer boundary is expected scope, not an RLS regression, but it is a hard blocker for SAAS-9D implementation without a reviewed phased plan and for every second-tenant action.
+
+```text
+SAAS-9C-2E AUDIT:
+PASS
+
+SAAS-9C COMPLETE:
+YES
+
+RLS TENANT ISOLATION:
+PASS
+
+GLOBAL ROLE ISOLATION:
+PASS
+
+READY FOR SAAS-9D PLANNING:
+GO
+
+READY FOR SAAS-9D IMPLEMENTATION:
+NO-GO
+
+SECOND TENANT:
+NO-GO
+
+SEC-004:
+OPEN
+```
+
 ## SAAS-9C-2D/2E — FINAL TENANT-AWARE RLS COMPLETION PLAN
 
 This section is the binding plan for the remaining SAAS-9C work after the production closure of 9C-2C. It is based on the current repository, the post-reset local catalog, and the deployed 9C-1 through 9C-2C migrations. It supersedes the provisional 9C-2D/2E outline earlier in this document. This is planning only: no policy, ACL, schema, function, application, or production data change is authorized here.
@@ -2072,6 +2285,26 @@ READY FOR SAAS-9C-2C LOCAL IMPLEMENTATION: **GO**
 READY FOR PRODUCTION WRITE: **NO**
 
 READY FOR SAAS-9D: **NO-GO**
+
+SECOND TENANT: **NO-GO**
+
+SEC-004: **OPEN**
+
+## Current authoritative phase status — SAAS-9C-2E
+
+The completed **SAAS-9C-2E — FINAL RLS ISOLATION AUDIT (AUTHORITATIVE)** section above supersedes the historical readiness and provisional 9C-2C/2D/2E planning sections that follow it in this accumulated architecture document. The repository and production RLS checkpoint are complete through SAAS-9C-2D; the next permitted activity is SAAS-9D planning only.
+
+SAAS-9C-2E AUDIT: **PASS**
+
+SAAS-9C COMPLETE: **YES**
+
+RLS TENANT ISOLATION: **PASS**
+
+GLOBAL ROLE ISOLATION: **PASS**
+
+READY FOR SAAS-9D PLANNING: **GO**
+
+READY FOR SAAS-9D IMPLEMENTATION: **NO-GO**
 
 SECOND TENANT: **NO-GO**
 
