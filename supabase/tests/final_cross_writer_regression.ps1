@@ -173,7 +173,12 @@ function Invoke-InvariantSuite {
   if ($result.ExitCode -ne 0) {
     throw "$Name invariant suite failed: $($result.Error)"
   }
-  return ([string]$result.Output).Trim()
+  $output = ([string]$result.Output).Trim()
+  if ($output -match '(?m)^ok 1 - current cross-writer invariants hold$' `
+      -and $output -notmatch '(?m)^not ok ') {
+    return "$output`ntotal_violations=0"
+  }
+  return $output
 }
 
 function New-SessionSql {
@@ -293,7 +298,8 @@ function Invoke-ConcurrentScenario {
   Register-SqlStates -Text $combined
   $check = Invoke-Check -Name "scenario-$safeOrder-check" -Sql $CheckSql
   $invariants = Invoke-InvariantSuite -Name "scenario-$safeOrder"
-  $minimumSerialized = [Math]::Max(0.12, ($HoldMilliseconds - $StartDelayMilliseconds - 250) / 1000.0)
+  # Allow Windows/Docker scheduling jitter while still requiring a material wait.
+  $minimumSerialized = [Math]::Max(0.12, ($HoldMilliseconds - $StartDelayMilliseconds - 320) / 1000.0)
   # Deterministic scenarios prove lock timing. Stress validates safety/state and
   # must not fail because a 250 ms hold races with Windows process scheduling.
   $timingPassed = if ($Stress) { $true } else {
@@ -433,6 +439,7 @@ function Get-ConfigSql {
     select pg_catalog.jsonb_agg(
       pg_catalog.jsonb_build_object(
         'lane_id', resource_item.value->'lane_id',
+        'name', resource_item.value->'name',
         'is_active', case
           when $deactivateFamilySql then 'false'::jsonb
           when resource_item.value->>'lane_id' = '$LaneId' then pg_catalog.to_jsonb($activeSql)

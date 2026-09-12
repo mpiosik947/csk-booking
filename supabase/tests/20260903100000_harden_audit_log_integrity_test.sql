@@ -233,11 +233,20 @@ begin
   )
   select pg_catalog.count(*),
          pg_catalog.count(*) filter (
-           where not procedure.prosecdef
-              or procedure.owner_name<>'postgres'
+           where procedure.owner_name<>'postgres'
               or procedure.proconfig is null
               or not exists(select 1 from pg_catalog.unnest(procedure.proconfig) config where config like 'search_path=%')
               or pg_catalog.strpos(pg_catalog.pg_get_functiondef(procedure.oid),'auth.uid()')=0
+              or not (
+                procedure.prosecdef
+                or (
+                  procedure.proname like '%__saas9d1_core'
+                  and not pg_catalog.has_function_privilege('public',procedure.oid,'EXECUTE')
+                  and not pg_catalog.has_function_privilege('anon',procedure.oid,'EXECUTE')
+                  and not pg_catalog.has_function_privilege('authenticated',procedure.oid,'EXECUTE')
+                  and not pg_catalog.has_function_privilege('service_role',procedure.oid,'EXECUTE')
+                )
+              )
          )
   into v_writer_count,v_untrusted_writer_count
   from candidates procedure
@@ -246,7 +255,7 @@ begin
 
   perform pg_temp.record_result(17,'All current audit writers are trusted database functions',
     v_writer_count=17 and v_untrusted_writer_count=0,
-    'Oczekiwano 17 SECURITY DEFINER writerów owner=postgres z auth.uid() i explicit search_path.');
+    'Oczekiwano 17 zaufanych writerów: SECURITY DEFINER albo nieklienckie SAAS-9D-1 cores, owner=postgres, auth.uid() i explicit search_path.');
 
   perform pg_temp.record_result(18,'All fixture remains transaction-scoped',
     (select pg_catalog.count(*)=5 from public.profiles where user_id in (v_admin,v_employee,v_instructor,v_user,v_target))

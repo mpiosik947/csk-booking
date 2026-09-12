@@ -209,7 +209,7 @@ begin
     pg_catalog.md5(pg_catalog.pg_get_functiondef('public.get_my_role()'::pg_catalog.regprocedure))='dc8858eed7d2fd2d1ab47d22b0000b06'
     and pg_catalog.md5(pg_catalog.pg_get_functiondef('public.is_admin()'::pg_catalog.regprocedure))='89a221fa092af2a457db05a64b7e8d18'
     and pg_catalog.md5(pg_catalog.pg_get_functiondef('public.is_admin_or_employee()'::pg_catalog.regprocedure))='39651299fec2cf87a98500395ecc88ac'
-    and pg_catalog.md5(pg_catalog.pg_get_functiondef('public.create_reservation_v2(uuid,date,time without time zone,integer,integer,uuid,text)'::pg_catalog.regprocedure))='3f201f96dc413736d564089536b98d7d',
+    and pg_catalog.md5(pg_catalog.pg_get_functiondef('public.create_reservation_v2(uuid,date,time without time zone,integer,integer,uuid,text)'::pg_catalog.regprocedure))='ff1c273379e9ee3af3a1a60d131af81b',
     'Critical function fingerprint changed.');
 
   perform pg_temp.ok(32, 'temporarily disabled backfill triggers are enabled',

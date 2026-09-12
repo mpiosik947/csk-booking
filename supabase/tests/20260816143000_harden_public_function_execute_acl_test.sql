@@ -54,17 +54,17 @@ insert into expected_function_acl values
   ('public.anonymize_my_account_v1()','B',false,true,false),
   ('public.approve_event_registration(uuid)','C',false,true,false),
   ('public.cancel_event_registration(uuid)','B',false,true,true),
-  ('public.cancel_reservation(uuid)','B',false,true,true),
+  ('public.cancel_reservation(uuid)','B',false,true,false),
   ('public.check_confirmation_email_rate_limit(uuid,text)','D',false,false,true),
   ('public.complete_confirmation_email(uuid,boolean,text,text)','D',false,false,true),
   ('public.complete_event_reserve_promotion(uuid,uuid,boolean,text)','D',false,false,true),
   ('public.confirm_event_reserve_promotion(text)','B',false,true,false),
-  ('public.create_reservation_v2(uuid,date,time without time zone,integer,integer,uuid,text)','B',false,true,true),
-  ('public.create_reservation(uuid,date,time without time zone,integer,integer,uuid,text)','D',false,false,true),
+  ('public.create_reservation_v2(uuid,date,time without time zone,integer,integer,uuid,text)','B',false,true,false),
+  ('public.create_reservation(uuid,date,time without time zone,integer,integer,uuid,text)','D',false,false,false),
   ('public.export_my_data_v1()','B',false,true,false),
-  ('public.get_lane_booking_busy_ranges_v2(uuid,date)','B',false,true,true),
-  ('public.get_lane_booking_busy_ranges_v3(uuid,date)','B',false,true,true),
-  ('public.get_lane_booking_busy_ranges(uuid,date)','B',false,true,true),
+  ('public.get_lane_booking_busy_ranges_v2(uuid,date)','B',false,true,false),
+  ('public.get_lane_booking_busy_ranges_v3(uuid,date)','B',false,true,false),
+  ('public.get_lane_booking_busy_ranges(uuid,date)','B',false,true,false),
   ('public.get_my_reservations_v2()','B',false,true,false),
   ('public.get_my_event_registrations_v1(text,text,integer,integer)','B',false,true,false),
   ('public.get_my_role()','B',false,true,false),
@@ -108,11 +108,23 @@ insert into expected_function_acl values
   ('public.update_my_profile_v1(text,text,text,text,text,text,boolean,boolean,boolean,boolean,boolean,boolean,boolean,boolean,boolean,boolean)','B',false,true,false),
   ('public.update_profile_verification(uuid,text,text)','C',false,true,true),
   ('public.update_reservation_admin_note(uuid,text)','C',false,true,false),
-  ('public.update_reservation_attendance(uuid,text)','C',false,true,true),
+  ('public.update_reservation_attendance(uuid,text)','C',false,true,false),
   ('public.update_reservation_payment(uuid,text)','C',false,true,false),
   ('public.validate_lane_booking_rule_capacity()','E',false,false,false),
   ('public.validate_shooting_lane_capacity_change()','E',false,false,false),
-  ('public.validate_shooting_lane_hierarchy()','E',false,false,false);
+  ('public.validate_shooting_lane_hierarchy()','E',false,false,false),
+  ('public.cancel_reservation__saas9d1_core(uuid)','A',false,false,false),
+  ('public.create_reservation_v2__saas9d1_core(uuid,date,time without time zone,integer,integer,uuid,text)','A',false,false,false),
+  ('public.get_check_in_reservation_v1__saas9d1_core(uuid)','A',false,false,false),
+  ('public.get_lane_booking_busy_ranges__saas9d1_core(uuid,date)','A',false,false,false),
+  ('public.get_lane_booking_busy_ranges_v2__saas9d1_core(uuid,date)','A',false,false,false),
+  ('public.get_lane_booking_busy_ranges_v3__saas9d1_core(uuid,date)','A',false,false,false),
+  ('public.get_my_reservations_v2__saas9d1_core()','A',false,false,false),
+  ('public.get_public_check_in_status_v1__saas9d1_core(uuid)','A',false,false,false),
+  ('public.get_reservation_customer_profiles_v1__saas9d1_core(uuid[])','A',false,false,false),
+  ('public.update_reservation_admin_note__saas9d1_core(uuid,text)','A',false,false,false),
+  ('public.update_reservation_attendance__saas9d1_core(uuid,text)','A',false,false,false),
+  ('public.update_reservation_payment__saas9d1_core(uuid,text)','A',false,false,false);
 
 create function pg_temp.call_admin_configuration(p_user_id uuid)
 returns jsonb
@@ -204,8 +216,8 @@ begin
     and procedure.proname<>'csk_sec002_default_acl_probe';
 
   perform pg_temp.record_result(1,'Complete public function inventory',
-    (select pg_catalog.count(*)=86 from pg_temp.expected_function_acl)
-    and v_actual_count=86
+    (select pg_catalog.count(*)=98 from pg_temp.expected_function_acl)
+    and v_actual_count=98
     and not exists(
       select 1 from pg_temp.expected_function_acl expected
       where pg_catalog.to_regprocedure(expected.signature) is null
@@ -221,7 +233,7 @@ begin
           where pg_catalog.to_regprocedure(expected.signature)=procedure.oid
         )
     ),
-    'The exact 86-function inventory has no missing or unexpected signature.');
+    'The exact 98-function inventory has no missing or unexpected signature.');
 
   perform pg_temp.record_result(2,'PUBLIC executes no public function',
     not exists(
@@ -260,8 +272,8 @@ begin
       where pg_catalog.has_function_privilege('service_role',expected.signature,'EXECUTE')
         is distinct from expected.service_role_execute
     )
-    and (select pg_catalog.count(*)=19 from pg_temp.expected_function_acl where service_role_execute),
-    'service_role retains only the 19 explicitly intended server, rollback and safe-reader grants.');
+    and (select pg_catalog.count(*)=12 from pg_temp.expected_function_acl where service_role_execute),
+    'service_role retains only the 12 explicitly intended server, rollback and safe-reader grants.');
 
   perform pg_temp.record_result(6,'Trigger functions and internal helpers are isolated',
     (select pg_catalog.count(*)=12 from pg_temp.expected_function_acl where category='E')
@@ -314,14 +326,14 @@ begin
     'Future functions created by postgres receive no client or PUBLIC EXECUTE.');
 
   perform pg_temp.record_result(8,'Application function creator scope is exact',
-    (select pg_catalog.count(*)=86
+    (select pg_catalog.count(*)=98
       from pg_catalog.pg_proc procedure
       join pg_catalog.pg_namespace namespace on namespace.oid=procedure.pronamespace
       join pg_catalog.pg_roles owner_role on owner_role.oid=procedure.proowner
       where namespace.nspname='public' and procedure.prokind='f'
         and procedure.proname<>'csk_sec002_default_acl_probe'
         and owner_role.rolname='postgres'),
-    'All 86 application functions are owned by postgres, whose public-schema defaults are hardened.');
+    'All 98 application functions are owned by postgres, whose public-schema defaults are hardened.');
 
   perform pg_temp.record_result(9,'New function inherits owner-only execution',
     not pg_catalog.has_function_privilege('anon','public.csk_sec002_default_acl_probe()','EXECUTE')

@@ -237,9 +237,10 @@ begin
   perform pg_temp.ok(54,'critical booking writers remain SECURITY DEFINER',
     (select pg_catalog.count(*)=6 from pg_catalog.pg_proc p join pg_catalog.pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname in ('create_reservation_v2','cancel_reservation','admin_create_lane_block','admin_update_lane_block','admin_set_lane_block_active','admin_set_lane_booking_family_configuration_v2') and p.prosecdef),
     'Critical writer SECURITY DEFINER inventory differs.');
-  perform pg_temp.ok(55,'critical legacy writers do not yet consume tenant membership helpers',
-    (select pg_catalog.count(*)=6 from pg_catalog.pg_proc p join pg_catalog.pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname in ('create_reservation_v2','cancel_reservation','admin_create_lane_block','admin_update_lane_block','admin_set_lane_block_active','admin_set_lane_booking_family_configuration_v2') and p.prosrc !~ '\m(is_tenant_member_v1|has_tenant_role_v1|get_my_tenant_role_v1)\M'),
-    'Writer inventory unexpectedly changed; re-review 9D boundary.');
+  perform pg_temp.ok(55,'SAAS-9D-1 reservation writers consume tenant membership while later writers remain legacy',
+    (select pg_catalog.count(*)=2 from pg_catalog.pg_proc p join pg_catalog.pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname in ('create_reservation_v2','cancel_reservation') and p.prosrc ~ '\mget_my_tenant_role_v1\M')
+    and (select pg_catalog.count(*)=4 from pg_catalog.pg_proc p join pg_catalog.pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname in ('admin_create_lane_block','admin_update_lane_block','admin_set_lane_block_active','admin_set_lane_booking_family_configuration_v2') and p.prosrc !~ '\m(is_tenant_member_v1|has_tenant_role_v1|get_my_tenant_role_v1)\M'),
+    'SAAS-9D phased writer boundary differs.');
 
   perform pg_catalog.set_config('request.jwt.claims',pg_catalog.jsonb_build_object('sub',v_admin,'role','authenticated')::text,true);
   perform pg_catalog.set_config('request.jwt.claim.sub',v_admin::text,true);
