@@ -289,14 +289,14 @@ begin
       where not exists(select 1 from pg_catalog.pg_proc procedure join pg_catalog.pg_namespace namespace on namespace.oid=procedure.pronamespace where namespace.nspname='public' and procedure.proname=expected.name and procedure.prosecdef)
     ),
     'Critical event definer inventory differs.');
-  perform pg_temp.ok(60,'legacy event RPCs do not yet consume tenant membership helpers',
+  perform pg_temp.ok(60,'event RPCs deferred to SAAS-9D-2B/2C do not yet consume tenant membership helpers',
     not exists(
       select 1 from pg_catalog.pg_proc procedure join pg_catalog.pg_namespace namespace on namespace.oid=procedure.pronamespace
       where namespace.nspname='public'
-        and procedure.proname in('get_public_event_list_v2','get_public_event_availability_v1','admin_list_events_v1','admin_list_event_registrations_v1','get_my_event_registrations_v1','register_for_event','cancel_event_registration','confirm_event_reserve_promotion','prepare_event_reserve_promotions','complete_event_reserve_promotion','mark_event_registration_paid','admin_create_event_v2','admin_update_event_v2','admin_set_event_active_v2')
+        and procedure.proname in('get_public_event_list_v2','get_public_event_availability_v1','admin_list_events_v1','prepare_event_reserve_promotions','complete_event_reserve_promotion','admin_create_event_v2','admin_update_event_v2','admin_set_event_active_v2')
         and procedure.prosrc ~ '\m(is_tenant_member_v1|has_tenant_role_v1|get_my_tenant_role_v1)\M'
     ),
-    'Legacy event RPC boundary unexpectedly changed.');
+    'A deferred event RPC boundary unexpectedly changed.');
 
   v_rpc := pg_temp.as_actor_json('anon',null,pg_catalog.format('select public.get_public_event_list_v2(%L,''upcoming'',1,50)',v_marker));
   perform pg_temp.ok(61,'public event list RPC remains executable and PII-free',

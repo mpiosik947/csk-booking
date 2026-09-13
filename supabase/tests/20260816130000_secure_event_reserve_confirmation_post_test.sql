@@ -116,7 +116,7 @@ begin
   perform pg_temp.record_result(1,'RPC security and ACL contract',
     (select procedure.prosecdef
        and procedure.proowner=(select role.oid from pg_catalog.pg_roles role where role.rolname='postgres')
-       and procedure.proconfig=array['search_path=public, pg_temp']::text[]
+       and procedure.proconfig=array['search_path=pg_catalog, public, pg_temp']::text[]
      from pg_catalog.pg_proc procedure
      where procedure.oid='public.confirm_event_reserve_promotion(text)'::pg_catalog.regprocedure)
     and pg_catalog.has_function_privilege(

@@ -53,7 +53,7 @@ insert into expected_function_acl values
   ('public.active_single_tenant_id_v1()','A',false,false,false),
   ('public.anonymize_my_account_v1()','B',false,true,false),
   ('public.approve_event_registration(uuid)','C',false,true,false),
-  ('public.cancel_event_registration(uuid)','B',false,true,true),
+  ('public.cancel_event_registration(uuid)','B',false,true,false),
   ('public.cancel_reservation(uuid)','B',false,true,false),
   ('public.check_confirmation_email_rate_limit(uuid,text)','D',false,false,true),
   ('public.complete_confirmation_email(uuid,boolean,text,text)','D',false,false,true),
@@ -124,7 +124,14 @@ insert into expected_function_acl values
   ('public.get_reservation_customer_profiles_v1__saas9d1_core(uuid[])','A',false,false,false),
   ('public.update_reservation_admin_note__saas9d1_core(uuid,text)','A',false,false,false),
   ('public.update_reservation_attendance__saas9d1_core(uuid,text)','A',false,false,false),
-  ('public.update_reservation_payment__saas9d1_core(uuid,text)','A',false,false,false);
+  ('public.update_reservation_payment__saas9d1_core(uuid,text)','A',false,false,false),
+  ('public.admin_list_event_registrations_v1__saas9d2a_core(uuid,text,text,integer,integer)','A',false,false,false),
+  ('public.approve_event_registration__saas9d2a_core(uuid)','A',false,false,false),
+  ('public.cancel_event_registration__saas9d2a_core(uuid)','A',false,false,false),
+  ('public.confirm_event_reserve_promotion__saas9d2a_core(text)','A',false,false,false),
+  ('public.get_my_event_registrations_v1__saas9d2a_core(text,text,integer,integer)','A',false,false,false),
+  ('public.mark_event_registration_paid__saas9d2a_core(uuid)','A',false,false,false),
+  ('public.register_for_event__saas9d2a_core(uuid,boolean)','A',false,false,false);
 
 create function pg_temp.call_admin_configuration(p_user_id uuid)
 returns jsonb
@@ -216,8 +223,8 @@ begin
     and procedure.proname<>'csk_sec002_default_acl_probe';
 
   perform pg_temp.record_result(1,'Complete public function inventory',
-    (select pg_catalog.count(*)=98 from pg_temp.expected_function_acl)
-    and v_actual_count=98
+    (select pg_catalog.count(*)=105 from pg_temp.expected_function_acl)
+    and v_actual_count=105
     and not exists(
       select 1 from pg_temp.expected_function_acl expected
       where pg_catalog.to_regprocedure(expected.signature) is null
@@ -272,8 +279,8 @@ begin
       where pg_catalog.has_function_privilege('service_role',expected.signature,'EXECUTE')
         is distinct from expected.service_role_execute
     )
-    and (select pg_catalog.count(*)=12 from pg_temp.expected_function_acl where service_role_execute),
-    'service_role retains only the 12 explicitly intended server, rollback and safe-reader grants.');
+    and (select pg_catalog.count(*)=11 from pg_temp.expected_function_acl where service_role_execute),
+    'service_role retains only the 11 explicitly intended server, rollback and safe-reader grants.');
 
   perform pg_temp.record_result(6,'Trigger functions and internal helpers are isolated',
     (select pg_catalog.count(*)=12 from pg_temp.expected_function_acl where category='E')
@@ -326,14 +333,14 @@ begin
     'Future functions created by postgres receive no client or PUBLIC EXECUTE.');
 
   perform pg_temp.record_result(8,'Application function creator scope is exact',
-    (select pg_catalog.count(*)=98
+    (select pg_catalog.count(*)=105
       from pg_catalog.pg_proc procedure
       join pg_catalog.pg_namespace namespace on namespace.oid=procedure.pronamespace
       join pg_catalog.pg_roles owner_role on owner_role.oid=procedure.proowner
       where namespace.nspname='public' and procedure.prokind='f'
         and procedure.proname<>'csk_sec002_default_acl_probe'
         and owner_role.rolname='postgres'),
-    'All 98 application functions are owned by postgres, whose public-schema defaults are hardened.');
+    'All 105 application functions are owned by postgres, whose public-schema defaults are hardened.');
 
   perform pg_temp.record_result(9,'New function inherits owner-only execution',
     not pg_catalog.has_function_privilege('anon','public.csk_sec002_default_acl_probe()','EXECUTE')

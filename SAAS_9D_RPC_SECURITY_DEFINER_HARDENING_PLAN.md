@@ -4,7 +4,7 @@ Technical implementation plan with the approved SAAS-9D-1 local execution record
 
 Repository baseline: `02af6857a88e37d30b6e4b1159496cecff91bac1` on `main`, identical to `origin/main` when this plan was prepared.
 
-The original plan was planning-only. Section 22 now records the separately authorized local-only SAAS-9D-1 implementation. Nothing in this document authorizes a production deployment, SAAS-9D-2 or a second tenant.
+The original plan was planning-only. SAAS-9D-1 is now closed with production PASS, and the later sections record its checkpoint plus the reviewed SAAS-9D-2 plan. Nothing in this document authorizes SAAS-9D-2 implementation, a production write or a second tenant.
 
 ## 1. Executive summary
 
@@ -423,11 +423,299 @@ READY FOR SAAS-9D-1 LOCAL IMPLEMENTATION: **GO**
 
 READY FOR PRODUCTION WRITE: **NO**
 
+## 24. SAAS-9D-2A local implementation result
+
+SAAS-9D-2A was implemented locally in `20260912100000_harden_event_registration_rpcs.sql` for exactly the seven approved event-registration contracts. The public signatures and response shapes remain unchanged. Each reviewed business implementation is retained as a non-client `SECURITY INVOKER` core behind a postgres-owned, SP1 `SECURITY DEFINER` wrapper that derives tenant ownership from the event, registration or promotion token target.
+
+The registration core now writes `v_event.tenant_id` explicitly. Approval, cancellation and payment audits write the registration tenant explicitly. My Events joins active membership and active tenant state to each returned registration. Owner cancellation and promotion confirmation require both `auth.uid()` ownership and active target-tenant membership; staff operations use the active membership role and never trust `profiles.role` alone. Instructor participant access remains at its pre-existing, deferred SEC-008 scope.
+
+All seven wrappers are `authenticated`-only; `PUBLIC`, `anon` and `service_role` have no EXECUTE. All seven cores have no client/service EXECUTE. The total public-schema `SECURITY DEFINER` inventory remains 73. Preflight fingerprints, owner and ACL guards fail closed, and the migration is fully transactional. Representative 2B/2C fingerprints are frozen in focused tests and remain unchanged.
+
+Local evidence:
+
+- clean `supabase db reset`: PASS;
+- focused SAAS-9D-2A SQL: 32/32 PASS;
+- full Supabase DB suite: 28 files / 820 tests PASS;
+- real two-session registration race at capacity 1: exactly one `registered`, one `reserve`, cleanup 0;
+- Node: 734/734 PASS;
+- TypeScript and production build: PASS;
+- focused Events/My Events/Admin Events/Booking/Admin Playwright: 14/14 PASS;
+- synthetic fixture post-check: zero auth users, profiles, events, registrations and audits.
+
+SAAS-9D-2A LOCAL: **PASS**
+
+EVENT RPC TENANT ISOLATION: **PASS**
+
+GLOBAL ROLE BYPASS: **REMOVED for the seven 2A contracts**
+
+READY FOR SAAS-9D-2A PRODUCTION PREFLIGHT: **GO**
+
+READY FOR SAAS-9D-2B: **NO-GO until review**
+
+READY FOR PRODUCTION WRITE: **NO**
+
 SECOND TENANT: **NO-GO**
 
 SEC-004: **OPEN**
 
-## 22. SAAS-9D-1 local execution update
+## 22. SAAS-9D-2 — EVENTS RPC HARDENING FINAL PLAN
+
+Planning baseline: `d8fe265ccd00b607b3dc99cc53f5c2320c40cc08` on `main`, after the reproducible SAAS-9D-1 checkpoint and production PASS. This section is planning-only. It does not create a migration, change an application caller, authorize a production write or permit a second active tenant.
+
+### 22.1 Exact function inventory and severity
+
+The local catalog reconstructed from the production migration history still contains 73 `SECURITY DEFINER` functions. The 9D-2 boundary contains 20 of them: 19 event-named/event-target functions plus the shared `complete_confirmation_email` claim finalizer. All 20 are owned by `postgres` and bypass table RLS by design.
+
+`SP1` means `pg_catalog, public, pg_temp`; `SP2` means `public, pg_temp`. Grants below are the effective client/service grants in the current catalog, excluding owner `postgres`.
+
+| Function and exact identity arguments | Caller | Path / grants | Current authorization | Resource / tenant derivation | Operation | Current cross-tenant risk | Severity | Planned phase |
+|---|---|---|---|---|---|---|---|---|
+| `admin_create_event(text,text,date,time without time zone,time without time zone,text,numeric,integer,uuid[])` | no TypeScript caller; legacy | SP2 / service | global `profiles.role` | lane array is insufficient when empty | staff write, RLS bypass | service can create globally | CRITICAL | 2B retire EXECUTE |
+| `admin_create_event_v2(text,text,date,time without time zone,time without time zone,text,numeric,integer,uuid[])` | `app/admin/events/page.tsx` | SP1 / authenticated | global admin/pracownik | single-active tenant bridge; cross-check every lane | staff write | global create and default-owned children | CRITICAL | 2B |
+| `admin_list_event_registrations_v1(uuid,text,text,integer,integer)` | `app/admin/events/page.tsx` | SP1 / authenticated | global admin/pracownik/instruktor | event -> tenant | staff/instructor PII read | foreign-tenant participant PII | HIGH | 2A |
+| `admin_list_events_v1(text,text,text,integer,integer)` | `app/admin/events/page.tsx` | SP1 / authenticated | global admin/pracownik/instruktor | no resource; single-active tenant bridge | staff/instructor read | aggregates all tenants | HIGH | 2B |
+| `admin_set_event_active(uuid,boolean)` | no TypeScript caller; legacy | SP2 / service | global `profiles.role` | event -> tenant | staff write, RLS bypass | service/global mutation | CRITICAL | 2B retire EXECUTE |
+| `admin_set_event_active_v2(uuid,boolean)` | `app/admin/events/page.tsx` | SP1 / authenticated | global admin/pracownik | event -> tenant | staff write | foreign event mutation | CRITICAL | 2B |
+| `admin_update_event(uuid,text,text,date,time without time zone,time without time zone,text,numeric,integer,uuid[])` | no TypeScript caller; legacy | SP2 / service | global `profiles.role` | event -> tenant, then lanes | staff write, RLS bypass | service/global mutation | CRITICAL | 2B retire EXECUTE |
+| `admin_update_event_v2(uuid,text,text,date,time without time zone,time without time zone,text,numeric,integer,uuid[])` | `app/admin/events/page.tsx` | SP1 / authenticated | global admin/pracownik | event -> tenant; every lane must match | staff write | foreign event/lane binding | CRITICAL | 2B |
+| `approve_event_registration(uuid)` | `app/admin/events/page.tsx` | SP2 / authenticated | global admin/pracownik | registration -> event -> tenant | staff write/audit | foreign participant mutation | CRITICAL | 2A |
+| `cancel_event_registration(uuid)` | register/my/admin flows through `app/api/cancel-event-registration/route.ts` | SP2 / authenticated + service | owner for user/instruktor, otherwise global admin/pracownik | registration -> event -> tenant | owner or staff write/audit | staff global bypass; unnecessary service grant | CRITICAL | 2A |
+| `complete_event_reserve_promotion(uuid,uuid,boolean,text)` | `lib/server/event-reserve-promotion.ts` | SP2 / service | claim pair only | registration -> event -> tenant; claim must match | service claim completion | completion is not tenant-bound | CRITICAL | 2C |
+| `confirm_event_reserve_promotion(text)` | `app/api/confirm-event-reserve-promotion/route.ts` | SP2 / authenticated | `auth.uid()` owns token registration | token -> registration -> event -> tenant | owner promotion write | no membership/tenant equality check | CRITICAL | 2A |
+| `get_my_event_registrations_v1(text,text,integer,integer)` | `app/my-events/page.tsx` | SP1 / authenticated | `auth.uid()` row ownership | actor rows plus single-active tenant bridge until 9E | owner read | future account can aggregate tenants | MEDIUM | 2A |
+| `get_public_event_availability_v1()` | no current page caller; retained public contract | SP1 / anon + authenticated | public | single-active public tenant | PII-free public read | aggregates all tenants | HIGH | 2B |
+| `get_public_event_list_v2(text,text,integer,integer)` | `app/events/page.tsx` | SP1 / anon + authenticated | public | single-active public tenant | PII-free public read | mixes event counts across tenants | HIGH | 2B |
+| `mark_event_registration_paid(uuid)` | `app/admin/events/page.tsx` | SP1 / authenticated | global admin/pracownik | registration -> event -> tenant | staff write/audit | foreign payment mutation | CRITICAL | 2A |
+| `prepare_confirmation_email(text,uuid)` | event registration confirmation API plus reservation mail APIs | SP2 / authenticated | owner for event branch; mixed legacy staff branch for reservation cancellation | typed record -> registration/event or reservation -> tenant | owner/staff email claim | delivery tenant is defaulted, not proven | CRITICAL | 2C shared boundary |
+| `complete_confirmation_email(uuid,boolean,text,text)` | three mail APIs through the service completion client | SP2 / service | claim ID only | claim -> delivery -> typed record tenant | service claim completion | claim target/tenant equality not enforced | CRITICAL | 2C shared boundary |
+| `prepare_event_reserve_promotions(uuid)` | `lib/server/event-reserve-promotion.ts` from cancellation and manual promotion APIs | SP2 / service | trusted server only; route manual path uses global profile role | event -> tenant, registrations must match | service claim/token creation | arbitrary tenant event accepted by service | CRITICAL | 2C |
+| `register_for_event(uuid,boolean)` | `app/api/register-event/route.ts` | SP2 / authenticated | `auth.uid()`, profile completeness | event -> tenant; actor active membership | owner create | inserted tenant currently comes from CSK default | CRITICAL | 2A |
+
+No separate event-rejection or event-lane RPC exists. Rejection uses the existing cancellation transition, and event-lane writes are embedded in event create/update. Event reads performed through table RLS by the calendar `.ics` route are outside this `SECURITY DEFINER` inventory and remain covered by SAAS-9C.
+
+### 22.2 Tenant derivation and write invariant
+
+For every target-bound call, the function must lock or read the target, derive its tenant, and authorize against that derived tenant before reading PII, mutating state or writing audit:
+
+- `event_id` -> `events.tenant_id`;
+- `registration_id` -> `event_registrations.tenant_id`, with equality to the referenced `events.tenant_id`;
+- promotion token -> registration -> event, with token owner equal to `auth.uid()`;
+- promotion claim -> registration -> event, with claim ID and tenant bound to that same registration;
+- delivery claim -> `email_deliveries.tenant_id` -> typed record, with record tenant, recipient and claim all equal;
+- event lane -> both composite FKs must prove `event_lanes.tenant_id = events.tenant_id = shooting_lanes.tenant_id`.
+
+Caller-supplied tenant is never the only authority. No active 9D-2 signature currently accepts tenant. Target-bound signatures can therefore remain stable.
+
+`admin_create_event_v2`, `admin_list_events_v1`, `get_public_event_availability_v1` and `get_public_event_list_v2` lack an existing resource. Before 9E they resolve exactly one active tenant with `active_single_tenant_id_v1()`. They fail closed if that invariant is not exact. Admin create/list additionally require an active membership in that tenant; public reads do not require membership and return only that active tenant's public events. This is a CSK compatibility bridge, not a multi-tenant routing design.
+
+Every new insert must set tenant explicitly:
+
+- `events.tenant_id` from the resolved single-active tenant during the bridge;
+- `event_lanes.tenant_id` from the already-authorized event tenant;
+- `event_registrations.tenant_id` from the locked event;
+- `email_deliveries.tenant_id` from the typed source record;
+- event-related `audit_logs.tenant_id` from the target event/registration.
+
+Any null/missing target, tenant mismatch, mixed-tenant lane array or orphan relationship fails before partial writes and before audit.
+
+### 22.3 Owner event-registration operations
+
+`register_for_event`, `cancel_event_registration`, `confirm_event_reserve_promotion` and `get_my_event_registrations_v1` retain their existing business statuses and response contracts.
+
+- Registration requires `auth.uid()`, an active `user` or `instructor`/staff membership in the event tenant as permitted by the current single-tenant product, a complete owner profile, and an active future event. The insert uses the event tenant explicitly.
+- Self-cancellation requires the registration owner, active membership in its tenant and the existing Europe/Warsaw 72-hour rule. Exactly 72 hours remains allowed; less than 72 hours remains denied.
+- An instructor can cancel only their own registration. This does not create instructor-to-event assignment and does not expand SEC-008.
+- Promotion confirmation requires the token registration owner, active membership in the event tenant, unexpired token and capacity under the locked event.
+- My-events remains owner-only and is filtered to the sole active tenant until 9E supplies selected tenant context. A caller cannot pass a user ID or tenant ID.
+
+Required proof: User A own Tenant A operation ALLOW; User A foreign user in A DENY; User A Tenant B IDOR DENY; missing/pending/suspended membership DENY; no partial registration/audit/email row.
+
+### 22.4 Staff and instructor operations
+
+For create/update/activate/approve/payment/staff cancellation, global `profiles.role` is replaced by an active tenant membership role:
+
+- `admin` and `employee` preserve current management permissions;
+- `instructor` remains read-only for the currently exposed event and participant lists, scoped to the event tenant/single active tenant;
+- `instructor` does not gain approval, payment, event management or foreign cancellation;
+- no membership, pending membership, suspended membership and global `profiles.role=admin` without membership all fail closed.
+
+Participant-list authorization derives tenant from `p_event_id` before returning PII. Event update and activation lock the event first. Update cross-checks every requested lane tenant before any conflict query or relationship replacement. Create resolves the compatibility tenant first and rejects every lane outside it. Empty-lane creation is allowed only inside that resolved tenant.
+
+### 22.5 Event management, lanes and audit
+
+Existing validation, operating hours, hierarchy conflict locks, reservation conflicts, lane-block conflicts and event conflicts remain unchanged. The hardening adds tenant predicates to each conflict read and writes event/event-lane tenant explicitly. It does not alter capacity, dates, prices, active semantics or UI responses.
+
+Changed staff actions continue to create exactly one tenant-bound audit with DB actor/time. `no_change`, invalid transitions, authorization denial and not-found paths create no audit. Audit details must not contain promotion tokens, email claims or participant contact fields.
+
+The three legacy service-only event management signatures have no current TypeScript caller. 9D-2B freezes a zero-caller test and revokes `service_role` EXECUTE, leaving owner-only access. It does not drop the functions in the same migration, allowing a forward rollback without reconstructing definitions.
+
+### 22.6 Waitlist, promotion and confirmation claims
+
+The existing order and state machine remain authoritative:
+
+- occupied statuses are `registered` and `approved`;
+- `reserve` does not occupy capacity;
+- reserve ordering remains `created_at, id`;
+- event row lock precedes participant counting and promotion/confirmation;
+- registration row locks, unique active registration constraint, promotion claim ID/expiry and email delivery claim ID/expiry remain intact;
+- repeated completion remains idempotent and cannot create a second state transition or audit.
+
+The service-only prepare/complete functions retain exact service grants because they are server delivery state machines. They must derive tenant from the event/registration/claim and reject mismatched claims or typed targets. They may not accept a browser-supplied tenant.
+
+The manual `/api/send-event-reserve-promotion` path must replace its global profile-role check with an authenticated, event-target membership check before invoking the service helper. The owner-cancellation path may invoke the helper only with the `event_id` returned by the successfully hardened cancellation RPC; it must not accept a second event ID from the request. The service helper continues to send only after a successful claim and completes only that exact registration/claim pair.
+
+`prepare_confirmation_email` must derive `email_deliveries.tenant_id` for each supported message type. `complete_confirmation_email` must verify that the delivery tenant still equals its typed reservation/event-registration target before completion. This shared change must run all reservation email regressions from SEC-006/SEC-015 as well as event confirmation tests.
+
+### 22.7 Public availability and public list
+
+`get_public_event_list_v2` remains the active `/events` contract. `get_public_event_availability_v1` remains a compatible PII-free contract although no page currently calls it. Both:
+
+- resolve the exact single active tenant;
+- filter events and registration counts by that tenant;
+- preserve `registered + approved` occupied semantics, reserve count and `available_spots >= 0`;
+- remain executable by anon and authenticated only;
+- return no registration ID, user ID, contact data, tokens or notes;
+- fail closed if the single-active invariant is not exact.
+
+They must not require membership while public CSK routing remains unchanged. Before a second tenant, 9E must replace the implicit single-active selection with a trusted host/slug-selected contract.
+
+### 22.8 Owners, grants and search path
+
+All touched functions remain owned by `postgres`. Every redefined function uses explicit `SET search_path = pg_catalog, public, pg_temp` and schema-qualified objects/functions. No EXECUTE grant is widened.
+
+- public readers: `anon`, `authenticated` only;
+- owner/staff client RPCs: `authenticated` only;
+- service claim prepare/complete functions: `service_role` only;
+- legacy admin event v1 functions: owner-only after service grant revocation;
+- `PUBLIC`: no EXECUTE for every non-public contract and no implicit grant drift.
+
+Focused ACL tests must assert effective privileges, owner and search path for all 20 signatures and keep the total `SECURITY DEFINER` inventory explicitly accounted for.
+
+### 22.9 Application caller impact
+
+| File | Current RPC | Current arguments/context | Planned caller impact |
+|---|---|---|---|
+| `app/events/page.tsx` | `get_public_event_list_v2` | search/scope/page; no tenant | none in 9D-2; compatibility bridge filters CSK |
+| `app/my-events/page.tsx` | `get_my_event_registrations_v1` | scope/status/page; actor JWT | none; DB adds tenant membership/filter |
+| `app/api/register-event/route.ts` | `register_for_event` | event ID/reserve flag; actor JWT | none |
+| `app/api/cancel-event-registration/route.ts` | `cancel_event_registration` | registration ID; actor JWT | preserve call; promotion helper must use only returned event ID |
+| `app/api/confirm-event-reserve-promotion/route.ts` | `confirm_event_reserve_promotion` | token; actor JWT | none |
+| `app/admin/events/page.tsx` | admin lists/create/update/active/approve/payment | filters or target IDs; browser JWT | active signatures remain; no selected tenant UI yet |
+| `app/api/send-event-registration-confirmation/route.ts` | `prepare_confirmation_email`, `complete_confirmation_email` | owner registration claim + server completion | no public contract change; shared claim gets tenant proof |
+| `app/api/send-event-reserve-promotion/route.ts` | server helper -> promotion prepare/complete | event ID; currently global profile-role precheck | change server precheck to event-derived active membership |
+| `lib/server/event-reserve-promotion.ts` | `prepare_event_reserve_promotions`, `complete_event_reserve_promotion` | service client, event/registration/claim | preserve service-only DB signatures; accept only already-authorized event context from route/cancellation result |
+
+No 9D-2 caller sends tenant ID. Selected-tenant arguments, hostname routing and multi-tenant URL state belong to 9E. If implementation discovers that preserving a signature would require trusting client tenant input, that subphase stops rather than silently changing the caller contract.
+
+### 22.10 Concurrency and business-regression contract
+
+Tests must prove, under deterministic barriers and repeated stress where the current harness supports it:
+
+1. one active registration per user/event remains enforced;
+2. event row locking prevents overbooking and preserves reserve fallback;
+3. exactly one reserve claimant is promoted for one released place;
+4. confirmation cannot exceed capacity under simultaneous tokens;
+5. event create/update/activate retains canonical lane-family conflict locks and cannot bind mixed-tenant lanes;
+6. claim prepare/complete permits one active delivery/promotion claim, rejects a foreign claim and remains retry-safe;
+7. cancellation plus promotion retains the current controlled-warning contract when email delivery fails;
+8. changed staff actions write one audit, while no-change/retry writes none;
+9. Tenant A and Tenant B operations on independent resources do not deadlock or leak rows.
+
+### 22.11 Required cross-tenant and regression tests
+
+Focused SQL coverage for every phase includes:
+
+- anon public list/availability ALLOW and PII-free; anon mutations DENY;
+- User A own registration/register/cancel/confirm in Tenant A ALLOW;
+- User A foreign registration and Tenant B event/registration/token DENY;
+- Admin A and Employee A allowed Tenant A operations ALLOW, Tenant B DENY;
+- Instructor A retains current reads and own cancellation only; management DENY;
+- missing, pending and suspended membership DENY privileged/owner tenant operations;
+- global legacy admin/pracownik profile without active target membership DENY;
+- caller/resource mismatch and mixed A+B lane arrays DENY atomically;
+- event registration and event-lane composite tenant constraints remain valid;
+- public counts, sold-out, reserve, cancellation and promotion semantics remain exact;
+- no cross-tenant PII from admin participant list or my-events;
+- service prepare/complete claims cannot cross registration/delivery tenants;
+- exact grants/search paths/owners and zero legacy runtime callers;
+- no RLS recursion and no direct DML grant regression;
+- fixture cleanup equals zero.
+
+Regression gates: focused event SQL, event concurrency harness, full Supabase DB suite, full Node suite, TypeScript, production build, event Playwright/mobile flows, confirmation/reserve email tests, `npm audit --omit=dev`, changed-files ESLint and `git diff --check`.
+
+### 22.12 Temporary CSK defaults
+
+Current catalog evidence:
+
+| Table | Current `tenant_id` default | 9D-2 writer behavior | Removal |
+|---|---|---|---|
+| `events` | CSK UUID | create writes resolved tenant explicitly | retain until 9D-5/9E gate |
+| `event_lanes` | CSK UUID | create/update write event tenant explicitly | retain until 9D-5/9E gate |
+| `event_registrations` | CSK UUID | register/promotion paths write/retain event tenant explicitly | retain until 9D-5/9E gate |
+| `email_deliveries` | CSK UUID | prepare writes typed-record tenant explicitly | retain until all reservation/event mail writers pass production proof |
+| `audit_logs` | no default | every event audit writes derived tenant explicitly | no change |
+
+The explicit gate remains: **REMOVE DEFAULT BEFORE TENANT-AWARE WRITER CUTOVER AND BEFORE SECOND TENANT**. 9D-2 does not remove any default.
+
+### 22.13 Proposed migration split and rollout
+
+Do not deploy this domain as one migration.
+
+1. **9D-2A — event registration owner/staff contracts**: `register_for_event`, `cancel_event_registration`, `approve_event_registration`, `mark_event_registration_paid`, `confirm_event_reserve_promotion`, `get_my_event_registrations_v1`, `admin_list_event_registrations_v1`; explicit registration/audit tenant, membership enforcement, SP1 normalization, concurrency tests. Active signatures stay unchanged.
+2. **9D-2B — event management and public reads**: active admin create/update/activate/list and both public readers; single-active bridge for contextless calls, mixed-lane rejection, explicit event/event-lane tenant; revoke service EXECUTE from the three zero-caller legacy admin functions. Active signatures stay unchanged.
+3. **9D-2C — event delivery and promotion claims**: promotion prepare/complete, shared confirmation prepare/complete, tenant-bound claim state; replace the manual promotion route's global role precheck with event-target membership. Run reservation e-mail regressions because the confirmation functions are shared.
+
+Each migration is independently additive/`CREATE OR REPLACE` plus grant hardening, has a frozen preflight fingerprint, focused test, compatibility matrix, local PASS, production dry-run, explicit production approval and rollback-only postflight. Complete 2A production proof before 2B; complete 2B before 2C.
+
+Compatibility target for every subphase:
+
+- old app + old DB: current behavior;
+- old app + new DB: safe because active signatures and response codes remain, subject to correct membership backfill already proven in 9C-1;
+- new app + old DB: only 2C's route membership precheck dependency requires coordinated ordering; deploy its DB authorization contract before the route change;
+- new app + new DB: tenant-bounded CSK behavior, still not second-tenant ready.
+
+### 22.14 Rollback
+
+- Capture exact preflight function definitions, owners, grants, paths and normalized fingerprints for all 20 signatures.
+- Rollback is a reviewed forward migration restoring only the previous definitions/grants for the affected subphase; never edit applied migrations or use `migration repair`.
+- Keep active signatures stable so application rollback remains possible.
+- If 2C application deployment fails, roll back the route/helper to the prior version while the new DB functions remain backward-compatible; do not re-grant legacy browser access.
+- Never roll back by removing tenant columns, composite FKs, memberships or the single-active guard.
+- STOP on catalog drift, unexpected caller, membership/backfill mismatch, cross-tenant allow, grant widening, capacity/waitlist race regression, audit drift, public PII, nonzero fixture or additional pending migration.
+
+### 22.15 SEC-004 impact and residual work
+
+9D-2 removes global-role authorization and unscoped event/event-registration access from active event RPCs, filters public/admin reads to CSK, explicitly binds event children/audits/deliveries, and constrains service claims to exact tenant-owned targets.
+
+SEC-004 remains OPEN because:
+
+- 9D-3 still must harden lane/block/configuration definers;
+- 9D-4 still must harden reports, profile/account and remaining global authorization helpers;
+- 9D-5 must retire compatibility grants/default dependencies after all writers are proven;
+- 9E must introduce trusted tenant selection/routing and replace single-active wrappers;
+- 9F must cut over reports/events/calendar/check-in to selected tenant context;
+- 9G must prove application-level cross-tenant IDOR and concurrency;
+- 9H alone may authorize SEC-004 closure and second-tenant readiness.
+
+### 22.16 Blocking decisions and GO / NO-GO
+
+No unresolved architecture decision blocks **local 9D-2A**: all its tenant contexts derive from event/registration/token resources, membership role mapping is already approved, and the existing concurrency semantics are explicit.
+
+9D-2B may proceed locally with the already established single-active-CSK compatibility bridge. It must not invent selected-tenant routing. 9D-2C may proceed only after its local preflight freezes the exact server callers and proves the manual promotion endpoint checks membership in the derived event tenant before service execution; this is an implementation gate, not a business decision.
+
+Production remains separately gated per subphase. No 9D-2 work enables Tenant B or closes SEC-004.
+
+SAAS-9D-2 TECHNICAL PLAN: **READY**
+
+READY FOR SAAS-9D-2 LOCAL IMPLEMENTATION: **GO**
+
+READY FOR PRODUCTION WRITE: **NO**
+
+SECOND TENANT: **NO-GO**
+
+SEC-004: **OPEN**
+
+## 23. SAAS-9D-1 closure record
 
 The approved first phase was implemented locally in `20260911140000_harden_reservation_checkin_rpcs.sql`. It preserves all public function signatures and the 73-function `SECURITY DEFINER` count while separating 12 reviewed business implementations into non-client `SECURITY INVOKER` cores behind tenant-authorizing wrappers.
 
@@ -466,10 +754,12 @@ Local verification outcome:
 
 The detailed implementation evidence is recorded in `SAAS_9D_1_RESERVATION_CHECKIN_RPC_HARDENING_REPORT.md`.
 
-SAAS-9D-1 LOCAL: **PASS**
+SAAS-9D-1: **CLOSED / PROD PASS**
 
-READY FOR SAAS-9D-1 PRODUCTION PREFLIGHT: **GO**
+REPOSITORY REPRODUCIBLE: **YES**
 
-READY FOR SAAS-9D-2: **NO-GO until review**
+GLOBAL ROLE BYPASS — RESERVATION/CHECK-IN: **REMOVED**
+
+READY FOR SAAS-9D-2 PLANNING: **GO; section 22 is authoritative**
 
 READY FOR PRODUCTION WRITE: **NO**

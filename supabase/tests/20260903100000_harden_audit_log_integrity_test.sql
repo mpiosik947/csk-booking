@@ -240,7 +240,7 @@ begin
               or not (
                 procedure.prosecdef
                 or (
-                  procedure.proname like '%__saas9d1_core'
+                  procedure.proname ~ '__saas9d(1|2a)_core$'
                   and not pg_catalog.has_function_privilege('public',procedure.oid,'EXECUTE')
                   and not pg_catalog.has_function_privilege('anon',procedure.oid,'EXECUTE')
                   and not pg_catalog.has_function_privilege('authenticated',procedure.oid,'EXECUTE')
@@ -255,7 +255,7 @@ begin
 
   perform pg_temp.record_result(17,'All current audit writers are trusted database functions',
     v_writer_count=17 and v_untrusted_writer_count=0,
-    'Oczekiwano 17 zaufanych writerów: SECURITY DEFINER albo nieklienckie SAAS-9D-1 cores, owner=postgres, auth.uid() i explicit search_path.');
+    'Oczekiwano 17 zaufanych writerów: SECURITY DEFINER albo nieklienckie SAAS-9D cores, owner=postgres, auth.uid() i explicit search_path.');
 
   perform pg_temp.record_result(18,'All fixture remains transaction-scoped',
     (select pg_catalog.count(*)=5 from public.profiles where user_id in (v_admin,v_employee,v_instructor,v_user,v_target))
