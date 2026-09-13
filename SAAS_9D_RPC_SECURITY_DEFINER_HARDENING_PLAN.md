@@ -649,6 +649,51 @@ SECOND TENANT: **NO-GO**
 
 SEC-004: **OPEN**
 
+## 28. SAAS-9D-2B-2 local implementation result
+
+SAAS-9D-2B-2 was implemented locally in the single migration
+`20260913150000_harden_public_event_readers.sql`. The approved wrapper/core
+design is now concrete:
+
+- `get_public_event_availability_v1()` and
+  `get_public_event_list_v2(text,text,integer,integer)` retain their exact
+  signatures, defaults, stable 13-field public DTO and anon/authenticated
+  grants;
+- each wrapper resolves only `active_single_tenant_id_v1()` and calls one
+  owner-only `SECURITY INVOKER` core;
+- both cores independently filter `events` and `event_registrations` by the
+  resolved tenant and join counts on both tenant and event ID;
+- zero or multiple active tenants return a safe empty public result, while
+  invalid list input still returns `invalid_input`;
+- no application caller, route, parser, writer, RLS policy, temporary CSK
+  default or unrelated RPC changed.
+
+The focused rollback-only SQL suite passed 40/40 checks across Tenant A and
+Tenant B, including one-active A, one-active B, zero-active, two-active,
+Event A plus Registration B, Event A plus Lane B, canonical count semantics,
+anon parity, exact DTO/PII allowlisting, pagination, filters and stable sort.
+The full database suite passed 892/892 checks after updating three historical
+test assertions that intentionally described the pre-2B-2 function inventory,
+global-reader boundary and wrapper fingerprints. All 734 Node tests,
+TypeScript, the production build, Events Playwright 8/8 and lane-family/admin
+Playwright 5/5 passed. Local fixture post-check was zero for tenants, events,
+registrations, lanes and memberships.
+
+Migration SHA-256:
+`9E2E1A8530CCFB1A17AC5926F22E885033D0957788B0A27776637A82B35293DD`.
+
+SAAS-9D-2B-2 LOCAL: **PASS**
+
+READY FOR SAAS-9D-2B-2 PRODUCTION PREFLIGHT: **GO**
+
+READY FOR PRODUCTION WRITE: **NO**
+
+READY FOR SAAS-9D-2C: **NO-GO until review**
+
+SECOND TENANT: **NO-GO**
+
+SEC-004: **OPEN**
+
 ## 24. SAAS-9D-2A local implementation result
 
 SAAS-9D-2A was implemented locally in `20260912100000_harden_event_registration_rpcs.sql` for exactly the seven approved event-registration contracts. The public signatures and response shapes remain unchanged. Each reviewed business implementation is retained as a non-client `SECURITY INVOKER` core behind a postgres-owned, SP1 `SECURITY DEFINER` wrapper that derives tenant ownership from the event, registration or promotion token target.
@@ -1003,6 +1048,259 @@ SAAS-9D-2B-1 LOCAL: **PASS**
 READY FOR SAAS-9D-2B-1 PRODUCTION PREFLIGHT: **GO**
 
 READY FOR SAAS-9D-2B-2: **NO-GO until review**
+
+READY FOR PRODUCTION WRITE: **NO**
+
+SECOND TENANT: **NO-GO**
+
+SEC-004: **OPEN**
+
+## 27. SAAS-9D-2B-2 — PUBLIC EVENT READERS FINAL PLAN
+
+This section is the implementation-ready technical plan only. It creates no migration, changes no application code and authorizes no database write. SAAS-9D-2B-1 is closed in production at checkpoint `6cd29ab` before this plan begins.
+
+### 27.1 Exact scope
+
+Only these public read contracts are in scope:
+
+1. `public.get_public_event_availability_v1()`
+2. `public.get_public_event_list_v2(text,text,integer,integer)`
+
+The local implementation should introduce an inaccessible `SECURITY INVOKER` core for each contract and recreate the exact public signature as a small tenant-resolving `SECURITY DEFINER` wrapper. No event writer, registration writer, admin reader, UI component, RLS policy, table ACL, compatibility default or tenant-routing mechanism is changed in 2B-2.
+
+### 27.2 Current function inventory
+
+| Function | Exact signature | Return contract | SECURITY DEFINER | Current tenant source | Current tenant filtering | Owner | Search path |
+|---|---|---|---|---|---|---|---|
+| availability | `public.get_public_event_availability_v1()` | 13-column table | yes, stable | none | none; all active events are eligible | `postgres` | `pg_catalog, public, pg_temp` |
+| list | `public.get_public_event_list_v2(text,text,integer,integer)` | JSONB contract v2 | yes, stable | none | none; filters only active/search/scope | `postgres` | `pg_catalog, public, pg_temp` |
+
+Current grants for both signatures are identical:
+
+- `PUBLIC`: no `EXECUTE`;
+- `anon`: `EXECUTE`;
+- `authenticated`: `EXECUTE`;
+- `service_role`: no `EXECUTE`.
+
+These grants must remain exact. No direct table grant or RLS policy is widened.
+
+### 27.3 Caller inventory and compatibility
+
+Runtime callers:
+
+- `app/events/page.tsx` calls `get_public_event_list_v2` with `p_search`, `p_scope='upcoming'`, `p_page` and `p_page_size=20`.
+- `lib/event-read-contracts.ts` parses the outer v2 JSONB envelope and pagination.
+- `lib/public-event-availability.ts` enforces the exact 13-key item DTO and capacity invariants.
+- There is no direct application/runtime caller of `get_public_event_availability_v1()` at current HEAD. It remains an externally callable public contract and an authoritative regression surface.
+
+Test and contract callers include:
+
+- `supabase/tests/20260905120000_add_public_event_availability_v1_test.sql`;
+- `supabase/tests/20260905190000_add_scalable_event_read_contracts_test.sql`;
+- `supabase/tests/20260911100000_tenant_aware_events_rls_test.sql`;
+- `supabase/tests/20260912100000_harden_event_registration_rpcs_test.sql`;
+- `supabase/tests/20260913100000_harden_event_management_rpcs_test.sql`;
+- `lib/public-event-availability.test.mjs`, `lib/event-read-contracts.test.mjs`, `app/events/events-ux.test.mjs` and `tests/e2e/events-responsive.spec.ts`.
+
+Both public signatures, parameter defaults, item keys, list envelope, pagination/filter behavior and status/capacity semantics remain unchanged. No `tenant_id` argument is added, so no UI change is required. Until 9E provides trusted routing, the active-single-tenant bridge is the compatibility mechanism.
+
+Compatibility matrix:
+
+| State | Result |
+|---|---|
+| old app + old DB | current behavior |
+| old app + new DB | safe; identical signatures and DTOs, tenant-bounded result |
+| new app + old DB | not applicable to this DB-only phase; current app requires no change |
+| current app + new DB | safe for exact-one-active CSK runtime |
+
+Deployment model after local and production preflight PASS: **DB FIRST / DB ONLY**.
+
+### 27.4 Current data paths and risk
+
+`get_public_event_availability_v1()` currently:
+
+- aggregates every non-null `event_registrations.event_id`;
+- counts `registered` and `approved` as occupied;
+- counts `reserve` separately;
+- joins counts to every active event by global `event_id`;
+- clamps `available_spots` to zero and derives `sold_out`.
+
+`get_public_event_list_v2(...)` currently:
+
+- builds the active/search/scope-filtered event set globally;
+- paginates before counting registrations;
+- counts `registered` and `approved` as occupied and `reserve` separately for page event IDs;
+- returns a bounded v2 JSONB envelope with maximum page size 50.
+
+Neither function currently reads `event_lanes` or `shooting_lanes`, so lane data is not part of the public DTO. The database already enforces `(tenant_id,event_id)` consistency for `event_registrations` and `(tenant_id,event_id)/(tenant_id,lane_id)` consistency for `event_lanes`; nevertheless, the new cores must include explicit tenant predicates rather than rely only on globally unique IDs or composite FKs.
+
+Current cross-tenant exposure risk is **HIGH once another tenant becomes active**: both definers bypass caller RLS and currently select globally. Current single-active CSK exploitability remains bounded by the second-active-tenant guard, but this is not sufficient for 9E/second-tenant readiness.
+
+### 27.5 Tenant resolution and bridge behavior
+
+The wrappers resolve tenant only through:
+
+```text
+public.active_single_tenant_id_v1()
+```
+
+The helper already returns an ID only when exactly one tenant has `status='active'`; otherwise it returns `NULL`. It is owner-only, `postgres`-owned, stable, SP1 and must not receive a public grant.
+
+Required public behavior:
+
+| Active tenants | Availability | List v2 |
+|---|---|---|
+| exactly one A | rows for A only | `ok=true`, items/total for A only |
+| exactly one B | rows for B only | `ok=true`, items/total for B only |
+| zero | empty result set | contract-compatible `ok=true`, `items=[]`, `pagination.total=0` |
+| more than one | empty result set | contract-compatible `ok=true`, `items=[]`, `pagination.total=0` |
+
+Invalid list inputs continue to return `{"ok":false,"code":"invalid_input"}` before any empty-result success is produced. No arbitrary `LIMIT 1`, oldest/newest tenant selection, CSK constant fallback, membership requirement or browser-supplied tenant ID is allowed.
+
+The production partial unique index normally prevents two active tenants. The `>1` path is still tested locally inside a rollback-only fixture that temporarily exercises the resolver invariant and restores the guard before rollback; it is never tested by weakening production.
+
+### 27.6 Proposed wrapper/core design
+
+Availability:
+
+- public wrapper retains signature `()` and exact table return columns;
+- wrapper resolves `v_tenant_id` and returns zero rows when it is null;
+- inaccessible core accepts one internal UUID tenant argument;
+- core filters `events.tenant_id = p_tenant_id`;
+- registration aggregation filters `event_registrations.tenant_id = p_tenant_id` and joins on the tenant-consistent event.
+
+List:
+
+- public wrapper retains `(text,text,integer,integer)` and all defaults;
+- wrapper resolves one active tenant and calls an inaccessible core with the tenant UUID plus the four existing arguments;
+- core preserves validation, search, scope, Warsaw-time comparison, stable ordering, page bounds and outer JSONB contract;
+- `filtered` includes `events.tenant_id = p_tenant_id`;
+- page registration counts include both `registration.tenant_id = p_tenant_id` and page event IDs;
+- valid requests with a null resolved tenant return the exact empty v2 envelope rather than leaking an internal error.
+
+Both cores must be `SECURITY INVOKER`, `postgres`-owned, SP1 and have no `EXECUTE` for `PUBLIC`, `anon`, `authenticated` or `service_role`. Both public wrappers remain stable `SECURITY DEFINER`, `postgres`-owned and SP1 with the existing anon/authenticated-only grants. The total public-schema `SECURITY DEFINER` count therefore remains unchanged.
+
+Direct conversion of the public functions to `SECURITY INVOKER` is not recommended in 2B-2: anon does not have the protected table access needed to count registrations, and granting it would expand the trust boundary. It can be reconsidered only with a separate PII-free view/read-model design.
+
+### 27.7 Public DTO and PII inventory
+
+The exact availability row and each list item remain:
+
+1. `event_id`
+2. `title`
+3. `description`
+4. `event_date`
+5. `start_time`
+6. `end_time`
+7. `location`
+8. `price`
+9. `max_participants`
+10. `registered_count`
+11. `reserve_count`
+12. `available_spots`
+13. `sold_out`
+
+The list envelope additionally contains only `ok`, `code`, `contract_version`, public filters, pagination and `items`.
+
+Forbidden output remains: registration IDs, user IDs, membership IDs/roles, profile data, names of participants, email, phone, address, permit/declaration data, payment/customer fields, registration tokens, promotion/confirmation/check-in tokens, admin notes, audit data and tenant membership internals. `event_id` is intentionally public because registration and event selection require it; `tenant_id` is not added to the DTO in this bridge phase.
+
+### 27.8 Join consistency and authoritative semantics
+
+The tenant predicate must appear independently on the event base and registration aggregate. Registration status semantics remain exact:
+
+- `registered`, `approved`: occupy capacity;
+- `reserve`: counted separately and does not occupy capacity;
+- `cancelled` and every other non-occupying state: excluded from both counts.
+
+`available_spots = greatest(max_participants - registered_count, 0)` and `sold_out = registered_count >= max_participants` remain unchanged.
+
+`event_lanes` and `shooting_lanes` remain outside both reader queries and DTOs. Tests must nevertheless create Event A with Lane A and a Tenant B lane/relation to prove that no lane relationship introduces a cross-tenant public row. An attempted Event A + Lane B relation must continue to fail under the existing composite tenant FK.
+
+### 27.9 Fingerprint baseline and migration guards
+
+Normalized production fingerprints use `CRLF / CR -> LF` before MD5:
+
+| Function | Production normalized full-definition MD5 |
+|---|---|
+| `public.get_public_event_availability_v1()` | `40adf74cb5adec5df3b4745fc7851433` |
+| `public.get_public_event_list_v2(text,text,integer,integer)` | `fe075d7057149b0a0bad0129419a3e99` |
+
+Implementation preconditions must fail closed unless:
+
+- both exact signatures exist once and match these fingerprints;
+- both are stable `SECURITY DEFINER`, owned by `postgres`, with SP1;
+- grants are exactly anon/authenticated `EXECUTE`, with none for `PUBLIC` or `service_role`;
+- `active_single_tenant_id_v1()` exists with its reviewed owner/path/ACL;
+- `events.tenant_id` and `event_registrations.tenant_id` are non-null;
+- validated composite tenant/event FKs and the single-active guard exist;
+- 2B-1 active/legacy event RPC fingerprints and ACLs have not drifted;
+- no unexpected pending migration or function overload exists.
+
+Postflight repeats the catalog, ACL, path, owner, signature, definer-count, core-isolation and public DTO checks. Any mismatch aborts the migration transaction.
+
+### 27.10 Cross-tenant and public test matrix
+
+Focused SQL tests use Tenant A and dormant Tenant B with synthetic events, lanes and registrations:
+
+1. one active Tenant A: anon and authenticated list return only A;
+2. one active Tenant A: availability returns only A;
+3. switch the exact active tenant to B: both contracts return only B;
+4. zero active tenants: availability is empty; valid list is a successful empty envelope;
+5. two active tenants in a local rollback-only guard fixture: both contracts fail closed as empty;
+6. Event A plus Lane B is rejected and cannot create a public row;
+7. Tenant B registrations do not affect Event A counts;
+8. A and B may use identical-looking titles/dates without count bleed;
+9. anon and authenticated receive identical public results;
+10. no-auth REST/RPC access remains allowed;
+11. `registered` and `approved` occupy capacity; `reserve` is separate; `cancelled` does not occupy;
+12. sold-out clamps at zero and never becomes negative;
+13. search, upcoming/all scope, Warsaw time, stable ordering, page 1/page 2, beyond-last page and max page size 50 remain exact;
+14. invalid page/scope/search remain `invalid_input`;
+15. all response keys match the PII-free allowlist and forbidden strings/values are absent;
+16. wrapper cores cannot be called by any client role;
+17. `PUBLIC`, `anon`, `authenticated`, `service_role` grants remain exact;
+18. 2A registration, cancellation and promotion update availability without cross-tenant effects;
+19. 2B-1 create/edit/activate/list regression remains PASS;
+20. overbooking remains prevented by the authoritative writer, not by the display reader.
+
+### 27.11 Regression and operational verification
+
+Required local verification after a separately approved implementation:
+
+- fresh local database reset;
+- focused 2B-2 SQL suite;
+- tenant-aware Events RLS and event-registration privacy suites;
+- 2A and 2B-1 focused regression suites;
+- full Supabase DB suite;
+- all Node tests;
+- TypeScript and production build;
+- focused `/events` Playwright tests for public list, search, pagination, empty/error/retry and mobile layouts;
+- anon/authenticated REST contract smoke;
+- `git diff --check` and zero synthetic fixture.
+
+Production preflight remains separate: exact migration SHA, LOCAL/REMOTE history, only-one-pending dry-run, frozen production fingerprints, tenant/data invariants, lock check and explicit deployment approval. Production postflight uses read-only catalog checks plus a rollback-only two-tenant fixture; it performs no persistent second-tenant activation.
+
+No new index is planned initially. The existing tenant/event integrity, `events_tenant_active_schedule_idx`, event registration indexes and bounded page query are retained. Local `EXPLAIN` must confirm no material regression; any proposed additional index is a scope change requiring review before implementation.
+
+### 27.12 Temporary defaults and application scope
+
+2B-2 is read-only and does not use, add or remove any of the seven temporary CSK `tenant_id` defaults. Default removal remains gated before tenant-aware writer cutover and before a second tenant. No route, UI, parser or generated client type change is expected because signatures and DTOs remain stable.
+
+### 27.13 Rollback
+
+Rollback is a reviewed forward migration that restores the two exact pre-2B-2 production function definitions, owners, SP1 paths and grants from the frozen baselines. It removes only the new inaccessible cores after restoring the public functions. It must not remove tenant columns, constraints, indexes, memberships, the single-active guard or any 2A/2B-1 work.
+
+Because the phase is DB-only and signature-compatible, an application rollback is not required. STOP conditions are fingerprint drift, unexpected caller/overload, public PII, tenant bleed, changed status/capacity semantics, widened ACL, changed `SECURITY DEFINER` inventory, nonzero fixture or any additional pending migration.
+
+### 27.14 SEC-004 impact and final gate
+
+2B-2 removes the remaining global public event-read path for the two named readers and makes them fail closed when the bridge cannot resolve exactly one tenant. It does not close SEC-004 because selected tenant routing, remaining RPC families, application context, operational cutover and full cross-tenant verification remain in 9D-2C through 9H.
+
+No unresolved business decision blocks local implementation. The bridge behavior, unchanged signatures/DTOs/grants, explicit tenant predicates and zero/one/many behavior are fully specified. Implementation still requires a separate explicit approval.
+
+SAAS-9D-2B-2 TECHNICAL PLAN: **READY**
+
+READY FOR SAAS-9D-2B-2 LOCAL IMPLEMENTATION: **GO**
 
 READY FOR PRODUCTION WRITE: **NO**
 

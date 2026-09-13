@@ -128,7 +128,7 @@ begin
   update public.tenants set status='dormant' where id=tenant_b;
   create unique index tenants_single_active_runtime_guard on public.tenants ((true)) where status='active';
 
-  perform pg_temp.ok(29,'public reader fingerprints remain frozen',md5(replace(replace(pg_get_functiondef('public.get_public_event_availability_v1()'::regprocedure),E'\r\n',E'\n'),E'\r',E'\n'))='40adf74cb5adec5df3b4745fc7851433' and md5(replace(replace(pg_get_functiondef('public.get_public_event_list_v2(text,text,integer,integer)'::regprocedure),E'\r\n',E'\n'),E'\r',E'\n'))='fe075d7057149b0a0bad0129419a3e99','2B-2 public reader changed');
+  perform pg_temp.ok(29,'public reader fingerprints match approved 2B-2 wrappers',md5(replace(replace(pg_get_functiondef('public.get_public_event_availability_v1()'::regprocedure),E'\r\n',E'\n'),E'\r',E'\n'))='665b9ac71f99b3de3421d1534b24f088' and md5(replace(replace(pg_get_functiondef('public.get_public_event_list_v2(text,text,integer,integer)'::regprocedure),E'\r\n',E'\n'),E'\r',E'\n'))='642b84c0d78066e2071a0f0df1ce97ff','2B-2 wrapper fingerprint changed');
   result:=pg_temp.as_actor_json('anon',null,format('select public.get_public_event_list_v2(%L,''upcoming'',1,50)',marker));
   perform pg_temp.ok(30,'public events remain available and PII-free',result->>'code'='ok' and result::text !~* 'customer|user_id|registration_id|token|admin_note|phone|email','public event contract regressed');
   perform pg_temp.ok(31,'temporary event defaults remain',(select count(*)=2 from information_schema.columns where table_schema='public' and table_name in('events','event_lanes') and column_name='tenant_id' and column_default='''c5c00000-0000-4000-8000-000000000001''::uuid'),'temporary defaults changed');

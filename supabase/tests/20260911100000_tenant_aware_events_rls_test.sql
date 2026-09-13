@@ -303,9 +303,11 @@ begin
     v_rpc->>'code'='ok'
     and v_rpc::text !~* 'customer|user_id|registration_id|token|admin_note|phone|email',
     'Public event RPC contract regressed or exposed participant data.');
-  perform pg_temp.ok(62,'public legacy definer remains an explicit SAAS-9D blocker',
-    (v_rpc#>>'{pagination,total}')::integer=2,
-    'Expected unscoped public definer behavior changed; reclassify the 9D boundary.');
+  perform pg_temp.ok(62,'public reader is tenant-scoped by SAAS-9D-2B-2',
+    (v_rpc#>>'{pagination,total}')::integer=1
+    and v_rpc->'items' @> pg_catalog.jsonb_build_array(pg_catalog.jsonb_build_object('event_id',v_event_a_active))
+    and not v_rpc->'items' @> pg_catalog.jsonb_build_array(pg_catalog.jsonb_build_object('event_id',v_event_b_active)),
+    'Public reader did not resolve the one active tenant exactly.');
 
   v_rpc := pg_temp.as_actor_json('authenticated',v_global_admin_no_membership,pg_catalog.format('select public.admin_list_events_v1(%L,''all'',''nearest'',1,50)',v_marker));
   perform pg_temp.ok(63,'global admin without active membership is denied by SAAS-9D-2B-1',
