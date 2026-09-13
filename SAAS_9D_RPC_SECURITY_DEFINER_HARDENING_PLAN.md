@@ -649,6 +649,489 @@ SECOND TENANT: **NO-GO**
 
 SEC-004: **OPEN**
 
+## 30. SAAS-9D-2C-1 local implementation result
+
+SAAS-9D-2C-1 was implemented locally after checkpoint
+`0b5188fdd9fbbd07b56c2ce2c0378ca0c82a4729`.
+
+Exact scope:
+
+- `prepare_confirmation_email(text,uuid)`: tenant/resource/membership body
+  hardening, authenticated-only SECURITY DEFINER retained and normalized to
+  SP1;
+- `complete_confirmation_email(uuid,boolean,text,text)`: tenant/resource/
+  recipient body hardening and service-only SECURITY INVOKER conversion;
+- `check_confirmation_email_rate_limit(uuid,text)`: exact fingerprint,
+  metadata, limits and service-only ACL preserved unchanged.
+
+The two reserve-promotion functions remain untouched in 2C-2. No application
+file changed.
+
+Local verification:
+
+- database reset: PASS;
+- focused SQL: 44/44 PASS;
+- real prepare/complete concurrency: PASS, with zero deadlocks, broken
+  invariants or duplicate effects;
+- 2A, 2B-1 and 2B-2 regressions: PASS;
+- full DB suite: 31 files / 936 tests PASS;
+- Node: 734/734 PASS;
+- TypeScript and build: PASS;
+- focused Events Playwright: 8/8 PASS;
+- fixture cleanup: every tracked category 0;
+- SECURITY DEFINER inventory: 73 -> 72 with zero unrelated drift;
+- compatibility defaults: 7/7 retained.
+
+Migration:
+
+`20260914100000_harden_shared_confirmation_email_rpcs.sql`
+
+SHA-256:
+
+`C7CCEAD3B0A5ACE67AFE05D87EE6966B885C5BC1111926F01ACD970D7A31E0F1`
+
+Detailed evidence is recorded in
+`SAAS_9D_2C1_SHARED_RPC_HARDENING_REPORT.md`.
+
+SAAS-9D-2C-1 LOCAL: **PASS**
+
+READY FOR SAAS-9D-2C-1 PRODUCTION PREFLIGHT: **GO**
+
+READY FOR SAAS-9D-2C-2: **NO-GO until review**
+
+READY FOR PRODUCTION WRITE: **NO**
+
+SECOND TENANT: **NO-GO**
+
+SEC-004: **OPEN**
+
+## 29. SAAS-9D-2C — REMAINING EVENT / SHARED RPC HARDENING FINAL PLAN
+
+This section is planning-only and is based on production after the completed
+SAAS-9D-2A, 2B-1 and 2B-2 deployments. The reproducible 2B-2 checkpoint is
+`0b5188fdd9fbbd07b56c2ce2c0378ca0c82a4729` on `main`, identical to
+`origin/main` when this plan was prepared. No migration, SQL write,
+application change or production deployment is authorized here.
+
+### 29.1 Exact 2C function inventory
+
+The exact 2C review boundary contains five existing functions. No function
+from 9D-3, 9D-4 or 9D-5 is moved into this phase.
+
+| Function | Current callers | Mode / owner / path | Current grants | Current authorization | Tenant/resource derivation | RLS bypass and cross-tenant risk | Severity |
+|---|---|---|---|---|---|---|---|
+| `check_confirmation_email_rate_limit(uuid,text)` | three mail API routes through a service client | DEFINER / postgres / `public, pg_temp` | service_role only | route verifies the user; function trusts supplied user UUID plus HMAC IP hash | global user/IP anti-abuse scope; no tenant-owned target | definer is required because service_role has no table ACL; no tenant data is read, but an arbitrary service call can affect another user's rate bucket | MEDIUM |
+| `prepare_confirmation_email(text,uuid)` | event-registration confirmation, reservation confirmation and reservation cancellation routes, using caller JWT | DEFINER / postgres / `public, pg_temp` | authenticated only | owner checks for confirmation paths; cancellation staff fallback uses global `profiles.role` | message type + record ID -> reservation or registration -> event -> tenant | bypasses RLS and currently inserts `email_deliveries` using the CSK default rather than a proved tenant; staff branch is globally authorized | CRITICAL |
+| `complete_confirmation_email(uuid,boolean,text,text)` | the same three routes through the service completion client | DEFINER / postgres / `public, pg_temp` | service_role only | opaque delivery claim ID | claim -> delivery -> typed record -> tenant | completion updates by claim only and does not re-prove delivery tenant, typed target tenant and recipient equality | HIGH |
+| `prepare_event_reserve_promotions(uuid)` | `lib/server/event-reserve-promotion.ts`, called after cancellation and by the manual promotion API | DEFINER / postgres / `public, pg_temp` | service_role only | service credential; manual route currently checks global profile role | event ID -> event tenant; reserve registrations must match it | counts and claims registrations by global event ID without explicit tenant predicates; manual route can authorize a global role with no membership | CRITICAL |
+| `complete_event_reserve_promotion(uuid,uuid,boolean,text)` | `lib/server/event-reserve-promotion.ts` after provider outcome | DEFINER / postgres / `public, pg_temp` | service_role only | registration ID + claim ID | registration -> event -> tenant; claim is stored on the registration | exact claim equality is checked, but event/registration tenant equality is not explicitly re-proved | CRITICAL |
+
+Production normalized fingerprints frozen for implementation preflight:
+
+| Signature | Normalized MD5 |
+|---|---|
+| `check_confirmation_email_rate_limit(uuid,text)` | `e693411c3fc7f24510313e60a1d8e2a5` |
+| `prepare_confirmation_email(text,uuid)` | `449dbd830a7ece7f0c5b8b046dc1ee2c` |
+| `complete_confirmation_email(uuid,boolean,text,text)` | `8ca5430a2d7e625d10ebc61617a03dd5` |
+| `prepare_event_reserve_promotions(uuid)` | `4e73ef1df59936a1a3f41a00e121f6e9` |
+| `complete_event_reserve_promotion(uuid,uuid,boolean,text)` | `dd5025876008d6eb9551497d84cef90e` |
+
+All five exist exactly once, are currently SECURITY DEFINER, owned by
+`postgres`, and have no PUBLIC or anon EXECUTE. `prepare_confirmation_email`
+is authenticated-only; the other four are service-only.
+
+### 29.2 Classification and target decision
+
+| Function | Classification | Target decision |
+|---|---|---|
+| `prepare_confirmation_email` | A. BODY HARDENING REQUIRED | retain one authenticated SECURITY DEFINER signature, normalize to SP1, derive tenant from the typed resource, require owner or active same-tenant admin/employee membership, write tenant explicitly |
+| `complete_confirmation_email` | A + C. BODY HARDENING AND DEFINER REMOVAL CANDIDATE | change to SECURITY INVOKER, SP1, service-only; service_role already has exact DML on `email_deliveries`; verify claim/delivery/typed-target/recipient tenant consistency before completion |
+| `prepare_event_reserve_promotions` | A + C + E. BODY HARDENING, DEFINER REMOVAL, APP DEPENDENCY | change to SECURITY INVOKER, SP1, service-only; derive and filter the event tenant; complete manual-route membership cutover in the same 2C-2 release |
+| `complete_event_reserve_promotion` | A + C. BODY HARDENING AND DEFINER REMOVAL CANDIDATE | change to SECURITY INVOKER, SP1, service-only; verify registration/event tenant consistency and exact current claim before completion |
+| `check_confirmation_email_rate_limit` | D. SAFE / NO BODY CHANGE | preserve fingerprint, DEFINER and service-only ACL in 2C; this is intentionally global anti-abuse state and service_role has no direct table ACL, so converting it would require an unjustified table grant; path normalization is deferred to the final 9D-5 inventory review |
+
+No ACL-only cleanup is required in 2C: current effective function grants are
+already the narrow target. No grant is widened. The expected public-schema
+SECURITY DEFINER count after both 2C slices is **70**, reduced from 73 by
+converting the three service-only claim functions above to invoker. The rate
+limit definer and authenticated prepare wrapper remain.
+
+### 29.3 Production data preflight
+
+The read-only production preflight found:
+
+- 11 `email_deliveries`, all `reservation_confirmation`;
+- zero unknown message types;
+- zero null delivery tenants;
+- zero reservation or event-registration target/tenant/recipient issues;
+- zero active or expired delivery claims;
+- zero active or expired promotion claims;
+- zero promotion registration/event tenant issues.
+
+No data migration or new tenant-claim column is required. `email_deliveries`
+already has `tenant_id`; promotion claims live on the tenant-owned
+`event_registrations` row. Implementation preflight must repeat these counts
+and stop on an unknown type, orphan or mismatch.
+
+### 29.4 Caller inventory
+
+| Caller | Functions | Auth context | Tenant context | Resource context | Application change required |
+|---|---|---|---|---|---|
+| `app/api/send-event-registration-confirmation/route.ts` | rate limit, prepare confirmation, complete confirmation | verified user JWT for reads/prepare; service client only for rate-limit/completion | registration -> event tenant | owner registration ID | no signature change; DB enforcement only |
+| `app/api/send-reservation-confirmation/route.ts` | rate limit, prepare confirmation, complete confirmation | verified owner JWT; service completion | reservation tenant | owner reservation ID | no signature change |
+| `app/api/send-reservation-cancellation/route.ts` | rate limit, prepare confirmation, complete confirmation | verified JWT; current route also reads legacy profile role; service completion | reservation tenant | owner or staff cancellation reservation ID | no signature change; DB membership becomes authoritative even if legacy UI precheck remains temporarily |
+| `app/api/cancel-event-registration/route.ts` | indirect promotion prepare/complete | cancellation RPC authenticates owner/staff; helper receives only the event ID returned by that successful RPC | hardened cancellation result -> event tenant | registration -> event | no request-contract change |
+| `app/api/send-event-reserve-promotion/route.ts` | indirect promotion prepare/complete | verified user JWT, but current authorization uses global `profiles.role` | currently absent before service call | browser event ID | **yes in 2C-2**: derive event tenant through authenticated DB context and require active admin/employee membership before service invocation |
+| `lib/server/event-reserve-promotion.ts` | promotion prepare/complete and service table reads | server-only service credential | derived inside hardened DB prepare; registration IDs returned by that claim | event ID plus exact prepared registration/claim pairs | retain server-only boundary and signatures; do not accept browser tenant ID |
+
+There is no SQL-to-SQL, cron or background caller for these five functions.
+Tests and security reports call them only as regression surfaces. Direct
+service helper invocation remains an infrastructure boundary; it is not by
+itself business authorization.
+
+### 29.5 Tenant derivation and authorization
+
+`prepare_confirmation_email` must use a message-type allowlist and derive the
+tenant as follows:
+
+- `reservation_confirmation` and `reservation_cancellation`: lock the
+  reservation and take `reservations.tenant_id`;
+- `event_registration_confirmation`: lock the registration, require its
+  non-null `event_id`, load the event, and prove
+  `registration.tenant_id = event.tenant_id`;
+- derive `recipient_user_id` only from that resource, never from request data;
+- insert `email_deliveries.tenant_id` explicitly and reject an existing
+  delivery whose tenant, record type, record ID or recipient differs.
+
+Owner confirmation requires `auth.uid() = resource.user_id` plus an active
+membership in the resource tenant. Cancellation email preparation permits the
+same owner or active tenant membership role `admin`/`employee`. Global
+`profiles.role`, pending membership, suspended membership, no membership,
+user/instructor membership for staff actions and cross-user/cross-tenant IDs
+all deny. Existing status eligibility remains unchanged.
+
+`prepare_event_reserve_promotions` locks the event, derives its tenant, counts
+only registrations with both matching `tenant_id` and `event_id`, and claims
+only reserve registrations in that same tenant. `complete_event_reserve_promotion`
+locks the supplied registration, loads its event, proves equal tenants and
+then requires the exact current claim ID. Neither accepts tenant ID.
+
+The manual promotion route must replace the global profile-role decision with:
+
+1. authenticated event lookup to derive its stored tenant;
+2. `has_tenant_role_v1(derived_tenant_id, ['admin','employee'])` under the
+   caller JWT;
+3. fail-closed not-found/forbidden behavior before creating a service client;
+4. invoke the service helper only with the already-checked event ID.
+
+The tenant UUID is not accepted from the browser. The event tenant is
+immutable through client paths, so the lookup plus membership check does not
+create a tenant-switch TOCTOU window.
+
+### 29.6 Service-role model
+
+The three completion/promotion functions remain callable only by
+`service_role`, but service possession is not treated as business authority:
+
+- mail routes authenticate the actor before creating a delivery claim;
+- completion can touch only the exact claim produced by authenticated
+  prepare and must re-prove the typed target tenant;
+- owner cancellation may promote only the event ID returned by the successful
+  hardened cancellation RPC;
+- manual promotion must pass the event-derived membership precheck;
+- provider recipient reads use only registration IDs returned by the
+  tenant-filtered prepare function;
+- no browser receives a service credential, claim tenant or arbitrary
+  recipient selector.
+
+Production ACL confirms service_role has the table privileges required for
+the three proposed invoker functions on `email_deliveries`, `events` and
+`event_registrations`. It has no table privilege on
+`confirmation_email_rate_limits`, which is why that one narrow definer is
+retained rather than widening table ACL.
+
+### 29.7 Public, token, owner, staff and server paths
+
+- **Public read:** none of the five functions is public; public Events readers
+  remain the completed 2B-2 contracts and receive no membership requirement.
+- **Public token action:** reserve-promotion confirmation is already hardened
+  in 2A and remains outside 2C. Token -> registration -> event tenant,
+  expiration, owner binding and single-use semantics must regress PASS.
+- **Owner action:** confirmation/cancellation delivery prepare is actor JWT +
+  owned resource + active membership + resource tenant.
+- **Staff action:** cancellation preparation and manual promotion require
+  active same-tenant admin/employee membership.
+- **Server action:** only rate limiting and exact prepared-claim completion or
+  promotion use service_role.
+
+No token alone authorizes a 2C mutation. Promotion token generation is bound
+to a tenant-filtered reserve registration. Tokens remain UUIDs, expire after
+24 hours, and confirmation remains single-use/idempotent under the completed
+2A contract. Full tokens, claims, recipient PII and provider errors remain
+absent from logs and public responses.
+
+### 29.8 ACL, owner and search path target
+
+| Function | Target mode | Owner | Target search path | PUBLIC | anon | authenticated | service_role |
+|---|---|---|---|---:|---:|---:|---:|
+| rate limit | DEFINER | postgres | retain current SP2 in 2C | no | no | no | EXECUTE |
+| prepare confirmation | DEFINER | postgres | SP1 | no | no | EXECUTE | no |
+| complete confirmation | INVOKER | postgres | SP1 | no | no | no | EXECUTE |
+| prepare promotions | INVOKER | postgres | SP1 | no | no | no | EXECUTE |
+| complete promotion | INVOKER | postgres | SP1 | no | no | no | EXECUTE |
+
+SP1 means `pg_catalog, public, pg_temp`. All touched identifiers are schema
+qualified. The migration must revoke from all four application roles before
+granting back only the exact target role. The unchanged rate-limit function
+is fingerprint-frozen in both preflight and postflight.
+
+### 29.9 Signature and response compatibility
+
+All five signatures, parameter defaults, return shapes and stable business
+codes remain unchanged. No tenant argument is added. Existing callers continue
+to pass record, event, registration and claim IDs in the same order.
+
+Compatibility by slice:
+
+| State | 2C-1 shared delivery | 2C-2 promotion |
+|---|---|---|
+| old app + old DB | current behavior | current behavior |
+| old app + new DB | safe for single-active CSK; DB enforcement is stricter and signatures unchanged | safe while second tenant remains blocked; manual route still has legacy precheck until app release |
+| new app + old DB | no app change in 2C-1 | membership precheck improves authorization but service RPC bodies remain globally scoped |
+| new app + new DB | tenant-bound | tenant-bound |
+
+Recommended rollout for 2C-2 is **DB first followed immediately by APP in one
+controlled low-traffic release window**, with the second-active-tenant guard
+unchanged. The phase is not complete until both sides pass production smoke.
+
+### 29.10 Concurrency and idempotency
+
+The implementation must preserve and test:
+
+1. two parallel delivery prepares for one typed record: exactly one `ready`,
+   the other `in_progress` or `already_sent`;
+2. completion with the exact current claim only; foreign and superseded claim
+   IDs deny;
+3. repeated successful completion returns no second mutation or send state;
+4. provider failure clears only its claim, stores a bounded technical code and
+   retains the existing three-attempt/24-hour bound;
+5. a delayed completion may succeed only while its claim remains the current
+   claim; a re-claimed record makes the old completion fail;
+6. two parallel promotion prepares serialize on the event and cannot claim or
+   email the same reserve registration twice;
+7. reserve ordering remains `created_at,id`, capacity uses only registered and
+   approved statuses, and reserve does not occupy capacity;
+8. cancellation and manual promotion races do not exceed capacity or create
+   duplicate active claims;
+9. success/failure promotion completion remains idempotent for the same exact
+   registration/claim pair;
+10. rate-limit user and HMAC-IP scopes retain their current atomic behavior.
+
+### 29.11 Cross-tenant test matrix
+
+Minimum focused tests for each applicable path:
+
+| Scenario | Expected |
+|---|---|
+| Tenant A resource + active authorized Tenant A caller | ALLOW |
+| Tenant B resource + Tenant A caller | DENY |
+| global `profiles.role=admin/pracownik` without membership | DENY |
+| pending membership | DENY |
+| suspended membership | DENY |
+| no membership | DENY |
+| instructor/user attempting staff action | DENY |
+| owner A on another user's resource | DENY |
+| browser-supplied tenant spoof | impossible by request contract / DENY |
+| delivery tenant differs from typed target tenant | DENY, no state change |
+| delivery recipient differs from target owner | DENY, no state change |
+| promotion registration tenant differs from event tenant | DENY |
+| claim from Tenant B paired with Tenant A registration/event | DENY |
+| claim/token replay after successful completion | controlled no-change |
+| service direct call without a valid current claim | DENY |
+
+Tests must also prove the legal owner, admin and employee paths, public Events
+2B-2 regression, event registration 2A regression, reservation 9D-1
+regression, SEC-006 HTML escaping, SEC-015 cancellation delivery, safe errors,
+PII minimization and zero fixture.
+
+### 29.12 Full SECURITY DEFINER inventory after 2B-2
+
+Production contains exactly 73 SECURITY DEFINER functions. Every signature is
+accounted for below; there is no UNKNOWN classification.
+
+**Already hardened or safe retained (29):**
+
+`admin_create_event_v2`, `admin_list_event_registrations_v1`,
+`admin_list_events_v1`, `admin_set_event_active_v2`, `admin_update_event_v2`,
+`approve_event_registration`, `cancel_event_registration`,
+`cancel_reservation`, `confirm_event_reserve_promotion`,
+`create_reservation_v2`, `get_check_in_reservation_v1`,
+`get_lane_booking_busy_ranges`, `get_lane_booking_busy_ranges_v2`,
+`get_lane_booking_busy_ranges_v3`, `get_my_event_registrations_v1`,
+`get_my_reservations_v2`, `get_public_check_in_status_v1`,
+`get_public_event_availability_v1`, `get_public_event_list_v2`,
+`get_reservation_customer_profiles_v1`, `mark_event_registration_paid`,
+`register_for_event`, `update_reservation_admin_note`,
+`update_reservation_attendance`, `update_reservation_payment`,
+`get_my_tenant_role_v1`, `has_tenant_role_v1`,
+`is_active_public_tenant_v1`, `is_tenant_member_v1`.
+
+**9D-2C (5):** the five exact signatures in section 29.1.
+
+**9D-3 lane/block/configuration (13):**
+
+`admin_create_lane_block`, `admin_create_lane_booking_family_v1`,
+`admin_get_lane_booking_configuration_v1`,
+`admin_get_lane_booking_configuration_v2`,
+`admin_set_lane_block_active`, `admin_set_lane_booking_configuration`,
+`admin_set_lane_booking_family_configuration_v2`, `admin_update_lane_block`,
+`lane_booking_family_business_snapshot_v2`,
+`normalize_lane_booking_family_payload_v2`,
+`validate_lane_booking_rule_capacity`,
+`validate_shooting_lane_capacity_change`,
+`validate_shooting_lane_hierarchy`.
+
+**9D-4 / 9E reports, profiles, lifecycle and authorization (19):**
+
+`admin_get_reservation_report_export_v1`,
+`admin_get_reservation_report_v1`, `admin_get_reservation_report_v2`,
+`admin_list_users_v1`, `admin_set_user_note_v1`, `admin_set_user_role_v1`,
+`anonymize_my_account_v1`, `export_my_data_v1`, `get_my_role`,
+`get_public_booking_configuration_v1`, `handle_new_user`, `is_admin`,
+`is_admin_or_employee`, `is_admin_or_staff`,
+`prevent_non_admin_profile_privilege_changes`, `update_my_profile_v1`,
+`update_profile_contact_details`, `update_profile_identity`,
+`update_profile_verification`.
+
+**9D-5 / 9E retirement or bridge gate (7):**
+
+`active_single_tenant_id_v1`, the owner-only legacy
+`admin_create_event`, `admin_set_event_active`, `admin_update_event` and
+`create_reservation`, plus `sync_csk_membership_role_to_profile` and
+`sync_profile_role_to_csk_membership`.
+
+After converting three 2C service functions to invoker, the projected count
+is 70. Later counts may change only in their assigned reviewed phase.
+
+### 29.13 Temporary CSK defaults
+
+All 7/7 compatibility defaults remain and are not removed in 2C planning.
+
+| Table | Current active writers | Tenant-aware now? | Still depends on default? | Target removal gate |
+|---|---|---:|---:|---|
+| `shooting_lanes` | lane-family/configuration writers | no; 9D-3 pending | yes | 9D-5 after 9D-3 production proof |
+| `reservations` | hardened `create_reservation_v2` | yes, explicit tenant | no active V2 dependency | 9D-5 after legacy retirement verification |
+| `lane_blocks` | lane-block writers | no; 9D-3 pending | yes | 9D-5 after 9D-3 production proof |
+| `events` | hardened event V2 create/update | yes, explicit tenant | no active V2 dependency | 9D-5 after 2C and 9D-3/4 gates |
+| `event_lanes` | hardened event V2 create/update | yes, explicit event tenant | no active V2 dependency | 9D-5 |
+| `event_registrations` | hardened register/promotion contracts | registration owner writers are explicit; promotion updates existing rows | no new-row 2C dependency | 9D-5 after event domain proof |
+| `email_deliveries` | `prepare_confirmation_email` | **not yet** | **yes** | 9D-5 only after 2C-1 production proof |
+
+The mandatory gate remains: **REMOVE DEFAULT BEFORE TENANT-AWARE WRITER
+CUTOVER AND BEFORE SECOND TENANT**.
+
+### 29.14 Proposed split, implementation order and tests
+
+#### SAAS-9D-2C-1 — shared confirmation delivery
+
+1. freeze all three shared function definitions/ACL plus delivery constraints;
+2. fail preflight on any unknown/orphan/mismatched delivery;
+3. harden `prepare_confirmation_email` with resource tenant, membership and
+   explicit delivery tenant;
+4. convert/harden `complete_confirmation_email` as service-only invoker;
+5. preserve `check_confirmation_email_rate_limit` exactly;
+6. add focused owner/staff/cross-tenant/claim/concurrency tests;
+7. run every reservation/event email, SEC-006, SEC-009 and SEC-015 regression;
+8. run full DB, Node, TypeScript, build, focused Playwright and diff checks.
+
+Expected migration: one new 2C-1 SQL migration and one focused SQL test. No
+application change is expected.
+
+#### SAAS-9D-2C-2 — reserve promotion claims
+
+1. freeze both promotion functions, event/registration constraints and the
+   manual/cancellation caller contracts;
+2. harden both functions with explicit tenant consistency and convert them to
+   service-only invokers;
+3. replace the manual route's global role lookup with event-derived active
+   admin/employee membership;
+4. keep the cancellation path bound to the event ID returned by the hardened
+   cancellation RPC;
+5. add deterministic parallel prepare/complete/cancellation tests and IDOR
+   tests;
+6. run all 2A/2B/event availability/public DTO, email, reservation and
+   operational Playwright regressions;
+7. deploy DB first and APP immediately afterward under a separate approved
+   coordinated rollout, then run postflight.
+
+Expected files: one 2C-2 SQL migration, focused SQL test,
+`app/api/send-event-reserve-promotion/route.ts` and its focused Node tests.
+`lib/server/event-reserve-promotion.ts` should change only if tests prove an
+additional server-side tenant assertion is required; its public helper
+signature should otherwise remain stable.
+
+### 29.15 Rollback
+
+- Every migration freezes normalized production fingerprints, exact overload
+  count, owner, search path and grants and aborts on drift.
+- Database rollback is a reviewed forward migration restoring only the
+  previous bodies/security modes/paths/grants for that slice; never use
+  migration repair or edit an applied migration.
+- 2C-1 signatures are backward-compatible, so application rollback is not
+  required.
+- After 2C-2 DB-first deployment, the old app remains functional while the
+  single-active guard is enforced. If the app deployment fails, keep Tenant B
+  blocked and either retry the app or deploy the reviewed forward DB rollback.
+- The new manual-route precheck is compatible with the old DB; rolling the app
+  back after the new DB does not break signatures but reopens the route-level
+  authorization gap until restored.
+- Never roll back tenant columns, memberships, composite FKs, the active
+  tenant guard or completed 9D-1/2A/2B work.
+
+STOP conditions are fingerprint/ACL drift, unknown delivery type, orphan or
+tenant mismatch, active claim that cannot be reconciled, global-role-only
+authorization, widened grant, cross-tenant allow, duplicate send/promotion,
+capacity regression, PII/secret leak, nonzero fixture or any extra pending
+migration.
+
+### 29.16 SEC-004 impact and residual work
+
+2C closes the remaining event-domain service claim boundaries: typed email
+delivery tenant ownership, exact delivery completion, tenant-filtered reserve
+claim creation/completion and manual promotion authorization. It completes
+the planned 9D-2 event/shared scope.
+
+It does not close SEC-004. Remaining work stays assigned to:
+
+- 9D-3: lane, block and lane-configuration definers;
+- 9D-4: reports, users/profiles, account lifecycle and global role helpers;
+- 9D-5: legacy function/default/CSK bridge retirement and final definer audit;
+- 9E: trusted selected-tenant application context and routing;
+- 9F: reports/events/calendar/check-in selected-tenant cutover;
+- 9G: full application cross-tenant IDOR and concurrency suite;
+- 9H: SEC-004 closure and second-tenant readiness decision.
+
+### 29.17 Blocking decisions and final gate
+
+No unresolved business decision blocks local 2C-1. Its tenant derivation,
+owner/staff roles, delivery types and compatibility contract are explicit.
+
+Local 2C-2 is also implementation-ready provided its approved scope includes
+the narrowly required manual-route authorization change described above. No
+new RPC, tenant selector or browser tenant argument is needed. Production
+deployment remains separately gated per slice and 2C-2 requires coordinated
+DB/application approval.
+
+SAAS-9D-2C TECHNICAL PLAN: **READY**
+
+READY FOR SAAS-9D-2C LOCAL IMPLEMENTATION: **GO**
+
+READY FOR PRODUCTION WRITE: **NO**
+
+SECOND TENANT: **NO-GO**
+
+SEC-004: **OPEN**
+
 ## 28. SAAS-9D-2B-2 local implementation result
 
 SAAS-9D-2B-2 was implemented locally in the single migration

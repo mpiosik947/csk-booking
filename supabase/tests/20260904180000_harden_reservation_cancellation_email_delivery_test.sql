@@ -167,12 +167,12 @@ begin
     and (select count(*)=1 from pg_catalog.pg_proc p join pg_catalog.pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname='prepare_confirmation_email'),
     'Exactly one expected signature must exist.');
 
-  perform pg_temp.record_result(3,'Prepare RPC security properties unchanged',
+  perform pg_temp.record_result(3,'Prepare RPC retains protected metadata with hardened search path',
     exists(select 1 from pg_catalog.pg_proc p join pg_catalog.pg_roles r on r.oid=p.proowner
       where p.oid='public.prepare_confirmation_email(text,uuid)'::regprocedure
         and p.prosecdef and p.provolatile='v' and p.prorettype='jsonb'::regtype
-        and p.proconfig=array['search_path=public, pg_temp']::text[] and r.rolname='postgres'),
-    'SECURITY DEFINER, owner, volatility, return type and search_path remain unchanged.');
+        and p.proconfig=array['search_path=pg_catalog, public, pg_temp']::text[] and r.rolname='postgres'),
+    'SECURITY DEFINER, owner, volatility, return type and hardened search_path must remain exact.');
 
   perform pg_temp.record_result(4,'Prepare RPC remains authenticated-only',
     pg_catalog.has_function_privilege('authenticated','public.prepare_confirmation_email(text,uuid)','EXECUTE')
