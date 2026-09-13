@@ -289,14 +289,14 @@ begin
       where not exists(select 1 from pg_catalog.pg_proc procedure join pg_catalog.pg_namespace namespace on namespace.oid=procedure.pronamespace where namespace.nspname='public' and procedure.proname=expected.name and procedure.prosecdef)
     ),
     'Critical event definer inventory differs.');
-  perform pg_temp.ok(60,'event RPCs deferred to SAAS-9D-2B/2C do not yet consume tenant membership helpers',
+  perform pg_temp.ok(60,'only public readers and 2C claims remain deferred after SAAS-9D-2B-1',
     not exists(
       select 1 from pg_catalog.pg_proc procedure join pg_catalog.pg_namespace namespace on namespace.oid=procedure.pronamespace
       where namespace.nspname='public'
-        and procedure.proname in('get_public_event_list_v2','get_public_event_availability_v1','admin_list_events_v1','prepare_event_reserve_promotions','complete_event_reserve_promotion','admin_create_event_v2','admin_update_event_v2','admin_set_event_active_v2')
+        and procedure.proname in('get_public_event_list_v2','get_public_event_availability_v1','prepare_event_reserve_promotions','complete_event_reserve_promotion')
         and procedure.prosrc ~ '\m(is_tenant_member_v1|has_tenant_role_v1|get_my_tenant_role_v1)\M'
-    ),
-    'A deferred event RPC boundary unexpectedly changed.');
+    ) and (select pg_catalog.count(*)=4 from pg_catalog.pg_proc procedure join pg_catalog.pg_namespace namespace on namespace.oid=procedure.pronamespace where namespace.nspname='public' and procedure.proname in('admin_list_events_v1','admin_create_event_v2','admin_update_event_v2','admin_set_event_active_v2') and procedure.prosrc ~ '\m(get_my_tenant_role_v1)\M'),
+    'Deferred or hardened event RPC boundaries differ.');
 
   v_rpc := pg_temp.as_actor_json('anon',null,pg_catalog.format('select public.get_public_event_list_v2(%L,''upcoming'',1,50)',v_marker));
   perform pg_temp.ok(61,'public event list RPC remains executable and PII-free',
@@ -308,9 +308,9 @@ begin
     'Expected unscoped public definer behavior changed; reclassify the 9D boundary.');
 
   v_rpc := pg_temp.as_actor_json('authenticated',v_global_admin_no_membership,pg_catalog.format('select public.admin_list_events_v1(%L,''all'',''nearest'',1,50)',v_marker));
-  perform pg_temp.ok(63,'global admin legacy definer bypass remains known for SAAS-9D',
-    v_rpc->>'code'='ok' and (v_rpc#>>'{pagination,total}')::integer=3,
-    'Expected legacy admin definer bypass changed; re-review transition safety.');
+  perform pg_temp.ok(63,'global admin without active membership is denied by SAAS-9D-2B-1',
+    v_rpc->>'code'='not_allowed',
+    'Global profile role still bypasses tenant membership.');
   perform pg_temp.ok(64,'temporary defaults and second-tenant guard remain unchanged',
     (select pg_catalog.count(*)=3 from information_schema.columns where table_schema='public' and table_name in('events','event_lanes','event_registrations') and column_name='tenant_id' and column_default='''c5c00000-0000-4000-8000-000000000001''::uuid')
     and pg_catalog.to_regclass('public.tenants_single_active_runtime_guard') is not null,

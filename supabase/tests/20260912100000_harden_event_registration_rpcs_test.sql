@@ -108,8 +108,8 @@ begin
   result:=pg_temp.as_actor_json('anon',null,format('select public.get_public_event_list_v2(%L,''upcoming'',1,50)',marker));
   perform pg_temp.ok(29,'public event contract remains available and PII-free',result->>'code'='ok' and result::text !~* 'customer|user_id|registration_id|token|admin_note|phone|email','public contract regressed');
   perform pg_temp.ok(30,'capacity and waitlist ordering remain authoritative after register cancel and promotion',(select registered_count=2 and reserve_count=1 and available_spots=18 from public.get_public_event_availability_v1() where event_id=event_a),'capacity or waitlist semantics differ');
-  perform pg_temp.ok(31,'2B and 2C function fingerprints remain unchanged',
-    md5(replace(replace(pg_get_functiondef('public.admin_list_events_v1(text,text,text,integer,integer)'::regprocedure),E'\r\n',E'\n'),E'\r',E'\n'))='7972f35024b6202a149afbe09f50d5a2'
+  perform pg_temp.ok(31,'2B-1 is hardened while 2C fingerprints remain unchanged',
+    strpos(pg_get_functiondef('public.admin_list_events_v1(text,text,text,integer,integer)'::regprocedure),'get_my_tenant_role_v1')>0
     and md5(replace(replace(pg_get_functiondef('public.prepare_event_reserve_promotions(uuid)'::regprocedure),E'\r\n',E'\n'),E'\r',E'\n'))='4e73ef1df59936a1a3f41a00e121f6e9'
     and md5(replace(replace(pg_get_functiondef('public.complete_event_reserve_promotion(uuid,uuid,boolean,text)'::regprocedure),E'\r\n',E'\n'),E'\r',E'\n'))='dd5025876008d6eb9551497d84cef90e',
     'deferred scope changed');
