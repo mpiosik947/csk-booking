@@ -10,8 +10,9 @@ type EventReservePromotionPayload = {
   eventId?: unknown;
 };
 
-type OperatorProfile = {
-  role: string | null;
+type AuthorizedEvent = {
+  id: string;
+  tenant_id: string;
 };
 
 const UUID_PATTERN =
@@ -67,29 +68,6 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const user = authResult.user;
-
-    const { data: operatorProfileData, error: operatorProfileError } =
-      await authenticatedSupabase
-        .from("profiles")
-        .select("role")
-        .eq("user_id", user.id)
-        .maybeSingle();
-
-    if (operatorProfileError) {
-      return NextResponse.json(
-        { error: "Nie udało się zweryfikować uprawnień." },
-        { status: 500 }
-      );
-    }
-
-    const operatorProfile = operatorProfileData as OperatorProfile | null;
-    const operatorRole = operatorProfile?.role?.trim().toLowerCase() ?? "";
-
-    if (operatorRole !== "admin" && operatorRole !== "pracownik") {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-    }
-
     let parsedBody: unknown;
 
     try {
@@ -123,6 +101,45 @@ export async function POST(request: Request) {
         { error: "Nieprawidłowy identyfikator szkolenia." },
         { status: 400 }
       );
+    }
+
+    const { data: eventData, error: eventError } = await authenticatedSupabase
+      .from("events")
+      .select("id, tenant_id")
+      .eq("id", eventId)
+      .maybeSingle();
+
+    if (eventError) {
+      return NextResponse.json(
+        { error: "Nie udało się zweryfikować szkolenia." },
+        { status: 500 }
+      );
+    }
+
+    const event = eventData as AuthorizedEvent | null;
+
+    if (!event?.id || !event.tenant_id || !UUID_PATTERN.test(event.tenant_id)) {
+      return NextResponse.json(
+        { error: "Nie znaleziono szkolenia." },
+        { status: 404 }
+      );
+    }
+
+    const { data: hasAllowedTenantRole, error: tenantRoleError } =
+      await authenticatedSupabase.rpc("has_tenant_role_v1", {
+        p_tenant_id: event.tenant_id,
+        p_roles: ["admin", "employee"],
+      });
+
+    if (tenantRoleError) {
+      return NextResponse.json(
+        { error: "Nie udało się zweryfikować uprawnień." },
+        { status: 500 }
+      );
+    }
+
+    if (hasAllowedTenantRole !== true) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
     const promotionResult = await promoteEventReserve(eventId);
