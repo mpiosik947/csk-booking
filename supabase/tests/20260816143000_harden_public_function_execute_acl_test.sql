@@ -137,7 +137,10 @@ insert into expected_function_acl values
   ('public.confirm_event_reserve_promotion__saas9d2a_core(text)','A',false,false,false),
   ('public.get_my_event_registrations_v1__saas9d2a_core(text,text,integer,integer)','A',false,false,false),
   ('public.mark_event_registration_paid__saas9d2a_core(uuid)','A',false,false,false),
-  ('public.register_for_event__saas9d2a_core(uuid,boolean)','A',false,false,false);
+  ('public.register_for_event__saas9d2a_core(uuid,boolean)','A',false,false,false),
+  ('public.admin_create_lane_block__saas9d3a_core(uuid,date,time without time zone,time without time zone,text)','A',false,false,false),
+  ('public.admin_set_lane_block_active__saas9d3a_core(uuid,boolean)','A',false,false,false),
+  ('public.admin_update_lane_block__saas9d3a_core(uuid,uuid,date,time without time zone,time without time zone,text,boolean)','A',false,false,false);
 
 create function pg_temp.call_admin_configuration(p_user_id uuid)
 returns jsonb
@@ -229,8 +232,8 @@ begin
     and procedure.proname<>'csk_sec002_default_acl_probe';
 
   perform pg_temp.record_result(1,'Complete public function inventory',
-    (select pg_catalog.count(*)=111 from pg_temp.expected_function_acl)
-    and v_actual_count=111
+    (select pg_catalog.count(*)=114 from pg_temp.expected_function_acl)
+    and v_actual_count=114
     and not exists(
       select 1 from pg_temp.expected_function_acl expected
       where pg_catalog.to_regprocedure(expected.signature) is null
@@ -246,7 +249,7 @@ begin
           where pg_catalog.to_regprocedure(expected.signature)=procedure.oid
         )
     ),
-    'The exact 111-function inventory has no missing or unexpected signature.');
+    'The exact 114-function inventory has no missing or unexpected signature.');
 
   perform pg_temp.record_result(2,'PUBLIC executes no public function',
     not exists(
@@ -339,14 +342,14 @@ begin
     'Future functions created by postgres receive no client or PUBLIC EXECUTE.');
 
   perform pg_temp.record_result(8,'Application function creator scope is exact',
-    (select pg_catalog.count(*)=111
+    (select pg_catalog.count(*)=114
       from pg_catalog.pg_proc procedure
       join pg_catalog.pg_namespace namespace on namespace.oid=procedure.pronamespace
       join pg_catalog.pg_roles owner_role on owner_role.oid=procedure.proowner
       where namespace.nspname='public' and procedure.prokind='f'
         and procedure.proname<>'csk_sec002_default_acl_probe'
         and owner_role.rolname='postgres'),
-    'All 111 application functions are owned by postgres, whose public-schema defaults are hardened.');
+    'All 114 application functions are owned by postgres, whose public-schema defaults are hardened.');
 
   perform pg_temp.record_result(9,'New function inherits owner-only execution',
     not pg_catalog.has_function_privilege('anon','public.csk_sec002_default_acl_probe()','EXECUTE')

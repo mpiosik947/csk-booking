@@ -237,9 +237,10 @@ begin
   perform pg_temp.ok(54,'critical booking writers remain SECURITY DEFINER',
     (select pg_catalog.count(*)=6 from pg_catalog.pg_proc p join pg_catalog.pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname in ('create_reservation_v2','cancel_reservation','admin_create_lane_block','admin_update_lane_block','admin_set_lane_block_active','admin_set_lane_booking_family_configuration_v2') and p.prosecdef),
     'Critical writer SECURITY DEFINER inventory differs.');
-  perform pg_temp.ok(55,'SAAS-9D-1 reservation writers consume tenant membership while later writers remain legacy',
+  perform pg_temp.ok(55,'SAAS-9D-1 and 9D-3A writers consume tenant membership while family configuration remains legacy',
     (select pg_catalog.count(*)=2 from pg_catalog.pg_proc p join pg_catalog.pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname in ('create_reservation_v2','cancel_reservation') and p.prosrc ~ '\mget_my_tenant_role_v1\M')
-    and (select pg_catalog.count(*)=4 from pg_catalog.pg_proc p join pg_catalog.pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname in ('admin_create_lane_block','admin_update_lane_block','admin_set_lane_block_active','admin_set_lane_booking_family_configuration_v2') and p.prosrc !~ '\m(is_tenant_member_v1|has_tenant_role_v1|get_my_tenant_role_v1)\M'),
+    and (select pg_catalog.count(*)=3 from pg_catalog.pg_proc p join pg_catalog.pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname in ('admin_create_lane_block','admin_update_lane_block','admin_set_lane_block_active') and p.prosrc ~ '\mget_my_tenant_role_v1\M')
+    and (select pg_catalog.count(*)=1 from pg_catalog.pg_proc p join pg_catalog.pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname='admin_set_lane_booking_family_configuration_v2' and p.prosrc !~ '\m(is_tenant_member_v1|has_tenant_role_v1|get_my_tenant_role_v1)\M'),
     'SAAS-9D phased writer boundary differs.');
 
   perform pg_catalog.set_config('request.jwt.claims',pg_catalog.jsonb_build_object('sub',v_admin,'role','authenticated')::text,true);
@@ -249,10 +250,9 @@ begin
   execute 'reset role';
   perform pg_catalog.set_config('request.jwt.claims','{}',true);
   perform pg_catalog.set_config('request.jwt.claim.sub','',true);
-  perform pg_temp.ok(56,'legacy definer demonstrably bypasses new cross-tenant RLS',
-    v_rpc_result->>'code'='deactivated' and exists(select 1 from public.lane_blocks where id=v_block_b_active and is_active=false),
-    'Expected 9D blocker was not reproduced; writer contract requires reclassification.');
-  update public.lane_blocks set is_active=true where id=v_block_b_active;
+  perform pg_temp.ok(56,'9D-3A lane-block wrapper blocks the former cross-tenant definer bypass',
+    v_rpc_result->>'code'='not_allowed' and exists(select 1 from public.lane_blocks where id=v_block_b_active and is_active=true),
+    'Lane-block global-role or cross-tenant bypass remains.');
 
   perform pg_temp.ok(57,'public booking configuration RPC remains executable by anon',pg_catalog.has_function_privilege('anon','public.get_public_booking_configuration_v1()','EXECUTE'),'Public booking RPC ACL regressed.');
   perform pg_temp.ok(58,'busy-range RPC remains executable by authenticated',pg_catalog.has_function_privilege('authenticated','public.get_lane_booking_busy_ranges_v3(uuid,date)','EXECUTE'),'Busy-range RPC ACL regressed.');
