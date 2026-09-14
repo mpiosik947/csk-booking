@@ -110,9 +110,9 @@ begin
   perform pg_temp.ok(30,'capacity and waitlist ordering remain authoritative after register cancel and promotion',(select registered_count=2 and reserve_count=1 and available_spots=18 from public.get_public_event_availability_v1() where event_id=event_a),'capacity or waitlist semantics differ');
   perform pg_temp.ok(31,'2B-1 is hardened while 2C fingerprints remain unchanged',
     strpos(pg_get_functiondef('public.admin_list_events_v1(text,text,text,integer,integer)'::regprocedure),'get_my_tenant_role_v1')>0
-    and md5(replace(replace(pg_get_functiondef('public.prepare_event_reserve_promotions(uuid)'::regprocedure),E'\r\n',E'\n'),E'\r',E'\n'))='4e73ef1df59936a1a3f41a00e121f6e9'
-    and md5(replace(replace(pg_get_functiondef('public.complete_event_reserve_promotion(uuid,uuid,boolean,text)'::regprocedure),E'\r\n',E'\n'),E'\r',E'\n'))='dd5025876008d6eb9551497d84cef90e',
-    'deferred scope changed');
+    and md5(replace(replace(pg_get_functiondef('public.prepare_event_reserve_promotions(uuid)'::regprocedure),E'\r\n',E'\n'),E'\r',E'\n'))='cdc7abeb7f8ced41cde0f5524a8953ef'
+    and md5(replace(replace(pg_get_functiondef('public.complete_event_reserve_promotion(uuid,uuid,boolean,text)'::regprocedure),E'\r\n',E'\n'),E'\r',E'\n'))='2c78ac26c5c55df3aac54360b610d39b',
+    '2C-2 promotion hardening drifted');
   perform pg_temp.ok(32,'temporary CSK defaults remain on event writers',(select count(*)=3 from information_schema.columns where table_schema='public' and table_name in('events','event_lanes','event_registrations') and column_name='tenant_id' and column_default='''c5c00000-0000-4000-8000-000000000001''::uuid'),'temporary defaults changed');
 end;$tests$;
 

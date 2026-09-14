@@ -277,19 +277,19 @@ begin
     (select pg_catalog.count(*)=2 from pg_catalog.pg_indexes where schemaname='public' and indexname in('tenant_memberships_user_status_tenant_idx','tenant_memberships_tenant_role_status_user_idx')),
     'Membership indexes differ.');
 
-  perform pg_temp.ok(59,'critical event RPCs remain SECURITY DEFINER',
+  perform pg_temp.ok(59,'remaining critical event writers retain expected SECURITY DEFINER mode',
     not exists(
       select 1 from pg_catalog.unnest(array[
-        'get_public_event_list_v2','get_public_event_availability_v1','admin_list_events_v1',
+        'admin_list_events_v1',
         'admin_list_event_registrations_v1','get_my_event_registrations_v1','register_for_event',
-        'cancel_event_registration','confirm_event_reserve_promotion','prepare_event_reserve_promotions',
-        'complete_event_reserve_promotion','mark_event_registration_paid','admin_create_event_v2',
+        'cancel_event_registration','confirm_event_reserve_promotion',
+        'mark_event_registration_paid','admin_create_event_v2',
         'admin_update_event_v2','admin_set_event_active_v2'
       ]::text[]) expected(name)
       where not exists(select 1 from pg_catalog.pg_proc procedure join pg_catalog.pg_namespace namespace on namespace.oid=procedure.pronamespace where namespace.nspname='public' and procedure.proname=expected.name and procedure.prosecdef)
     ),
     'Critical event definer inventory differs.');
-  perform pg_temp.ok(60,'only public readers and 2C claims remain deferred after SAAS-9D-2B-1',
+  perform pg_temp.ok(60,'public readers and 2C promotion claims use explicit tenant scoping without membership-helper coupling',
     not exists(
       select 1 from pg_catalog.pg_proc procedure join pg_catalog.pg_namespace namespace on namespace.oid=procedure.pronamespace
       where namespace.nspname='public'
