@@ -649,13 +649,401 @@ SECOND TENANT: **NO-GO**
 
 SEC-004: **OPEN**
 
+## 34. SAAS-9D-3B — LANE FAMILY CREATION / READERS FINAL PLAN
+
+Planning baseline: checkpoint `e3cf1103eb943b274d66770d514ac55b59549068`,
+SAAS-9D-3A CLOSED / PROD PASS, production SECURITY DEFINER count `70`, and
+compatibility defaults `7/7`. This is a technical plan only. It does not
+authorize a migration, SQL write, application change, deployment, commit or
+push.
+
+### 34.1 Exact scope
+
+9D-3B contains exactly these three existing functions:
+
+1. `admin_create_lane_booking_family_v1(jsonb)`;
+2. `admin_get_lane_booking_configuration_v1()`;
+3. `admin_get_lane_booking_configuration_v2()`.
+
+It must not include the 9D-3C family writer or its helpers:
+`admin_set_lane_booking_family_configuration_v2`,
+`admin_set_lane_booking_configuration`,
+`lane_booking_family_business_snapshot_v2`, or
+`normalize_lane_booking_family_payload_v2`. Lane-block RPCs are already closed
+in 9D-3A. Trigger functions, public booking readers, reservation RPCs, 9D-4,
+9D-5 and 9E are also excluded.
+
+The proposed future migration is one narrowly scoped, forward-only migration,
+provisionally `20260916100000_harden_lane_family_creation_readers.sql`, plus a
+focused SQL test and a deterministic concurrency harness. No file is created
+during this planning task.
+
+### 34.2 Function classification and current inventory
+
+ACL values are `PUBLIC / anon / authenticated / service_role`; `D` means no
+EXECUTE and `A` means EXECUTE.
+
+| Function | Signature | Current mode | Owner / path | Current ACL | Global role check | Resource/root arg | Current tenant source | Path | RLS bypass / risk | Severity | 3B disposition |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| `admin_create_lane_booking_family_v1` | `(jsonb)` | SECURITY DEFINER, VOLATILE | postgres / SP1 | D/D/A/D | yes, `profiles.role=admin` | no | implicit CSK column default | staff writer | yes; can create a global family and audit under elevated rights | CRITICAL | body hardening |
+| `admin_get_lane_booking_configuration_v1` | `()` | SECURITY DEFINER, STABLE | postgres / SP1 | D/D/A/D | yes, global admin | no | none; global snapshot | internal/admin reader | yes; returns all lane configuration | HIGH | body hardening plus authenticated ACL revoke |
+| `admin_get_lane_booking_configuration_v2` | `()` | SECURITY DEFINER, STABLE | postgres / SP1 | D/D/A/D | yes, global admin | no | none; global V1 result and global versions | admin runtime reader | yes; groups all families | HIGH | body hardening |
+
+SP1 is exactly `search_path=pg_catalog, public, pg_temp`. The three current
+normalized production fingerprints, guarded after CRLF and CR normalization to
+LF, are respectively:
+
+- creator: `69ec76ae348f83387045a5c343dd906f`;
+- V1 reader: `2684f7ea8a3b9eba6dae4d4f7aad653c`;
+- V2 reader: `5c729f01536d476a5c8b3cf0d9b40c62`.
+
+Preflight must additionally freeze signatures, volatility, SECURITY mode,
+owner, path, ACL, overload count, dependency objects, all seven defaults,
+non-target SECURITY DEFINER fingerprints and the absence of tenant/hierarchy
+orphans. Any difference is a STOP condition.
+
+### 34.3 Caller inventory and compatibility
+
+| File/caller | Caller type | RPC | Arguments | Auth context | Tenant context | Resource context | App change required? |
+|---|---|---|---|---|---|---|---|
+| `app/admin/lane-configuration/page.tsx` | browser Supabase client | `admin_get_lane_booking_configuration_v2` | none | authenticated browser JWT; UI also performs legacy presentation gating | none; exact-active bridge is required | none | no |
+| same file | browser Supabase client | `admin_create_lane_booking_family_v1` | `{p_family: payload}` | authenticated browser JWT | none; exact-active bridge is required | no pre-existing root; IDs are server-generated | no |
+| `admin_get_lane_booking_configuration_v2()` | SQL-to-SQL internal call | `admin_get_lane_booking_configuration_v1` | none | original `auth.uid()` remains visible inside the definer chain | same exact-active tenant | V1 supplies the resource snapshot | no |
+| `tests/e2e/lane-family-creation.spec.ts` | local E2E/contract test | creator | existing JSON payload | admin/user/anon test JWTs | bridge | generated family | test expectations updated for membership, not payload/DTO |
+| existing SQL/ACL/family tests | DB regression callers | all three | unchanged | simulated JWT or owner test setup | controlled Tenant A/B fixture | controlled lanes/config | tests only |
+
+There is no TypeScript runtime caller of V1. Direct authenticated V1 execution
+is therefore removed; V2 can still call it under its postgres-owned definer
+context. The creator signature, exact accepted JSON shape, generated IDs,
+response keys/codes and atomic business behavior remain unchanged. The V2
+signature and DTO remain unchanged. No caller may supply `tenant_id`.
+
+### 34.4 Tenant derivation
+
+All three RPCs are contextless: creation has no existing root and both readers
+have no resource argument. Until 9E they must use only
+`active_single_tenant_id_v1()`:
+
+- exactly one active tenant: resolve that tenant;
+- zero active tenants: helper returns NULL and the RPC fails closed;
+- more than one active tenant: helper returns NULL and the RPC fails closed;
+- there is no `ORDER BY`, `LIMIT 1`, CSK constant, payload tenant, browser
+  state, global profile role or default-based fallback.
+
+The wrapper must stabilize tenant status for the transaction using the same
+reviewed tenant-row lock order as prior hardened create contracts, then resolve
+the bridge. The bridge and every 3B contract are marked **TEMPORARY UNTIL 9E**.
+They do not constitute selected-tenant routing and cannot enable Tenant B.
+
+### 34.5 Family creation
+
+The hardened creator must preserve all current validation and transaction
+semantics, then:
+
+1. resolve exactly one active tenant and require
+   `get_my_tenant_role_v1(tenant_id) = 'admin'`;
+2. reject global admin without active membership and all pending, suspended,
+   missing, employee, instructor and ordinary-user memberships;
+3. keep the exact payload allowlist so a supplied `tenant_id`, root ID,
+   parent ID or other unknown authority field is rejected;
+4. explicitly insert the resolved `tenant_id` into the root and every child
+   `shooting_lanes` row;
+5. scope `max(display_order)` and every duplicate/validation lookup to that
+   tenant while retaining the existing serialization lock;
+6. create rules, durations, pricing and the family-version row only through
+   the newly generated same-tenant lane/root IDs;
+7. explicitly set `audit_logs.tenant_id` to the resolved tenant;
+8. preserve one atomic transaction: any failure leaves zero root, child,
+   rule, duration, pricing, version and audit rows.
+
+The creator does not create or reparent children outside its new family. Its
+server-generated root and child IDs prevent caller-selected cross-tenant
+targets. The CSK default may remain present but must no longer be consumed by
+this writer.
+
+### 34.6 Hierarchy consistency
+
+The database already enforces
+`child.(tenant_id,parent_lane_id) -> parent.(tenant_id,id)` with the composite
+FK and the hierarchy trigger. 3B adds controlled pre-insert consistency and
+postflight assertions; it does not weaken or replace those constraints.
+
+Required outcomes:
+
+- Root A + Child A: ALLOW when all current family validation passes;
+- Root A + Child B and Parent A + Child B: DENY atomically;
+- caller-selected reparent/move: impossible in creator and DENY in later 3C;
+- every generated child has the same tenant as its generated root;
+- the version row resolves to a top-level root in that tenant;
+- rule, duration and pricing rows resolve only through same-family lanes;
+- no orphan child, mixed-tenant family or partial configuration can survive.
+
+### 34.7 Reader design
+
+These two readers are staff/admin configuration readers. They are not public
+or ordinary booking readers.
+
+**V1 internal reader:** resolve the exact active tenant, require active admin
+membership from `auth.uid()`, and tenant-scope every structural check and base
+lane query. Parent joins must include tenant equality. Missing-rule,
+duplicate-duration and overlapping-pricing checks must only inspect lanes of
+the resolved tenant. Preserve the V1 JSON schema and ordering.
+
+**V2 runtime reader:** independently resolve/stabilize the same bridge and
+require active admin membership. Scope root/version cardinality and family
+aggregation to that tenant. Call the hardened V1 reader internally and include
+only resources and versions from the resolved tenant. Preserve the V2 JSON
+schema, family ordering, configuration versions and error contract.
+
+Reader A must return zero family/resource/version rows from Tenant B. Foreign
+bad configuration must not make Tenant A's reader fail, and Tenant A defects
+must not expose Tenant B details in errors.
+
+### 34.8 Staff authorization
+
+The authoritative privileged check is:
+
+`auth.uid() + exact active tenant + active tenant_memberships row + role admin`.
+
+The UI's legacy `get_my_role` check may remain for presentation during this
+phase, but it has no authority in these RPCs. `profiles.role=admin` without an
+active matching membership is DENY. Employee, instructor and user remain DENY
+for family creation and admin configuration reads. Pending, suspended and no
+membership are DENY. Instructor scope is unchanged.
+
+### 34.9 Public and booking contract
+
+The public reader `get_public_booking_configuration_v1()` and authenticated
+reservation/busy-range contracts are outside 3B and remain unchanged. 3B must
+not add a membership requirement or grant to legal public/user booking paths,
+and must not change their DTOs.
+
+Regression must prove unchanged lane list, family labels, hierarchy ordering,
+availability, active/inactive and online visibility, whole-axis versus position
+semantics, pricing, duration and capacity behavior. Public/user responses must
+not gain internal admin configuration, family version, membership data or
+cross-tenant lanes. Selected-tenant public routing remains a 9E dependency.
+
+### 34.10 Target ACL, owner, path and modes
+
+| Function | Target mode | Owner | Search path | PUBLIC | anon | authenticated | service_role |
+|---|---|---|---|---:|---:|---:|---:|
+| creator | SECURITY DEFINER, VOLATILE | postgres | SP1 | DENY | DENY | EXECUTE | DENY |
+| V1 reader | SECURITY DEFINER, STABLE | postgres | SP1 | DENY | DENY | DENY | DENY |
+| V2 reader | SECURITY DEFINER, STABLE | postgres | SP1 | DENY | DENY | EXECUTE | DENY |
+
+Definer mode remains necessary because protected table ACL/RLS cannot supply
+these bounded admin read/write contracts directly. Internal V1 remains a
+definer only so the authorized V2 wrapper can use its protected snapshot; its
+client/service surface is removed. No PUBLIC, anon or service grant is added.
+ACL-only revocation for V1 must be separately guarded to prove its body,
+signature, mode, owner and path did not drift.
+
+### 34.11 Concurrency plan
+
+Focused deterministic tests must cover:
+
+1. two concurrent family creates: serialized display ordering, unique IDs and
+   two complete families, with no partial rows or deadlock;
+2. duplicate-name/child validation race according to the existing business
+   contract, with deterministic controlled results;
+3. creator versus reader: each reader sees one complete MVCC state, never a
+   partially inserted family;
+4. root/child assignment and mixed-tenant fixture race: composite FK and
+   transaction checks leave zero cross-tenant hierarchy;
+5. tenant-status cutover racing creator/reader: the tenant-row lock plus exact
+   bridge gives one stable tenant or a fail-closed result;
+6. attempted second-active tenant during creation: database guard/bridge
+   prevents selection and leaves zero Tenant-B family rows;
+7. concurrent Tenant-A caller and Tenant-B-only member: A may act in A; B has
+   no selectable tenant context and is denied rather than redirected into A;
+8. creator versus reservations, blocks and event-lane reads: no regression in
+   existing conflict or hierarchy semantics.
+
+Positive simultaneous A and B creation cannot be a supported 3B scenario,
+because the second-active-tenant guard and lack of selected tenant context make
+Tenant B intentionally unreachable. It is deferred to 9E/9G; the 3B proof is
+the negative invariant: deadlocks `0`, cross-tenant hierarchy `0`, Tenant-B
+writes `0`, partial families `0`, duplicate version/audit effects `0`, fixture
+`0`.
+
+### 34.12 Cross-tenant matrix
+
+| Scenario | Expected |
+|---|---|
+| active Admin A + exact active Tenant A | creator/read V2 ALLOW |
+| Admin A + Root/Child B payload attempt | DENY; tenant fields/IDs are not accepted |
+| active Employee A + Tenant A | DENY for all three 3B contracts |
+| active Instructor/User A | DENY |
+| global admin without active membership A | DENY |
+| pending/suspended/no membership | DENY |
+| Admin membership B while A is the only active tenant | DENY, never create/read as A |
+| Parent A + Child B | DENY by controlled logic and composite FK |
+| Reader A with valid Tenant-B family present | zero B resources/versions |
+| 0 active tenants | fail closed |
+| more than 1 active tenant | fail closed; no fallback |
+| anon/public/service direct execution | DENY by ACL |
+
+Existence and validation failures return only the existing controlled contract;
+they must not reveal foreign lane names, configuration, membership or IDs.
+
+### 34.13 Temporary defaults
+
+All seven compatibility defaults remain unchanged in 3B.
+
+| Table | 3B writer | Current default | Tenant explicitly set after 3B? | Default still used by this writer? | Removal phase |
+|---|---|---|---:|---:|---|
+| `shooting_lanes` | family creator | CSK UUID | yes, bridge result on root and children | no | 9D-5 after 9E cutover gate |
+| `reservations` | none | CSK UUID | unchanged | unchanged | 9D-5 |
+| `lane_blocks` | none; hardened in 3A | CSK UUID | unchanged | unchanged | 9D-5 |
+| `events` | none | CSK UUID | unchanged | unchanged | 9D-5 |
+| `event_lanes` | none | CSK UUID | unchanged | unchanged | 9D-5 |
+| `event_registrations` | none | CSK UUID | unchanged | unchanged | 9D-5 |
+| `email_deliveries` | none | CSK UUID | unchanged | unchanged | 9D-5 |
+| `audit_logs` | family creator writes audit | no default | yes, bridge result | not applicable | remains nullable for global audit |
+
+Rules, durations, pricing and family versions have no independent tenant
+default; ownership is derived through their lane/root foreign key. The gate
+remains: **REMOVE DEFAULT BEFORE TENANT-AWARE WRITER CUTOVER AND BEFORE SECOND
+TENANT**. 3B must not remove any default.
+
+### 34.14 SECURITY DEFINER impact
+
+The measured production count after deployed 9D-3A is `70`. All three 3B
+functions remain SECURITY DEFINER, so the expected count after 3B is also
+`70`. No helper, overload or wrapper is added. Non-target normalized
+fingerprints must remain unchanged; unexpected drift must be `0`.
+
+Remaining disposition after 3B:
+
+- 9D-3C: family V2 writer plus legacy/internal helpers; three approved INVOKER
+  conversions occur there, not in 3B;
+- SAFE / NO CHANGE: three lane/config integrity triggers remain definers;
+- 9D-4: reports, profiles/users, account lifecycle and remaining authorization;
+- 9D-5: legacy retirement, sync bridges, defaults and final definer cleanup;
+- APP-CUTOVER DEPENDENCY: contextless creator/readers remain on the exact-active
+  bridge until trusted tenant context/routing exists in 9E.
+
+UNKNOWN functions after inventory reconciliation: `0`.
+
+### 34.15 Test and regression plan
+
+Implementation verification order:
+
+1. clean local DB reset and normalized preflight fingerprint guards;
+2. focused 3B SQL tests for exact signatures, modes, owner, path and ACL;
+3. role matrix: admin allow; global-role-only, employee, instructor, user,
+   pending, suspended, no-membership, anon and service deny;
+4. 0/1/>1 bridge and tenant-status race tests;
+5. Tenant A/B reader leakage and hierarchy/IDOR matrix;
+6. creator atomicity, payload spoof, explicit tenant writes, audit tenant,
+   display order and deterministic concurrency harness;
+7. existing family creation/configuration, rules, durations, pricing, capacity,
+   optimistic-lock and stale-protection tests;
+8. 9D-3A lane blocks plus booking/reservation conflict and direct-DML denial;
+9. Events, event registrations/management, public event readers, shared email,
+   reserve promotion and check-in regressions;
+10. full Supabase DB suite, all Node tests, TypeScript, production build,
+    focused lane-family/booking/admin Playwright, changed-files ESLint,
+    `npm audit --omit=dev`, `git diff --check`, and fixture cleanup.
+
+Production preflight later must be read-only and verify the same fingerprints,
+ACL, tenant/hierarchy invariants, SECURITY DEFINER count `70`, defaults `7/7`,
+data volumes and exactly one pending approved migration. A separate approval is
+required for production write.
+
+### 34.16 Rollback and STOP conditions
+
+Rollback is a reviewed forward migration restoring only the captured three
+function definitions and the former authenticated V1 grant. Never edit an
+applied migration or use migration repair. Because signatures and V2/creator
+contracts are preserved, an application rollback remains compatible, but a DB
+rollback would deliberately reopen the global-role/cross-tenant risk and is
+only an emergency coordinated action while Tenant B remains blocked.
+
+STOP on any fingerprint, overload, owner, path, mode or unexpected ACL drift;
+nonzero tenant/hierarchy orphan or mismatch; non-admin allow; global-role
+bypass; foreign row in a reader; payload tenant acceptance; default-dependent
+creator insert; partial family; duplicate version/audit effect; deadlock;
+changed DTO/signature/business validation; widened table RLS/ACL; public
+booking regression; unexpected SECURITY DEFINER drift; changed compatibility
+default; additional pending migration; secret/PII leak; or nonzero fixture.
+
+### 34.17 SEC-004 impact
+
+Successful 3B rollout will close the lane-family creator and admin reader
+portion of the global-role/RLS-bypass gap. It will not close SEC-004. Remaining
+work includes 9D-3C, 9D-4, 9D-5, trusted selected-tenant routing in 9E, module
+cutover in 9F, full cross-tenant application/concurrency proof in 9G, and the
+9H closure audit.
+
+The bridge deliberately supports only the present single-active-tenant runtime.
+SECOND TENANT remains NO-GO before 9H.
+
+### 34.18 GO / NO-GO
+
+The actual repo supplies an unambiguous three-function boundary, stable
+callers, tenant ownership constraints, membership helpers, exact-active bridge,
+known fingerprints and unchanged DTO/signature requirements. No unresolved
+business decision blocks local implementation. The positive dual-active-tenant
+operation is intentionally unavailable until 9E and does not block this
+single-active compatibility hardening.
+
+SAAS-9D-3B TECHNICAL PLAN: **READY**
+
+READY FOR SAAS-9D-3B LOCAL IMPLEMENTATION: **GO**
+
+READY FOR PRODUCTION WRITE: **NO**
+
+SECOND TENANT: **NO-GO**
+
+SEC-004: **OPEN**
+
+## 35. SAAS-9D-3B local implementation result (2026-09-14)
+
+The approved lane-family creation and configuration-reader slice has been
+implemented and verified locally.
+
+- `admin_create_lane_booking_family_v1(jsonb)` now resolves the exact single
+  active tenant, requires an active admin membership, writes tenant ownership
+  explicitly for root/children/audit, and preserves its payload and response.
+- `admin_get_lane_booking_configuration_v1()` and V2 now authorize and scope
+  every root/resource/nested configuration path to the resolved tenant. V1 no
+  longer has direct authenticated EXECUTE; V2 remains the application entry.
+- Global `profiles.role` alone cannot authorize any target. Bridge 0/1/>1,
+  pending/suspended/no-membership, cross-tenant hierarchy and reader-isolation
+  cases all fail closed as required.
+- Focused SQL passed 33/33, ACL 17/17, concurrency passed with zero deadlocks or
+  broken/cross-tenant hierarchy, full DB passed 1040/1040, Node 739/739,
+  TypeScript/build and focused Playwright 5/5 passed, and fixture cleanup is 0.
+- Function signatures/DTOs are unchanged, SECURITY DEFINER remains 70, and all
+  7/7 compatibility defaults remain present.
+- Migration SHA-256:
+  `E7A6ABDE21384ED2CC37E6AB3E133A2D06701A43C2BD2E8A64C12736021EA4B7`.
+
+Detailed evidence is recorded in
+`SAAS_9D_3B_LANE_FAMILY_RPC_HARDENING_REPORT.md`.
+
+SAAS-9D-3B LOCAL: **PASS**
+
+READY FOR SAAS-9D-3B PRODUCTION PREFLIGHT: **GO**
+
+READY FOR SAAS-9D-3C: **NO-GO until review**
+
+READY FOR PRODUCTION WRITE: **NO**
+
+SECOND TENANT: **NO-GO**
+
+SEC-004: **OPEN**
+
 ## 33. SAAS-9D-3 — LANE / CONFIGURATION / ADMIN RPC HARDENING FINAL PLAN
 
 Planning baseline: production and repository state after the completed
-SAAS-9D-2C checkpoint `c7f7f10e9d554ef6df3f1a528124d69bde6b8a10`.
+SAAS-9D-3A checkpoint `e3cf1103eb943b274d66770d514ac55b59549068`.
 Production has 70 public SECURITY DEFINER functions and all seven temporary
-CSK tenant defaults. This section is planning only: no migration, SQL write,
-application change or deployment is authorized.
+CSK tenant defaults. SAAS-9D-3A is CLOSED / PROD PASS. This section is
+planning only: no migration, SQL write, application change or deployment is
+authorized.
 
 ### 33.1 Exact function inventory
 

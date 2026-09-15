@@ -31,7 +31,7 @@ insert into expected_function_acl values
   ('public.admin_create_event(text,text,date,time without time zone,time without time zone,text,numeric,integer,uuid[])','A',false,false,false),
   ('public.admin_create_lane_block(uuid,date,time without time zone,time without time zone,text)','C',false,true,false),
   ('public.admin_create_lane_booking_family_v1(jsonb)','C',false,true,false),
-  ('public.admin_get_lane_booking_configuration_v1()','C',false,true,false),
+  ('public.admin_get_lane_booking_configuration_v1()','A',false,false,false),
   ('public.admin_get_lane_booking_configuration_v2()','C',false,true,false),
   ('public._admin_reservation_report_rows_v2(date,date,uuid,text,text,text)','A',false,false,false),
   ('public.admin_get_reservation_report_export_v1(date,date,uuid,text,text,text)','C',false,true,false),
@@ -279,8 +279,8 @@ begin
       where pg_catalog.has_function_privilege('authenticated',expected.signature,'EXECUTE')
         is distinct from expected.authenticated_execute
     )
-    and (select pg_catalog.count(*)=53 from pg_temp.expected_function_acl where authenticated_execute),
-    'authenticated has exactly the 53 user, policy-helper and internally authorized RPC grants.');
+    and (select pg_catalog.count(*)=52 from pg_temp.expected_function_acl where authenticated_execute),
+    'authenticated has exactly the 52 user, policy-helper and internally authorized RPC grants.');
 
   perform pg_temp.record_result(5,'Exact service_role ACL matrix',
     not exists(
