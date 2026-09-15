@@ -649,6 +649,360 @@ SECOND TENANT: **NO-GO**
 
 SEC-004: **OPEN**
 
+## 36. SAAS-9D-3C — LANE FAMILY WRITER / HELPERS FINAL PLAN
+
+Planning baseline: repository checkpoint
+`0dfd03c5dd1013d1726160d0b13d7bcbe02e7bf4` and the production state after
+SAAS-9D-3B CLOSED / PROD PASS. Production has `70` public SECURITY DEFINER
+functions, all `7/7` temporary CSK compatibility defaults, exactly one active
+tenant and no enabled second-tenant runtime. This section is planning only. It
+does not authorize a migration, SQL write, application change or deployment.
+
+### 36.1 Exact scope and evidence boundary
+
+After the completed 9D-3A and 9D-3B slices, exactly seven functions remain
+from the frozen 13-function 9D-3 inventory. No function from 9D-4, 9D-5 or 9E
+is moved into 3C, and UNKNOWN is `0`.
+
+ACL values below are `PUBLIC / anon / authenticated / service_role`; `D` means
+no EXECUTE and `A` means EXECUTE. All seven functions are currently owned by
+`postgres` and use the approved SP1 `search_path=pg_catalog, public, pg_temp`.
+
+| FUNCTION | SIGNATURE | CALLERS | SECURITY DEFINER? | OWNER | SEARCH_PATH | ACL | GLOBAL ROLE CHECK? | LANE/FAMILY ARG? | RESOURCE ARG? | TENANT SOURCE | SERVICE_ROLE PATH? | RLS BYPASS? | CROSS-TENANT RISK? | SEVERITY | CLASS |
+|---|---|---|---:|---|---|---|---:|---|---|---|---:|---:|---|---|---|
+| `admin_set_lane_booking_family_configuration_v2` | `(uuid,bigint,jsonb,boolean) -> jsonb` | `app/admin/lane-configuration/page.tsx`; DB tests; calls normalize and snapshot helpers | yes | `postgres` | SP1 | D/D/A/D | yes, global `profiles.role=admin` | root lane plus complete family payload | root UUID and resource UUIDs in JSON | target: locked root `shooting_lanes.tenant_id`; every resource must match | no | yes | current definer can authorize globally and mutate a foreign root/family, rules, durations, pricing and audit | CRITICAL | A — BODY HARDENING |
+| `admin_set_lane_booking_configuration` | `(uuid,boolean,boolean,boolean,integer,boolean,integer,integer[],jsonb) -> jsonb` | no application or active SQL caller; legacy/concurrency tests only | yes | `postgres` | SP1 | D/D/D/D | yes, global `profiles.role=admin` | one lane | lane UUID | lane if ever called; no supported runtime path | no | yes | latent foreign-lane writer if its closed ACL is widened | HIGH / dormant | C — SECURITY INVOKER CANDIDATE |
+| `lane_booking_family_business_snapshot_v2` | `(uuid) -> jsonb` | SQL-only from the family V2 writer | yes | `postgres` | SP1 | D/D/D/D | no | root lane | root UUID | hardened outer writer's locked root and validated family | no | yes | internal cross-tenant read only if called without the outer binding or a grant is widened | LOW / internal | C — SECURITY INVOKER CANDIDATE |
+| `normalize_lane_booking_family_payload_v2` | `(jsonb) -> jsonb` | SQL-only from the family V2 writer | yes | `postgres` | SP1 | D/D/D/D | no | payload includes lane UUIDs but performs no table access | JSON family payload | none; pure immutable normalization, result must be bound by outer writer | no | technically yes, but no table access | no independent data path; risk is only misuse of its result by a caller | LOW / internal | C — SECURITY INVOKER CANDIDATE |
+| `validate_lane_booking_rule_capacity` | `() -> trigger` | `validate_lane_booking_rule_capacity_trigger` only | yes | `postgres` | SP1 | D/D/D/D | no | `NEW.lane_id` | affected rule row | lane reached from `NEW.lane_id`; statement writer supplies row tenant context | no direct RPC | yes, trigger-bound | no client authorization surface; protects capacity integrity | SAFE | D — SAFE / NO CHANGE |
+| `validate_shooting_lane_capacity_change` | `() -> trigger` | `validate_shooting_lane_capacity_change_trigger` only | yes | `postgres` | SP1 | D/D/D/D | no | `OLD/NEW` lane | affected lane row | affected lane and its booking rule | no direct RPC | yes, trigger-bound | no client authorization surface; protects physical/online capacity consistency | SAFE | D — SAFE / NO CHANGE |
+| `validate_shooting_lane_hierarchy` | `() -> trigger` | `validate_shooting_lane_hierarchy_trigger` only | yes | `postgres` | SP1 | D/D/D/D | no | `OLD/NEW.parent_lane_id` | affected lane and proposed parent | row tenant plus composite tenant/parent FK | no direct RPC | yes, trigger-bound | no client authorization surface; protects parent/child shape | SAFE | D — SAFE / NO CHANGE |
+
+Current normalized production fingerprints carried from the frozen catalog are:
+
+| Signature | Current fingerprint |
+|---|---|
+| `admin_set_lane_booking_configuration(uuid,boolean,boolean,boolean,integer,boolean,integer,integer[],jsonb)` | `c60876406d007491187869017df989b5` |
+| `admin_set_lane_booking_family_configuration_v2(uuid,bigint,jsonb,boolean)` | `00fc387949410273a7cb33589cd8d1c6` |
+| `lane_booking_family_business_snapshot_v2(uuid)` | `bc891bbdfab6d033fed72ece1c9fc193` |
+| `normalize_lane_booking_family_payload_v2(jsonb)` | `77eee4f69abb6bdf74f1529f8e21589a` |
+| `validate_lane_booking_rule_capacity()` | `78a6c1beb5048645a46d20d735324e2a` |
+| `validate_shooting_lane_capacity_change()` | `96e0199a327831f40bec66c57d37f5ca` |
+| `validate_shooting_lane_hierarchy()` | `dd3c97078341a74edc83ca79e9b19c0f` |
+
+Local implementation must first re-read the actual catalog and fail closed on
+any overload, fingerprint, owner, path, ACL, caller or trigger dependency drift.
+
+### 36.2 Classification result
+
+**A. BODY HARDENING**
+
+- `admin_set_lane_booking_family_configuration_v2` is the only body rewrite.
+  Its signature, JSON response, stable business codes, optimistic concurrency,
+  future-obligation acknowledgement, pricing/duration semantics and UI caller
+  contract remain unchanged.
+
+**B. ACL-ONLY**
+
+- none. The three dormant/internal functions already have closed ACLs. The
+  active V2 writer retains authenticated-only EXECUTE.
+
+**C. SECURITY INVOKER CANDIDATE**
+
+- `admin_set_lane_booking_configuration`;
+- `lane_booking_family_business_snapshot_v2`;
+- `normalize_lane_booking_family_payload_v2`.
+
+Their bodies, signatures, owner, search path, volatility and closed ACLs remain
+unchanged. Only SECURITY DEFINER is removed. The two helpers then execute with
+the already-authorized effective context of the outer writer; neither becomes
+a new public, authenticated or service entry point.
+
+**D. SAFE / NO CHANGE**
+
+- `validate_lane_booking_rule_capacity`;
+- `validate_shooting_lane_capacity_change`;
+- `validate_shooting_lane_hierarchy`.
+
+They stay postgres-owned SP1 SECURITY DEFINER trigger functions with no direct
+client/service EXECUTE. Their exact fingerprints and trigger bindings become
+negative drift guards.
+
+**E. APP-CUTOVER DEPENDENCY**
+
+- none inside the seven-function 3C change set. The active writer already has
+  a trusted root resource from which tenant is derived, so it does not need a
+  selected-tenant application parameter. The page's legacy `get_my_role`
+  presentation gate remains non-authoritative and is removed only with the
+  broader 9D-4D/9E application authorization cutover.
+
+### 36.3 Target writer authorization and tenant binding
+
+`admin_set_lane_booking_family_configuration_v2` must perform the following
+sequence before any mutable family/configuration work:
+
+1. require `auth.uid()`;
+2. validate scalar inputs and normalize the payload without accepting a
+   `tenant_id`, parent override or any other authority field;
+3. load and lock `p_root_lane_id`, require a top-level `resource_kind='lane'`,
+   and derive the sole authority tenant from `shooting_lanes.tenant_id`;
+4. call `get_my_tenant_role_v1(derived_tenant_id)` and require exactly active
+   membership role `admin`; global `profiles.role`, browser state and the seven
+   CSK defaults are never authorization;
+5. lock the conflict family and version in deterministic order, then verify
+   that the root, every current child, every payload lane ID and the family
+   version resolve to that same tenant and exact family;
+6. reject missing, foreign, duplicate, sibling, reparented or mixed-tenant
+   resources before writes; the payload's resource-ID set must equal the
+   locked current family-ID set;
+7. execute every rule, duration and pricing read/write only through the
+   already validated same-tenant family lane IDs;
+8. add the derived tenant predicate to future reservations, lane blocks,
+   events and event-lane obligation/conflict reads, including equality on both
+   sides of tenant-owned joins;
+9. constrain `shooting_lanes` updates by both resource ID and derived tenant;
+   nested lane-owned rows remain bound through the prevalidated lane set;
+10. write `audit_logs.tenant_id=derived_tenant_id`; actor identity and display
+    fields may still come from the actor profile, but `profiles.role` cannot
+    decide authorization and the audit actor role is the tenant role;
+11. preserve the existing `no_change`, `stale_configuration`, confirmation,
+    conflict and successful version-increment contracts with exactly one audit
+    only for a real successful mutation.
+
+Admin A plus Family A is allowed. Admin A plus Family B is denied. Employee,
+instructor and ordinary-user membership do not gain configuration-write scope.
+A global legacy admin without an active membership in the resource tenant,
+pending membership, suspended membership and no membership are denied.
+
+### 36.4 Hierarchy, spoofing and helper boundaries
+
+The active family editor does not support arbitrary reparenting or adding and
+removing resource identities. 3C must preserve that contract rather than add a
+new hierarchy API.
+
+- Parent A + Child B: DENY before mutation;
+- Family A + Lane B in the JSON set: DENY atomically;
+- root A plus sibling from another family in A: DENY;
+- `tenant_id`, `parent_lane_id`, `root_lane_id` or unexpected authority keys in
+  payload: DENY through the unchanged exact-key normalizer contract;
+- root/child tenant equality remains protected finally by the existing
+  composite FK and hierarchy trigger, but the writer must fail earlier with a
+  controlled result;
+- the snapshot helper receives only the already authorized and locked root;
+- the normalizer remains pure and cannot establish tenant authority;
+- direct helper EXECUTE stays denied to PUBLIC, anon, authenticated and
+  service_role.
+
+There is no active move/reparent RPC in 3C. `admin_update_lane_block` is a block
+move contract already completed in 3A and must not be modified again.
+
+### 36.5 Configuration, pricing and obligation compatibility
+
+The tenant boundary is added without changing product semantics:
+
+- `shooting_lanes` is tenant-owned;
+- `lane_booking_rules`, `lane_booking_durations` and `lane_pricing_rules` are
+  lane-owned and receive no new tenant column in 3C;
+- `lane_booking_family_configuration_versions` is root-lane-owned;
+- duration validation, booking-step divisibility, max-shooter and online-limit
+  checks, weekday/weekend pricing coverage, canonical ordering and retained
+  inactive historical pricing rows stay unchanged;
+- current/future reservation, block and event obligations retain the existing
+  Europe/Warsaw and acknowledgement behavior but are constrained to the
+  derived tenant;
+- name-only updates, unchanged payloads and stale expected versions retain the
+  current version/audit behavior;
+- no public booking/configuration DTO or application payload changes.
+
+All `7/7` CSK compatibility defaults remain present. None is consulted as an
+authorization source. Their removal stays gated on 9D-5 after tenant-aware
+writers and 9E selected-tenant routing are proven and before Tenant B.
+
+### 36.6 ACL, owner, path and SECURITY DEFINER target
+
+| Function group | Target SECURITY mode | Target ACL | Owner/path |
+|---|---|---|---|
+| active family V2 writer | DEFINER | D/D/A/D | `postgres`, SP1 |
+| legacy single-lane writer | INVOKER | D/D/D/D | `postgres`, SP1 |
+| snapshot and normalize helpers | INVOKER | D/D/D/D | `postgres`, SP1 |
+| three integrity triggers | DEFINER, unchanged | D/D/D/D | `postgres`, SP1 |
+
+No service_role caller exists for this domain and 3C grants no service_role
+EXECUTE. No PUBLIC/anon grant, table ACL or RLS policy changes. The production
+SECURITY DEFINER count must change from `70` to exactly `67`; the only mode
+changes are the three approved INVOKER conversions. Unexpected drift is `0`.
+
+### 36.7 Concurrency and atomicity plan
+
+The writer must keep one transaction and deterministic lock order. Focused
+concurrency coverage must prove:
+
+1. two updates with the same expected version produce exactly one update and
+   one `stale_configuration`, one version increment and one audit;
+2. Tenant A and Tenant B family updates in parallel never read, lock or mutate
+   the other tenant's rows;
+3. a mixed Family A + Lane B request racing a legitimate Tenant B update is
+   denied without partial mutation;
+4. family update versus reservation creation, lane-block creation/toggle and
+   event lane assignment preserves the current conflict/obligation contract;
+5. pricing/duration replacement racing another family update leaves one
+   canonical active snapshot and no broken historical references;
+6. name-only update and no-change retry do not create duplicate audit effects;
+7. membership transition to pending/suspended before authorization fails
+   closed; an already authorized transaction remains bound to the locked
+   resource tenant and cannot switch tenant through payload data;
+8. no deadlock, orphan row, mixed hierarchy, partial family/configuration,
+   duplicate version effect or cross-tenant audit survives.
+
+### 36.8 Proposed implementation files and order
+
+No file is created during planning. The expected local implementation scope is:
+
+- one new forward migration, proposed
+  `supabase/migrations/20260917100000_harden_lane_family_writer_helpers.sql`;
+- one focused transactional SQL matrix with normalized CRLF/CR-to-LF
+  fingerprint guards;
+- one deterministic PowerShell concurrency harness;
+- updates only to existing ACL/phase inventory tests whose expected mode/count
+  genuinely changes;
+- this plan and a future
+  `SAAS_9D_3C_LANE_FAMILY_WRITER_HELPERS_HARDENING_REPORT.md`.
+
+Implementation order:
+
+1. freeze production definitions, signatures, dependencies, triggers, ACL,
+   owner, search path and normalized fingerprints;
+2. fail closed on tenant/hierarchy/config/version orphan or mismatch data;
+3. rewrite only the active family V2 writer with resource-derived membership
+   authorization and tenant-bound predicates/audit;
+4. convert exactly the legacy writer and two helpers to INVOKER while retaining
+   closed ACLs;
+5. assert the three trigger definitions and bindings are byte-semantically
+   unchanged after normalized line endings;
+6. run focused role/IDOR/hierarchy/configuration/concurrency suites, then full
+   regression;
+7. prepare a separate read-only production preflight. Production push requires
+   a new explicit approval and exactly one pending approved migration.
+
+One cohesive 3C migration is preferable to 3C-1/3C-2: only one active writer
+body changes, its two direct helpers change mode, and the legacy writer's mode
+is reduced. Splitting the outer writer from the helper mode changes would add a
+temporary mixed security model without reducing rollout risk. If preflight
+finds caller or fingerprint drift, stop and reconsider the split rather than
+expanding scope.
+
+### 36.9 Test and regression plan
+
+Focused SQL must cover the exact metadata and role matrix plus:
+
+- Admin A + Family A ALLOW; Admin A + Family B DENY;
+- Employee A, instructor A and ordinary user A DENY configuration writes;
+- global `profiles.role=admin` without matching active membership DENY;
+- pending, suspended and no-membership DENY;
+- Parent A + Child B, Family A + Lane B, sibling injection and tenant spoof
+  DENY with zero partial changes;
+- exact payload resource set, root/child identity immutability and hierarchy
+  constraints;
+- optimistic version, stale, no-change, name-only and future-obligation
+  acknowledgement behavior;
+- rules/durations/pricing canonical replacement and historical price retention;
+- tenant-scoped audit actor, target, before/after content and idempotency;
+- helper direct EXECUTE denied for all client/service roles;
+- trigger capacity/hierarchy behavior unchanged;
+- `7/7` defaults unchanged and SECURITY DEFINER count exactly `67`.
+
+Regression order:
+
+1. focused 3C SQL and cross-tenant/IDOR matrix;
+2. focused configuration and pricing suites;
+3. deterministic concurrency harness;
+4. 9D-3A lane-block and 9D-3B creation/reader suites;
+5. booking, reservations, public booking, Events, Calendar, Reports, check-in,
+   email and account/auth DB contracts;
+6. full Supabase DB suite;
+7. all Node tests, TypeScript, production build and focused lane-configuration
+   Playwright;
+8. changed-files ESLint, `npm audit --omit=dev`, `git diff --check` and exact
+   fixture cleanup `0`.
+
+No heavy production stress test is planned. Production verification, if later
+approved, uses a rollback-only synthetic matrix and bounded runtime smoke.
+
+### 36.10 Compatibility and rollout
+
+Signatures, active writer ACL, UI payload and response DTO remain stable:
+
+| Combination | Expected result |
+|---|---|
+| OLD APP + OLD DB | current single-tenant behavior; known global-role risk remains |
+| OLD APP + NEW DB | compatible; same RPC name/payload/response, membership becomes authority |
+| NEW APP + OLD DB | not applicable; 3C requires no application change |
+| NEW APP + NEW DB | target state; identical UI contract with tenant-bound DB authorization |
+
+Deployment model is **DB ONLY**, after local PASS, read-only production
+preflight, exact SHA/fingerprint/history checks and separate production-write
+approval. No app-first cutover is required.
+
+### 36.11 Rollback and STOP conditions
+
+Rollback is a reviewed forward migration restoring only the four changed
+definitions/security modes/ACLs. Never edit an applied migration, run migration
+repair or use ad-hoc production SQL as deployment. Restoring the old active
+writer would reopen the global-role/cross-tenant defect, so prefer forward-fix
+while Tenant B remains blocked.
+
+STOP on any unknown/overloaded function, unexpected caller, fingerprint/owner/
+path/ACL drift, nonzero orphan or tenant/hierarchy/config mismatch, changed
+signature/DTO/business code, global-role-only allow, employee/instructor scope
+expansion, foreign family/resource access, tenant spoof acceptance, non-atomic
+write, changed trigger behavior, unexpected audit target/PII, concurrency
+failure, SECURITY DEFINER count other than `67`, non-target function drift,
+changed compatibility default, additional pending migration or nonzero fixture.
+
+### 36.12 Work deliberately remaining after 3C
+
+**9D-4 remains:**
+
+- 4A tenant-context reservation reports and export;
+- 4B tenant-related user/profile administration;
+- 4C owner account export/update/anonymization lifecycle review;
+- 4D retirement of authorization dependence on global `get_my_role`,
+  `is_admin*`, profile privilege guards and related legacy auth paths after
+  callers are ready;
+- 4E public selected-tenant contract preparation for 9E.
+
+**9D-5 remains:**
+
+- zero-caller legacy RPC retirement and final grant cleanup;
+- removal of all seven CSK defaults only after every writer gate passes;
+- CSK profile/membership sync-bridge retirement at the 9E reconciliation gate;
+- final SECURITY DEFINER and compatibility inventory.
+
+**SAFE / NO CHANGE remains:** the three lane/config integrity triggers in this
+section and every unrelated safe helper from the authoritative inventory.
+
+**9E dependency remains:** trusted selected-tenant application context,
+routing, replacement of exact-active bridge contracts and removal of global
+role presentation/authorization assumptions before Tenant B. 3C neither starts
+9E nor makes a second tenant safe.
+
+### 36.13 Final planning gate
+
+The actual repository supplies an exact seven-function boundary, one active
+application caller, no service path, stable signatures, deterministic tenant
+derivation from the root and no unresolved product decision. UNKNOWN: **0**.
+The slice is appropriately sized as one local implementation phase.
+
+SAAS-9D-3C TECHNICAL PLAN: **READY**
+
+READY FOR SAAS-9D-3C LOCAL IMPLEMENTATION: **GO**
+
+READY FOR PRODUCTION WRITE: **NO**
+
+SECOND TENANT: **NO-GO**
+
+SEC-004: **OPEN**
+
 ## 34. SAAS-9D-3B — LANE FAMILY CREATION / READERS FINAL PLAN
 
 Planning baseline: checkpoint `e3cf1103eb943b274d66770d514ac55b59549068`,
@@ -3065,6 +3419,49 @@ READY FOR SAAS-9D-2C-2 PRODUCTION APP PREFLIGHT: **GO**
 READY FOR PRODUCTION WRITE: **NO**
 
 READY FOR SAAS-9D-3: **NO-GO until 2C-2 full production rollout/checkpoint**
+
+SECOND TENANT: **NO-GO**
+
+SEC-004: **OPEN**
+
+## 37. SAAS-9D-3C local implementation result (2026-09-15)
+
+The approved seven-function lane-family writer/helper slice has been implemented
+and verified locally. No application file or production resource was changed.
+
+- The active V2 writer keeps its signature and authenticated-only caller
+  contract. A minimal SECURITY DEFINER wrapper delegates to a closed SECURITY
+  INVOKER core.
+- The core derives the tenant from the locked root lane, requires an active
+  tenant `admin` membership, validates every family resource against that
+  tenant, scopes reservation/block/event dependency checks and the audit row,
+  and does not use `profiles.role` as authority.
+- Family identifiers are normalized to UUID order before equality comparison.
+  This fixes a pre-existing nondeterministic valid-payload rejection exposed by
+  randomized full-suite fixtures.
+- The dormant legacy writer and the two internal helpers are SECURITY INVOKER
+  with no client or service EXECUTE. The three integrity triggers are unchanged.
+- SECURITY DEFINER count is `67`, unexpected non-target drift is zero, and all
+  `7/7` compatibility defaults remain present.
+- Focused pgTAP passed `34/34`; concurrency/IDOR/integrity checks passed with
+  zero deadlocks, invalid final states, cross-tenant contamination, or fixture.
+  The full DB suite passed `1074/1074`; Node, TypeScript, production build and
+  focused Playwright (`5/5`) passed; final local fixture post-check is zero.
+- Migration SHA-256:
+  `814F648620F04760874A29C1916104E900ADFFE000B19989282078B27F7C4884`.
+- `npm audit --omit=dev` retains one unrelated MODERATE advisory in
+  `baseline-browser-mapping`; no HIGH or CRITICAL advisory was reported.
+
+Detailed evidence is recorded in
+`SAAS_9D_3C_LANE_FAMILY_WRITER_HELPERS_HARDENING_REPORT.md`.
+
+SAAS-9D-3C LOCAL: **PASS**
+
+READY FOR SAAS-9D-3C PRODUCTION PREFLIGHT: **GO**
+
+READY FOR SAAS-9D-4 PLANNING: **NO-GO until 9D-3C production/checkpoint review**
+
+READY FOR PRODUCTION WRITE: **NO**
 
 SECOND TENANT: **NO-GO**
 

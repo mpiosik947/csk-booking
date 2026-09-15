@@ -45,6 +45,7 @@ insert into expected_function_acl values
   ('public.admin_set_lane_block_active(uuid,boolean)','C',false,true,false),
   ('public.admin_set_lane_booking_configuration(uuid,boolean,boolean,boolean,integer,boolean,integer,integer[],jsonb)','A',false,false,false),
   ('public.admin_set_lane_booking_family_configuration_v2(uuid,bigint,jsonb,boolean)','C',false,true,false),
+  ('public.admin_set_lane_booking_family_configuration_v2__saas9d3c_core(uuid,bigint,jsonb,boolean)','A',false,false,false),
   ('public.admin_set_user_note_v1(uuid,text)','C',false,true,false),
   ('public.admin_set_user_role_v1(uuid,text)','C',false,true,false),
   ('public.admin_update_event_v2(uuid,text,text,date,time without time zone,time without time zone,text,numeric,integer,uuid[])','C',false,true,false),
@@ -232,8 +233,8 @@ begin
     and procedure.proname<>'csk_sec002_default_acl_probe';
 
   perform pg_temp.record_result(1,'Complete public function inventory',
-    (select pg_catalog.count(*)=114 from pg_temp.expected_function_acl)
-    and v_actual_count=114
+    (select pg_catalog.count(*)=115 from pg_temp.expected_function_acl)
+    and v_actual_count=115
     and not exists(
       select 1 from pg_temp.expected_function_acl expected
       where pg_catalog.to_regprocedure(expected.signature) is null
@@ -249,7 +250,7 @@ begin
           where pg_catalog.to_regprocedure(expected.signature)=procedure.oid
         )
     ),
-    'The exact 114-function inventory has no missing or unexpected signature.');
+    'The exact 115-function inventory has no missing or unexpected signature.');
 
   perform pg_temp.record_result(2,'PUBLIC executes no public function',
     not exists(
@@ -342,14 +343,14 @@ begin
     'Future functions created by postgres receive no client or PUBLIC EXECUTE.');
 
   perform pg_temp.record_result(8,'Application function creator scope is exact',
-    (select pg_catalog.count(*)=114
+    (select pg_catalog.count(*)=115
       from pg_catalog.pg_proc procedure
       join pg_catalog.pg_namespace namespace on namespace.oid=procedure.pronamespace
       join pg_catalog.pg_roles owner_role on owner_role.oid=procedure.proowner
       where namespace.nspname='public' and procedure.prokind='f'
         and procedure.proname<>'csk_sec002_default_acl_probe'
         and owner_role.rolname='postgres'),
-    'All 114 application functions are owned by postgres, whose public-schema defaults are hardened.');
+    'All 115 application functions are owned by postgres, whose public-schema defaults are hardened.');
 
   perform pg_temp.record_result(9,'New function inherits owner-only execution',
     not pg_catalog.has_function_privilege('anon','public.csk_sec002_default_acl_probe()','EXECUTE')

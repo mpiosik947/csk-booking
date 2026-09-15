@@ -240,7 +240,7 @@ begin
               or not (
                 procedure.prosecdef
                 or (
-                  procedure.proname ~ '__saas9d(1|2a)_core$'
+                  procedure.proname ~ '__saas9d(1|2a|3c)_core$'
                   and not pg_catalog.has_function_privilege('public',procedure.oid,'EXECUTE')
                   and not pg_catalog.has_function_privilege('anon',procedure.oid,'EXECUTE')
                   and not pg_catalog.has_function_privilege('authenticated',procedure.oid,'EXECUTE')
