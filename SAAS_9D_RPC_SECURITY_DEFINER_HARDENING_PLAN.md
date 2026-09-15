@@ -649,6 +649,403 @@ SECOND TENANT: **NO-GO**
 
 SEC-004: **OPEN**
 
+## 38. SAAS-9D-4 — reports / profile / audit / privileged helpers final plan
+
+Planning baseline: production and repository checkpoint
+`d871785a5fb580d1ac7f8ca94c666d5cfdc3202d`. SAAS-9D-3A, 9D-3B and
+9D-3C are closed with production PASS. The production SECURITY DEFINER count
+is `67`, unexpected drift is zero, and the seven compatibility defaults remain
+present. This section is planning-only and authorizes no migration, SQL write,
+application cutover or production deployment.
+
+### 38.1 Exact scope and boundaries
+
+The frozen catalog assigns exactly 19 live functions to 9D-4/9E. All are owned
+by `postgres`. No function from 9D-5, a completed 9D phase, or SAFE / NO CHANGE
+is moved into 9D-4.
+
+Legend: SP1 = `pg_catalog, public, pg_temp`; SP2 = `public, pg_temp`; SP3 =
+`public`. `A`, `N`, and `S` mean direct EXECUTE by `authenticated`, `anon`, and
+`service_role`. Every function in this table is currently SECURITY DEFINER.
+
+| Function | Signature | Domain / callers | SQL callers | Path / ACL | Global role check | User/resource argument | Tenant source / service path | PII / bypass / risk | Severity |
+|---|---|---|---|---|---|---|---|---|---|
+| `admin_get_reservation_report_export_v1` | `(date,date,uuid,text,text,text)` | reports; `app/admin/reports/page.tsx` | closed `_admin_reservation_report_rows_v2` | SP1 / A | yes, `profiles.role=admin` | optional lane | lane if supplied; otherwise missing; no service caller | operational reservation export; definer bypass can mix tenants | HIGH |
+| `admin_get_reservation_report_v1` | `(date,date,int,int)` | legacy report; no TypeScript caller | direct table reads | SP1 / A | yes | none | missing | reservation/customer PII and global aggregates | HIGH |
+| `admin_get_reservation_report_v2` | `(date,date,uuid,text,text,text,int,int)` | reports; `app/admin/reports/page.tsx` | closed `_admin_reservation_report_rows_v2` | SP1 / A | yes | optional lane | lane if supplied; otherwise missing | name/email/phone details plus global KPI | HIGH |
+| `admin_list_users_v1` | `(int,int,text,text,text,text)` | users; `app/admin/users/page.tsx` | none | SP1 / A | yes | no target | missing selected tenant | broad profile/contact/address/permit/verification/admin-note PII | CRITICAL |
+| `admin_set_user_note_v1` | `(uuid,text)` | users page | profile trigger; audit insert | SP1 / A | yes | target user | no tenant relation | privileged note plus tenantless audit | CRITICAL |
+| `admin_set_user_role_v1` | `(uuid,text)` | users page | profile trigger and CSK role sync bridge | SP1 / A | yes | target user | should be selected membership | global privilege mutation and tenantless audit | CRITICAL |
+| `anonymize_my_account_v1` | `()` | `app/api/account/delete/route.ts` under user JWT | internal redaction helper; business tables; global audit | SP1 / A | last-admin logic uses global role | caller UID | owner account across memberships; Auth deletion is a later server step | all caller PII; intentional definer bypass; lifecycle spill risk | HIGH |
+| `export_my_data_v1` | `()` | `app/api/account/export/route.ts` under user JWT | `auth.users` and owner business rows | SP1 / A | no | caller UID | owner account across memberships | full caller export; requires controlled access to `auth.users` | HIGH |
+| `get_my_role` | `()` | homepage, admin pages and calendar-feed API | no live RLS caller after 9C; application authorization caller | SP3 / A | returns global role | none | none | global authorization result | CRITICAL |
+| `get_public_booking_configuration_v1` | `()` | `app/booking/page.tsx` | booking tables | SP1 / N,A,S | no | none | currently no explicit tenant; active-single bridge required | PII-free config, but cross-tenant configuration mixing | HIGH |
+| `handle_new_user` | `()` trigger | `auth.users` -> profile trigger | trigger only | SP2 / none | creates legacy global role | `NEW.id` | onboarding has no selected tenant | profile PII/global role creation; required definer boundary | HIGH |
+| `is_admin` | `()` | legacy DB helper | called by profile privilege trigger; no current RLS policy after 9C | SP3 / A | yes | none | none | global privilege predicate | CRITICAL |
+| `is_admin_or_employee` | `()` | legacy DB helper | no live RLS policy after 9C | SP3 / A | yes | none | none | global privilege predicate | CRITICAL |
+| `is_admin_or_staff` | `()` | legacy DB helper | no live RLS policy after 9C | SP3 / A | yes | none | none | global privilege predicate | CRITICAL |
+| `prevent_non_admin_profile_privilege_changes` | `()` trigger | profile UPDATE trigger | calls `is_admin`; invoked by profile writers | SP1 / none | yes | `OLD/NEW` profile | lacks membership/resource context | protects global fields using global authority | HIGH |
+| `update_my_profile_v1` | `(text,text,text,text,text,text,bool,bool,bool,bool,bool,bool,bool,bool,bool,bool)` | `app/account/page.tsx` | profile trigger | SP1 / A | reads own global admin role for verification reset branch | caller UID | owner profile; no selected tenant | contact/address/declarations; protected-field bypass boundary | HIGH |
+| `update_profile_contact_details` | `(uuid,text,text,text,text,text,text)` | users page | profile trigger; audit insert | SP2 / A,S | yes | target user | no tenant/resource relation; no repo service caller | phone/address PII and tenantless audit | CRITICAL |
+| `update_profile_identity` | `(uuid,text,text)` | users page | profile trigger; audit insert | SP2 / A,S | yes | target user | no tenant/resource relation; no repo service caller | names/full name and tenantless audit | CRITICAL |
+| `update_profile_verification` | `(uuid,text,text)` | users page and `app/admin/check-in/page.tsx` | profile trigger; audit insert | SP2 / A,S | yes | target user | check-in caller does not pass reservation/tenant; no repo service caller | verification/qualification state and tenantless audit | CRITICAL |
+
+Inventory result: 19/19 classified, UNKNOWN = `0`. The internal report row
+helper `_admin_reservation_report_rows_v2(date,date,uuid,text,text,text)` and
+the lifecycle redaction helper are dependencies, not additional members of the
+67-function SECURITY DEFINER catalog: both remain closed, SECURITY INVOKER
+helpers unless a versioned tenant parameter is added to their closed contract.
+
+### 38.2 Final classification
+
+| Class | Functions | Planned disposition |
+|---|---|---|
+| A. BODY HARDENING REQUIRED | report v2/export; all six admin user/profile functions; `anonymize_my_account_v1`; `export_my_data_v1`; `update_my_profile_v1`; public booking configuration | bind authorization and every read/write/audit to trusted tenant or owner scope; preserve active signatures only where the single-active bridge is an explicit temporary contract |
+| B. ACL-ONLY CLEANUP | legacy report v1 | after production zero-caller proof, revoke A/S/N/PUBLIC as applicable; body, owner and search_path fingerprint remain unchanged; final retirement stays 9D-5 |
+| C. SECURITY INVOKER CANDIDATE | none accepted in the 19-function scope | export cannot become invoker because it reads `auth.users`; staff/report/profile writers require privileged table access; public config cannot resolve the closed active-tenant bridge as anon without a privileged wrapper |
+| D. SAFE / NO CHANGE | none of the 19 | closed report/redaction helpers outside the 19-function catalog remain invoker and internal; previously closed tenant helpers remain outside 9D-4 |
+| E. APP-CUTOVER DEPENDENCY | `get_my_role`, `is_admin`, `is_admin_or_employee`, `is_admin_or_staff`, `handle_new_user`, profile privilege trigger | freeze fingerprints and grants in 9D-4; replace/retire only with trusted selected-tenant context and onboarding/role cutover in 9E, then finalize in 9D-5 |
+
+No SECURITY DEFINER function is converted mechanically. The expected count
+after the DB-only 9D-4 phases is therefore **67**. A different count is drift
+and stops deployment. The later 9E/9D-5 cutover must publish a separate exact
+count after the six app-cutover-dependent functions have a proved disposition.
+
+### 38.3 Reporting plan (9D-4A)
+
+1. Add a closed SECURITY INVOKER report core that accepts an already-validated
+   tenant UUID. Tenant predicate is applied before KPI aggregation, revenue,
+   details pagination and export counting.
+2. Preserve active v2/export signatures for OLD APP compatibility. Their small
+   definer wrappers resolve exactly one active tenant, require an active `admin`
+   membership in it, validate an optional lane belongs to it, and call the core.
+   A global `profiles.role=admin` without that membership returns `not_allowed`.
+3. Preserve the current admin-only business rule. Employee remains denied; no
+   role widening is introduced in 9D-4.
+4. Keep KPI/details/export filter semantics identical, page size limits intact,
+   CSV at maximum 5000 rows, formula-injection handling unchanged and the
+   existing PII-minimized export DTO unchanged. Report details may retain only
+   the currently required name/email/phone fields for tenant-authorized admin.
+5. The v1 report has no live app caller. 9D-4A performs ACL-only closure after
+   production log/caller proof; deletion or signature removal belongs to 9D-5.
+6. A future selected-tenant report version and replacement of the active-single
+   wrapper belong to 9E/9F. A second active tenant is prohibited before that.
+
+Required proof: Tenant A report has zero Tenant B rows in KPI, revenue, totals,
+details and CSV; optional Lane B fails before output; page-independent totals,
+DST/calendar ranges, hierarchy and formula/PII safety retain their 6A/6B tests.
+
+### 38.4 Profiles and users plan (9D-4B)
+
+The current functions have only `target_user_id`, which is not a tenant
+authority. They must not infer authorization from the target's global profile
+role. The recommended operational relationship is:
+
+- active tenant membership in the selected tenant; or
+- a reservation owned by that user in the selected tenant; or
+- an event registration owned by that user whose event is in the selected
+  tenant.
+
+That relationship must be approved as a business rule before implementation.
+An unrelated global profile is never enough.
+
+- `admin_list_users_v1`: use the sole-active tenant compatibility wrapper now,
+  then return the union of tenant members and operationally related customers,
+  de-duplicated by user ID. Admin-only access remains. Search/filter/sort/count
+  operate after tenant scoping. Address, declarations, verification and admin
+  note remain admin-only because the current page requires them.
+- `admin_set_user_role_v1`: role means `tenant_memberships.role`, using the
+  approved mapping `admin/user/pracownik/instruktor` <->
+  `admin/user/employee/instructor`. Lock target membership and tenant admin
+  count, prevent removal/demotion of the last active tenant admin, update the
+  selected membership, and let the temporary CSK sync bridge preserve legacy
+  `profiles.role`. The global profile value is not the authorization source.
+- note and identity: tenant admin only plus an approved target relationship.
+  Store one audit with the selected tenant. No employee widening.
+- contact details: tenant admin; employee only for an operationally related
+  customer and never self/admin/staff, preserving the current restrictions.
+- verification: admin for a related target; employee only when a trusted
+  reservation/check-in relationship proves the target belongs to the same
+  tenant. The existing target-user-only signature cannot prove that relation.
+  Introduce a versioned resource-bound RPC for check-in and mark its app caller
+  change as a 9E/9F dependency; do not accept a browser tenant UUID alone.
+
+All six functions continue to require definer privilege because authenticated
+direct profile UPDATE remains revoked. SP2 functions move to SP1 when their
+bodies change. Their service_role grants are removed unless production caller
+evidence identifies an exact server-only path; repository inventory found none.
+
+### 38.5 Owner lifecycle plan (9D-4C)
+
+- `update_my_profile_v1` remains strictly `auth.uid()` scoped and cannot accept
+  another user or tenant. It keeps the allowlist and verification reset rule.
+  Its global-admin special branch must be replaced by a rule based on the
+  caller's active memberships or removed if it is not required for self-service.
+- `export_my_data_v1` keeps its definer boundary because the allowlisted export
+  reads the caller's `auth.users` row. Every business row remains filtered by
+  `user_id=auth.uid()` and retains its own tenant ownership internally; no
+  tenant, audit, token, admin-note or rate-limit internals are added to output.
+- `anonymize_my_account_v1` remains owner-only, locks the caller profile and
+  owner rows, anonymizes across the whole account, and never accepts a target
+  user. Its single `account_anonymized` audit is an approved global lifecycle
+  audit with `tenant_id=NULL`, pseudonymous actor/details and DB timestamp.
+  Idempotent retry creates no second audit.
+
+Recommended lifecycle contract is **account-wide across every membership**,
+because deletion of the Auth identity cannot safely be tenant-local. This is a
+blocking business decision: if deletion is intended to leave other-tenant
+access alive, it must become a different "leave tenant" feature and Auth user
+deletion must not run. No 9D-4C implementation starts until this is approved.
+
+### 38.6 Audit disposition
+
+There is no standalone client audit writer in the 19-function scope. Audit is
+embedded in the admin profile mutations and account anonymization.
+
+| Writer | Tenant derivation | Audit tenant | Read visibility | Required behavior |
+|---|---|---|---|---|
+| role/note/identity/contact/verification | locked selected membership or locked operational reservation/event-registration relation | exact target tenant | active tenant admin only; no global/foreign audit | actor=`auth.uid()`, DB time, no PII values, no audit on deny/no-change |
+| account anonymization | caller-owned account lifecycle | `NULL` | not exposed to tenant staff by tenant audit readers | one pseudonymous global audit; retry creates none |
+| self update/export/reports/public reader | no audit mutation | none | n/a | must not create synthetic or denial audits |
+
+All tenant audit inserts explicitly provide `tenant_id`; they do not rely on a
+default. Denied cross-tenant attempts are resolved before any update or audit.
+No target name, note, email, phone, address, token or raw error is written to
+audit details.
+
+### 38.7 Service-role paths
+
+| Function/path | Caller | Authentication / business authorization | Tenant/resource source | Why service is required | Direct EXECUTE target |
+|---|---|---|---|---|---|
+| account delete route after `anonymize_my_account_v1` | server route | user JWT proves self; DB RPC must succeed first | caller UID/account-wide | Auth Admin `deleteUser` only | lifecycle RPC stays authenticated-only; service never calls it |
+| contact/identity/verification current S grants | no live repository caller found | none demonstrated | target user only and therefore insufficient | no demonstrated need | revoke S when body is hardened, after production zero-caller check |
+| public booking config S grant | server compatibility only | public PII-free contract | exactly one active tenant | no privileged business mutation | retain only if a live server caller is proved; otherwise N+A only |
+| trigger functions | database triggers | trigger event and hardened parent writer | `NEW/OLD` or auth user | required internal trigger execution | no direct N/A/S grants |
+
+Service role is never business authorization. A server caller must first prove
+the user or claim and bind the trusted resource; otherwise the call is denied.
+
+### 38.8 PII authorization matrix
+
+| Data | Owner | Tenant admin | Tenant employee | Other tenant / anon |
+|---|---|---|---|---|
+| own account/profile/export | full approved self contract | only through related admin function | only explicitly allowed operational subset | none |
+| name, email, phone for user list | own only | related tenant user/customer | not through global list | none |
+| address and declarations | own export/self edit | related tenant user/customer where current admin screen requires | contact edit only for related customer; no broad list grant | none |
+| verification state/note | own permitted export/state | related tenant target | related check-in customer only | none |
+| admin note | never in self export | related tenant admin only | none | none |
+| reservation/event association | owner flows | selected tenant operations | selected tenant existing scope | none |
+| tokens, secrets, auth hashes | none | none | none | none |
+
+Every DTO has an allowlist. Tenant UUID may be used internally but is not added
+to public DTOs or URLs unless the later trusted 9E routing contract requires a
+non-PII tenant selector.
+
+### 38.9 Tenant derivation and authorization rules
+
+1. Reports/public configuration without a resource resolve the existing
+   `active_single_tenant_id_v1()` bridge and fail if the result is NULL. This is
+   compatibility only and is invalid after a second active tenant.
+2. Optional report lane derives its tenant from `shooting_lanes` and must equal
+   the resolved tenant.
+3. Role mutation derives from the locked target membership in the resolved
+   tenant. Caller-supplied user ID is never enough.
+4. Profile operations derive from a locked tenant membership or locked
+   reservation/event-registration relationship. Mixed or ambiguous relations
+   fail; no partial read/update is allowed.
+5. Self operations derive the actor only from `auth.uid()` and reject any
+   foreign resource even if supplied indirectly.
+6. Privileged operations require an active tenant and active membership.
+   `profiles.role=admin` without that membership, pending/suspended membership,
+   no membership and inactive tenant all deny.
+7. Employee is included only in contact/verification operations already
+   permitted by the product, with the stronger operational relation. Instructor
+   scope is not expanded.
+
+### 38.10 ACL, owner, search_path and compatibility
+
+- Changed definers remain owned by `postgres`, use SP1, schema-qualify objects,
+  revoke PUBLIC/N/A/S first, then receive the minimum exact grant.
+- Active report/profile/self RPC signatures and response codes remain unchanged
+  when the sole-active bridge can safely provide context. Resource-bound
+  verification and future selected-tenant list/report contracts are versioned;
+  their app switch belongs to 9E/9F.
+- ACL-only report-v1 cleanup changes only grants. Its body, security mode,
+  owner, path and normalized fingerprint remain unchanged.
+- `get_my_role` and `is_admin*` are not rewritten to guess CSK permanently.
+  They retain current behavior only until 9E moves every caller to
+  `get_my_tenant_role_v1(selected tenant)` and tenant membership checks.
+- `handle_new_user` continues to create only the legacy profile. Tenant
+  membership onboarding and invitation semantics belong to 9E; it must not
+  silently assign users to every active tenant.
+- The profile privilege trigger remains frozen until all profile writers and the
+  sync bridge have tenant-aware replacements. It is not used as the primary
+  authorization control for hardened RPCs.
+
+Caller compatibility:
+
+| File | Caller type | Current args/auth | Required context | App change |
+|---|---|---|---|---|
+| `app/admin/reports/page.tsx` | browser admin | filters/dates/optional lane; user JWT | active-single bridge now, selected tenant later | no for bridge hardening; yes in 9E |
+| `app/admin/users/page.tsx` | browser admin | filters or target user; user JWT | selected/sole tenant plus target relation | versioned relation-aware calls require 9E/9F |
+| `app/admin/check-in/page.tsx` | browser employee/admin | target user/action; user JWT | reservation-derived tenant and target relation | yes, pass trusted reservation to a versioned RPC |
+| `app/account/page.tsx` | browser owner | self fields; user JWT | `auth.uid()` | no |
+| account export/delete routes | server route using user-scoped Supabase client | no target user; bearer JWT | `auth.uid()` account-wide | no; Auth Admin deletion remains server-only |
+| `app/booking/page.tsx` | public/browser | no args | sole active tenant now; host/slug in 9E | no now; yes in 9E |
+| homepage/admin/calendar-feed callers | browser/server user session | `get_my_role()` | selected tenant membership | 9E dependency; do not break in 9D-4 |
+
+### 38.11 Concurrency and idempotency plan
+
+- Role change: transaction/advisory lock by tenant then target membership;
+  concurrent last-admin demotions yield one valid outcome, never zero active
+  admins and never cross-tenant profile synchronization.
+- Profile mutations: lock target relation then profile in stable UUID order;
+  no-change returns without audit; concurrent different-tenant attempts cannot
+  affect the target or write audit.
+- Account anonymization: preserve existing profile lock and idempotent marker;
+  concurrent retries create one anonymization and one global audit. Export
+  during deletion returns either a coherent pre-delete snapshot or controlled
+  unavailable result, never a mixed cross-user export.
+- Reports are STABLE/read-only and must share one transaction snapshot; KPI,
+  detail and export tenant scope cannot diverge under concurrent writes.
+- Required result for all stress matrices: deadlocks `0`, unintended duplicate
+  effects `0`, cross-tenant effects/rows `0`, orphan fixture `0`.
+
+### 38.12 Minimum cross-tenant matrix
+
+| Actor / attempt | Required result |
+|---|---|
+| ADMIN_A report/resource A | ALLOW; only Tenant A rows/KPI/CSV |
+| ADMIN_A report/resource B | DENY before any Tenant B data |
+| EMPLOYEE_A report | DENY under current admin-only report contract |
+| ADMIN_A related profile A | ALLOW per exact function role |
+| ADMIN_A unrelated or Tenant B profile | DENY; zero PII/audit |
+| EMPLOYEE_A related customer contact/verification | ALLOW only current operation |
+| EMPLOYEE_A admin/staff/self/unrelated/Tenant B target | DENY |
+| global profile admin without active target membership | DENY every privileged function |
+| pending/suspended/no membership | DENY every privileged function |
+| USER_A own self update/export/anonymization | ALLOW per contract |
+| USER_A foreign user/resource or spoofed tenant | DENY |
+| Tenant A audit reader | no Tenant B or global lifecycle audit |
+| anon | public booking config only; no reports/profile/account PII |
+| service_role direct profile/report mutation | DENY unless an exact retained server contract is proved |
+
+Tests also freeze DTO field names, status/error codes, report pagination and
+CSV behavior, owner lifecycle idempotency, audit actor/time/content, trigger
+fingerprints, direct table DML denials and global-role negative cases.
+
+### 38.13 Compatibility defaults
+
+All seven fixed-CSK defaults remain during 9D-4. They are compatibility only,
+not authorization or tenant derivation.
+
+| Table | Default | Current tenant-aware writers | Legacy writers / residual | Removal blocker | Target removal |
+|---|---|---|---|---|---|
+| `reservations` | fixed CSK UUID | active reservation v2 explicitly derives lane tenant | closed legacy v1/default dependency | final writer/caller inventory | 9D-5 after 9E/9F gate |
+| `shooting_lanes` | fixed CSK UUID | hardened lane-family create explicitly resolves tenant | dormant/legacy creation paths | selected-tenant app context | 9D-5 after 9E/9F |
+| `lane_blocks` | fixed CSK UUID | hardened block writers derive lane tenant | no active browser fallback | production zero-caller proof | 9D-5 |
+| `events` | fixed CSK UUID | hardened event create/update resolve tenant | retained legacy service functions | app selected-tenant cutover | 9D-5 after 9E/9F |
+| `event_lanes` | fixed CSK UUID | event writers copy verified event tenant | retained legacy event paths | same as events | 9D-5 after 9E/9F |
+| `event_registrations` | fixed CSK UUID | register/promotion writers derive event tenant | legacy compatibility paths | complete writer inventory | 9D-5 after 9E/9F |
+| `email_deliveries` | fixed CSK UUID | hardened prepare/complete flows bind record tenant | historical/legacy delivery paths | all delivery writers explicit | 9D-5 after 9E/9F |
+
+### 38.14 Proposed sub-phases
+
+1. **9D-4A — reservation reports.** Harden v2/export plus closed report core;
+   ACL-close v1. No application change under the active-single bridge.
+2. **9D-4B-1 — tenant admin user list and role/note/identity/contact.** Starts
+   only after the operational-relationship rule is approved. Preserve current
+   admin/employee division and make audits tenant-bound.
+3. **9D-4B-2 — verification/check-in relation.** Add resource-bound versioned
+   verification, update the check-in caller in the later approved app cutover,
+   then close the target-user-only unsafe path.
+4. **9D-4C — owner lifecycle.** Starts only after account-wide deletion/export
+   semantics are approved; preserve self-only and idempotency.
+5. **9D-4E — public booking compatibility.** Bind v1 output to exactly one
+   active tenant without changing its DTO; selected host/slug contract remains
+   9E.
+6. **9D-4D/9E gate — legacy authorization and onboarding.** Do not implement in
+   DB-only 9D-4. Replace app callers/onboarding first, then retire in 9D-5.
+
+Each executable sub-phase needs a separate migration, normalized fingerprint
+preflight, focused pgTAP/cross-tenant/concurrency tests, full DB/Node/TypeScript/
+build regression, production dry-run, explicit production approval, rollback-
+only production matrix, postflight and Git checkpoint.
+
+### 38.15 9D-5 entry criteria
+
+Before 9D-5:
+
+- every active writer explicitly sets or derives tenant and no security decision
+  relies on a CSK default;
+- reports and user/profile paths have zero global-role authorization and zero
+  cross-tenant PII/audit leakage;
+- account lifecycle semantics are approved and production-proved;
+- app and DB callers of `get_my_role`, `is_admin*`, legacy report v1 and legacy
+  service grants are inventoried with zero unknown caller;
+- onboarding and role management have a tenant-aware replacement ready in 9E;
+- all remaining SECURITY DEFINER functions have exact owner/path/ACL/fingerprint
+  and retain/convert/retire disposition; UNKNOWN remains zero;
+- default-removal preflight proves all seven active and internal writer paths
+  explicitly supply tenant;
+- final cross-tenant RPC isolation audit can run without activating Tenant B in
+  production.
+
+### 38.16 Rollback and STOP conditions
+
+Rollback uses a reviewed forward migration restoring only captured function
+bodies, modes, owners, paths and ACL. Never edit applied migrations or use
+migration repair. Versioned functions are additive until caller cutover; old
+wrappers are not removed in the same deployment. Restoring a global-role body
+is allowed only as an emergency single-active-CSK rollback while Tenant B is
+still blocked, followed by immediate forward correction.
+
+STOP on any unexpected overload/caller/fingerprint, non-SP1 touched definer,
+wider grant, ambiguous user-tenant relation, account-lifecycle decision absent,
+zero/multiple active tenants for a compatibility wrapper, resource/tenant
+mismatch, global-admin allow without membership, cross-tenant row/PII/audit,
+duplicate audit, last-admin race, nonzero fixture, unexpected SECURITY DEFINER
+count, changed default, additional pending migration or runtime contract drift.
+
+### 38.17 SEC-004 impact and decisions required
+
+9D-4 will close the current global report, profile administration, account
+lifecycle and public booking privileged-function gaps for the single-active
+tenant bridge. It will not close SEC-004.
+
+Still required afterward:
+
+- **9D-5:** legacy ACL/function retirement, exact final definer audit and seven
+  default retirement after all cutover gates;
+- **9E:** trusted host/slug/selected-tenant application context, tenant role
+  routing, onboarding and removal of app dependence on `profiles.role`;
+- **9F:** Reports/Events/Calendar/Check-in and remaining UI/API context cutover;
+- **9G:** full cross-tenant application IDOR/concurrency suite;
+- **9H:** SEC-004 closure and second-tenant readiness audit.
+
+Blocking decisions before a complete local 9D-4 implementation:
+
+1. approve or revise the proposed operational user relationship (membership OR
+   tenant reservation OR tenant event registration), including which employee
+   profile fields/actions it permits;
+2. approve account-wide export/anonymization/Auth deletion semantics, distinct
+   from a future tenant-leave operation.
+
+The plan is technically complete, but implementation of the entire 9D-4 scope
+is not authorized and is not safe until those two decisions are recorded.
+9D-4A and 9D-4E are independently implementable after a separate explicit
+approval; they do not resolve the 9D-4B/4C blockers.
+
+SAAS-9D-4 TECHNICAL PLAN: **READY**
+
+READY FOR SAAS-9D-4 LOCAL IMPLEMENTATION: **NO-GO**
+
+READY FOR PRODUCTION WRITE: **NO**
+
+SECOND TENANT: **NO-GO**
+
+SEC-004: **OPEN**
+
 ## 36. SAAS-9D-3C — LANE FAMILY WRITER / HELPERS FINAL PLAN
 
 Planning baseline: repository checkpoint
@@ -3460,6 +3857,46 @@ SAAS-9D-3C LOCAL: **PASS**
 READY FOR SAAS-9D-3C PRODUCTION PREFLIGHT: **GO**
 
 READY FOR SAAS-9D-4 PLANNING: **NO-GO until 9D-3C production/checkpoint review**
+
+READY FOR PRODUCTION WRITE: **NO**
+
+SECOND TENANT: **NO-GO**
+
+SEC-004: **OPEN**
+
+## 39. SAAS-9D-4A local implementation result (2026-09-15)
+
+The approved reservation-report slice has been implemented and verified
+locally. Active v2/report export wrappers preserve their signatures and DTOs,
+resolve the approved sole active tenant bridge, and authorize exclusively from
+an active tenant `admin` membership. A closed SECURITY INVOKER core applies the
+tenant predicate before KPI, revenue, occupancy, pagination, resource options,
+details, and export calculations. The global `profiles.role` report bypass is
+removed. The unused legacy v1 body remains unchanged and its direct EXECUTE is
+closed.
+
+Profile administration is not part of 4A; the approved target-user operational
+relationship matrix remains a mandatory 4B requirement. Existing reservation
+ownership is the operational relationship for customer detail rows returned by
+4A. Tenant-leave and account-wide export/anonymization/Auth deletion remain
+separate: their functions and fingerprints are unchanged.
+
+Focused SQL passed `33/33`; REPORTS-6A `25/25`; REPORTS-6B `34/34`; the full
+function ACL matrix `17/17`; and the full DB suite `1107/1107`. Node passed
+`739/739`, TypeScript and production build passed, focused Reports Playwright
+passed `5/5`, and synthetic fixture cleanup is zero. SECURITY DEFINER remains
+`67`, unexpected drift is zero, and compatibility defaults remain `7/7`.
+Migration SHA-256 is
+`54D3EE6B3D37D63374F4EBFFD507B89C7797CE6ED0C813F62080BCBDD8408031`.
+
+Detailed evidence is recorded in
+`SAAS_9D_4A_ADMIN_RESERVATION_REPORTS_HARDENING_REPORT.md`.
+
+SAAS-9D-4A LOCAL: **PASS**
+
+READY FOR SAAS-9D-4A PRODUCTION PREFLIGHT: **GO**
+
+READY FOR SAAS-9D-4B-1: **NO-GO until review**
 
 READY FOR PRODUCTION WRITE: **NO**
 

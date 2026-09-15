@@ -28,7 +28,8 @@ begin
   perform pg_catalog.set_config(
     'request.jwt.claim.sub', coalesce(p_user_id::text, ''), true
   );
-  execute pg_catalog.format('set local role %I', p_role);
+  -- Legacy v1 is owner-only after SAAS-9D-4A. Keep claims for body-regression
+  -- coverage while calling it as the test owner; direct client ACL is tested below.
 end;
 $function$;
 
@@ -160,11 +161,11 @@ begin
     'RPC ma być STABLE SECURITY DEFINER, owner postgres, bezpieczny search_path.');
 
   perform pg_temp.record_result(3, 'Least-privilege EXECUTE ACL',
-    pg_catalog.has_function_privilege('authenticated', 'public.admin_get_reservation_report_v1(date,date,integer,integer)', 'EXECUTE')
+    not pg_catalog.has_function_privilege('authenticated', 'public.admin_get_reservation_report_v1(date,date,integer,integer)', 'EXECUTE')
     and not pg_catalog.has_function_privilege('anon', 'public.admin_get_reservation_report_v1(date,date,integer,integer)', 'EXECUTE')
     and not pg_catalog.has_function_privilege('service_role', 'public.admin_get_reservation_report_v1(date,date,integer,integer)', 'EXECUTE')
     and not exists (select 1 from pg_catalog.pg_proc procedure cross join lateral pg_catalog.aclexplode(coalesce(procedure.proacl, pg_catalog.acldefault('f', procedure.proowner))) acl where procedure.oid = 'public.admin_get_reservation_report_v1(date,date,integer,integer)'::pg_catalog.regprocedure and acl.grantee = 0 and acl.privilege_type = 'EXECUTE'),
-    'Tylko authenticated otrzymuje EXECUTE; autoryzacja admin pozostaje wewnętrzna.');
+    'Legacy v1 jest owner-only; aktywny klient używa tenant-aware v2.');
 
   perform pg_temp.record_result(4, 'No report RLS policy or table grant widening',
     not exists (select 1 from pg_catalog.pg_policies where schemaname = 'public' and tablename in ('reservations', 'profiles', 'shooting_lanes', 'lane_booking_rules') and policyname like '%REPORTS-6A%'),
