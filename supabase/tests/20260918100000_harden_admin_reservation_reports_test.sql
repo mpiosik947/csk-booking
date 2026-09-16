@@ -210,11 +210,10 @@ begin
     ) and strpos(p.prosrc,'get_my_tenant_role_v1(v_tenant_id)')>0)=2,
     'membership authorization missing');
   perform pg_temp.ok(28,'active single tenant bridge exact',tenant_a is not null and (select count(*) from public.tenants where status='active')=1,'active-single bridge differs');
-  perform pg_temp.ok(29,'profile administration contract untouched',
-    md5(replace(replace(pg_get_functiondef('public.admin_list_users_v1(integer,integer,text,text,text,text)'::regprocedure),E'\r\n',E'\n'),E'\r',E'\n'))='e0702f533d7a9ee5b7de93bb68ef3168'
+  perform pg_temp.ok(29,'profile administration follows approved 4B-1A cutover',
+    exists(select 1 from pg_proc where oid='public.admin_list_users_v1(integer,integer,text,text,text,text)'::regprocedure and prosrc~'\mget_my_tenant_role_v1\M' and prosrc~'\mtenant_user_admin_notes\M' and prosrc!~'profile[.]admin_note')
     and md5(replace(replace(pg_get_functiondef('public.update_profile_verification(uuid,text,text)'::regprocedure),E'\r\n',E'\n'),E'\r',E'\n'))='a0522b6beb94bde3bdff22799afc1368',
-    '4B function drifted: list='||md5(replace(replace(pg_get_functiondef('public.admin_list_users_v1(integer,integer,text,text,text,text)'::regprocedure),E'\r\n',E'\n'),E'\r',E'\n'))
-      ||', verification='||md5(replace(replace(pg_get_functiondef('public.update_profile_verification(uuid,text,text)'::regprocedure),E'\r\n',E'\n'),E'\r',E'\n')));
+    '4B-1A list or deferred verification contract drifted.');
   perform pg_temp.ok(30,'account lifecycle contract untouched',
     md5(replace(replace(pg_get_functiondef('public.export_my_data_v1()'::regprocedure),E'\r\n',E'\n'),E'\r',E'\n'))='ffa6b35c5502a347e463110401032061'
     and md5(replace(replace(pg_get_functiondef('public.anonymize_my_account_v1()'::regprocedure),E'\r\n',E'\n'),E'\r',E'\n'))='7e4d950e75e6e5782b139f11269d03a0',

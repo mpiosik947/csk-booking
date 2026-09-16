@@ -183,7 +183,7 @@ begin
 
   select id into v_audit_id
   from public.audit_logs
-  where action='profile_admin_note_updated' and target_id=v_target
+  where action='tenant_user_admin_note_updated' and target_id=v_target
   order by created_at desc,id desc limit 1;
 
   perform pg_temp.record_result(10,'Admin cannot update trusted audit rows',
@@ -209,15 +209,15 @@ begin
   perform pg_temp.record_result(15,'Trusted flow writes exactly one idempotent audit',
     v_first_result @> '{"ok":true,"changed":true,"code":"updated"}'::jsonb
     and v_repeat_result @> '{"ok":true,"changed":false,"code":"no_change"}'::jsonb
-    and (select pg_catalog.count(*)=1 from public.audit_logs where action='profile_admin_note_updated' and target_id=v_target),
+    and (select pg_catalog.count(*)=1 from public.audit_logs where action='tenant_user_admin_note_updated' and target_id=v_target),
     'Pierwsza zmiana tworzy jeden audit, a no_change nie tworzy drugiego.');
 
   select * into v_audit from public.audit_logs where id=v_audit_id;
   perform pg_temp.record_result(16,'Trusted audit derives actor and exposes no secrets',
     v_audit.actor_user_id=v_admin
     and v_audit.actor_role='admin'
-    and v_audit.action='profile_admin_note_updated'
-    and v_audit.target_type='profile'
+    and v_audit.action='tenant_user_admin_note_updated'
+    and v_audit.target_type='tenant_user_admin_note'
     and v_audit.target_id=v_target
     and v_audit.created_at is not null
     and v_audit.details = '{"new_note_present":true,"operator_role":"admin","previous_note_present":false}'::jsonb
@@ -260,7 +260,7 @@ begin
   perform pg_temp.record_result(18,'All fixture remains transaction-scoped',
     (select pg_catalog.count(*)=5 from public.profiles where user_id in (v_admin,v_employee,v_instructor,v_user,v_target))
     and (select pg_catalog.count(*)=5 from auth.users where id in (v_admin,v_employee,v_instructor,v_user,v_target))
-    and (select pg_catalog.count(*)=1 from public.audit_logs where action='profile_admin_note_updated' and target_id=v_target),
+    and (select pg_catalog.count(*)=1 from public.audit_logs where action='tenant_user_admin_note_updated' and target_id=v_target),
     'Fixture [TEST][SEC-007] istnieje wyłącznie przed końcowym ROLLBACK.');
 end;
 $tests$;

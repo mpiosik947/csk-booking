@@ -296,13 +296,14 @@ begin
     and pg_catalog.to_regprocedure('public.get_check_in_reservation_v1(uuid)') is not null,
     'Booking, Events, Reports and Check-in contracts must not be replaced.');
 
-  perform pg_temp.record_result(30, 'Later ownership remains limited to approved SAAS-9B-2 tables',
-    (select pg_catalog.count(*) = 8
+  perform pg_temp.record_result(30, 'Later ownership remains limited to approved tenant-owned tables',
+    (select pg_catalog.count(*) = 9
      from information_schema.columns
      where table_schema = 'public' and column_name = 'tenant_id'
        and table_name in (
          'shooting_lanes', 'reservations', 'lane_blocks', 'events',
-         'event_lanes', 'event_registrations', 'email_deliveries', 'audit_logs'
+         'event_lanes', 'event_registrations', 'email_deliveries', 'audit_logs',
+         'tenant_user_admin_notes'
        ))
     and not exists (
       select 1 from information_schema.columns
@@ -310,10 +311,10 @@ begin
         and table_name not in (
           'tenant_memberships', 'shooting_lanes', 'reservations', 'lane_blocks',
           'events', 'event_lanes', 'event_registrations', 'email_deliveries',
-          'audit_logs'
+          'audit_logs', 'tenant_user_admin_notes'
         )
     ),
-    'Tenant ownership must not spread outside the approved SAAS-9B-2 scope.');
+    'Tenant ownership must not spread outside the approved phased scope.');
 end;
 $tests$;
 

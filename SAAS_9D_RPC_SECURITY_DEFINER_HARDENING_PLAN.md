@@ -3903,3 +3903,324 @@ READY FOR PRODUCTION WRITE: **NO**
 SECOND TENANT: **NO-GO**
 
 SEC-004: **OPEN**
+
+## 40. SAAS-9D-4B-1 — FINAL PLAN
+
+Planning baseline: repository and production checkpoint
+`44a3d4699d682689757eb1b8985c7a13ed3064ab`. SAAS-9D-4A is closed with
+production PASS. This section is planning-only: it creates no migration,
+performs no SQL write and authorizes no production change.
+
+### 40.1 Exact scope
+
+9D-4B-1 contains exactly five active profile/user-administration functions.
+Verification is deliberately excluded for 9D-4B-2, owner lifecycle for 4C,
+legacy authorization/onboarding for 4D/9E, and compatibility retirement for
+9D-5.
+
+| Function | Signature | Domain / callers | Current mode, owner, path | Current ACL | Global role check | Target / tenant source | PII and bypass risk | Severity | Disposition |
+|---|---|---|---|---|---|---|---|---|---|
+| `admin_list_users_v1` | `(integer,integer,text,text,text,text)` | admin users list; `app/admin/users/page.tsx` | DEFINER, `postgres`, SP1 | authenticated | actor `profiles.role=admin` | no target; tenant currently absent | returns broad profile/contact/address/declaration/verification/note DTO across every profile | CRITICAL | A — BODY HARDENING |
+| `admin_set_user_role_v1` | `(uuid,text)` | role editor; `app/admin/users/page.tsx` | DEFINER, `postgres`, SP1 | authenticated | actor and target global roles | target user only; target membership must become authority | global privilege mutation, global last-admin count, tenantless audit | CRITICAL | A — BODY HARDENING |
+| `admin_set_user_note_v1` | `(uuid,text)` | admin note editor; `app/admin/users/page.tsx` | DEFINER, `postgres`, SP1 | authenticated | actor global role | target user only; no relation | cross-tenant note mutation and tenantless/PII-bearing audit | CRITICAL | A — BODY HARDENING |
+| `update_profile_identity` | `(uuid,text,text)` | identity editor; `app/admin/users/page.tsx` | DEFINER, `postgres`, SP2 | authenticated + service_role | actor global role | target user only; no relation | name/full-name PII mutation; service path has no repository caller | CRITICAL | A — BODY + ACL HARDENING |
+| `update_profile_contact_details` | `(uuid,text,text,text,text,text,text)` | contact editor; `app/admin/users/page.tsx` | DEFINER, `postgres`, SP2 | authenticated + service_role | actor/target global roles | target user only; no relation | phone/address PII mutation; employee can target globally; no service caller | CRITICAL | A — BODY + ACL HARDENING |
+
+Repository caller inventory is exact: all five browser calls are in
+`app/admin/users/page.tsx`; tests are the only other repository callers. No
+server/service caller exists for the identity or contact RPC. Production
+preflight must reconfirm zero service caller before revoking those grants.
+UNKNOWN = `0`.
+
+One optional implementation dependency is permitted: a closed, owner-only
+SECURITY INVOKER helper accepting explicit `(tenant_id,user_id)` and returning
+only whether the approved operational relation exists. It must have no
+PUBLIC/anon/authenticated/service_role EXECUTE. It is not an external RPC and
+does not change the expected SECURITY DEFINER count. If repeated inline
+`EXISTS` predicates are clearer after implementation review, no helper is
+required.
+
+### 40.2 Trusted tenant and operational relationship
+
+All unchanged public signatures use the temporary
+`active_single_tenant_id_v1()` compatibility bridge. The bridge must resolve
+exactly one active tenant; zero or more than one returns controlled denial.
+It is not valid after second-tenant activation and must be replaced by trusted
+selected-tenant context in 9E.
+
+Caller authorization is always `auth.uid()` plus an active membership in the
+resolved tenant:
+
+- list, role, note and identity: membership role `admin` only;
+- contact: `admin`, or `employee` only under the existing customer-only scope;
+- pending, suspended, missing membership and global `profiles.role` alone:
+  DENY.
+
+A target is operationally related only when at least one retained row proves:
+
+1. `tenant_memberships(tenant_id,target_user_id)`, or
+2. `reservations(tenant_id,user_id=target_user_id)`, or
+3. `event_registrations(user_id=target_user_id)` joined to an `events` row with
+   the same tenant (and matching registration tenant).
+
+The relationship is derived in SQL from tenant-owned records. Browser tenant
+values, target `profiles.role`, the existence of a global profile and the
+target UUID alone are never authority. Cross-tenant-only and unrelated global
+users fail before profile PII is read or mutated. Retained historical business
+rows continue to constitute the approved operational relationship; this does
+not change retention or expose data to another tenant.
+
+### 40.3 Per-function target contract
+
+`admin_list_users_v1` keeps its exact signature, return columns, filters,
+sorting, pagination cap and stable UUID tie-breaker for old-app compatibility.
+It builds a de-duplicated eligible-user ID set from the three approved
+relationship sources before joining `profiles`; search/filter/count occur only
+inside that set. It remains admin-only. The existing page currently consumes
+all returned fields, so removing return columns would require a versioned DTO
+and app cutover in 9E/9F. 4B-1 therefore preserves but does not expand the DTO.
+
+The list `role` field comes from the selected tenant membership and maps tenant
+roles back to legacy UI values: `employee -> pracownik`, `instructor ->
+instruktor`, with `admin` and `user` unchanged. An operational customer without
+a membership is displayed as `user`; this display fallback is not authority.
+
+`admin_set_user_role_v1` changes only an existing membership in the resolved
+tenant. It does not create membership implicitly. Input keeps the legacy UI
+values and maps through the approved bridge:
+`admin/user/pracownik/instruktor -> admin/user/employee/instructor`. Lock order
+is tenant advisory lock, target membership, then any actor/target profile row
+needed by the temporary CSK sync bridge. Last-admin counting is tenant-local
+and considers active admin memberships only. Demotion/removal cannot leave the
+tenant without an active admin. The CSK sync trigger may mirror the result to
+`profiles.role` during compatibility, but the profile value never authorizes
+the operation.
+
+`admin_set_user_note_v1` and `update_profile_identity` require tenant admin plus
+the approved target relation. `update_profile_contact_details` permits tenant
+admin; tenant employee is limited to a related operational customer, cannot
+target self, and cannot target a membership whose tenant role is admin,
+employee or instructor. For a related customer without membership, the
+effective operational class is user. No employee list access or role/note/
+identity widening is introduced.
+
+All mutations retain current validation limits, controlled result/error
+semantics, no-change behavior and response fields required by the page. Direct
+profile UPDATE remains denied.
+
+### 40.4 Least-privilege PII and audit
+
+| Operation | Required profile fields | Permitted actor | Output |
+|---|---|---|---|
+| list | current page DTO: identity, contact/address, declarations, verification, tenant-mapped role, admin note | related-tenant admin only | existing 30-column contract; no foreign rows |
+| role | target ID and tenant membership role; profile only for temporary CSK sync | related-tenant admin | existing status/role timestamps; no profile DTO |
+| note | admin note and target ID | related-tenant admin | existing note result only |
+| identity | first/last/full name | related-tenant admin | existing identity result only |
+| contact | phone/address fields | related-tenant admin or constrained employee | existing contact result only |
+
+No function returns another user's tokens, auth metadata, passwords, audit
+internals or unrelated business records. Future DTO minimization must split
+list summary/detail in a versioned 9E/9F contract; it cannot silently change
+the current table-return signature.
+
+Every successful changed mutation writes exactly one tenant-scoped audit with
+explicit `tenant_id`, actor=`auth.uid()` and DB timestamp. Audit details contain
+only stable action/changed-field metadata and tenant role mapping, never note
+contents, names, email, phone, address or tokens. Actor/target labels are
+pseudonymous. Deny and no-change create no audit. No audit default or global
+`profiles.role` is used.
+
+### 40.5 Owner, staff and account separation
+
+- OWNER self-service remains exclusively `update_my_profile_v1` and the 4C
+  account contracts; none of the five 4B-1 RPCs becomes an owner bypass.
+- STAFF means active tenant membership plus allowed membership role plus the
+  approved target operational relationship.
+- SERVER/service_role receives no business authorization. The unproved SP2
+  service grants on identity/contact are revoked.
+- Global export, global anonymization, Auth deletion and future leave-tenant
+  are untouched. 4B-1 neither calls nor changes those functions. Leave-tenant
+  remains membership-scoped; account deletion remains account-wide.
+
+### 40.6 ACL, metadata and compatibility
+
+All five remain SECURITY DEFINER, owned by `postgres`, and use SP1 after
+hardening. Each migration statement first revokes PUBLIC/anon/authenticated/
+service_role, then grants only authenticated EXECUTE. Authorization remains
+inside the function. No table ACL or RLS policy is widened.
+
+Expected SECURITY DEFINER count after 4B-1: **67**. A closed INVOKER helper, if
+used, does not change it. Compatibility defaults remain **7/7** and are not
+tenant authority.
+
+Compatibility matrix:
+
+| Combination | Result |
+|---|---|
+| OLD APP + OLD DB | current single-tenant behavior; known unsafe for Tenant B |
+| OLD APP + NEW DB | supported; identical signatures/DTOs and active-single bridge |
+| NEW APP + OLD DB | not applicable; 4B-1 plans no app change |
+| NEW APP + NEW DB | supported; same as old app under the bridge |
+
+Deployment model: **DB FIRST / DB ONLY**, with second tenant still blocked.
+
+### 40.7 Migration and implementation sequence
+
+Proposed single migration name:
+`20260919100000_harden_tenant_profile_administration.sql`.
+
+1. Fail closed on exact five signatures, overload count, normalized source
+   fingerprints, owner, mode, path and ACL; freeze representative 4A/4B-2/4C
+   dependencies and SECURITY DEFINER count 67.
+2. Verify exactly one active tenant, membership uniqueness, reservation/event
+   relationship integrity, zero cross-tenant mismatches and defaults 7/7.
+3. Snapshot unrelated function definitions/metadata/ACL and business row
+   counts/fingerprints.
+4. Add the optional closed INVOKER relationship helper or use one identical
+   inline relation predicate in all relevant bodies.
+5. Replace the five bodies, normalize SP2 paths to SP1 and apply exact ACLs.
+6. Postflight target fingerprints, relationship predicates, audit tenant,
+   global-role absence, count 67, defaults 7/7 and unrelated drift zero.
+7. Commit the migration transaction only if every assertion passes.
+
+No application, schema-table, RLS, membership backfill, data rewrite or default
+removal belongs to 4B-1.
+
+### 40.8 Test plan
+
+Focused SQL must cover every function plus:
+
+- ADMIN_A + related member/reservation/event-registration user A: ALLOW;
+- ADMIN_A + Tenant-B-only or unrelated global user: DENY, zero PII/audit;
+- EMPLOYEE_A: contact only for related customer; self/admin/employee/
+  instructor/unrelated/Tenant-B target DENY;
+- global `profiles.role=admin` without active A membership, pending,
+  suspended and no membership: DENY;
+- owner self only through existing self contract; foreign owner path DENY;
+- tenant role mapping both directions and no implicit membership creation;
+- tenant-local last-admin protection under concurrent demotions;
+- mixed-tenant relationship and tenant spoof attempts fail closed;
+- list de-duplication, filter/sort/page/count and current DTO field contract;
+- note/identity/contact validation, no-change idempotency, one tenant audit per
+  changed mutation, PII-free audit details and no denial audit;
+- direct profile DML remains denied; service_role direct RPC execution denied;
+- account export/anonymization/Auth deletion and future leave-tenant separation
+  fingerprints unchanged;
+- SECURITY DEFINER 67, unexpected drift 0, defaults 7/7, fixture cleanup 0.
+
+Regression: focused 4B-1 SQL, CLEAN-005/profile DML, SEC-007 audit, SEC-009
+lifecycle, admin-users Node tests, full Supabase DB suite, all Node tests,
+TypeScript, production build, focused admin-users Playwright, npm audit,
+changed-files ESLint and `git diff --check`. Concurrency tests require
+last-admin races, note/contact no-change races, deadlocks 0, duplicate audits 0
+and cross-tenant contamination 0.
+
+### 40.9 Production preflight and rollback
+
+Production preflight is read-only: verify project identity, migration history,
+single pending migration, migration SHA, five source fingerprints, zero service
+callers, relation/orphan/mismatch counts, one active tenant, membership/admin
+baseline, SECURITY DEFINER 67, defaults 7/7 and exact dry-run. Any difference is
+a blocker.
+
+The migration is transactional and contains no backfill. A failed pre/postflight
+rolls back automatically. After deployment, use catalog checks plus a
+rollback-only two-tenant matrix and independent fixture-zero query. If a
+post-deploy defect requires reversal, create a separately reviewed corrective
+migration restoring frozen definitions and ACLs; never use migration repair or
+manual production edits. Application rollback is unnecessary because public
+signatures and DTOs are unchanged.
+
+### 40.10 Risks and gates
+
+| Risk | Level | Mitigation |
+|---|---|---|
+| cross-tenant profile PII | CRITICAL impact | relation-first eligible IDs; foreign/unrelated negative matrix |
+| role/last-admin race | HIGH | tenant-scoped advisory lock plus membership row lock |
+| employee scope widening | HIGH | contact-only, customer-only relation and target-role checks |
+| audit PII or wrong tenant | HIGH | explicit tenant ID and allowlisted pseudonymous details |
+| broad list DTO | MEDIUM residual | admin-only related scope now; versioned DTO split in 9E/9F |
+| active-single bridge | HIGH before Tenant B | second tenant remains blocked; replace in 9E |
+| caller compatibility | LOW | unchanged signatures, result fields and error contracts |
+
+All blocking business decisions for local 4B-1 are resolved by the approved
+operational-relationship and account/leave-tenant decisions. The only
+implementation gates are empirical: fresh source fingerprints/callers and
+production integrity must match this plan. Verification remains explicitly
+outside 4B-1 and is handled by 4B-2.
+
+SAAS-9D-4B-1 TECHNICAL PLAN: **READY**
+
+READY FOR SAAS-9D-4B-1 LOCAL IMPLEMENTATION: **GO**
+
+READY FOR PRODUCTION WRITE: **NO**
+
+SECOND TENANT: **NO-GO**
+
+SEC-004: **OPEN**
+
+## 41. SAAS-9D-4B-1A — tenant user admin-note foundation (implemented locally)
+
+The approved data-model decision supersedes the former assumption in section
+40 that 4B-1 would not add a table or perform a backfill. 4B-1 is now split:
+
+- **4B-1A** owns only the tenant note model, fail-closed direct access, one-way
+  CSK backfill, `admin_list_users_v1` note-source cutover,
+  `admin_set_user_note_v1` write cutover, and tenant-bound audit;
+- **4B-1B** retains role, identity, contact, verification and tenant-local
+  last-admin hardening. None of those functions is changed by 4B-1A.
+
+Local migration `20260919100000_add_tenant_user_admin_notes.sql` implements a
+`tenant_user_admin_notes(tenant_id,user_id)` primary key with note metadata and
+foreign keys to `tenants` and `auth.users`. The table is owned by `postgres`,
+has RLS enabled with zero policies, and grants no direct table privilege to
+PUBLIC, anon, authenticated, or service_role. Access is only through the two
+existing, signature-compatible RPCs.
+
+The one-way backfill copies a non-null `profiles.admin_note` only when the user
+has an existing relationship to the single active CSK tenant through a
+membership, reservation, or tenant-consistent event registration. Any
+unrelated legacy note aborts the migration. After cutover,
+`profiles.admin_note` is frozen: there is no read fallback and no write path
+from either target RPC.
+
+Both RPCs use the temporary exact-single-active-tenant bridge, require an
+active admin membership in that tenant, and establish the target relation
+before reading or mutating profile data. The same user may therefore hold an
+independent note per tenant. Global `profiles.role`, pending/suspended
+membership, a foreign-only relationship, or the target UUID alone never grant
+access. The temporary bridge remains a **9E cutover dependency** and is not
+valid for activating a second tenant.
+
+Changed note mutations write exactly one PII-free audit with explicit
+`audit_logs.tenant_id`, action `tenant_user_admin_note_updated`, and target type
+`tenant_user_admin_note`; no-change retries produce no audit. The existing
+audit tenant trigger is extended only for that explicit action/target pair.
+Account export, global anonymization, Auth deletion and future leave-tenant
+remain separate contracts.
+
+Local verification:
+
+- focused SQL: **37/37 PASS**;
+- full Supabase DB suite: **1144/1144 PASS**;
+- all Node tests: **739/739 PASS**;
+- focused `/admin/users` Playwright: **1/1 PASS**, including tenant note
+  persistence and frozen legacy field;
+- TypeScript, production build, changed-file ESLint and `git diff --check`:
+  **PASS**;
+- SECURITY DEFINER count: **67**; compatibility defaults: **7/7**;
+- fixture cleanup: **0**.
+
+Production preflight and production write have not been performed.
+
+SAAS-9D-4B-1A LOCAL: **PASS**
+
+READY FOR SAAS-9D-4B-1A PRODUCTION PREFLIGHT: **GO**
+
+READY FOR SAAS-9D-4B-1B: **NO-GO until review**
+
+READY FOR PRODUCTION WRITE: **NO**
+
+SECOND TENANT: **NO-GO**
+
+SEC-004: **OPEN**

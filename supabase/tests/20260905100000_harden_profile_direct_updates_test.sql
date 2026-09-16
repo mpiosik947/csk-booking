@@ -192,16 +192,17 @@ begin
   execute 'reset role';
   perform pg_temp.record_result(27,'Admin note RPC remains controlled and audited',
     v_result @> '{"ok":true,"changed":true,"code":"updated"}'::jsonb
-    and (select pg_catalog.count(*)=1 from public.audit_logs where action='profile_admin_note_updated' and target_id=v_other and actor_user_id=v_admin),
+    and (select pg_catalog.count(*)=1 from public.audit_logs where action='tenant_user_admin_note_updated' and target_type='tenant_user_admin_note' and target_id=v_other and actor_user_id=v_admin and tenant_id=public.active_single_tenant_id_v1())
+    and (select admin_note='[TEST][CLEAN-005] note' from public.tenant_user_admin_notes where tenant_id=public.active_single_tenant_id_v1() and user_id=v_other),
     'Admin note writer changes the note through its dedicated contract.');
 
-  select pg_catalog.count(*) into v_audit_count from public.audit_logs where action='profile_admin_note_updated' and target_id=v_other;
+  select pg_catalog.count(*) into v_audit_count from public.audit_logs where action='tenant_user_admin_note_updated' and target_id=v_other;
   perform pg_temp.set_client('authenticated',v_admin);
   select public.admin_set_user_note_v1(v_other,'[TEST][CLEAN-005] note') into v_result;
   execute 'reset role';
   perform pg_temp.record_result(28,'Admin no-change creates no duplicate audit',
     v_result @> '{"ok":true,"changed":false,"code":"no_change"}'::jsonb
-    and (select pg_catalog.count(*) from public.audit_logs where action='profile_admin_note_updated' and target_id=v_other)=v_audit_count,
+    and (select pg_catalog.count(*) from public.audit_logs where action='tenant_user_admin_note_updated' and target_id=v_other)=v_audit_count,
     'Idempotent admin writer must not create false audit.');
 
   perform pg_temp.set_client('authenticated',v_lifecycle);
