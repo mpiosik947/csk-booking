@@ -27,6 +27,7 @@ create temporary table expected_function_acl(
 ) on commit drop;
 
 insert into expected_function_acl values
+  ('public._backfill_csk_tenant_user_verifications_v1()','A',false,false,false),
   ('public.admin_create_event_v2(text,text,date,time without time zone,time without time zone,text,numeric,integer,uuid[])','C',false,true,false),
   ('public.admin_create_event(text,text,date,time without time zone,time without time zone,text,numeric,integer,uuid[])','A',false,false,false),
   ('public.admin_create_lane_block(uuid,date,time without time zone,time without time zone,text)','C',false,true,false),
@@ -234,8 +235,8 @@ begin
     and procedure.proname<>'csk_sec002_default_acl_probe';
 
   perform pg_temp.record_result(1,'Complete public function inventory',
-    (select pg_catalog.count(*)=116 from pg_temp.expected_function_acl)
-    and v_actual_count=116
+    (select pg_catalog.count(*)=117 from pg_temp.expected_function_acl)
+    and v_actual_count=117
     and not exists(
       select 1 from pg_temp.expected_function_acl expected
       where pg_catalog.to_regprocedure(expected.signature) is null
@@ -344,14 +345,14 @@ begin
     'Future functions created by postgres receive no client or PUBLIC EXECUTE.');
 
   perform pg_temp.record_result(8,'Application function creator scope is exact',
-    (select pg_catalog.count(*)=116
+    (select pg_catalog.count(*)=117
       from pg_catalog.pg_proc procedure
       join pg_catalog.pg_namespace namespace on namespace.oid=procedure.pronamespace
       join pg_catalog.pg_roles owner_role on owner_role.oid=procedure.proowner
       where namespace.nspname='public' and procedure.prokind='f'
         and procedure.proname<>'csk_sec002_default_acl_probe'
         and owner_role.rolname='postgres'),
-    'All 116 application functions are owned by postgres, whose public-schema defaults are hardened.');
+    'All 117 application functions are owned by postgres, whose public-schema defaults are hardened.');
 
   perform pg_temp.record_result(9,'New function inherits owner-only execution',
     not pg_catalog.has_function_privilege('anon','public.csk_sec002_default_acl_probe()','EXECUTE')

@@ -297,13 +297,13 @@ begin
     'Booking, Events, Reports and Check-in contracts must not be replaced.');
 
   perform pg_temp.record_result(30, 'Later ownership remains limited to approved tenant-owned tables',
-    (select pg_catalog.count(*) = 9
+    (select pg_catalog.count(*) = 10
      from information_schema.columns
      where table_schema = 'public' and column_name = 'tenant_id'
        and table_name in (
          'shooting_lanes', 'reservations', 'lane_blocks', 'events',
          'event_lanes', 'event_registrations', 'email_deliveries', 'audit_logs',
-         'tenant_user_admin_notes'
+         'tenant_user_admin_notes', 'tenant_user_verifications'
        ))
     and not exists (
       select 1 from information_schema.columns
@@ -311,7 +311,7 @@ begin
         and table_name not in (
           'tenant_memberships', 'shooting_lanes', 'reservations', 'lane_blocks',
           'events', 'event_lanes', 'event_registrations', 'email_deliveries',
-          'audit_logs', 'tenant_user_admin_notes'
+          'audit_logs', 'tenant_user_admin_notes', 'tenant_user_verifications'
         )
     ),
     'Tenant ownership must not spread outside the approved phased scope.');

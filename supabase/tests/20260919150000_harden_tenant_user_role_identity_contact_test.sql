@@ -40,6 +40,10 @@ begin
   insert into auth.users(id,instance_id,aud,role,email,encrypted_password,email_confirmed_at,raw_app_meta_data,raw_user_meta_data,created_at,updated_at)
   select x.id,'00000000-0000-0000-0000-000000000000','authenticated','authenticated',x.label||'-'||run_id||'@example.invalid','',pg_catalog.now(),'{}','{}',pg_catalog.now(),pg_catalog.now()
   from (values(admin_a,'admin-a'),(admin_a2,'admin-a2'),(admin_b,'admin-b'),(user_a,'user-a'),(user_b,'user-b'),(unrelated,'unrelated'),(employee_a,'employee-a'),(instructor_a,'instructor-a'),(global_admin,'global-admin'),(pending_admin,'pending'),(suspended_admin,'suspended')) x(id,label);
+  insert into public.profiles(user_id,role,first_name,last_name,full_name,email)
+  select x.id,x.legacy,'[TEST]',x.label,'[TEST][SAAS-9D-4B-1B] '||x.label,x.label||'-'||run_id||'@example.invalid'
+  from (values(admin_a,'admin','Admin A'),(admin_a2,'admin','Admin A2'),(admin_b,'admin','Admin B'),(user_a,'user','User A'),(user_b,'user','User B'),(unrelated,'user','Unrelated'),(employee_a,'pracownik','Employee A'),(instructor_a,'instruktor','Instructor A'),(global_admin,'admin','Global Admin'),(pending_admin,'admin','Pending'),(suspended_admin,'admin','Suspended')) x(id,legacy,label)
+  where not exists(select 1 from public.profiles profile where profile.user_id=x.id);
   update public.profiles p set role=x.legacy,first_name='[TEST]',last_name=x.label,full_name='[TEST][SAAS-9D-4B-1B] '||x.label,email=x.label||'-'||run_id||'@example.invalid'
   from (values(admin_a,'admin','Admin A'),(admin_a2,'admin','Admin A2'),(admin_b,'admin','Admin B'),(user_a,'user','User A'),(user_b,'user','User B'),(unrelated,'user','Unrelated'),(employee_a,'pracownik','Employee A'),(instructor_a,'instruktor','Instructor A'),(global_admin,'admin','Global Admin'),(pending_admin,'admin','Pending'),(suspended_admin,'admin','Suspended')) x(id,legacy,label)
   where p.user_id=x.id;

@@ -649,6 +649,220 @@ SECOND TENANT: **NO-GO**
 
 SEC-004: **OPEN**
 
+## 43. SAAS-9D-4B-2 — FINAL PLAN
+
+Planning baseline: checkpoint `567dfa8ca3a971f8ea2d0490a19594f94199960f`,
+identical to `origin/main`, after 4B-1B CLOSED / PROD PASS. Production has 67
+public SECURITY DEFINER functions and seven temporary CSK ownership defaults.
+This section is planning-only and performs no database or application change.
+
+### 43.1 Exact inventory and scope decision
+
+| Function | Signature | Domain / callers | Mode / owner / path | ACL | Current authority and tenant source | PII / bypass risk | Baseline fingerprint | Expected target |
+|---|---|---|---|---|---|---|---|---|
+| `update_profile_verification` | `(uuid,text,text)` | tenant staff verification; `app/admin/users/page.tsx`, `app/admin/check-in/page.tsx` | DEFINER / `postgres` / `public,pg_temp` (SP2) | authenticated + service_role | global `profiles.role`; target UUID; no tenant/resource binding | global verification, note and operator fields can be changed across tenants | normalized MD5 `a0522b6beb94bde3bdff22799afc1368` | retain only as a temporary admin compatibility wrapper over tenant storage; remove global-role authority and service grant; employee check-in must move to a resource-bound versioned RPC |
+| `prevent_non_admin_profile_privilege_changes` | `()` trigger | `BEFORE UPDATE profiles`; indirectly reached by owner and staff profile writers | DEFINER / `postgres` / `pg_catalog,public,pg_temp` (SP1) | closed | calls global `is_admin`; uses transaction settings for legacy profile verification writes; no tenant context | false allow/deny and global-field invalidation when verification becomes tenant-scoped | normalized MD5 `d28cb697d8355a5e8005296a03ad63ea` | frozen 4B-2 dependency; final body hardening remains 4D after tenant verification cutover |
+| `admin_list_users_v1` | `(integer,integer,text,text,text,text)` | `app/admin/users/page.tsx` | DEFINER / `postgres` / SP1 | authenticated | active membership and operational relation, but reads verification columns from `profiles` | Tenant-A list displays global state changed by Tenant B | frozen by 4B-1A/1B | must read tenant verification storage without changing its DTO |
+| `get_reservation_customer_profiles_v1` | `(uuid[])` | `app/admin/check-in/page.tsx` | hardened reader from 9D-1 | authenticated contract | reservation relationship, but returns global profile verification fields | check-in can display another tenant's decision | current 9D-1 fingerprint to be captured at preflight | replace/cut over to a reservation-bound tenant verification reader without widening PII |
+
+`update_profile_verification` is the only existing public writer owned directly
+by 4B-2. The trigger and two readers are mandatory dependencies, not permission
+to absorb unrelated 4D or 9D-1 work. There are no other unclassified 4B-2
+functions: UNKNOWN = **0**.
+
+### 43.2 Confirmed data-model blocker
+
+The active implementation stores `verification_status`, `permissions_verified`,
+verification timestamps, verifier identifiers and the verification note once
+per global row in `profiles`. Both Admin Users and reservation Check-in treat
+these values as an operational decision made by tenant staff. Therefore an
+authorization-only rewrite is insufficient: Tenant A could still overwrite
+the state observed and enforced by Tenant B.
+
+The current owner surfaces (`/account`, `/dashboard`, `/booking`) also read the
+same global fields directly. Check-in calls the writer with only a target user
+ID even though the trusted tenant/resource is the reservation. Correct isolation
+requires both new tenant-scoped storage and caller/read-model cutover. This is a
+**DATA MODEL BLOCKER**, not a migration defect and not something that may be
+masked with the exact-single-active-tenant bridge.
+
+### 43.3 Required phased design before implementation
+
+4B-2 must be split and separately approved:
+
+1. **4B-2A — tenant verification foundation.** Add a closed table keyed by
+   `(tenant_id,user_id)` for tenant verification decision state. RLS is enabled
+   with zero direct client policies/grants. Backfill only CSK records whose
+   operational relationship is deterministic. Any non-default global state for
+   an unrelated or ambiguously related user is a STOP condition. Global profile
+   fields remain frozen compatibility data during this expand phase.
+2. **4B-2B — RPC/read-model and application cutover.** Make the existing writer
+   an admin-only compatibility wrapper using active membership plus the approved
+   operational relationship. Introduce a reservation-bound versioned check-in
+   writer whose tenant comes from the reservation/lane relationship, not a
+   caller value. Cut `admin_list_users_v1`, the check-in reader, Admin Users,
+   Check-in, Account, Dashboard and Booking to the tenant state selected by
+   trusted application context. The employee path is allowed only through the
+   reservation-bound workflow.
+3. **4B-2C — legacy closure.** After all readers/writers use tenant storage,
+   revoke service_role from the legacy writer, remove its employee use, freeze
+   or remove global verification projection, and prove no fallback. Changes to
+   `prevent_non_admin_profile_privilege_changes`, global declaration-reset
+   behavior and legacy `is_admin` belong to 4D. Removal of the single-active
+   bridge and selected-tenant routing belongs to 9E.
+
+Because 4B-2B needs trusted tenant context and application changes, local 4B-2
+implementation is blocked until its application-cutover boundary is approved.
+It must not be released as a DB-only authorization patch.
+
+### 43.4 Authorization and operational relationship contract
+
+- ADMIN_A + a target related to Tenant A: ALLOW for Tenant-A verification only.
+- ADMIN_A + Tenant-B-only or unrelated global target: DENY before profile PII.
+- EMPLOYEE_A: ALLOW only through a Tenant-A reservation/check-in resource and
+  only within the existing employee restrictions; self and tenant staff targets
+  remain denied.
+- global `profiles.role=admin` without active target-tenant membership: DENY.
+- pending, suspended, missing membership, tenant spoof or target UUID alone:
+  DENY.
+- owner self: read tenant state through trusted selected tenant; no privileged
+  verification write. Owner declaration edits remain a separate self-service
+  contract.
+- server/system: no generic service-role writer. Any future server path must be
+  separately named, resource-bound and service-only.
+
+The approved relationship predicate remains membership, tenant-owned
+reservation, or tenant-consistent event registration. The check-in mutation is
+narrower and must bind to the supplied reservation. Tenant-A mutation may never
+alter the Tenant-B row.
+
+### 43.5 Verification field matrix
+
+| Field group | Scope | Owner | Admin | Employee | System | Reason / cross-tenant risk |
+|---|---|---|---|---|---|---|
+| `permission_*`, `qualification_*` declarations | global user assertion | read/write own | least-privilege read | least-privilege read in check-in | no direct write | facts declared by the account; an edit must invalidate affected tenant decisions, not silently overwrite them |
+| `verification_status` | tenant | read selected tenant | read/write related user | resource-bound read/write only | no generic write | tenant operational decision; global storage contaminates tenants |
+| `permissions_verified` | tenant | read selected tenant | read/write related user | resource-bound read/write only | no generic write | approval of declarations by a tenant |
+| `permissions_verified_at`, `permissions_verified_by` | tenant | read own tenant result | read/write through RPC | resource-bound write | controlled metadata only | tenant actor and decision provenance |
+| `permissions_verification_note` | tenant, sensitive | read own only if product contract retains it; default hide | operational read/write | resource-bound write | no generic write | staff note/PII leakage risk |
+| `verified_at/by`, `unverified_at/by` | tenant | minimal status history | operational read/write | resource-bound write | controlled metadata only | workflow history cannot be shared across tenants |
+| legacy `verification_note` | unresolved legacy content but operationally tenant-bound if retained | no new access | no fallback | no access | no write | preflight must classify non-empty rows; ambiguous data blocks backfill |
+
+The new table must use trusted actor UUIDs consistently (not mixed profile IDs
+and text IDs), tenant-bound audit, deterministic timestamps, a unique
+`(tenant_id,user_id)` key and no direct browser DML.
+
+### 43.6 Trigger and audit boundaries
+
+The profile trigger currently protects global fields with `is_admin()` and
+transaction settings. 4B-2 must not weaken it. During expand/cutover it remains
+frozen and blocks direct global-field mutation. Once tenant storage is
+authoritative, direct changes to tenant verification are prevented by the new
+table's closed ACL/RLS and controlled RPCs.
+
+Changing global declarations must eventually mark every applicable tenant
+verification pending without granting owner authority over tenant decisions.
+That multi-row invalidation and removal of global `is_admin` from the profile
+trigger is explicitly 4D work. Until then, 4B-2 cannot claim full closure.
+
+Every changed privileged verification mutation creates exactly one audit with
+the resolved `tenant_id`, pseudonymous actor/target and no note contents or
+document data. Denial/no-change creates no audit. A normal tenant verification
+must never create a NULL-tenant audit.
+
+### 43.7 Caller compatibility and deployment gate
+
+| Caller | Current arguments/context | Required target | App change |
+|---|---|---|---|
+| `app/admin/users/page.tsx` | target user, action, note; no tenant | trusted selected tenant plus related target | YES unless temporary CSK bridge is explicitly accepted only for 4B-2A |
+| `app/admin/check-in/page.tsx` | reservation available locally, but RPC receives only target user | reservation-bound versioned RPC; tenant derived from reservation | YES |
+| `admin_list_users_v1` | tenant bridge, global verification columns | tenant verification join, unchanged DTO | DB body change plus later trusted-context cutover |
+| check-in customer-profile reader | reservation IDs, global verification columns | reservation-derived tenant verification DTO | DB and caller validation change |
+| `/account`, `/dashboard`, `/booking` | direct/global profile verification reads | selected-tenant owner read contract | YES; depends on 9E context |
+
+No caller may supply authoritative `tenant_id`. No service-role caller exists
+in the repository for the current writer; production dependency inventory must
+reconfirm this before its service grant is revoked.
+
+### 43.8 SECURITY DEFINER, compatibility and tests
+
+Current and blocked-plan count is **67**. The proposed phased design keeps the
+existing writer as one hardened compatibility DEFINER and uses closed INVOKER
+cores/new closed tenant storage, so the expected count after 4B-2A/2B remains
+**67**. Retirement of the legacy wrapper may reduce the count later, but is a
+9E/closure decision and is not claimed here. Unexpected drift must be zero.
+Compatibility defaults remain **7/7** and are not authorization authority.
+
+Required verification after the blocker is resolved:
+
+- focused tenant verification SQL and deterministic CSK backfill tests;
+- global-role, pending/suspended/no-membership and unrelated-target negatives;
+- ADMIN_A related A ALLOW; B-only/unrelated DENY; Tenant-B state unchanged;
+- employee reservation-bound ALLOW plus self/staff/foreign-resource DENY;
+- owner self read and declaration-update regression; owner foreign DENY;
+- direct profile and tenant-verification DML denial; trigger regression;
+- audit tenant binding, no-change idempotency and PII/note exclusion;
+- concurrent A/B verification updates with no lost update or contamination;
+- ACL/owner/search_path/fingerprint and SECURITY DEFINER 67 checks;
+- admin list, check-in reader, Booking, Account and Dashboard contract tests;
+- full DB, Node, TypeScript, build, relevant Playwright, fixture cleanup and
+  `git diff --check`.
+
+### 43.9 Rollout and rollback
+
+No migration may be created until the tenant verification schema, backfill
+classification and trusted tenant-context/app cutover are approved. The later
+rollout must be expand -> deterministic backfill -> dual-read comparison with
+no fallback authority -> application cutover -> legacy closure. Each DB step is
+transactional and fail-closed; rollback uses a separately reviewed corrective
+migration, never migration repair or manual production edits. A second active
+tenant remains blocked throughout.
+
+SAAS-9D-4B-2 TECHNICAL PLAN: **READY — PHASED ONLY**
+
+DATA MODEL BLOCKER: **RESOLVED LOCALLY BY 4B-2A; PRODUCTION PENDING**
+
+READY FOR SAAS-9D-4B-2 LOCAL IMPLEMENTATION: **4B-2A COMPLETE; 4B-2B/2C NO-GO**
+
+READY FOR PRODUCTION WRITE: **NO**
+
+SECOND TENANT: **NO-GO**
+
+SEC-004: **OPEN**
+
+### 43.10 Approved 4B-2A local implementation status
+
+The architecture decision approves tenant-scoped verification storage and the
+4B-2A/2B/2C split. Local 4B-2A is implemented by
+`20260920100000_add_tenant_user_verification_foundation.sql`.
+
+The migration adds closed `tenant_user_verifications(tenant_id,user_id)`
+storage and an owner-only SECURITY INVOKER deterministic CSK backfill helper.
+It copies only tenant-specific decision/provenance fields, translates legacy
+profile actor IDs to Auth user IDs, aborts on unrelated/ambiguous meaningful
+state, and never overwrites an existing tenant row. Global declarations,
+legacy fields, application readers, the verification writer and profile
+privilege trigger remain unchanged.
+
+Local evidence: focused 30/30 plus rollback cleanup PASS; full DB 1223/1223;
+Node 739/739; TypeScript/build PASS; focused Playwright 1/1; cleanup 0;
+SECURITY DEFINER 67; defaults 7/7. Migration SHA-256 is
+`3C328182BF2534FB437332F34C0673D62F75A583DD78BC159F971C1F278D99F9`.
+
+SAAS-9D-4B-2A LOCAL: **PASS**
+
+DATA MODEL BLOCKER: **RESOLVED locally; production deployment pending**
+
+READY FOR 4B-2A PRODUCTION PREFLIGHT: **GO**
+
+READY FOR 4B-2B: **NO-GO until production PASS and checkpoint/review**
+
+READY FOR PRODUCTION WRITE: **NO**
+
+SECOND TENANT: **NO-GO**
+
+SEC-004: **OPEN**
+
 ## 42. SAAS-9D-4B-1B — FINAL PLAN
 
 Planning baseline: reproducible checkpoint
