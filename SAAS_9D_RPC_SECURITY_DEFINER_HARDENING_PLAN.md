@@ -649,6 +649,363 @@ SECOND TENANT: **NO-GO**
 
 SEC-004: **OPEN**
 
+## 42. SAAS-9D-4C — OWNER LIFECYCLE FINAL PLAN
+
+Planning baseline: repository and production checkpoint
+`16a9ab46765638dd993b5b4ee3a39230568d865d` on `main`, identical to
+`origin/main`. SAAS-9D-4B-2C is closed with production PASS. Production has
+`69` public SECURITY DEFINER functions and all seven compatibility defaults.
+This section is planning-only: it creates no migration, performs no SQL write,
+changes no application file and authorizes no production deployment.
+
+### 42.1 Exact scope and disposition
+
+9D-4C contains exactly three active owner/account RPCs. It does not include a
+tenant-leave operation, staff profile administration, legacy authorization,
+onboarding, public booking, compatibility-default retirement or any function
+assigned to 4D, 4E, 9D-5 or 9E.
+
+| Function / object | Signature | Domain and callers | Current security metadata | Current ACL | Current authorization / tenant source | Resource / target / PII | Audit and service path | Cross-tenant risk | Current normalized fingerprint | Expected target |
+|---|---|---|---|---|---|---|---|---|---|---|
+| `update_my_profile_v1` | `(text,text,text,text,text,text,boolean,boolean,boolean,boolean,boolean,boolean,boolean,boolean,boolean,boolean)` | owner self-service; `app/account/page.tsx` | DEFINER, owner `postgres`, SP1 | authenticated only | `auth.uid()`; no staff/global-role authority; exact-single-active bridge is used only for the legacy singular verification fields in the response | caller profile; account-wide declarations; all caller-owned tenant verification rows | one tenant-bound invalidation audit per changed tenant decision; no service_role path | concurrent self-update/anonymization and accidental partial invalidation | `c8c882630f05763f745788e9a108fb65` | **A — BODY HARDENING**; retain signature/DTO and owner-only semantics; serialize on caller; invalidate every caller tenant decision atomically when global declarations change; bridge remains response compatibility only |
+| `export_my_data_v1` | `()` | account export route; `app/api/account/export/route.ts` | STABLE DEFINER, owner `postgres`, SP1 | authenticated only | `auth.uid()` only; account-wide, not selected-tenant authorization | caller `auth.users`, profile, reservations, event registrations; target must add allowlisted memberships and tenant verification state while excluding staff notes and security internals | read-only; invoked server-side with the caller JWT, not service_role | incomplete export and stale legacy verification representation across tenants | `ffa6b35c5502a347e463110401032061` | **A — BODY + APP-CUTOVER HARDENING**; keep signature; return versioned account-wide v2 payload with per-tenant relationship/verification data and explicit historical-only legacy treatment |
+| `anonymize_my_account_v1` | `()` | account delete route; `app/api/account/delete/route.ts` | VOLATILE DEFINER, owner `postgres`, SP1 | authenticated only | `auth.uid()` only; account-wide; never accepts a target or tenant | all caller-owned reservations, event registrations, tenant verifications, tenant admin notes, memberships, deliveries, rate limits, profile and audit identifiers | exactly one global `account_anonymized` audit with `tenant_id=NULL`; route calls Auth Admin deletion only after DB success; DB RPC has no service_role grant | PII/relationship residue if Auth deletion fails after DB success; last-admin and concurrent membership races | `7e4d950e75e6e5782b139f11269d03a0` | **A — BODY HARDENING**; make DB anonymization complete before Auth deletion, preserve history and tenant-bound audit identity, enforce last-admin invariant, retain idempotent retry |
+
+Associated objects are dependencies, not additional function scope:
+`tenant_memberships`, `tenant_user_verifications`,
+`tenant_user_admin_notes`, tenant-owned business rows, `audit_logs`,
+`email_deliveries`, `confirmation_email_rate_limits`, `auth.users`, and the
+closed INVOKER helper `redact_account_audit_details_v1`. The helper remains
+**D — SAFE / NO CHANGE** unless focused implementation review proves an exact
+allowlist extension is required; any such change must be fingerprinted but
+does not change the exact external RPC count. UNKNOWN = `0`.
+
+### 42.2 Approved account-wide and tenant-scoped boundary
+
+The three contracts are account-owner operations, not tenant-admin powers:
+
+- `update_my_profile_v1` updates one global owner profile. Declarations are
+  account-wide facts. If they change, every existing verification decision for
+  that user is reset to pending in its own tenant, with one PII-free audit row
+  carrying that row's exact `tenant_id`. No tenant admin or employee path is
+  introduced.
+- `export_my_data_v1` exports the caller's data across every tenant relation.
+  Tenant ownership is retained in the export so rows are not flattened or
+  attributed to the active CSK bridge. Staff-only admin-note and verification-
+  note contents, tokens, secrets, audit internals and rate-limit internals stay
+  excluded.
+- `anonymize_my_account_v1` is global account deletion preparation. It removes
+  or anonymizes caller PII and caller relationships across every tenant before
+  the route attempts Auth deletion. Tenant business history stays tenant-owned
+  and anonymized. Existing tenant audit rows keep their tenant IDs while user
+  identifiers/details are pseudonymized.
+
+Future **leave tenant** remains a separate, versioned tenant-scoped contract.
+It will deactivate one membership/relationship, preserve the global Auth
+account and every other tenant relation, and will not call export,
+anonymization or Auth deletion. No leave-tenant RPC is created in 4C.
+
+Tenant admin/staff cannot call any 4C RPC for another user. Global
+`profiles.role`, a target UUID, browser tenant input and service_role are never
+authority. The three signatures expose neither target user nor tenant ID.
+
+### 42.3 Target export contract and application dependency
+
+The current API validator accepts exactly export version 1 and exactly six
+top-level keys. A safe account-wide tenant export therefore requires an
+application compatibility cutover before the DB body changes.
+
+Target export version 2 keeps the existing account, profile, reservation and
+event-registration allowlists and adds an allowlisted tenant-relationship
+collection. Each entry contains only the caller's tenant identifier/name or
+slug as required for intelligibility, membership role/status, and current
+tenant verification status/timestamps. It excludes:
+
+- `tenant_user_admin_notes.admin_note`;
+- `tenant_user_verifications.permissions_verification_note`;
+- staff actor IDs unless legally required and separately approved;
+- audit rows/details, tokens, delivery claims, rate-limit keys and secrets;
+- any other user's membership, verification or business data.
+
+The profile block may retain legacy verification columns only when clearly
+classified as historical compatibility data; they are never presented as the
+operational verification source. The canonical current state comes only from
+`tenant_user_verifications`.
+
+App-first change: `lib/server/account-lifecycle.js` and focused route tests
+must accept both the current v1 payload and the exact v2 payload, while keeping
+recursive forbidden-key rejection. The route, authorization header handling,
+no-store headers and RPC name remain unchanged. After DB cutover, v2 becomes
+the produced contract; v1 acceptance remains only for rollback compatibility
+until a later cleanup review.
+
+The APP-FIRST implementation freezes the v2 relationship element as this exact
+shape; every listed key is required and additional keys fail validation:
+
+```text
+tenant_relationships[] = {
+  tenant: { id, name, slug },
+  membership: { role, status, created_at, updated_at },
+  verification: null | {
+    status, permissions_verified, permissions_verified_at, updated_at
+  }
+}
+```
+
+`membership.role` is one of `admin`, `employee`, `user`, `instructor`;
+`membership.status` is one of `active`, `pending`, `suspended`; verification
+status is one of `pending`, `verified`, `rejected`. Verified permission state
+is valid only with verification status `verified`. Tenant IDs must be unique
+inside one export. The existing account/profile/reservation/registration blocks
+retain their exact v1 allowlists. Staff notes, verification notes, actor IDs,
+tokens, audit details, rate-limit data and foreign-user rows remain forbidden.
+
+### 42.4 Target mutation contracts
+
+`update_my_profile_v1`:
+
+1. resolve only `auth.uid()` and take the same per-user transaction advisory
+   lock used by account anonymization before locking the profile;
+2. preserve all input limits, profile field allowlist, signature and result
+   keys consumed by `/account`;
+3. update only the caller profile;
+4. when declarations change, lock and reset all caller rows in
+   `tenant_user_verifications` in deterministic tenant order;
+5. create one explicit tenant audit per changed row, no audit on no-change;
+6. return the legacy singular verification fields from the exact-single-active
+   bridge only while production has exactly one active tenant. This is display
+   compatibility, not authorization, and is a mandatory 9E replacement gate.
+
+`anonymize_my_account_v1`:
+
+1. take the per-user advisory lock, lock the caller profile and lock caller
+   memberships/tenant state in deterministic tenant order;
+2. fail closed with a stable result/error when removing the caller would leave
+   any tenant with zero active admins; ownership must be transferred first;
+3. anonymize reservations and event registrations without deleting operational
+   history or changing their tenant IDs;
+4. delete caller rows from `tenant_user_admin_notes` and
+   `tenant_user_verifications`, then remove caller `tenant_memberships` across
+   all tenants; this prevents residue when later Auth deletion fails;
+5. delete caller delivery/rate-limit state and the global profile as in the
+   existing contract;
+6. pseudonymize caller identifiers and PII in global and tenant-bound audit
+   rows while preserving tenant IDs and statistical integrity;
+7. insert exactly one global `account_anonymized` audit with
+   `tenant_id=NULL`; retry after DB success returns `already_anonymized` and
+   creates no second audit;
+8. preserve the existing result shape consumed by
+   `executeAccountDeletion`; Auth Admin `deleteUser()` remains a separate
+   server step after successful DB anonymization.
+
+No 4C function deletes tenant business history, tenant configuration, another
+user, another tenant's operational state, or the Auth user directly.
+
+### 42.5 Caller compatibility and rollout
+
+| Caller | Call type and args | Auth context | Tenant/resource context | App change | Deployment order |
+|---|---|---|---|---|---|
+| `app/account/page.tsx` | browser RPC with 16 allowlisted owner fields | authenticated owner JWT | caller profile; no trusted selected tenant | no signature/argument change; response fields preserved | works before and after DB cutover |
+| `app/api/account/export/route.ts` | server route calls `export_my_data_v1()` | verified owner bearer token through anon client | account-wide caller rows | **yes**: validator accepts exact v1 and v2 before DB produces v2 | APP-FIRST |
+| `app/api/account/delete/route.ts` | server route calls `anonymize_my_account_v1()`, then Auth Admin delete | DB RPC uses owner JWT; Auth deletion alone uses service_role | account-wide caller rows | no RPC/result change; add regression assertions only | app-compatible before/after DB |
+
+Compatibility matrix:
+
+| State | Result |
+|---|---|
+| OLD APP + OLD DB | current production behavior |
+| NEW APP + OLD DB | PASS; dual validator accepts v1 |
+| OLD APP + NEW DB | **UNSAFE**; exact v1 validator rejects export v2 |
+| NEW APP + NEW DB | target PASS |
+
+Deployment order is **TWO-STEP / APP-FIRST**: deploy and production-smoke the
+dual export validator first; only then deploy the transactional DB migration.
+Every intermediate state remains functional. Application rollback after DB
+cutover is forbidden until DB rollback/corrective migration restores v1.
+
+### 42.6 Security metadata and expected inventory
+
+All three functions stay SECURITY DEFINER because authenticated users retain
+no direct table access and export reads the caller's `auth.users` row. They
+remain owned by `postgres`, SP1, with EXECUTE granted only to authenticated;
+PUBLIC, anon and service_role remain revoked. No new DEFINER function is
+planned and none switches to INVOKER.
+
+- functions staying DEFINER: the exact three functions above;
+- functions switching INVOKER: `0`;
+- new DEFINER functions: `0`;
+- removed/closed functions: `0`;
+- expected production SECURITY DEFINER count after 4C: **69**;
+- unexpected function drift: `0`;
+- compatibility defaults: **7/7**, unchanged;
+- global role dependency in target: **none**.
+
+Frozen dependencies include the 4B-1/4B-2 profile administration and
+verification functions, `prevent_non_admin_profile_privilege_changes`, account
+route authentication, Auth deletion sequencing and all 4A report functions.
+Their normalized fingerprints, metadata and ACL are migration guards.
+
+### 42.7 Dependency disposition
+
+| Phase | Dependency / boundary |
+|---|---|
+| 4B-1A/B | tenant admin notes, membership role/identity/contact and operational relation are established; 4C removes caller-owned rows during global deletion but never grants tenant staff lifecycle authority |
+| 4B-2A/B/C | `tenant_user_verifications` is sole operational source; 4C exports its allowlisted caller state, resets it on global declaration changes and removes it during account anonymization; legacy profile verification remains historical only |
+| 4D | global role/onboarding functions are frozen and unrelated; no 4C authorization uses them |
+| 4E | public booking compatibility is unrelated and must remain fingerprint-stable |
+| 9D-5 | seven defaults, sync bridges and legacy retirement remain deferred; 4C supplies lifecycle proof required by the 9D-5 entry gate |
+| 9E | selected tenant context must replace the singular verification display bridge and may later retire v1 export compatibility; 4C does not activate Tenant B |
+
+Data model blocker: **NO**. Existing keys and cascades are sufficient. The
+required explicit DB cleanup is necessary precisely so security does not rely
+on the later Auth cascade. App compatibility dependency: **YES**, limited to
+the export payload validator and tests.
+
+### 42.8 Authorization, privacy and audit matrix
+
+Minimum focused matrix:
+
+| Case | Expected |
+|---|---|
+| owner updates own profile | ALLOW; only caller profile changes |
+| actor supplies/targets another user | impossible by signature; DENY by absence of target input |
+| global admin/staff calls owner RPC | only its own account; global role gives no additional power |
+| pending/suspended/no membership owner | own global update/export/delete remains owner-authorized; no privileged tenant operation is gained |
+| same user related to Tenant A and B | export contains only that user's allowlisted A/B state; declaration change resets A/B independently; deletion removes caller relation in both with no state crossover |
+| Tenant A actor + Tenant B user/resource | not a 4C path; no target parameters and no cross-user data |
+| unrelated global user | receives only its own account data; no foreign PII |
+| cross-tenant PII | zero leakage; staff notes and verification notes excluded |
+| tenant-bound mutation audit | exact row tenant ID, PII-free details |
+| global account anonymization audit | `tenant_id=NULL`, pseudonymous actor/target, exactly one |
+| leave-tenant behavior | not implemented and never invoked by account functions |
+
+### 42.9 Concurrency and invariant plan
+
+Focused concurrent tests must cover:
+
+- parallel self-profile updates: deterministic final row, no lost declaration
+  invalidation and no duplicate per-tenant audit;
+- self update racing account anonymization: common advisory-lock order, no
+  recreated profile/verification/note after anonymization;
+- two simultaneous anonymization attempts: one changed result, one
+  `already_anonymized`, one global audit;
+- export racing anonymization: one statement-consistent pre- or post-state,
+  never a mixed cross-user/cross-tenant payload;
+- membership role/status change racing deletion: deterministic tenant lock
+  order and last-active-admin preservation;
+- simultaneous Tenant A/B verification activity for the same user: deletion
+  and declaration invalidation affect only the caller's rows, deadlocks `0`,
+  lost updates `0`, cross-tenant contamination `0`;
+- retry after DB success plus Auth deletion failure: no PII/membership residue,
+  no recreated audit, safe Auth retry.
+
+### 42.10 Implementation and migration sequence
+
+No migration is created during planning. After separate authorization, use a
+single DB migration only after the app-first validator deployment has passed:
+
+1. application-only dual v1/v2 export validator and focused route tests;
+2. production app smoke proving current v1 export still works;
+3. migration preflight for exact three signatures, normalized fingerprints,
+   owner/mode/path/ACL, 69 DEFINER functions, defaults 7/7 and frozen
+   dependencies;
+4. read-only integrity inventory for caller memberships, verifications, notes,
+   last-admin distribution, audit target classifications and orphan/mismatch
+   counts; any unknown classification stops;
+5. replace only the three bodies, preserving signatures and ACL;
+6. postflight target fingerprints, zero global-role source, explicit tenant
+   audit rules, source-of-truth rules, count 69, defaults 7/7 and unrelated
+   drift zero;
+7. local focused, full regression and cleanup proof;
+8. separate production preflight, explicit production approval, DB push,
+   rollback-only matrix and independent fixture-zero post-check.
+
+Migration rollback is transactional before commit. After production commit,
+reversal requires a separately reviewed forward corrective migration; never
+use migration repair or manual SQL replacement. The app-first validator is
+left backward-compatible during any DB rollback.
+
+### 42.11 Required verification
+
+- focused SQL for all three RPCs and exact metadata/ACL;
+- owner/cross-user/global-role negative authorization matrix;
+- pending/suspended/no-membership proof that no privileged tenant authority is
+  gained while owner account operations remain self-only;
+- two-tenant owner export/update/anonymization isolation and PII allowlist;
+- tenant/global audit binding and no-change/idempotency;
+- last-admin denial and all concurrency cases above;
+- legacy profile verification remains frozen/historical and is never read as
+  current tenant state;
+- account-wide versus leave-tenant contract separation;
+- normalized fingerprint guards for every changed and frozen dependency;
+- caller/route tests, account UI regression and safe error mapping;
+- full Supabase DB suite, all Node tests, TypeScript, production build,
+  relevant account Playwright tests, `npm audit --omit=dev`, changed-files
+  ESLint and `git diff --check`;
+- production runtime smoke for account export, profile save, deletion retry,
+  login, booking, events and admin isolation without deleting a real account;
+- synthetic fixture cleanup `0`.
+
+### 42.12 Final planning gate
+
+The approved account-wide deletion/export decision and leave-tenant separation
+resolve the former business blocker. No data-model blocker remains. Local
+implementation is safe only as two reviewed substeps:
+
+- **4C-APP**: app-first dual export validator; no DB write;
+- **4C-DB**: exact three-function migration after APP production PASS.
+
+Neither substep authorizes production write in this planning task. 4D and 4E
+remain gated on separate review. A second tenant remains blocked and SEC-004
+remains open.
+
+SAAS-9D-4C TECHNICAL PLAN: **READY**
+
+EXACT FUNCTION SCOPE: **3**
+
+DATA MODEL BLOCKER: **NO**
+
+APP CHANGE REQUIRED: **YES**
+
+GLOBAL ROLE DEPENDENCY: **REMOVED IN TARGET**
+
+EXPECTED SECURITY DEFINER COUNT: **69**
+
+COMPATIBILITY DEFAULTS: **7/7**
+
+DEPLOYMENT ORDER: **TWO-STEP**
+
+READY FOR SAAS-9D-4C LOCAL IMPLEMENTATION: **GO — PHASED ONLY**
+
+READY FOR PRODUCTION WRITE: **NO**
+
+READY FOR 4D / 4E: **NO-GO until review**
+
+SECOND TENANT: **NO-GO**
+
+SEC-004: **OPEN**
+
+### 42.13 APP-FIRST local implementation checkpoint
+
+The first rollout step is implemented locally without changing any SQL,
+migration, RPC caller, account-delete contract or profile-update contract.
+`isAccountExportPayload` now discriminates exact version `1` and `2` payloads,
+validates the complete current v1 DTO, validates the frozen v2 tenant
+relationship DTO, rejects duplicate tenant relationships and recursively
+rejects security-sensitive keys. The export route continues to call
+`export_my_data_v1()` with the verified owner JWT and returns no-store JSON.
+
+Local gates: current v1 PASS, target v2 fixture PASS, malformed v1/v2 DENY,
+Node `750/750` PASS, TypeScript PASS, production build PASS, changed-files
+ESLint PASS, focused Playwright `1/1` PASS, offline production-dependency audit
+`0` vulnerabilities and `git diff --check` PASS. External registry audit was
+not used because the execution environment rejected dependency-metadata egress.
+
+The DB phase remains blocked until this APP-FIRST revision is deployed and its
+production v1 export smoke passes. No migration exists in this checkpoint;
+production SECURITY DEFINER remains `69` and compatibility defaults remain
+`7/7`.
+
 ## SAAS-9D-4B-2C — LEGACY GLOBAL VERIFICATION PATH CLOSURE — FINAL PLAN
 
 ### 4B-2C.1 Planning baseline and boundary
