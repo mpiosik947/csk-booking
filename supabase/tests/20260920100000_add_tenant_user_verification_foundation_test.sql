@@ -118,8 +118,8 @@ begin
   perform pg_temp.ok(24,'more than one active tenant is structurally denied',v_failed);
   perform pg_temp.ok(25,'exactly one active CSK tenant is restored',(select pg_catalog.count(*)=1 from public.tenants where status='active') and public.active_single_tenant_id_v1()=v_csk);
 
-  perform pg_temp.ok(26,'update_profile_verification matches approved 4B-2B cutover',
-    pg_catalog.md5(pg_catalog.replace(pg_catalog.replace(pg_catalog.pg_get_functiondef('public.update_profile_verification(uuid,text,text)'::regprocedure),E'\r\n',E'\n'),E'\r',E'\n'))='8df439041f082c25e18a632f952623cb');
+  perform pg_temp.ok(26,'update_profile_verification matches approved 4B-2C closure',
+    pg_catalog.md5(pg_catalog.replace(pg_catalog.replace(pg_catalog.pg_get_functiondef('public.update_profile_verification(uuid,text,text)'::regprocedure),E'\r\n',E'\n'),E'\r',E'\n'))='022baa5652409d2246cd5e66642e884e');
   perform pg_temp.ok(27,'profile privilege trigger fingerprint is frozen',
     pg_catalog.md5(pg_catalog.replace(pg_catalog.replace(pg_catalog.pg_get_functiondef('public.prevent_non_admin_profile_privilege_changes()'::regprocedure),E'\r\n',E'\n'),E'\r',E'\n'))='d28cb697d8355a5e8005296a03ad63ea');
   perform pg_temp.ok(28,'legacy-signature writer uses only tenant verification source after 4B-2B',

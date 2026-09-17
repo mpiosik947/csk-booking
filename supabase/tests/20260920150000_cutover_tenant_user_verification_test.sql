@@ -123,7 +123,7 @@ begin
   update public.tenants set status='dormant' where id=b; update public.tenants set status='active' where id=a;
   perform pg_temp.ok(35,'active-single tenant invariant restored',(select count(*)=1 from public.tenants where status='active') and public.active_single_tenant_id_v1()=a);
   perform pg_temp.ok(36,'target functions contain no profiles role authority',strpos((select prosrc from pg_proc where oid='public.update_reservation_customer_verification_v1(uuid,text,text)'::regprocedure),'profiles.role')=0 and strpos((select prosrc from pg_proc where oid='public.update_profile_verification(uuid,text,text)'::regprocedure),'profiles.role')=0);
-  perform pg_temp.ok(37,'OLD APP employee compatibility writer remains resource-related and tenant-scoped',((pg_temp.as_actor_text(employee_a,format('public.update_profile_verification(%L,''mark_pending'',''old app compatibility'')',user_x)))::jsonb)->>'verification_status'='pending');
+  perform pg_temp.ok(37,'4B-2C closes generic employee compatibility writer',pg_temp.as_actor_raises(employee_a,format('select public.update_profile_verification(%L,''mark_pending'',''closed compatibility'')',user_x)));
 end;
 $tests$;
 

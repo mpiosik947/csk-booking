@@ -128,9 +128,11 @@ try {
   $validJob = Start-LocalSqlResultJob $validCall
   $foreignJob = Start-LocalSqlResultJob $foreignCall
   $results = Receive-Pair $validJob $foreignJob
-  $validResult = $results | Where-Object ExitCode -eq 0
-  $foreignResult = $results | Where-Object ExitCode -ne 0
-  if ($validResult.Count -ne 1 -or $foreignResult.Count -ne 1 -or $validResult.Output -notmatch '(?m)^rejected\r?$') { throw 'Concurrent foreign-resource denial differs.' }
+  $validResult = @($results | Where-Object ExitCode -eq 0)
+  $foreignResult = @($results | Where-Object ExitCode -ne 0)
+  if ($validResult.Count -ne 1 -or $foreignResult.Count -ne 1 -or $validResult.Output -notmatch '(?m)^rejected\r?$') {
+    throw "Concurrent foreign-resource denial differs: $($results | ConvertTo-Json -Compress -Depth 4)"
+  }
   if ((Invoke-LocalSql "select ((select verification_status='rejected' from public.tenant_user_verifications where tenant_id='$tenant' and user_id='$customer') and (select verification_status='pending' from public.tenant_user_verifications where tenant_id='$tenantB' and user_id='$customer'))::text;") -ne 'true') { throw 'Concurrent foreign-resource attempt contaminated Tenant B.' }
   Write-Output 'RESOURCE_TENANT_MISMATCH_RACE=DENY'
   Write-Output 'CROSS_TENANT_EFFECTS=0'

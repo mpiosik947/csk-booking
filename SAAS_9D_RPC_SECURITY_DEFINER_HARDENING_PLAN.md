@@ -649,6 +649,360 @@ SECOND TENANT: **NO-GO**
 
 SEC-004: **OPEN**
 
+## SAAS-9D-4B-2C — LEGACY GLOBAL VERIFICATION PATH CLOSURE — FINAL PLAN
+
+### 4B-2C.1 Planning baseline and boundary
+
+This final plan is based on repository HEAD
+`11466eb157c10bcaf746df6888b77640f5131416` after the successful 4B-2B
+application and database cutover. Production is in the **NEW APP + NEW DB**
+state, `tenant_user_verifications` is authoritative, the current SECURITY
+DEFINER count is **69**, compatibility ownership defaults remain **7/7**, and
+the second tenant remains blocked.
+
+This is a planning-only phase. 4B-2C closes the remaining global verification
+write projection and temporary compatibility authorization. It does not remove
+global declaration/qualification fields, redesign account lifecycle, change
+tenant routing, remove ownership defaults, or implement leave-tenant.
+
+### 4B-2C.2 Exact residual inventory
+
+| Object / field / function | Currently used? | Current callers / dependency | Current source and scope | Safe action in 4B-2C | App change | DB/data change | Target phase |
+|---|---:|---|---|---|---:|---:|---|
+| `profiles.verification_status` | lifecycle/history only | `export_my_data_v1`; `_apply_tenant_user_verification_v1` mirror; frozen profile trigger | global legacy projection | stop all tenant workflow writes; retain frozen/historical | no | function body only; no data rewrite | 4B-2C freeze; lifecycle decision 4C |
+| `profiles.permissions_verified` | lifecycle/history only | export; mirror; frozen trigger | global legacy projection | same | no | same | 4B-2C / 4C |
+| `profiles.permissions_verified_at` | lifecycle/history only | export; mirror; frozen trigger | global legacy projection | same | no | same | 4B-2C / 4C |
+| `profiles.permissions_verified_by` | mirror/history | mirror; FK to `profiles(id)`; frozen trigger | global legacy projection | stop writes; retain FK/column | no | no data rewrite | 4B-2C / 4C |
+| `profiles.permissions_verification_note` | lifecycle/history only | anonymization PII collection; mirror; frozen trigger | global legacy PII | stop writes; retain frozen for account-wide anonymization | no | no data rewrite | 4B-2C / 4C |
+| `profiles.verified_at` | mirror/history | mirror; frozen trigger | global legacy projection | stop writes; retain frozen | no | no data rewrite | 4B-2C / 4C |
+| `profiles.verified_by` | mirror/history | mirror; frozen trigger | global legacy projection | stop writes; retain frozen | no | no data rewrite | 4B-2C / 4C |
+| `profiles.unverified_at` | mirror/history | mirror; frozen trigger | global legacy projection | stop writes; retain frozen | no | no data rewrite | 4B-2C / 4C |
+| `profiles.unverified_by` | mirror/history | mirror; frozen trigger | global legacy projection | stop writes; retain frozen | no | no data rewrite | 4B-2C / 4C |
+| `_apply_tenant_user_verification_v1(uuid,uuid,text,text,text,uuid)` | active internal helper | two tenant writers | tenant table **plus temporary global mirror** | retain INVOKER signature; delete profile mirror and transaction-setting bridge | no | body replacement | 4B-2C |
+| `update_profile_verification(uuid,text,text)` | **active** | `app/admin/users/page.tsx`; focused Admin Users test | tenant-scoped via active-single bridge despite legacy name | retain signature/DTO and authenticated ACL; remove temporary employee compatibility; admin-only tenant writer | no | body replacement | 4B-2C; bridge removal 9E |
+| `update_reservation_customer_verification_v1(uuid,text,text)` | active | Check-in | resource-bound tenant writer | retain unchanged except dependency fingerprint guard | no | none | safe/no change |
+| `get_my_active_tenant_verification_v1()` | active | Account, Dashboard, Booking | active-single tenant reader | retain unchanged | no | none | 9E routing dependency |
+| `admin_list_users_v1(...)` | active | Admin Users | tenant table reader | retain unchanged; named DTO fields are tenant values, not profile fallback | no | none | safe/no change |
+| `get_reservation_customer_profiles_v1(uuid[])` | active | Check-in and cancellation server route | reservation-bound tenant reader | retain unchanged | no | none | safe/no change |
+| `get_reservation_customer_profiles_v1__saas9d1_core(uuid[])` | no runtime caller | historical tests/inventory only; outer reader no longer calls it | closed INVOKER legacy profile reader | retain fail-closed in 4B-2C unless catalog dependency proof permits a separately asserted DROP; no runtime grant | no | optional object removal, no data | 4B-2C cleanup candidate |
+| `_backfill_csk_tenant_user_verifications_v1()` | no runtime caller | foundation migration/tests only | closed INVOKER one-time backfill | retain closed for reproducibility; never expose or rerun in runtime | no | none | safe/no change |
+| `create_reservation_v2` closed core and retained `create_reservation` | active compatibility contracts | booking RPC callers | tenant status through `_tenant_verification_status_for_lane_v1`; no profile fallback | retain unchanged and fingerprint-guard | no | none | safe/no change / later API retirement |
+| `update_my_profile_v1(...)` | active owner contract | Account | global declarations/profile plus tenant-table invalidation | retain unchanged; no global verification write | no | none | safe/no change |
+| `export_my_data_v1()` | active account-wide contract | account export API | reads three historical global profile values | retain unchanged in 4B-2C | no | none | 4C lifecycle review |
+| `anonymize_my_account_v1()` | active account-wide contract | account deletion API | captures legacy note for PII redaction, then deletes profile | retain unchanged in 4B-2C | no | none | 4C lifecycle review |
+| `prevent_non_admin_profile_privilege_changes()` | active profile UPDATE trigger | all profile UPDATE paths | global profile guard; fingerprint frozen | leave byte-for-byte unchanged | no | none | 4D |
+| profile verification indexes and `permissions_verified_by` FK | schema residual | columns above | global historical storage | retain; no tenant authority | no | none | 4C/schema-retention decision |
+
+The application uses verification-shaped DTO field names in Admin Users and
+Check-in, but those values now come from `tenant_user_verifications`. That is
+not a legacy global read. Searches of application and server code find no
+direct selection of the legacy profile verification columns. Reports and
+Events do not consume them. Reservation admission uses the lane-bound tenant
+helper. Check-in mutation uses the reservation-bound writer.
+
+### 4B-2C.3 Global profile field classification
+
+| Field | Type | Active tenant reader | Active writer before 4B-2C | Account-wide meaning | Tenant-only meaning | 4B-2C state | Remove now? | PII / retention |
+|---|---|---:|---|---:|---:|---|---:|---|
+| `verification_status` | `text` | none | temporary mirror | no | yes | frozen/historical | no | lifecycle export dependency |
+| `permissions_verified` | `boolean not null` | none | temporary mirror | no | yes | frozen/historical | no | lifecycle export dependency |
+| `permissions_verified_at` | `timestamptz` | none | temporary mirror | no | yes | frozen/historical | no | lifecycle export dependency |
+| `permissions_verified_by` | `uuid` | none | temporary mirror | no | yes | frozen/historical | no | profile FK/history |
+| `permissions_verification_note` | `text` | none | temporary mirror | no | yes | frozen/historical | no | PII; anonymization dependency |
+| `verified_at` | `timestamptz` | none | temporary mirror | no | yes | frozen/historical | no | history |
+| `verified_by` | `uuid` | none | temporary mirror | no | yes | frozen/historical | no | history |
+| `unverified_at` | `timestamptz` | none | temporary mirror | no | yes | frozen/historical | no | history |
+| `unverified_by` | `text` | none | temporary mirror | no | yes | frozen/historical | no | history/legacy mixed type |
+
+The account-wide declaration and qualification columns (`permission_*` and
+`qualification_*`) are explicitly outside this closure. They remain global
+user assertions and continue to invalidate tenant decisions through
+`update_my_profile_v1`; they must not be confused with staff verification.
+
+Retained legacy verification columns have this strict post-4B-2C contract:
+
+- **FROZEN / HISTORICAL ONLY**;
+- zero tenant workflow reads;
+- zero tenant workflow writes;
+- zero fallback into any tenant authorization or business decision;
+- no backfill from tenant state and no cross-tenant aggregation;
+- physical deletion, export semantics and retention belong to 4C after an
+  explicit lifecycle decision.
+
+### 4B-2C.4 Caller and dependency proof
+
+Repository evidence gives the following current caller counts:
+
+| Contract | App callers | Server callers | RPC/trigger callers | Lifecycle/report dependency | Result |
+|---|---:|---:|---:|---:|---|
+| legacy global profile verification read | 0 | 0 | 0 tenant workflows | export/anonymization only | no active tenant fallback |
+| `_apply_tenant_user_verification_v1` global mirror | 0 direct | 0 direct | 2 tenant writer RPCs | none | removable internal projection |
+| `update_profile_verification` signature | **1** (`/admin/users`) | 0 | none | none | retain and harden, do not DROP/revoke authenticated |
+| old reservation profile core | 0 | 0 | 0 after outer replacement | historical tests only | closed, safe cleanup candidate |
+| foundation backfill helper | 0 | 0 | 0 runtime | migration reproducibility/tests | retain closed |
+
+Therefore “zero legacy callers” is false if interpreted as the old RPC
+signature: one active Admin Users caller remains. It is not a blocker because
+the target preserves that exact signature and output while eliminating its
+global behavior. Any plan that revokes or drops it without an app cutover is
+rejected.
+
+Before implementation, a fail-closed migration preflight must re-prove:
+
+1. exactly one application caller of `update_profile_verification` and no
+   server caller;
+2. zero active reads of profile verification columns outside account lifecycle;
+3. exact two internal callers of `_apply_tenant_user_verification_v1`;
+4. zero dependencies on the old reservation profile core from live functions;
+5. exact lifecycle dependencies above and frozen trigger fingerprint;
+6. no unexpected function overloads or grants.
+
+Any extra caller or dependency is a STOP condition and requires plan review.
+
+### 4B-2C.5 Final disposition of `update_profile_verification`
+
+Selected disposition: **redirect/retain**.
+
+The existing signature remains because Admin Users actively calls it. The
+function remains SECURITY DEFINER, owned by `postgres`, SP1, and executable
+only by `authenticated`. It continues to derive the temporary tenant through
+the exact-one-active-tenant bridge, requires an active `admin` membership,
+requires an approved operational relationship to the target, and delegates to
+the tenant mutation helper. It returns the current JSON contract.
+
+The temporary 4B-2B employee compatibility branch is removed. Employees keep
+the resource-bound Check-in path only. `profiles.role`, caller-supplied tenant
+data, target UUID existence, service_role, pending/suspended/no membership and
+a Tenant-B-only relationship never authorize this writer.
+
+This retains caller compatibility while closing the legacy **global** writer.
+It is not a no-op and does not write any global verification column. The
+active-single bridge remains an explicit 9E dependency and is not permission
+to activate Tenant B.
+
+### 4B-2C.6 Mutation core and no-dual-source target
+
+`_apply_tenant_user_verification_v1` remains a closed SECURITY INVOKER helper
+with its signature, owner, SP1 and zero runtime EXECUTE grants unchanged. Its
+profile mirror block is removed in full:
+
+- no lookup of actor `profiles.id` solely for the mirror;
+- no `set_config('csk.profile_verification_rpc_actor', ...)`;
+- no `set_config('csk.profile_verification_rpc_target', ...)`;
+- no UPDATE of any verification column in `profiles`;
+- no mirror-reset transaction settings.
+
+Tenant row locking, status transition, note validation, no-change behavior,
+return JSON and explicit tenant-bound PII-free audit remain unchanged. After
+the replacement, `tenant_user_verifications` is the only read/write source for
+tenant verification.
+
+`prevent_non_admin_profile_privilege_changes()` can remain byte-for-byte
+**FROZEN**: removing the mirror requires no trigger change because no 4B-2C
+path attempts a profile verification UPDATE. A discovered need to modify that
+trigger is a STOP condition and a 4D dependency.
+
+### 4B-2C.7 ACL and metadata target
+
+| Function | PUBLIC | anon | authenticated | service_role | Mode / owner / path | 4B-2C action |
+|---|---|---|---|---|---|---|
+| `update_profile_verification(uuid,text,text)` | DENY | DENY | ALLOW | DENY | DEFINER / postgres / SP1 | retain exact public boundary; admin-only body |
+| `_apply_tenant_user_verification_v1(...)` | DENY | DENY | DENY | DENY | INVOKER / postgres / SP1 | retain closed; remove mirror |
+| `update_reservation_customer_verification_v1(...)` | DENY | DENY | ALLOW | DENY | DEFINER / postgres / SP1 | unchanged |
+| `get_my_active_tenant_verification_v1()` | DENY | DENY | ALLOW | DENY | DEFINER / postgres / SP1 | unchanged |
+| `admin_list_users_v1(...)` | DENY | DENY | ALLOW | DENY | DEFINER / postgres / SP1 | unchanged |
+| `get_reservation_customer_profiles_v1(uuid[])` | DENY | DENY | ALLOW | DENY | DEFINER / postgres / SP1 | unchanged |
+| old reservation profile core | DENY | DENY | DENY | DENY | INVOKER / postgres / SP1 | retain closed or DROP only after catalog zero-dependency assertion |
+| foundation backfill helper | DENY | DENY | DENY | DENY | INVOKER / postgres / SP1 | unchanged |
+
+Fail-closed ACL is preferred over unnecessary object deletion. The old core
+may be dropped only in the same transactional migration if a catalog assertion
+proves zero live dependencies and regression tests no longer require its
+presence; otherwise it remains closed. This choice does not affect the
+security target or function count.
+
+### 4B-2C.8 Security invariants and cross-tenant gate
+
+The implementation must prove:
+
+- Admin A plus an approved Tenant-A relationship can update A;
+- Admin A cannot update a Tenant-B-only or unrelated global user;
+- Employee A cannot use the compatibility signature and may use only the
+  resource-bound Check-in writer within its present scope;
+- global `profiles.role=admin` without active A membership is denied;
+- pending, suspended and missing membership are denied;
+- a Tenant-A decision changes only `(tenant_a,user)` and never `(tenant_b,user)`;
+- changing retained profile legacy values cannot alter tenant reads,
+  reservation admission, Admin Users, Check-in or account UI;
+- no RPC trusts caller-supplied tenant authority;
+- audit tenant ID is the resolved tenant, and no PII/note contents enter audit;
+- account export, global anonymization, Auth deletion and future leave-tenant
+  remain distinct contracts.
+
+### 4B-2C.9 SECURITY DEFINER inventory and expected delta
+
+Current count: **69**.
+
+4B-2C does not add, remove or convert a SECURITY DEFINER function:
+
+- retained DEFINER: `update_profile_verification`,
+  `update_reservation_customer_verification_v1`,
+  `get_my_active_tenant_verification_v1`, `admin_list_users_v1`,
+  `get_reservation_customer_profiles_v1` and all unrelated inventory;
+- retained INVOKER: `_apply_tenant_user_verification_v1`,
+  `_tenant_verification_status_for_lane_v1` and the closed backfill/core
+  helpers;
+- losing EXECUTE: none; the legacy-signature Admin Users writer must remain
+  authenticated-callable, but its global behavior is removed;
+- optional DROP: only the closed INVOKER reservation profile core, with zero
+  count impact.
+
+Expected post-4B-2C SECURITY DEFINER count: **69**. Expected unexpected drift:
+**0**. UNKNOWN: **0**. Compatibility defaults remain **7/7**.
+
+### 4B-2C.10 Proposed migration scope and implementation order
+
+Proposed single migration name for later review:
+`20260921100000_close_legacy_global_verification_path.sql`.
+
+The migration must be transactional and fail closed:
+
+1. assert exact input fingerprints, signatures, overload counts, owner,
+   security mode, SP1 and ACL for both replaced functions and every frozen
+   dependency;
+2. assert application-derived caller inventory in focused source tests, one
+   active tenant, membership/verification uniqueness, zero tenant mismatch,
+   SECURITY DEFINER 69 and defaults 7/7;
+3. replace `_apply_tenant_user_verification_v1` without the global profile
+   mirror or transaction settings;
+4. replace `update_profile_verification` as admin-only tenant writer with the
+   existing signature/DTO and operational relationship gate;
+5. optionally drop the closed old reservation core only after a catalog
+   zero-dependency assertion; otherwise leave it fail-closed;
+6. freeze all other bodies/fingerprints, especially lifecycle functions,
+   current readers/writers, reservation admission and profile trigger;
+7. postflight no global profile write tokens in either target body, no reader
+   fallback, exact ACL/metadata, count 69, defaults 7/7 and unrelated drift 0.
+
+No application file, table/column, RLS policy, account data, verification row,
+index, FK, default or trigger is changed. No backfill or data migration occurs.
+
+### 4B-2C.11 Test plan
+
+Focused SQL and source-contract tests must cover:
+
+- the one allowed legacy-signature app caller and zero server callers;
+- zero active global verification readers in tenant workflows;
+- no profile UPDATE or transaction-setting mirror tokens in the mutation core;
+- Admin Users writer: Admin A + related A ALLOW; Tenant-B-only and unrelated
+  target DENY;
+- employee, global-role-only admin, pending, suspended and no-membership DENY;
+- resource-bound Check-in writer remains ALLOW for current employee/admin
+  scope and DENY cross-tenant/resource mismatch;
+- same user A/B independence and concurrent A/B updates without lost update,
+  deadlock or contamination;
+- Admin Users, Check-in, Account, Dashboard, Booking and reservation admission
+  read only tenant decisions; intentionally conflicting profile legacy values
+  cannot affect outcomes;
+- no-change idempotency, one audit for a changed tenant decision, explicit
+  tenant binding, no denial audit and PII-free details;
+- exact ACL/owner/SP1/signatures, direct table/profile DML denial, service_role
+  business RPC denial;
+- frozen lifecycle/trigger fingerprints and account-wide versus tenant-scoped
+  contract preservation;
+- SECURITY DEFINER 69, unexpected drift 0, compatibility defaults 7/7;
+- focused 4B-2C SQL, 4B-2B regression, CLEAN-005, SEC-007, SEC-009, full DB
+  suite, all Node tests, TypeScript, production build, npm audit,
+  changed-files ESLint and `git diff --check`;
+- Playwright for Admin Users verification, Check-in verification, Account,
+  Dashboard and Booking;
+- production runtime smoke for Login, Account, Booking, Admin Users, Check-in,
+  Reservations and Events; rollback-only A/B matrix and fixture cleanup 0.
+
+### 4B-2C.12 Rollout, rollback and remaining phases
+
+Deployment order: **DB-ONLY / SINGLE-STEP**. The current production app remains
+functional because the active Admin Users signature/result is preserved and
+all other app callers already use tenant readers/resource-bound writer.
+
+Preflight must prove one pending migration, authoritative SHA, exact production
+fingerprints/callers, migration history, one active tenant, verification and
+membership integrity, SECURITY DEFINER 69, defaults 7/7 and an exact dry-run.
+Any mismatch stops deployment.
+
+The migration rolls back atomically on any assertion. Post-deploy rollback is
+forward-only through a separately reviewed corrective migration restoring the
+two frozen input definitions; no migration repair or manual SQL. No app
+rollback/deployment is needed.
+
+Remaining work is deliberately separated:
+
+- **4C:** account export/anonymization treatment and retention/removal decision
+  for frozen global verification columns;
+- **4D:** global role helpers and `prevent_non_admin_profile_privilege_changes`;
+- **9E:** selected tenant routing and removal of the exact-active-tenant bridge;
+- **9D-5/9E gate:** removal of seven compatibility defaults;
+- no second tenant before SAAS-9H and SEC-004 closure.
+
+### 4B-2C.13 Final verdicts
+
+SAAS-9D-4B-2C TECHNICAL PLAN: **READY**
+
+ACTIVE LEGACY CALLERS: **1**
+
+LEGACY GLOBAL WRITER: **SAFE TO CLOSE**
+
+LEGACY READ FALLBACK: **ABSENT**
+
+APP CHANGE REQUIRED: **NO**
+
+prevent_non_admin_profile_privilege_changes: **FROZEN**
+
+EXPECTED SECURITY DEFINER COUNT: **69**
+
+DEPLOYMENT ORDER: **DB-ONLY**
+
+READY FOR SAAS-9D-4B-2C LOCAL IMPLEMENTATION: **GO**
+
+READY FOR PRODUCTION WRITE: **NO**
+
+SECOND TENANT: **NO-GO**
+
+SEC-004: **OPEN**
+
+### 4B-2C.14 Local implementation result
+
+Local 4B-2C is implemented by
+`20260921100000_close_legacy_global_verification_path.sql`. The retained
+`update_profile_verification(uuid,text,text)` signature remains compatible with
+its one active `/admin/users` caller, but is now active-admin-only. The closed
+INVOKER mutation core no longer sets profile-verification transaction settings
+or writes the nine legacy `profiles` verification fields. Employee Check-in
+continues through the reservation-bound writer.
+
+The legacy profile fields remain **FROZEN / HISTORICAL ONLY** for the later 4C
+lifecycle decision. `prevent_non_admin_profile_privilege_changes()` remains
+byte-for-byte unchanged. Application source changes are zero, SECURITY DEFINER
+remains 69, defaults remain 7/7, and the migration SHA-256 is
+`56242B2575D46C57F7874216CB0F1AF7BCEE4BA1CE1BC769FEA860B4C1884BA0`.
+
+Local evidence: focused SQL 36/36, full DB 1296/1296, Node 746/746,
+concurrency/IDOR/cross-tenant PASS, deadlocks 0, contamination 0, TypeScript,
+build, changed-file ESLint, focused Admin Users Playwright and
+`git diff --check` PASS; fixture cleanup 0.
+
+SAAS-9D-4B-2C LOCAL: **PASS**
+
+READY FOR SAAS-9D-4B-2C PRODUCTION PREFLIGHT: **GO**
+
+READY FOR PRODUCTION WRITE: **NO**
+
+READY FOR 4C: **NO-GO until 4B-2C production PASS/checkpoint**
+
+SECOND TENANT: **NO-GO**
+
+SEC-004: **OPEN**
+
 ## SAAS-9D-4B-2B — FINAL PLAN
 
 Planning baseline: checkpoint
