@@ -118,13 +118,13 @@ begin
   perform pg_temp.ok(24,'more than one active tenant is structurally denied',v_failed);
   perform pg_temp.ok(25,'exactly one active CSK tenant is restored',(select pg_catalog.count(*)=1 from public.tenants where status='active') and public.active_single_tenant_id_v1()=v_csk);
 
-  perform pg_temp.ok(26,'update_profile_verification fingerprint is frozen',
-    pg_catalog.md5(pg_catalog.replace(pg_catalog.replace(pg_catalog.pg_get_functiondef('public.update_profile_verification(uuid,text,text)'::regprocedure),E'\r\n',E'\n'),E'\r',E'\n'))='a0522b6beb94bde3bdff22799afc1368');
+  perform pg_temp.ok(26,'update_profile_verification matches approved 4B-2B cutover',
+    pg_catalog.md5(pg_catalog.replace(pg_catalog.replace(pg_catalog.pg_get_functiondef('public.update_profile_verification(uuid,text,text)'::regprocedure),E'\r\n',E'\n'),E'\r',E'\n'))='8df439041f082c25e18a632f952623cb');
   perform pg_temp.ok(27,'profile privilege trigger fingerprint is frozen',
     pg_catalog.md5(pg_catalog.replace(pg_catalog.replace(pg_catalog.pg_get_functiondef('public.prevent_non_admin_profile_privilege_changes()'::regprocedure),E'\r\n',E'\n'),E'\r',E'\n'))='d28cb697d8355a5e8005296a03ad63ea');
-  perform pg_temp.ok(28,'legacy writer still writes only profiles during 4B-2A',
-    (select pg_catalog.strpos(prosrc,'update public.profiles')>0 and pg_catalog.strpos(prosrc,'tenant_user_verifications')=0 from pg_catalog.pg_proc where oid='public.update_profile_verification(uuid,text,text)'::regprocedure));
-  perform pg_temp.ok(29,'SECURITY DEFINER inventory remains 67',(select pg_catalog.count(*)=67 from pg_catalog.pg_proc procedure join pg_catalog.pg_namespace namespace on namespace.oid=procedure.pronamespace where namespace.nspname='public' and procedure.prosecdef));
+  perform pg_temp.ok(28,'legacy-signature writer uses only tenant verification source after 4B-2B',
+    (select pg_catalog.strpos(prosrc,'update public.profiles')=0 and pg_catalog.strpos(prosrc,'_apply_tenant_user_verification_v1')>0 from pg_catalog.pg_proc where oid='public.update_profile_verification(uuid,text,text)'::regprocedure));
+  perform pg_temp.ok(29,'SECURITY DEFINER inventory is 69 after 4B-2B',(select pg_catalog.count(*)=69 from pg_catalog.pg_proc procedure join pg_catalog.pg_namespace namespace on namespace.oid=procedure.pronamespace where namespace.nspname='public' and procedure.prosecdef));
   perform pg_temp.ok(30,'compatibility defaults remain 7/7',(select pg_catalog.count(*)=7 from information_schema.columns where table_schema='public' and table_name in('shooting_lanes','reservations','lane_blocks','events','event_lanes','event_registrations','email_deliveries') and column_name='tenant_id' and column_default='''c5c00000-0000-4000-8000-000000000001''::uuid'));
 end;
 $test$;

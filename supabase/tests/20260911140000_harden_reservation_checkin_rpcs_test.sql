@@ -166,7 +166,10 @@ begin
   perform pg_temp.ok(28,'admin profile batch allows a single own tenant',pg_temp.as_actor_text('authenticated',v_admin,pg_catalog.format('(select count(*) from public.get_reservation_customer_profiles_v1(array[%L]::uuid[]))',v_res_a))='1','Own-tenant profile batch failed.');
   perform pg_temp.ok(29,'admin profile batch rejects mixed tenants',pg_temp.as_actor_raises('authenticated',v_admin,pg_catalog.format('select count(*) from public.get_reservation_customer_profiles_v1(array[%L,%L]::uuid[])',v_res_a,v_res_b),'42501'),'Mixed-tenant profile batch succeeded.');
 
-  perform pg_temp.ok(30,'authenticated user may create only in active membership tenant',pg_temp.as_actor_text('authenticated',v_user_a,pg_catalog.format('public.create_reservation_v2(%L,date %L,time %L,60,1,%L,%L)->>%L',v_lane_a,'2099-12-07','10:00',v_request,'[TEST][SAAS-9D-1]','code'))='created','Tenant-aware create failed.');
+  insert into public.tenant_user_verifications(tenant_id,user_id,verification_status,permissions_verified)
+  values(v_csk,v_user_a,'verified',true)
+  on conflict(tenant_id,user_id) do update set verification_status='verified',permissions_verified=true;
+  perform pg_temp.ok(30,'verified authenticated user may create only in active membership tenant',pg_temp.as_actor_text('authenticated',v_user_a,pg_catalog.format('public.create_reservation_v2(%L,date %L,time %L,60,1,%L,%L)->>%L',v_lane_a,'2099-12-07','10:00',v_request,'[TEST][SAAS-9D-1]','code'))='created','Tenant-aware create failed.');
   select id into v_created_id from public.reservations where creation_request_id=v_request;
   perform pg_temp.ok(31,'created reservation tenant is lane-derived without caller input',v_created_id is not null and (select tenant_id=v_csk from public.reservations where id=v_created_id),'Created reservation tenant differs.');
   perform pg_temp.ok(32,'active CSK user cannot create in dormant tenant B',pg_temp.as_actor_text('authenticated',v_user_a,pg_catalog.format('public.create_reservation_v2(%L,date %L,time %L,60,1,%L,%L)->>%L',v_lane_b,'2099-12-07','11:00',pg_catalog.gen_random_uuid(),'[TEST][SAAS-9D-1]','code'))='not_allowed','Cross-tenant create was allowed.');
@@ -181,7 +184,7 @@ begin
       <>pg_catalog.md5(pg_catalog.replace(pg_catalog.replace(pg_catalog.replace(v_semantic_lf,'select 1','select 2'),E'\r\n',E'\n'),E'\r',E'\n')),
     'A semantic body change was hidden by canonicalization.');
   perform pg_temp.ok(35,'legacy create definition and security metadata remain unchanged',
-    (select pg_catalog.md5(pg_catalog.replace(pg_catalog.replace(pg_catalog.pg_get_functiondef(p.oid),E'\r\n',E'\n'),E'\r',E'\n'))='3212b32f37ebc8e665a9a94e94260976'
+    (select pg_catalog.md5(pg_catalog.replace(pg_catalog.replace(pg_catalog.pg_get_functiondef(p.oid),E'\r\n',E'\n'),E'\r',E'\n'))='614972873ffcc3421bc9cf9c71769abc'
        and p.proowner=(select oid from pg_catalog.pg_roles where rolname='postgres')
        and p.prosecdef
        and p.proconfig=array['search_path=pg_catalog, public, pg_temp']::text[]

@@ -161,8 +161,8 @@ begin
     select 1 from (values('public'::name),('anon'::name),('authenticated'::name),('service_role'::name)) role(name)
     where pg_catalog.has_function_privilege(role.name,'public._admin_reservation_report_rows_v2(date,date,uuid,text,text,text)','EXECUTE')),
     'old helper exposed');
-  perform pg_temp.ok(8,'SECURITY DEFINER count remains 67',
-    (select count(*) from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.prosecdef)=67,
+  perform pg_temp.ok(8,'SECURITY DEFINER count is 69 after 9D-4B-2B',
+    (select count(*) from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.prosecdef)=69,
     'definer count differs');
   perform pg_temp.ok(9,'compatibility defaults remain 7/7',
     (select count(*) from information_schema.columns where table_schema='public'
@@ -212,7 +212,7 @@ begin
   perform pg_temp.ok(28,'active single tenant bridge exact',tenant_a is not null and (select count(*) from public.tenants where status='active')=1,'active-single bridge differs');
   perform pg_temp.ok(29,'profile administration follows approved 4B-1A cutover',
     exists(select 1 from pg_proc where oid='public.admin_list_users_v1(integer,integer,text,text,text,text)'::regprocedure and prosrc~'\mget_my_tenant_role_v1\M' and prosrc~'\mtenant_user_admin_notes\M' and prosrc!~'profile[.]admin_note')
-    and md5(replace(replace(pg_get_functiondef('public.update_profile_verification(uuid,text,text)'::regprocedure),E'\r\n',E'\n'),E'\r',E'\n'))='a0522b6beb94bde3bdff22799afc1368',
+    and md5(replace(replace(pg_get_functiondef('public.update_profile_verification(uuid,text,text)'::regprocedure),E'\r\n',E'\n'),E'\r',E'\n'))='8df439041f082c25e18a632f952623cb',
     '4B-1A list or deferred verification contract drifted.');
   perform pg_temp.ok(30,'account lifecycle contract untouched',
     md5(replace(replace(pg_get_functiondef('public.export_my_data_v1()'::regprocedure),E'\r\n',E'\n'),E'\r',E'\n'))='ffa6b35c5502a347e463110401032061'

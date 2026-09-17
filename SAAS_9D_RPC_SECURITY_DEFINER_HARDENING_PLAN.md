@@ -649,6 +649,445 @@ SECOND TENANT: **NO-GO**
 
 SEC-004: **OPEN**
 
+## SAAS-9D-4B-2B — FINAL PLAN
+
+Planning baseline: checkpoint
+`0fc7d5f8a830b27fdd4a43ee5dba818805b8f1bf`, identical to
+`origin/main`, after SAAS-9D-4B-2A CLOSED / PROD PASS. Production contains the
+closed `tenant_user_verifications(tenant_id,user_id)` foundation, 67 public
+SECURITY DEFINER functions and seven temporary CSK ownership defaults. This
+section is planning-only. It creates no migration, performs no SQL or Git write
+and authorizes no production change.
+
+This section supersedes the provisional 4B-2B notes in section 43. The
+foundation now exists in production, so there is no remaining data-model
+blocker. The implementation gate is the coordinated RPC/read-model and
+application cutover described below.
+
+### 4B-2B.1 Authoritative path inventory
+
+Repository search found no verification reader or writer outside the paths in
+this table. Events, event registrations and Reports do not currently consume
+verification state. There is no verification server action. UNKNOWN = **0**.
+
+| Caller / function | File / signature | R/W | Current source | Current tenant/resource/target | Auth context | PII | Global role used? | Cross-tenant risk | Target source | App / RPC change |
+|---|---|---:|---|---|---|---:|---:|---|---|---|
+| Admin Users list | `app/admin/users/page.tsx` -> `admin_list_users_v1(int,int,text,text,text,text)` | R | profile declarations and legacy verification columns; tenant note table | exact-single-active bridge; operational relationship set; target from result rows | browser JWT; RPC already requires active tenant admin | yes | UI calls legacy `get_my_role`; RPC does not rely on it | Tenant-A list currently displays global verification | `tenant_user_verifications` joined by resolved tenant and user | app call/DTO unchanged; RPC body changes |
+| Admin Users verification | `app/admin/users/page.tsx` -> `update_profile_verification(uuid,text,text)` | W | `profiles` | target UUID only; no resource | browser JWT | note + decision | yes, in current RPC | global state overwrite | tenant row; legacy profile is write-only mirror during compatibility | app call unchanged; RPC body/ACL changes |
+| Check-in list read | `app/admin/check-in/page.tsx`; direct `reservations` SELECT plus `get_reservation_customer_profiles_v1(uuid[])` | R | reservations plus global profile verification | each reservation supplies ID, tenant and target user | browser JWT; RLS and hardened RPC membership | broad operational PII | page UI reads global profile role only as presentation gate | reader can show another tenant's global decision | tenant row keyed by each reservation tenant/user | RPC body changes; caller and DTO stay compatible |
+| Check-in token read | `get_check_in_reservation_v1(uuid)` then profile reader | R | reservation DTO, then global profile verification | token -> reservation -> tenant/user | browser JWT; active admin/employee membership | yes | no in hardened RPC | profile hydration currently global | reservation-bound tenant row | verification reader changes; token RPC unchanged |
+| Check-in verification | `app/admin/check-in/page.tsx` -> `update_profile_verification(uuid,text,text)` | W | `profiles` | page has reservation ID, but current RPC receives only user ID | browser JWT | note + decision | yes, in current RPC | employee can write without binding the acted-on reservation | new reservation-bound writer | app call and RPC change required |
+| Check-in attendance | `update_reservation_attendance(uuid,text)` | W | reservation attendance only | reservation -> tenant/user | browser JWT; active tenant staff | operational PII | no | none for verification | unchanged | no change; regression dependency |
+| Cancellation-email recipient fallback | `app/api/send-reservation-cancellation/route.ts` -> `get_reservation_customer_profiles_v1(uuid[])` | R | broad profile DTO; route consumes name/email only | reservation ID -> tenant/user | caller JWT on server route | yes | route obtains legacy role for UI/business gate; RPC is authority | global verification fields are unnecessarily present in returned server DTO | same hardened reservation-bound reader; route ignores verification | no call change; no new exposure |
+| Account initial read | `app/account/page.tsx` direct `profiles` SELECT | R | global declarations and legacy verification | caller UID; no tenant context | browser JWT + owner RLS | own PII | no | wrong tenant decision shown once Tenant B exists | global declarations remain profile; tenant decision comes from owner verification RPC | app split-read required |
+| Account owner update | `update_my_profile_v1(...)` | W/R | global declarations; resets/returns legacy verification | caller UID; no tenant context | owner browser JWT | own PII | contains legacy admin branch | changed declarations leave tenant rows stale | global declarations stay profile; all existing tenant decision rows become pending | RPC body/result compatibility change; caller remains same |
+| Dashboard | `app/dashboard/page.tsx` direct `profiles` SELECT | R | legacy verification | caller UID; no resource | browser JWT + owner RLS | own PII | reads global role for UI | displays global decision | owner verification RPC via temporary active-tenant bridge | app change required |
+| Booking UI | `app/booking/BookingForm.tsx` direct `profiles` SELECT | R | legacy verification | caller UID; selected lane exists later but initial profile load has no lane | browser JWT + owner RLS | own PII | no | UI can display stale/global rejection | owner verification RPC for display; backend remains authoritative | app change required |
+| Reservation creation API | `app/api/create-reservation/route.ts` -> `create_reservation_v2(...)` | W/read gate | current core reads `profiles.verification_status` | lane ID -> `shooting_lanes.tenant_id`; target=`auth.uid()` | caller JWT forwarded by server route | customer snapshot | no in hardened wrapper | backend limit can use another tenant's decision | tenant row for lane tenant and caller | app call unchanged; DB core/wrapper verification lookup changes |
+| Legacy reservation creator | `create_reservation(...)` | W/read gate | legacy profile verification | lane -> tenant; caller | service-only legacy contract; no current repository caller | customer snapshot | legacy body | any retained caller can bypass tenant decision | tenant row derived from lane | DB body hardening or fail-closed retirement in 4B-2B; zero-caller preflight required |
+| Account export/delete | `app/api/account/export`, `app/api/account/delete`; `export_my_data_v1()`, `anonymize_my_account_v1()` | R/W | global profile/lifecycle data | account-wide caller UID | server route + owner JWT | yes | no | not a tenant authorization path, but lifecycle must eventually include/erase tenant verification PII | account-wide treatment of every caller-owned tenant row | excluded from 4B-2B body changes; mandatory 4C dependency before legacy removal |
+
+The direct Check-in reservation list remains protected by the tenant-aware RLS
+delivered in 9C. Its UI `profiles.role` check is not treated as authority:
+every reader/writer below independently requires active tenant membership. The
+global UI role gate is a 4D/9E application-context residual, not permission to
+weaken the RPC.
+
+### 4B-2B.2 Source-of-truth and compatibility invariant
+
+After the application cutover, every active tenant-specific verification read
+or decision in Admin Users, Check-in, Account, Dashboard, Booking and
+reservation creation uses `tenant_user_verifications`. There is **no read
+fallback** to `profiles.verification_status`, `profiles.permissions_verified`
+or related legacy provenance/note fields.
+
+The only temporary bridge is a one-way compatibility projection:
+
+- authoritative write: controlled RPC -> `tenant_user_verifications`;
+- compatibility write: the same transaction mirrors the CSK decision into the
+  legacy profile columns for OLD APP + NEW DB safety;
+- authoritative reads after app deployment: tenant table only;
+- forbidden direction: legacy profile fields never overwrite or fill a missing
+  tenant row after the 4B-2A backfill;
+- period: DB deployment until 4B-2C production closure;
+- 4B-2C removes the mirror, the employee-capable legacy writer bridge, closed
+  obsolete reader core and legacy verification projection after zero-caller
+  proof. Account lifecycle treatment is coordinated with 4C.
+
+A missing tenant verification row is interpreted as the safe default
+`pending/false`, not as permission to consult the global profile. A controlled
+writer creates the tenant row under its locked trusted relation.
+
+### 4B-2B.3 Trusted resource and tenant derivation
+
+| Flow | Trusted resource / table | Resource ID | Tenant source | Target user source | Verification key | Authorization |
+|---|---|---|---|---|---|---|
+| Check-in token | `reservations` selected by unique `check_in_token` | token resolves reservation UUID | `reservations.tenant_id`; lane tenant must match existing reservation integrity | `reservations.user_id` | `(reservation.tenant_id,reservation.user_id)` | active admin/employee membership in resource tenant; valid user-bound reservation |
+| Check-in list mutation | `reservations` | `p_reservation_id` | locked `reservations.tenant_id` | locked `reservations.user_id` | same | same; employee cannot target self or tenant staff and cannot substitute user/tenant |
+| Check-in batch reader | `reservations` | `p_reservation_ids[]` | every requested row must exist and share one tenant | each row's `user_id` | one key per row | active admin/employee membership; mixed/missing/duplicate IDs fail closed |
+| Admin Users read/write | membership/reservation/event registration relation | target user (no single resource exists) | temporary exact-single-active tenant bridge | requested/returned user, restricted to approved relationship set | `(resolved tenant,target user)` | active tenant admin; employee never gets generic Admin Users writer |
+| Reservation creation | `shooting_lanes` | `p_lane_id` | locked lane `tenant_id` | `auth.uid()` | `(lane.tenant_id,auth.uid())` | existing owner/member booking contract plus tenant decision |
+| Owner status | authenticated account; no resource exists | none | exact-single-active bridge only until 9E | `auth.uid()` | `(resolved tenant,auth.uid())` | owner-only read; no privileged write and no note returned |
+| Declaration invalidation | all existing caller-owned tenant verification rows | caller UID | each row's stored tenant ID | `auth.uid()` | every existing `(tenant,user)` row | owner may change global assertions; DB may only invalidate decisions, never verify |
+
+There is no current event-registration verification read/write path. Event
+registration remains an approved operational relationship for Admin Users but
+is not invented as a Check-in resource. Any future event check-in requires a
+separate event-registration-bound RPC.
+
+### 4B-2B.4 Current and target Check-in flow
+
+Current list flow:
+
+`browser JWT -> reservations SELECT/RLS -> reservation IDs ->
+get_reservation_customer_profiles_v1 -> global profile verification -> UI ->
+update_profile_verification(target user) -> global profile -> tenantless audit`.
+
+Current token flow first calls `get_check_in_reservation_v1(token)`, which
+correctly resolves and authorizes the reservation tenant, but then loses that
+binding when the page calls the global writer with only `user_id`.
+
+Target flow:
+
+`browser JWT -> tenant-aware reservation read or token RPC -> reservation ID ->
+reservation-bound profile/verification reader ->
+update_reservation_customer_verification_v1(reservation ID, action, note) ->
+lock reservation -> derive tenant and user -> lock active actor membership ->
+lock (tenant,user) verification row -> mutation -> tenant-bound audit ->
+minimal compatible response DTO`.
+
+The target writer accepts no tenant ID and no target user ID. A missing user,
+foreign reservation, mixed tenant, resource/user mismatch, pending/suspended
+membership or employee self/staff target returns controlled denial before PII
+or verification state is returned. Retry/no-change creates no extra audit.
+
+### 4B-2B.5 RPC design
+
+All functions are owned by `postgres` and use
+`search_path=pg_catalog,public,pg_temp`. Every migration statement revokes
+PUBLIC/anon/authenticated/service_role first, then grants only the explicitly
+listed role.
+
+| Name / signature | Mode and EXECUTE | Derivation and authority | Returned PII | Audit / idempotency / concurrency |
+|---|---|---|---|---|
+| `_apply_tenant_user_verification_v1(uuid,uuid,text,text,text,uuid)` | SECURITY INVOKER; closed to all runtime roles | internal `(tenant,user,action,note,resource type/resource id)` core; outer RPC must already lock and authorize | JSON decision fields only | row lock on tenant PK; changed-only tenant audit; no-change idempotent; deterministic timestamps |
+| `update_reservation_customer_verification_v1(uuid,text,text)` | SECURITY DEFINER; authenticated only | reservation ID -> locked tenant/user; active admin/employee membership; employee restrictions; caller cannot supply tenant/user | same decision JSON currently consumed by Check-in, including target user; no unrelated profile data | audit `tenant_id` from reservation; resource ID in allowlisted metadata; membership/resource/verification lock order prevents TOCTOU |
+| `update_profile_verification(uuid,text,text)` | existing SECURITY DEFINER; authenticated only after service grant removal | temporary Admin Users/old Check-in bridge; exact active tenant + approved operational relation; active admin, or transitional employee only for OLD APP check-in compatibility | existing JSON contract | calls internal core; mirrors legacy fields until 4B-2C; employee branch removed after app cutover |
+| `get_my_active_tenant_verification_v1()` | SECURITY DEFINER; authenticated only | exact-single-active bridge + `auth.uid()`; zero or multiple active tenants deny | `verification_status`, `permissions_verified`, `permissions_verified_at`, `updated_at`; **no staff note or actor IDs** | stable read, no audit, safe pending default; must be replaced by selected tenant context in 9E |
+| `admin_list_users_v1(...)` | existing SECURITY DEFINER; authenticated only | exact active tenant + active admin + approved relation set | unchanged existing Admin Users DTO; verification fields joined from tenant table | stable/paginated; filter/count/order use tenant values; no legacy fallback |
+| `get_reservation_customer_profiles_v1(uuid[])` | existing SECURITY DEFINER; authenticated only | all reservations exist, unique, same tenant; active admin/employee | unchanged Check-in DTO, with verification fields from tenant row; declarations remain global assertions | stable read; no audit; mixed/foreign IDs deny |
+| `update_my_profile_v1(...)` | existing SECURITY DEFINER; authenticated only | caller UID; global declarations remain global | unchanged owner result keys, populated from safe active-tenant row where available | declaration changes lock and invalidate every existing caller-owned tenant row to pending; one PII-free tenant audit per changed row; no verification elevation |
+| `create_reservation_v2` plus closed core | existing wrapper/core modes and ACL | lane -> tenant; caller UID | existing reservation JSON only | verification limit/rejection uses tenant row; missing row=pending; booking atomicity unchanged |
+| `create_reservation` | existing legacy mode; service-only only if a production caller is proven | lane -> tenant; caller UID/service contract must still identify user | unchanged | use tenant row or fail closed; otherwise retire in 4B-2C after zero-caller proof |
+
+`update_profile_verification` is therefore **not** the final Check-in contract.
+It remains a transitional Admin Users/OLD APP wrapper only. The target Check-in
+contract is the new reservation-bound RPC. No general RPC accepts
+caller-provided `tenant_id`.
+
+The foundation backfill helper stays SECURITY INVOKER and closed. Direct table
+access remains denied to PUBLIC, anon, authenticated and service_role; no RLS
+policy is added.
+
+### 4B-2B.6 Owner, staff and system contracts
+
+| Contract | Read | Write | Tenant/resource | Audit | PII |
+|---|---|---|---|---|---|
+| OWNER | own minimal tenant decision through owner RPC | global profile declarations only; may invalidate, never approve/reject | active-single bridge until 9E; invalidation iterates existing own tenant rows | one tenant-bound invalidation audit per changed decision | own status/timestamp; staff note and verifier IDs hidden |
+| ADMIN | related-user verification in Admin Users; reservation-bound Check-in | verify/pending/reject within resolved tenant | operational relation for generic Admin Users; reservation required for Check-in | exactly one changed-only audit with explicit tenant | existing Admin Users DTO; Check-in operational DTO only |
+| EMPLOYEE | reservation-bound Check-in only | reservation-bound verify/pending/reject under existing self/staff restrictions | reservation is mandatory | same resource tenant audit | only fields required for visit/check-in; no generic user list |
+| SYSTEM | no generic service writer or direct table access | declaration invalidation only inside owner RPC; any future automation needs a separately named resource-bound contract | stored row/resource tenant | explicit tenant required | no generic profile DTO |
+
+Global declarations (`permission_*`, `qualification_*`) remain account facts in
+`profiles`. Tenant decision/provenance/note fields remain exclusively tenant
+state. Leave-tenant is not account deletion; export, anonymization and Auth
+deletion remain account-wide 4C contracts.
+
+### 4B-2B.7 Reader and application cutover
+
+| File / reader | Current call / DTO | Target call / DTO | Context source | UI / compatibility impact |
+|---|---|---|---|---|
+| `app/admin/users/page.tsx` | `admin_list_users_v1`; legacy-shaped verification fields | same call and DTO, DB values from tenant table | active-single bridge in RPC until 9E | no UI change; filter/status now tenant-specific |
+| `app/admin/users/page.tsx` writer | `update_profile_verification(target user,...)` | same transitional admin wrapper | active-single bridge + operational relation | no UI/result change; never a Check-in employee authority after final app cutover |
+| `app/admin/check-in/page.tsx` reader | `get_reservation_customer_profiles_v1(reservation IDs)` | same call/DTO, tenant verification join | reservation array | no visual change; no fallback |
+| `app/admin/check-in/page.tsx` writer | `update_profile_verification(target user,...)` | `update_reservation_customer_verification_v1(reservation ID,...)` | selected reservation | required app change; result DTO remains compatible |
+| `app/account/page.tsx` | profile SELECT includes tenant decision/note | profile SELECT only global/account fields + `get_my_active_tenant_verification_v1()` | active-single bridge until 9E | remove staff-note display; status/timestamp UI retained |
+| `app/account/page.tsx` save | `update_my_profile_v1` returns legacy result | same call/result keys, values from invalidated tenant row | all existing owner rows; active tenant for returned UI | message unchanged; no stale verified result |
+| `app/dashboard/page.tsx` | profile SELECT includes decision | profile identity/role SELECT + owner verification RPC | active-single bridge | same badges; source changes |
+| `app/booking/BookingForm.tsx` | profile SELECT includes status | profile contact SELECT + owner verification RPC | active-single bridge for display; lane tenant for authoritative create | same UX; backend result remains authority |
+| `app/api/create-reservation/route.ts` | `create_reservation_v2` | same call/result | lane in RPC | no route change |
+| `app/api/send-reservation-cancellation/route.ts` | reservation reader used for staff fallback | same reader; verification fields ignored | reservation | no route change; no new browser PII |
+
+No Account/Dashboard/Booking reader has an explicit selected tenant today. This
+would be a blocker for Tenant B, but not for 4B-2B while the database enforces
+exactly one active tenant. The owner RPC makes this dependency explicit and
+fail-closed. It is not the long-term solution: 9E replaces it with trusted
+selected tenant context before a second tenant can be active.
+
+### 4B-2B.8 Minimal field matrix
+
+| Field | Owner R | Owner W | Admin R/W | Employee R/W | System | Tenant-scoped | PII | Why |
+|---|---:|---:|---|---|---|---:|---:|---|
+| global `permission_*` / `qualification_*` | own | own assertions | read related / no direct write | read only for reservation visit | invalidation trigger through owner RPC | no | yes | declared eligibility facts |
+| `verification_status` | yes | no | yes/yes | reservation-bound yes/yes | invalidate only | yes | low | operational decision |
+| `permissions_verified` | yes | no | yes/yes | reservation-bound yes/yes | invalidate only | yes | low | operational approval |
+| `permissions_verified_at` | yes | no | yes/derived | yes/derived | DB timestamp | yes | low | recency/provenance |
+| verifier IDs | no | no | only where operationally required; default not returned | no | DB writes actor UID | yes | pseudonymous | audit/provenance, not UI identity |
+| verification note | **no after cutover** | no | yes/yes for related user | reservation-bound yes/yes | no generic access | yes | yes | sensitive staff note; not owner-facing |
+| `verified_at/by`, `unverified_at/by` | no | no | mutation/result only if existing UI needs it | no | DB-managed | yes | pseudonymous | workflow history |
+| email/name/phone/address | own | existing profile contract | current Admin Users related scope | Check-in minimum only | no generic access | global profile PII | yes | operational contact; never added to verification-only RPC |
+
+No new verification RPC returns membership metadata, another user's tenant ID,
+tokens, Auth data, password data or unrelated profile fields.
+
+### 4B-2B.9 Audit and concurrency invariants
+
+Every changed privileged tenant verification mutation writes exactly one
+`audit_logs` row with `tenant_id` derived from the reservation or approved
+operational relation. Check-in audit includes an allowlisted reservation ID and
+stable action only. Notes, declarations, email, phone, address and document
+data are excluded. Denial and no-change write no audit. A normal tenant
+verification audit with `tenant_id IS NULL` is a migration/test failure.
+
+Lock order is fixed: trusted resource (when present), actor membership, target
+tenant membership needed for employee restrictions, verification row, then
+legacy profile mirror. Generic Admin Users writes take a tenant-scoped advisory
+lock before the target row. Declaration invalidation locks the caller profile,
+then tenant verification rows ordered by tenant UUID. Tests must prove:
+
+- concurrent verification updates serialize with last committed state and no
+  duplicate changed audit;
+- verification update versus Check-in/attendance has no deadlock and cannot
+  bypass the decision;
+- Check-in retry is idempotent;
+- simultaneous Tenant-A and Tenant-B decisions for one user affect independent
+  rows;
+- stale readers never fall back to profiles;
+- a resource tenant mismatch fails before state access;
+- suspension/pending transition racing a mutation results in denial or a
+  fully authorized mutation under the locked membership, never an unbound
+  write;
+- deadlocks, lost updates, broken invariants and cross-tenant effects are zero.
+
+### 4B-2B.10 Deployment order and intermediate-state safety
+
+Deployment model: **TWO-STEP (DB compatibility first, then application)**.
+
+1. **DB compatibility migration.** Freeze exact fingerprints/metadata/ACL,
+   table shape and 67-function baseline. Add the closed INVOKER mutation core,
+   the resource-bound Check-in writer and owner reader. Harden the existing
+   compatibility writer, Admin Users reader, reservation profile reader,
+   reservation creation verification gate and owner declaration invalidation.
+   Enable authoritative tenant writes plus one-way legacy mirror. Revoke the
+   unproved service_role grant from `update_profile_verification`. Preserve old
+   signatures and browser DTOs.
+2. **Application deployment.** Switch Check-in mutation to reservation ID;
+   split owner profile reads from tenant verification reads in Account,
+   Dashboard and Booking; stop rendering the staff verification note to owner.
+   Add focused parser/contract tests. Admin Users and server routes retain their
+   existing calls.
+3. **Observation gate.** Prove no active caller reads legacy verification, no
+   employee uses the legacy writer, no tenant/profile divergence and no raw
+   errors/PII leak. Only then may 4B-2C be planned/executed.
+
+Why not APP-FIRST: the old database lacks both the reservation-bound writer and
+owner reader. Why not a one-shot coordinated deployment: DB-first keeps OLD APP
++ NEW DB functional while the compatibility wrapper and mirror are present.
+Every intermediate state is fail-closed, avoids cross-tenant access, preserves
+Check-in for current staff and loses no decision.
+
+Compatibility matrix:
+
+| State | Result |
+|---|---|
+| OLD APP + OLD DB | current production; safe only while one active tenant |
+| OLD APP + NEW DB | functional; tenant table authoritative, resource readers hardened, old writer bridge and legacy mirror preserve UI |
+| NEW APP + OLD DB | unsupported and must never be deployed; new RPCs absent |
+| NEW APP + NEW DB | target 4B-2B state; active operational reads use tenant table only |
+
+### 4B-2B.11 Exact DB, RPC and application scope
+
+Proposed DB migration scope (name reserved only for later implementation
+review): `20260920150000_cutover_tenant_user_verification.sql`.
+
+Exact DB scope:
+
+- create the closed INVOKER mutation core;
+- add the reservation-bound writer and minimal owner reader;
+- replace bodies/ACL as specified for `update_profile_verification`,
+  `admin_list_users_v1`, `get_reservation_customer_profiles_v1`,
+  `update_my_profile_v1`, `create_reservation_v2`/its closed core and retained
+  `create_reservation` verification gate;
+- preserve table RLS with zero policies and zero direct runtime grants;
+- add no tenant parameter, profile fallback, default or data rewrite;
+- freeze `prevent_non_admin_profile_privilege_changes()` fingerprint/body;
+- preserve all unrelated RPC fingerprints and seven compatibility defaults.
+
+Exact application scope:
+
+- `app/admin/check-in/page.tsx` and its focused tests;
+- `app/account/page.tsx` and tests;
+- `app/dashboard/page.tsx` and tests;
+- `app/booking/BookingForm.tsx` and booking contract tests;
+- generated Supabase types only if this repository maintains them for the two
+  new signatures;
+- no event, report, role, contact, note, lifecycle or routing feature change.
+
+### 4B-2B.12 Exact 4B-2C residual
+
+After 4B-2B the following remains legacy and is the input to 4B-2C/referenced
+later phases:
+
+- global profile verification columns as a **write-only compatibility mirror**;
+- `update_profile_verification` as an active-single-tenant Admin Users/old-app
+  compatibility wrapper; employee compatibility must be removed after caller
+  telemetry/zero-caller proof;
+- closed `get_reservation_customer_profiles_v1__saas9d1_core` if the hardened
+  wrapper no longer calls it;
+- any retained legacy `create_reservation` service contract after production
+  caller proof;
+- transaction settings used only to permit the legacy profile mirror;
+- profile verification indexes/FKs and legacy trigger dependencies;
+- account export/anonymization treatment of tenant verification data (4C);
+- global `get_my_role`/`is_admin` UI/helper retirement and
+  `prevent_non_admin_profile_privilege_changes()` body hardening (4D);
+- exact-active-tenant owner/Admin Users bridge replacement with selected tenant
+  routing (9E);
+- seven compatibility ownership defaults (9D-5/9E gate).
+
+4B-2C may remove the mirror/fallback artifacts only after NEW APP + NEW DB is
+proven, account lifecycle is safe, and zero active caller depends on them.
+There is no legacy verification **read fallback** in the 4B-2B target.
+
+`prevent_non_admin_profile_privilege_changes()` remains **FROZEN**. 4B-2B uses
+the existing controlled transaction-setting bridge only for the temporary
+legacy projection. No trigger-body change is required; any discovered need to
+change it is a STOP condition and 4D dependency.
+
+### 4B-2B.13 Security inventory and expected count
+
+Current production: SECURITY DEFINER **67**, compatibility defaults **7/7**,
+UNKNOWN **0**.
+
+The closed mutation helper is SECURITY INVOKER and does not change the count.
+Two new externally callable, table-closing boundaries are required:
+
+1. `update_reservation_customer_verification_v1(...)`;
+2. `get_my_active_tenant_verification_v1()`.
+
+Both must be SECURITY DEFINER because direct authenticated and service-role
+table access remains denied and no permissive RLS policy may be added. Existing
+function replacements do not change the inventory. Expected post-4B-2B
+SECURITY DEFINER count: **69**. Unexpected drift: **0**.
+
+### 4B-2B.14 Required local and production test plan
+
+Focused SQL:
+
+- exact function fingerprints, signatures, owner, SP1, mode and ACL;
+- table owner/RLS/zero-policy/direct-denial for PUBLIC, anon, authenticated and
+  service_role;
+- ADMIN_A + related A/resource A ALLOW; B-only/unrelated/resource B DENY;
+- EMPLOYEE_A reservation A ALLOW under existing restrictions; self, tenant
+  staff, B resource and caller-spoof attempts DENY;
+- global `profiles.role=admin` without active A membership, pending,
+  suspended and no membership DENY;
+- same user verified in A/unverified in B remains independent;
+- Admin Users filters/count/DTO use only Tenant-A decision;
+- mixed/missing/duplicate reservation reader arrays deny;
+- owner reader returns own minimal status and never staff note/verifier IDs;
+- declaration edit invalidates every existing own tenant decision, cannot
+  verify and produces tenant-bound PII-free audits;
+- reservation create rejection/limit uses lane tenant decision; no overbooking,
+  idempotency or pricing regression;
+- no active target reader contains a legacy verification fallback;
+- audit tenant binding, no-change/replay idempotency and fixture cleanup zero;
+- concurrency matrix above, deadlocks/lost updates/contamination zero;
+- SECURITY DEFINER 69, unexpected drift zero, defaults 7/7.
+
+Regression and application verification:
+
+- focused Admin Users, Check-in, Account, Dashboard, Booking and
+  create-reservation Node tests;
+- CLEAN-005 profile DML, 9D-1 reservation/check-in, SEC-007 audit and SEC-009
+  lifecycle regression;
+- full Supabase DB suite and all Node tests;
+- TypeScript, production build, npm audit, changed-files ESLint and
+  `git diff --check`;
+- Playwright: `/admin/users`, Check-in list/token and verification mutation,
+  `/account`, dashboard and Booking, including controlled errors and mobile
+  layout where the source split changes loading state;
+- production preflight: project identity, migration history/SHA, exact single
+  pending migration, frozen fingerprints, one active tenant, row/orphan/
+  mismatch counts, table ACL, SECURITY DEFINER 67 and defaults 7/7;
+- production post-deploy/app smoke: Admin Users, Check-in, Account, Dashboard,
+  Booking, reservation create, Login; no 5xx; rollback-only A/B matrix;
+  fixture cleanup zero.
+
+Rollback is forward-only: each DB migration is transactional and fail-closed;
+post-deploy reversal requires a separately reviewed corrective migration.
+Never use migration repair or manual production edits. App rollback is safe
+only while the DB compatibility wrapper/mirror remains active.
+
+### 4B-2B.15 Final verdicts
+
+SAAS-9D-4B-2B TECHNICAL PLAN: **READY**
+
+RESOURCE-BOUND TENANT RESOLUTION: **PASS**
+
+CHECK-IN CUTOVER: **READY**
+
+READER CUTOVER: **READY**
+
+APP CUTOVER REQUIRED: **YES**
+
+NEW RPC REQUIRED: **YES**
+
+LEGACY FALLBACK AFTER TARGET: **ABSENT**
+
+DEPLOYMENT ORDER: **TWO-STEP**
+
+DATA MODEL BLOCKER: **NO**
+
+prevent_non_admin_profile_privilege_changes: **FROZEN**
+
+EXPECTED SECURITY DEFINER COUNT: **69**
+
+READY FOR SAAS-9D-4B-2B LOCAL IMPLEMENTATION: **GO**
+
+READY FOR PRODUCTION WRITE: **NO**
+
+READY FOR 4B-2C: **NO-GO**
+
+SECOND TENANT: **NO-GO**
+
+SEC-004: **OPEN**
+
+### 4B-2B.16 Local implementation result — 2026-09-17
+
+SAAS-9D-4B-2B was implemented locally within the approved scope. The DB-first
+compatibility migration, resource-bound Check-in writer, minimal owner reader,
+tenant-source reader/booking cutover and four application caller changes are
+complete. `prevent_non_admin_profile_privilege_changes()` remains byte-semantic
+fingerprint unchanged. The authoritative tenant table remains closed to direct
+runtime access.
+
+Evidence: focused SQL **37/37 PASS**, full DB **40 files / 1260 tests PASS**,
+Node **742/742 PASS**, deterministic concurrency PASS with deadlocks/lost
+updates/cross-tenant effects/fixture all zero, TypeScript/build PASS and full
+Playwright **31/31 PASS**. SECURITY DEFINER is exactly **69**, unexpected drift
+is zero and compatibility defaults remain **7/7**. Migration SHA-256 is
+`F6B86E487018DC54DE8A35A026C991E66B9E1B8857F9CCCCA0C763688DAF1412`.
+
+The exact implementation and residual evidence is recorded in
+`SAAS_9D_4B2B_VERIFICATION_CHECKIN_CUTOVER_REPORT.md`.
+
+READY FOR SAAS-9D-4B-2B PRODUCTION PREFLIGHT: **GO**
+
+READY FOR PRODUCTION WRITE: **NO**
+
+READY FOR 4B-2C: **NO-GO until production PASS/checkpoint**
+
 ## 43. SAAS-9D-4B-2 — FINAL PLAN
 
 Planning baseline: checkpoint `567dfa8ca3a971f8ea2d0490a19594f94199960f`,

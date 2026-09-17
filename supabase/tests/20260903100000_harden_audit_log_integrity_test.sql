@@ -240,7 +240,8 @@ begin
               or not (
                 procedure.prosecdef
                 or (
-                  procedure.proname ~ '__saas9d(1|2a|3c)_core$'
+                  (procedure.proname ~ '__saas9d(1|2a|3c)_core$'
+                   or procedure.proname='_apply_tenant_user_verification_v1')
                   and not pg_catalog.has_function_privilege('public',procedure.oid,'EXECUTE')
                   and not pg_catalog.has_function_privilege('anon',procedure.oid,'EXECUTE')
                   and not pg_catalog.has_function_privilege('authenticated',procedure.oid,'EXECUTE')
@@ -254,8 +255,8 @@ begin
     and pg_catalog.strpos(pg_catalog.lower(pg_catalog.pg_get_functiondef(procedure.oid)),'insert into')>0;
 
   perform pg_temp.record_result(17,'All current audit writers are trusted database functions',
-    v_writer_count=17 and v_untrusted_writer_count=0,
-    'Oczekiwano 17 zaufanych writerów: SECURITY DEFINER albo nieklienckie SAAS-9D cores, owner=postgres, auth.uid() i explicit search_path.');
+    v_writer_count=18 and v_untrusted_writer_count=0,
+    'Oczekiwano 18 zaufanych writerów: SECURITY DEFINER albo zamknięte nieklienckie cores/helpers, owner=postgres, auth.uid() i explicit search_path.');
 
   perform pg_temp.record_result(18,'All fixture remains transaction-scoped',
     (select pg_catalog.count(*)=5 from public.profiles where user_id in (v_admin,v_employee,v_instructor,v_user,v_target))

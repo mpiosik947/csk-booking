@@ -160,10 +160,11 @@ begin
     v_result @> '{"ok":true,"changed":true,"code":"updated","declarations_changed":true}'::jsonb
     and exists(select 1 from public.profiles where user_id=v_user and phone='500600700' and city='Warszawa' and permission_sport),
     'Owner contact and declarations must update through the RPC.');
-  perform pg_temp.record_result(22,'Declaration change resets verification',exists(
-    select 1 from public.profiles where user_id=v_user and verification_status='pending' and not permissions_verified
-      and permissions_verified_at is null and permissions_verified_by is null and permissions_verification_note is null
-  ),'Existing re-verification semantics must remain.');
+  perform pg_temp.record_result(22,'Declaration change resets tenant verification',
+    v_result->>'verification_status'='pending'
+    and coalesce((v_result->>'permissions_verified')::boolean,false)=false
+    and not exists(select 1 from public.tenant_user_verifications where tenant_id=public.active_single_tenant_id_v1() and user_id=v_user and (verification_status<>'pending' or permissions_verified)),
+    'Re-verification semantics must use the tenant-scoped source of truth, including the implicit pending default.');
   perform pg_temp.record_result(23,'Self RPC cannot mutate privileged fields',exists(
     select 1 from public.profiles where user_id=v_user and role='user' and email='clean005-user-'||v_run||'@example.invalid'
       and first_name='[TEST]' and created_at is not null
@@ -184,7 +185,7 @@ begin
   execute 'reset role';
   perform pg_temp.record_result(26,'Admin verification RPC remains controlled and audited',
     v_result->>'verification_status'='verified'
-    and (select pg_catalog.count(*)=1 from public.audit_logs where action='profile_verification_verified' and target_id=v_other and actor_user_id=v_admin),
+    and (select pg_catalog.count(*)=1 from public.audit_logs where action='tenant_user_verification_verified' and target_type='tenant_user_verification' and target_id=v_other and actor_user_id=v_admin and tenant_id=public.active_single_tenant_id_v1()),
     'Verification writer remains available.');
 
   perform pg_temp.set_client('authenticated',v_admin);
