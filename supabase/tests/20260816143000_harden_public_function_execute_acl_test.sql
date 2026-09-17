@@ -107,8 +107,8 @@ insert into expected_function_acl values
   ('public.sync_csk_membership_role_to_profile()','E',false,false,false),
   ('public.sync_profile_role_to_csk_membership()','E',false,false,false),
   ('public.tenant_role_to_legacy_profile_role_v1(text)','A',false,false,false),
-  ('public.update_profile_contact_details(uuid,text,text,text,text,text,text)','C',false,true,true),
-  ('public.update_profile_identity(uuid,text,text)','C',false,true,true),
+  ('public.update_profile_contact_details(uuid,text,text,text,text,text,text)','C',false,true,false),
+  ('public.update_profile_identity(uuid,text,text)','C',false,true,false),
   ('public.update_my_profile_v1(text,text,text,text,text,text,boolean,boolean,boolean,boolean,boolean,boolean,boolean,boolean,boolean,boolean)','B',false,true,false),
   ('public.update_profile_verification(uuid,text,text)','C',false,true,true),
   ('public.update_reservation_admin_note(uuid,text)','C',false,true,false),
@@ -290,8 +290,8 @@ begin
       where pg_catalog.has_function_privilege('service_role',expected.signature,'EXECUTE')
         is distinct from expected.service_role_execute
     )
-    and (select pg_catalog.count(*)=8 from pg_temp.expected_function_acl where service_role_execute),
-    'service_role retains only the eight explicitly intended server, rollback and safe-reader grants.');
+    and (select pg_catalog.count(*)=6 from pg_temp.expected_function_acl where service_role_execute),
+    'service_role retains only the six explicitly intended server, rollback and safe-reader grants.');
 
   perform pg_temp.record_result(6,'Trigger functions and internal helpers are isolated',
     (select pg_catalog.count(*)=12 from pg_temp.expected_function_acl where category='E')

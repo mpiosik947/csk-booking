@@ -176,7 +176,7 @@ begin
   execute 'reset role';
   perform pg_temp.record_result(25,'Admin role RPC remains controlled and audited',
     v_result @> '{"ok":true,"changed":true,"code":"updated","role":"instruktor"}'::jsonb
-    and (select pg_catalog.count(*)=1 from public.audit_logs where action='profile_role_changed' and target_id=v_other and actor_user_id=v_admin),
+    and (select pg_catalog.count(*)=1 from public.audit_logs where action='tenant_user_role_updated' and target_type='tenant_user_role' and target_id=v_other and actor_user_id=v_admin and tenant_id=public.active_single_tenant_id_v1()),
     'Role writer changes role only and records trusted actor.');
 
   perform pg_temp.set_client('authenticated',v_admin);
