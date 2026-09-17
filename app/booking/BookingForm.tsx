@@ -49,6 +49,10 @@ type Profile = {
   verification_status: string | null;
 };
 
+type TenantVerificationData = {
+  verification_status: string | null;
+};
+
 type CreateReservationResponse = {
   ok: boolean;
   changed: boolean;
@@ -301,13 +305,26 @@ export default function BookingForm({
 
       const { data } = await supabase
         .from("profiles")
-        .select(
-          "email,first_name,last_name,full_name,phone,verification_status"
-        )
+        .select("email,first_name,last_name,full_name,phone")
         .eq("user_id", user.id)
         .maybeSingle();
 
-      setProfile((data as Profile | null) ?? null);
+      const { data: verificationRows } = await supabase.rpc(
+        "get_my_active_tenant_verification_v1"
+      );
+      const tenantVerification = (
+        Array.isArray(verificationRows) ? verificationRows[0] : null
+      ) as TenantVerificationData | null;
+
+      setProfile(
+        data
+          ? {
+              ...(data as Omit<Profile, "verification_status">),
+              verification_status:
+                tenantVerification?.verification_status ?? "pending",
+            }
+          : null
+      );
       setIsLoggedIn(true);
       setCheckingUser(false);
     }

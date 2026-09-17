@@ -20,6 +20,9 @@ type ProfileData = {
   city: string | null;
   street: string | null;
   house_number: string | null;
+};
+
+type TenantVerificationData = {
   verification_status: string | null;
   permissions_verified: boolean | null;
 };
@@ -72,7 +75,7 @@ export default function DashboardPage() {
       const { data: profile } = await supabase
         .from("profiles")
         .select(
-          "role, first_name, last_name, full_name, email, phone, postal_code, city, street, house_number, verification_status, permissions_verified"
+          "role, first_name, last_name, full_name, email, phone, postal_code, city, street, house_number"
         )
         .eq("user_id", user.id)
         .single();
@@ -92,9 +95,6 @@ export default function DashboardPage() {
         });
 
         setFullName(displayedName);
-        setVerificationStatus(profileData.verification_status ?? "");
-        setPermissionsVerified(Boolean(profileData.permissions_verified));
-
         setProfileComplete(
           hasStructuredProfileName(profileData) &&
             hasValue(profileData.phone) &&
@@ -104,6 +104,15 @@ export default function DashboardPage() {
             hasValue(profileData.house_number)
         );
       }
+
+      const { data: verificationRows } = await supabase.rpc(
+        "get_my_active_tenant_verification_v1"
+      );
+      const tenantVerification = (
+        Array.isArray(verificationRows) ? verificationRows[0] : null
+      ) as TenantVerificationData | null;
+      setVerificationStatus(tenantVerification?.verification_status ?? "pending");
+      setPermissionsVerified(Boolean(tenantVerification?.permissions_verified));
 
       setLoading(false);
     }

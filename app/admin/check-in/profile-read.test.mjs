@@ -12,6 +12,9 @@ test("check-in reads profiles only through reservation-scoped RPC", async () => 
 
   assert.ok(loader);
   assert.match(loader, /get_reservation_customer_profiles_v1/);
+  assert.match(source, /update_reservation_customer_verification_v1/);
+  assert.match(source, /p_reservation_id:\s*reservation\.id/);
+  assert.doesNotMatch(source, /update_profile_verification/);
   assert.match(loader, /p_reservation_ids:\s*reservationIds\.slice/);
   assert.doesNotMatch(loader, /\.from\("profiles"\)/);
   assert.doesNotMatch(loader, /admin_note|weapon_permit|range_officer_number|instructor_number/);

@@ -1040,9 +1040,9 @@ function CheckInContent() {
     try {
       const trimmedNote = note?.trim() ?? "";
       const { data, error } = await supabase.rpc(
-        "update_profile_verification",
+        "update_reservation_customer_verification_v1",
         {
-          p_target_user_id: profile.user_id,
+          p_reservation_id: reservation.id,
           p_action: action,
           p_note: trimmedNote || null,
         }

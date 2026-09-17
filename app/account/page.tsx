@@ -22,8 +22,6 @@ type ProfileData = {
   street: string | null;
   house_number: string | null;
   apartment_number: string | null;
-  verification_status: string | null;
-
   permission_sport: boolean | null;
   permission_collector: boolean | null;
   permission_hunting: boolean | null;
@@ -36,9 +34,13 @@ type ProfileData = {
   qualification_pzss_license: boolean | null;
   qualification_hunter: boolean | null;
 
+};
+
+type TenantVerificationData = {
+  verification_status: string | null;
   permissions_verified: boolean | null;
   permissions_verified_at: string | null;
-  permissions_verification_note: string | null;
+  updated_at: string | null;
 };
 
 type PermissionValues = {
@@ -222,8 +224,6 @@ export default function AccountPage() {
     useState("niezweryfikowane");
   const [permissionsVerified, setPermissionsVerified] = useState(false);
   const [permissionsVerifiedAt, setPermissionsVerifiedAt] = useState("");
-  const [permissionsVerificationNote, setPermissionsVerificationNote] =
-    useState("");
 
   const [newPassword, setNewPassword] = useState("");
   const [repeatPassword, setRepeatPassword] = useState("");
@@ -287,7 +287,6 @@ export default function AccountPage() {
         street,
         house_number,
         apartment_number,
-        verification_status,
 
         permission_sport,
         permission_collector,
@@ -299,11 +298,7 @@ export default function AccountPage() {
         qualification_instructor,
         qualification_range_officer,
         qualification_pzss_license,
-        qualification_hunter,
-
-        permissions_verified,
-        permissions_verified_at,
-        permissions_verification_note
+        qualification_hunter
       `
       )
       .eq("user_id", user.id)
@@ -315,6 +310,24 @@ export default function AccountPage() {
       setLoading(false);
       return;
     }
+
+    const { data: verificationRows, error: verificationError } =
+      await supabase.rpc("get_my_active_tenant_verification_v1");
+
+    if (verificationError) {
+      reportClientError("Account tenant verification read failed", verificationError);
+      setMessage("Nie udało się pobrać statusu weryfikacji. Spróbuj ponownie.");
+      setLoading(false);
+      return;
+    }
+
+    const tenantVerification = (
+      Array.isArray(verificationRows) ? verificationRows[0] : null
+    ) as TenantVerificationData | null;
+
+    setVerificationStatus(tenantVerification?.verification_status ?? "pending");
+    setPermissionsVerified(Boolean(tenantVerification?.permissions_verified));
+    setPermissionsVerifiedAt(tenantVerification?.permissions_verified_at ?? "");
 
     if (profile) {
       const profileData = profile as ProfileData;
@@ -332,10 +345,6 @@ export default function AccountPage() {
       setStreet(profileData.street ?? "");
       setHouseNumber(profileData.house_number ?? "");
       setApartmentNumber(profileData.apartment_number ?? "");
-
-      setVerificationStatus(
-        profileData.verification_status ?? "niezweryfikowane"
-      );
 
       const loadedPermissionValues: PermissionValues = {
         permissionSport: Boolean(profileData.permission_sport),
@@ -377,11 +386,6 @@ export default function AccountPage() {
       setQualificationHunter(loadedPermissionValues.qualificationHunter);
       setInitialPermissionValues(loadedPermissionValues);
 
-      setPermissionsVerified(Boolean(profileData.permissions_verified));
-      setPermissionsVerifiedAt(profileData.permissions_verified_at ?? "");
-      setPermissionsVerificationNote(
-        profileData.permissions_verification_note ?? ""
-      );
     } else {
       setInitialPermissionValues({
         permissionSport: false,
@@ -527,7 +531,6 @@ export default function AccountPage() {
       setVerificationStatus(profileResult.verification_status ?? "pending");
       setPermissionsVerified(profileResult.permissions_verified ?? false);
       setPermissionsVerifiedAt(profileResult.permissions_verified_at ?? "");
-      setPermissionsVerificationNote("");
       setInitialPermissionValues(currentPermissionValues);
       setMessage(
         "Dane zostały zapisane. Zmiana deklarowanych uprawnień wymaga ponownej weryfikacji przez pracownika."
@@ -976,12 +979,6 @@ export default function AccountPage() {
                   <p className="mt-1 text-xs opacity-80">
                     Data weryfikacji:{" "}
                     {new Date(permissionsVerifiedAt).toLocaleString("pl-PL")}
-                  </p>
-                )}
-
-                {permissionsVerificationNote && (
-                  <p className="mt-3 break-words rounded-lg border border-[#30372c] bg-[#141814]/60 p-3 text-xs leading-5">
-                    {permissionsVerificationNote}
                   </p>
                 )}
 
