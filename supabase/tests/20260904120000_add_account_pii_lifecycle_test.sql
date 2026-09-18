@@ -284,8 +284,9 @@ begin
   v_export := pg_temp.export_as(v_user_a);
 
   perform pg_temp.record_result(5, 'Export has the stable versioned top-level contract',
-    (select pg_catalog.array_agg(key order by key) = array['account','event_registrations','export_version','generated_at','profile','reservations']::text[] from pg_catalog.jsonb_object_keys(v_export) as key)
-    and v_export->>'export_version' = '1',
+    (select pg_catalog.array_agg(key order by key) = array['account','event_registrations','export_version','generated_at','profile','reservations','tenant_relationships']::text[] from pg_catalog.jsonb_object_keys(v_export) as key)
+    and v_export->>'export_version' = '2'
+    and pg_catalog.jsonb_typeof(v_export->'tenant_relationships')='array',
     'Eksport nie może dodawać niezatwierdzonych sekcji.');
 
   perform pg_temp.record_result(6, 'Export is scoped to auth.uid()',

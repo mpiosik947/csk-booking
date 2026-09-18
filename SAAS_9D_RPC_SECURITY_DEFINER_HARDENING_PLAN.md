@@ -5854,3 +5854,54 @@ READY FOR PRODUCTION WRITE: **NO**
 SECOND TENANT: **NO-GO**
 
 SEC-004: **OPEN**
+
+## 44. SAAS-9D-4C DB phase — local implementation result (2026-09-17)
+
+The approved APP-FIRST cutover remains unchanged. The DB phase changes exactly
+the three account-owner RPCs in one forward-only migration:
+`update_my_profile_v1(...)`, `export_my_data_v1()` and
+`anonymize_my_account_v1()`. Their signatures, authenticated caller contracts,
+owners, SP1 search paths and authenticated-only ACL remain compatible.
+
+`update_my_profile_v1` uses `auth.uid()` plus a per-account advisory lock,
+updates only self-service fields and invalidates all changed tenant
+verification decisions in deterministic tenant order with explicit PII-free
+tenant audits. `export_my_data_v1` now emits the strict v2 contract already
+accepted by the deployed app, adding only deterministic, caller-owned
+`tenant_relationships`. `anonymize_my_account_v1` removes all caller notes,
+verifications and memberships, anonymizes retained reservation/event history,
+redacts audit PII, protects every tenant's last active administrator and writes
+one global idempotent lifecycle audit.
+
+Account deletion remains account-wide. Future leave-tenant remains a separate,
+unimplemented contract. `service_role` receives no RPC EXECUTE authority and is
+still used by the server only for the final Auth Admin deletion after DB
+success. App source changes are **0**.
+
+Local evidence:
+
+- fresh local reset: **PASS**;
+- focused SQL: **44/44 PASS**, final rollback;
+- concurrency: concurrent profile writes, anonymize-vs-tenant-activity and
+  duplicate anonymize all **PASS**; deadlocks/orphans/contamination **0**;
+- full DB suite: **1340/1340 PASS**;
+- Node: **750/750 PASS**;
+- TypeScript, production build and focused Playwright: **PASS**;
+- fixture cleanup: **0**;
+- SECURITY DEFINER: **69**; compatibility defaults: **7/7**;
+- migration SHA-256:
+  `8735888B72FE13ECF6265DE9D43797A4ADDB6F5E6702255280F8CEDB768881DD`.
+
+Production preflight and production write were not performed.
+
+SAAS-9D-4C DB PHASE LOCAL: **PASS**
+
+READY FOR 4C DB PRODUCTION PREFLIGHT: **GO**
+
+READY FOR 4D / 4E: **NO-GO until 4C production PASS/checkpoint**
+
+READY FOR PRODUCTION WRITE: **NO**
+
+SECOND TENANT: **NO-GO**
+
+SEC-004: **OPEN**

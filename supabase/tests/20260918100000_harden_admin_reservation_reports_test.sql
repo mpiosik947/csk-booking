@@ -215,8 +215,8 @@ begin
     and md5(replace(replace(pg_get_functiondef('public.update_profile_verification(uuid,text,text)'::regprocedure),E'\r\n',E'\n'),E'\r',E'\n'))='022baa5652409d2246cd5e66642e884e',
     '4B-1A list or closed verification contract drifted.');
   perform pg_temp.ok(30,'account lifecycle contract untouched',
-    md5(replace(replace(pg_get_functiondef('public.export_my_data_v1()'::regprocedure),E'\r\n',E'\n'),E'\r',E'\n'))='ffa6b35c5502a347e463110401032061'
-    and md5(replace(replace(pg_get_functiondef('public.anonymize_my_account_v1()'::regprocedure),E'\r\n',E'\n'),E'\r',E'\n'))='7e4d950e75e6e5782b139f11269d03a0',
+    md5(replace(replace(pg_get_functiondef('public.export_my_data_v1()'::regprocedure),E'\r\n',E'\n'),E'\r',E'\n'))='d159b7d0a14f7ffc9d6c3e5088d18dc5'
+    and md5(replace(replace(pg_get_functiondef('public.anonymize_my_account_v1()'::regprocedure),E'\r\n',E'\n'),E'\r',E'\n'))='70b5f590399aa3f3a147935459b7f085',
     '4C account-wide contract drifted');
   perform pg_temp.ok(31,'report reads create no audit',(select count(*) from public.audit_logs)=audit_before,'read-only report created audit');
   perform pg_temp.ok(32,'no report RLS policy added',not exists(select 1 from pg_policies where schemaname='public' and policyname like '%SAAS-9D-4A%'),'RLS widened');
