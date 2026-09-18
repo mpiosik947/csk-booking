@@ -121,7 +121,7 @@ begin
   perform pg_temp.ok(26,'update_profile_verification matches approved 4B-2C closure',
     pg_catalog.md5(pg_catalog.replace(pg_catalog.replace(pg_catalog.pg_get_functiondef('public.update_profile_verification(uuid,text,text)'::regprocedure),E'\r\n',E'\n'),E'\r',E'\n'))='022baa5652409d2246cd5e66642e884e');
   perform pg_temp.ok(27,'profile privilege trigger fingerprint is frozen',
-    pg_catalog.md5(pg_catalog.replace(pg_catalog.replace(pg_catalog.pg_get_functiondef('public.prevent_non_admin_profile_privilege_changes()'::regprocedure),E'\r\n',E'\n'),E'\r',E'\n'))='d28cb697d8355a5e8005296a03ad63ea');
+    pg_catalog.md5(pg_catalog.replace(pg_catalog.replace(pg_catalog.pg_get_functiondef('public.prevent_non_admin_profile_privilege_changes()'::regprocedure),E'\r\n',E'\n'),E'\r',E'\n'))='8a3cb4dc2d663cbf3c866fc3d9c8dac7');
   perform pg_temp.ok(28,'legacy-signature writer uses only tenant verification source after 4B-2B',
     (select pg_catalog.strpos(prosrc,'update public.profiles')=0 and pg_catalog.strpos(prosrc,'_apply_tenant_user_verification_v1')>0 from pg_catalog.pg_proc where oid='public.update_profile_verification(uuid,text,text)'::regprocedure));
   perform pg_temp.ok(29,'SECURITY DEFINER inventory is 69 after 4B-2B',(select pg_catalog.count(*)=69 from pg_catalog.pg_proc procedure join pg_catalog.pg_namespace namespace on namespace.oid=procedure.pronamespace where namespace.nspname='public' and procedure.prosecdef));

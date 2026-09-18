@@ -72,7 +72,7 @@ begin
   perform pg_temp.ok(7,'frozen lifecycle dependencies remain unchanged',
     pg_catalog.md5(pg_catalog.replace(pg_catalog.replace(pg_catalog.pg_get_functiondef('public.redact_account_audit_details_v1(jsonb,uuid,text,text[])'::regprocedure),E'\r\n',E'\n'),E'\r',E'\n'))='43aab16c26223ca68f4b8a34310bcfb5'
     and pg_catalog.md5(pg_catalog.replace(pg_catalog.replace(pg_catalog.pg_get_functiondef('public.set_audit_log_tenant_id()'::regprocedure),E'\r\n',E'\n'),E'\r',E'\n'))='d3e931ecee92180002d1dddd86fc4f06'
-    and pg_catalog.md5(pg_catalog.replace(pg_catalog.replace(pg_catalog.pg_get_functiondef('public.prevent_non_admin_profile_privilege_changes()'::regprocedure),E'\r\n',E'\n'),E'\r',E'\n'))='d28cb697d8355a5e8005296a03ad63ea');
+    and pg_catalog.md5(pg_catalog.replace(pg_catalog.replace(pg_catalog.pg_get_functiondef('public.prevent_non_admin_profile_privilege_changes()'::regprocedure),E'\r\n',E'\n'),E'\r',E'\n'))='8a3cb4dc2d663cbf3c866fc3d9c8dac7');
   perform pg_temp.ok(8,'no leave-tenant contract was introduced',pg_catalog.to_regprocedure('public.leave_tenant_v1()') is null);
 
   insert into public.tenants(id,name,slug,status) values

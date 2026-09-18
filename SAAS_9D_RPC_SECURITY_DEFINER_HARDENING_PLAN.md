@@ -649,6 +649,319 @@ SECOND TENANT: **NO-GO**
 
 SEC-004: **OPEN**
 
+## SAAS-9D-4D — FINAL PLAN
+
+Planning baseline: checkpoint `46dd54e2a9863d4f5684b6d01480c4ad2879327c`,
+SAAS-9D-4C closed with production PASS, production SECURITY DEFINER count
+`69`, compatibility defaults `7/7`, and no unexpected function drift. This
+section is planning-only. It does not authorize application changes, a
+migration, SQL write, deployment or Git checkpoint.
+
+### 45.1 Exact scope and current metadata
+
+The authoritative 4D scope contains exactly six functions. Normalized MD5
+means `pg_get_functiondef`, CRLF -> LF, then CR -> LF. `A` means direct
+`authenticated` EXECUTE; `closed` means owner-only EXECUTE.
+
+| Function / object | Signature | Domain and callers | Current mode / owner / path / ACL | Current normalized MD5 | Current authority, tenant/resource and target | PII / audit / service / bypass risk | Target state |
+|---|---|---|---|---|---|---|---|
+| `get_my_role` | `()` | homepage, admin dashboard, Calendar, Reports, Users, Events, Lane Configuration and calendar-feed API | DEFINER / `postgres` / `public` / A | `eec66d2c695d3892caec4d4242756ed0` | returns `profiles.role` for `auth.uid()`; no tenant or resource | no PII beyond role; no audit; no required service path; global UI/API authorization | APP-FIRST replace callers with trusted selected-tenant membership; then revoke A and retain owner-only, byte-stable, until 9D-5 retirement |
+| `is_admin` | `()` | only active DB caller is the profile privilege trigger; no tenant RLS caller after 9C | DEFINER / `postgres` / `public` / A | `d7143dadec70a91da2a1f62bf53bbed8` | global `profiles.role=admin`; no tenant/resource | no direct PII; global privilege bypass if reused | remove trigger dependency in 4D-1; after zero-caller proof revoke A and retain owner-only until 9D-5 |
+| `is_admin_or_employee` | `()` | no live RLS/function caller after 9C inventory; historical tests/migrations only | DEFINER / `postgres` / `public` / A | `15514f37a714f2592fb496820d2b8277` | global profile role; no tenant/resource | global staff predicate | zero-caller proof, revoke A, retain owner-only until 9D-5 |
+| `is_admin_or_staff` | `()` | no live RLS/function caller after 9C inventory; historical tests/migrations only | DEFINER / `postgres` / `public` / A | `191425c0cca4133eb373c12bdc219db1` | global profile role including instructor; no tenant/resource | global staff predicate and deferred instructor-model risk | zero-caller proof, revoke A, retain owner-only until 9D-5; no instructor widening |
+| `handle_new_user` | `()` trigger | production `auth.users` AFTER INSERT profile provisioner; no direct caller | DEFINER / `postgres` / `public, pg_temp` / closed | `10a0141f56f2baf69aa3e767d58338c0` | creates a global profile with legacy role `user`; no selected tenant; CSK membership is currently supplied by the separate compatibility sync bridge | account PII from Auth metadata; no audit; required trigger privilege; not tenant authorization | SAFE / NO CHANGE in 4D; keep closed DEFINER and fingerprint. Tenant onboarding/role-bridge redesign is 9E/9D-5 |
+| `prevent_non_admin_profile_privilege_changes` | `()` trigger | BEFORE UPDATE on `profiles`; reached by self, hardened profile writers and CSK role sync | DEFINER / `postgres` / SP1 / closed | `d28cb697d8355a5e8005296a03ad63ea` | calls global `is_admin`, reads actor `profiles.role`, validates legacy transaction markers; target is `OLD/NEW.user_id` | protects identity, role, legacy note, verification, declarations and technical fields; wrong global allow/deny is HIGH | 4D-1 body hardening: remove every global-role decision, keep exact field allowlists, require self ownership or the exact closed-writer marker/target contract, freeze legacy verification/note fields, remain closed DEFINER |
+
+All six are owned by `postgres`. There is no approved direct `service_role`
+EXECUTE path in this scope. `handle_new_user` and the profile trigger are
+trigger-only. No caller-supplied tenant UUID becomes authority.
+
+### 45.2 Required phased split
+
+**4D-1 — profile privilege trigger hardening (DB-only, independently ready).**
+
+- Preserve the trigger, signature, owner, SP1 and closed ACL.
+- Remove calls to `is_admin()` and every lookup of the actor's
+  `profiles.role`.
+- Self-service is allowed only when `auth.uid() = OLD.user_id` and only for the
+  existing self-service field allowlist. Identity, role, legacy admin note,
+  legacy verification, immutable IDs/email/created-at and technical permit
+  fields remain denied.
+- A role mirror update is allowed only for the exact actor/target marker set by
+  the closed membership-role bridge and only when the resulting legacy role
+  exactly maps to the already-written CSK membership role. The trigger does
+  not grant the role and does not treat the compatibility profile field as
+  authority.
+- Identity and contact updates require their exact actor/target marker and
+  retain the existing per-operation field-only diff. Authorization and
+  operational relationship remain in the hardened closed writer; a marker
+  cannot widen the table ACL or RLS boundary.
+- `profiles.admin_note` and legacy profile verification fields are frozen and
+  may not be changed by a tenant workflow. Account deletion removes the
+  profile row and is unaffected.
+- `auth.uid() IS NULL` is not a general bypass. Any required owner/internal
+  transition must be enumerated and proven; otherwise protected-field UPDATE
+  is denied.
+
+**4D-2 — global helper caller cutover and ACL closure (APP-FIRST, blocked on a
+minimal 9E trusted tenant-context contract).**
+
+- Replace all active `get_my_role()` callers and direct application reads of
+  `profiles.role` used for authorization with
+  `get_my_tenant_role_v1(trusted_tenant_id)` or an equivalent versioned,
+  trusted context contract.
+- The current callers are `app/page.tsx`, `app/admin/page.tsx`,
+  `app/admin/calendar/page.tsx`, `app/admin/reports/page.tsx`,
+  `app/admin/users/page.tsx`, `app/admin/events/page.tsx`,
+  `app/admin/lane-configuration/page.tsx` and
+  `app/api/admin/calendar-feed/route.ts`. `middleware.ts`, Admin Check-in,
+  Dashboard and the reservation-cancellation server route also contain direct
+  profile-role reads that must be classified and cut over when they make an
+  authorization decision.
+- A browser-provided tenant UUID, query parameter, localStorage value or
+  client boolean is not trusted context. Host/slug/session context must be
+  resolved and validated server-side as designed in 9E.
+- After deployment and production zero-caller proof, revoke authenticated
+  EXECUTE from `get_my_role` and all three `is_admin*` helpers. Retain their
+  bodies owner-only until the 9D-5 drop/retirement gate; do not rewrite them to
+  guess the single active tenant.
+- `handle_new_user` remains unchanged. Creating a membership or selecting a
+  tenant during onboarding is 9E work. The CSK sync bridges remain 9D-5/9E
+  compatibility objects.
+
+This split prevents a UI outage and prevents an apparently tenant-aware helper
+from silently authorizing CSK when a second tenant exists. Full 4D cannot be
+deployed before the 4D-2 app-first dependency is satisfied.
+
+### 45.3 Global-role final inventory
+
+| Function / trigger / app object | Global role reference now | Authority or compatibility | Active caller | Target action |
+|---|---:|---|---:|---|
+| `get_my_role` | yes | active application authorization/presentation gate | yes | app-first cutover, then ACL close; 9D-5 drop |
+| `is_admin` | yes | active only through profile trigger | yes | remove dependency in 4D-1, then ACL close |
+| `is_admin_or_employee` | yes | legacy helper only | no | ACL close after production zero-caller proof |
+| `is_admin_or_staff` | yes | legacy helper only | no | ACL close after production zero-caller proof |
+| `prevent_non_admin_profile_privilege_changes` | yes | active direct-profile protection | yes | replace global authority with closed-writer/self invariants |
+| `handle_new_user` | writes `role=user` | compatibility data, not authorization | trigger | retain until onboarding/sync redesign |
+| `sync_csk_membership_role_to_profile` | writes mapped role | approved CSK compatibility bridge | trigger | unchanged; 9D-5/9E retirement |
+| `sync_profile_role_to_csk_membership` | reads mapped role | approved CSK compatibility bridge | trigger | unchanged; 9D-5/9E retirement |
+| `admin_list_users_v1` | selects `profile.*` internally | returned role is membership-derived `tenant_role`; profile role is not authority | yes | no 4D change; fingerprint guard |
+| app role gates listed in 45.2 | yes | active application authorization/presentation | yes | 4D-2/9E cutover |
+
+After the **full 4D target**, active tenant-owned security authority references
+to `profiles.role` are exactly **0**. The physical column, default user value,
+closed legacy helper bodies and CSK sync bridge may remain compatibility data
+until 9D-5; they are not counted as active authority.
+
+### 45.4 Direct profile update protection
+
+The trigger remains necessary. Authenticated direct UPDATE on `profiles` is
+already denied, but the trigger is defense in depth for closed DEFINER writers,
+self-service and compatibility triggers. It must continue to protect:
+
+- `id`, `user_id`, `email`, `created_at` and other immutable technical fields;
+- legacy global `role` except the exact verified CSK mirror transition;
+- legacy `admin_note` and all frozen legacy verification fields;
+- identity and permit/qualification identifiers outside their approved RPC;
+- contact fields outside self-service or the exact related-user writer;
+- declarations/qualifications while preserving 4C's tenant-verification
+  invalidation contract.
+
+It must not re-authorize through global role, must not weaken direct DML denial,
+and must not merge tenant leave with account-wide deletion.
+
+### 45.5 SECURITY DEFINER disposition
+
+| 4D disposition | Count | Objects |
+|---|---:|---|
+| remain DEFINER | 6 | all six exact-scope functions; closed trigger boundaries remain privileged, and legacy helpers are retained owner-only for controlled 9D-5 retirement |
+| become INVOKER | 0 | no conversion is justified before caller/trigger proof |
+| ACL-only close | 4 | `get_my_role`, `is_admin`, `is_admin_or_employee`, `is_admin_or_staff`, only after 4D-2 zero-caller proof |
+| drop | 0 | drops belong to 9D-5 |
+
+Expected production SECURITY DEFINER count after full 4D: **69**. The goal is
+removal of active global authority, not an artificial count reduction.
+Unexpected drift remains zero.
+
+### 45.6 Compatibility, PII, audit and concurrency
+
+- Compatibility defaults stay **7/7**; 4D does not touch them.
+- 4C account-wide update/export/anonymization and future tenant-leave remain
+  separate contracts.
+- The trigger emits no audit. Tenant-owned writers continue to emit an audit
+  with the resolved `tenant_id`; global account audit remains explicitly NULL.
+- No trigger error includes foreign user/resource data or PII.
+- Concurrency tests cover simultaneous self update versus identity/contact,
+  membership-role mirror races, last-admin role transitions, A/B operations on
+  the same global user and retry. Expected: deadlocks/lost updates/cross-tenant
+  effects/privilege violations all zero.
+
+### 45.7 Deployment and tests
+
+4D-1 deployment order: **DB-ONLY** after focused local proof.
+
+4D-2 deployment order: **APP-FIRST / TWO-STEP**: deploy trusted tenant-context
+callers, prove old and new DB compatibility, prove zero callers, then close
+legacy ACLs. Every intermediate state keeps hardened DB authorization.
+
+Required tests: exact fingerprint/metadata guards; protected-field matrix;
+global-role negative; active/pending/suspended/no-membership; Tenant A actor
+and Tenant B target denial; same user A/B isolation; direct DML denial; trigger
+marker spoof denial; last-admin/concurrency; PII/error/audit checks; full DB,
+Node, TypeScript, build, relevant Playwright, runtime smoke, cleanup zero and
+`git diff --check`.
+
+SAAS-9D-4D TECHNICAL PLAN: **READY**
+
+READY FOR SAAS-9D-4D LOCAL IMPLEMENTATION: **GO — 4D-1 ONLY; 4D-2 NO-GO until trusted 9E app context is approved**
+
+READY FOR PRODUCTION WRITE: **NO**
+
+### 45.8 SAAS-9D-4D-1 local implementation result
+
+Local implementation is complete for the single approved DB object:
+`public.prevent_non_admin_profile_privilege_changes()` and its existing
+`BEFORE UPDATE` row trigger on `public.profiles`. Migration
+`20260923100000_harden_profile_privilege_trigger.sql` is forward-only and
+changes no application source, table, RLS policy, ACL grant or compatibility
+default.
+
+The target trigger no longer calls `is_admin()` and no longer reads
+`profiles.role` as actor authority. Privileged paths require the exact closed
+writer actor/target marker, active membership-derived role and same-tenant
+operational relationship. The legacy role mirror additionally requires the
+new legacy value to map to the already authoritative CSK membership role.
+Owner self-service is an explicit contact/declaration allowlist. Legacy
+verification and `profiles.admin_note` remain frozen. An auth-less exception
+is limited to direct `postgres` owner/maintenance execution without `SET ROLE`;
+PostgREST `service_role` is denied.
+
+Normalized input MD5: `d28cb697d8355a5e8005296a03ad63ea`.
+Normalized target MD5: `8a3cb4dc2d663cbf3c866fc3d9c8dac7`.
+Migration SHA-256:
+`2E0CABC94DA70BFAC023FF5B3E4090A8A9AB7655A9DD6726F0877CA6CE1C23C1`.
+
+Local evidence: fresh DB reset PASS; focused SQL 36/36 PASS; concurrency PASS
+with deadlocks, lost valid updates, privilege escalation and cross-tenant
+effects all zero; full DB 1376/1376 PASS; Node 750/750 PASS; TypeScript PASS;
+production build PASS; focused Playwright 2/2 PASS; fixture cleanup zero.
+SECURITY DEFINER remains 69 and compatibility defaults remain 7/7.
+
+SAAS-9D-4D-1 LOCAL: **PASS**
+
+READY FOR SAAS-9D-4D-1 PRODUCTION PREFLIGHT: **GO**
+
+SAAS-9D-4D-2: **NO-GO until trusted 9E tenant context**
+
+SAAS-9D-4E: **NO-GO in this working tree; separate stage after 4D-1 checkpoint**
+
+READY FOR PRODUCTION WRITE: **NO**
+
+## SAAS-9D-4E — FINAL PLAN
+
+### 46.1 Exact scope and current contract
+
+4E contains exactly one active function:
+
+| Function | Signature | Domain / caller | Current mode / owner / path / ACL | Current normalized MD5 | Current authority / source | PII / service / risk | Target state / phase |
+|---|---|---|---|---|---|---|---|
+| `get_public_booking_configuration_v1` | `()` returning the existing 14-column booking DTO | public Booking; `app/booking/page.tsx` | DEFINER / `postgres` / SP1 / N+A+S | `2aee39e3d37d3d1a19f58c3626aa0365` | no actor role; currently reads all configuration and has no explicit tenant predicate | PII-free; no demonstrated service caller; dormant Tenant B config could mix | retain v1 signature/DTO as an exact-single-active wrapper; move rows to a closed INVOKER core with explicit resolved tenant; remove S after zero-caller proof; 4E |
+
+No other public Events reader, busy-range reader, writer, helper or 9D-5 bridge
+is moved into 4E.
+
+### 46.2 Authoritative implementation contract
+
+1. Add one closed, owner-only, SECURITY INVOKER core whose input is an already
+   validated tenant UUID. Every `shooting_lanes`, parent, booking-rule,
+   duration and pricing join is constrained to that same tenant before
+   hierarchy/coverage aggregation.
+2. Keep `get_public_booking_configuration_v1()` as the public SECURITY DEFINER
+   compatibility wrapper. It resolves `active_single_tenant_id_v1()` and fails
+   closed unless exactly one active tenant exists, then calls the core.
+3. Preserve the exact 14-column DTO, hierarchy order, active/inactive rules,
+   duration coverage, price JSON shape, currency, whole-lane/position semantics
+   and PII-free contract. Do not add `tenant_id`, internal rule IDs or metadata.
+4. Grant the wrapper only to `anon` and `authenticated`. Repository inventory
+   found no service-role caller; production logs/caller evidence is the final
+   gate before revoking S. The core remains owner-only.
+5. The tenant parameter exists only on the closed core. A browser-supplied UUID
+   is never public authority. A future host/slug-aware v2 wrapper belongs to 9E
+   after the routing contract is approved.
+6. The wrapper and core are read-only, create no audit, expose no PII and do not
+   modify RLS, writers, compatibility defaults or account lifecycle.
+
+### 46.3 Isolation, compatibility and app impact
+
+- Tenant A active configuration is returned; Tenant B configuration is zero.
+- Parent, child, rule, duration and pricing rows must all match the resolved
+  tenant; Parent A + Child/Rule/Price B is denied by integrity and absent from
+  output.
+- Zero or more than one active tenant returns no configuration/fails closed.
+- Existing single-active CSK output is byte/row-semantic compatible.
+- No app change is required for 4E. `app/booking/page.tsx` keeps the v1 call.
+- A future selected-tenant app cutover is 9E and does not block this DB-only
+  isolation hardening.
+
+4E is therefore independent of 4D: it shares no writer, app role helper,
+profile trigger, PII, audit path or ACL. It may be locally implemented and
+reviewed before 4D-2, but still requires a separate explicit authorization.
+
+### 46.4 SECURITY DEFINER disposition and deployment
+
+| 4E disposition | Count | Objects |
+|---|---:|---|
+| stay DEFINER | 1 | public v1 wrapper |
+| become INVOKER | 0 existing | new closed core is INVOKER and does not change the DEFINER count |
+| ACL-only close | service_role removed from v1 after zero-caller proof | no body widening |
+| drop | 0 | none |
+
+Expected SECURITY DEFINER count after 4E: **69** (and also 69 if 4D is already
+complete). Compatibility defaults remain **7/7**. Deployment order is
+**DB-ONLY**; OLD APP + NEW DB and NEW APP + NEW DB are equivalent for this
+contract.
+
+Required tests: exact input/target fingerprints; wrapper/core owner/path/mode
+and ACL; anon/auth allow and direct core deny; service-role ACL; Tenant A/B
+isolation; mixed hierarchy/config integrity; zero/one/multiple-active bridge;
+exact DTO and ordering; pricing/durations/whole/position regression; PII zero;
+public Booking and reservation-entry Playwright; full DB, Node, TypeScript,
+build, runtime smoke, cleanup zero and `git diff --check`.
+
+SAAS-9D-4E TECHNICAL PLAN: **READY**
+
+READY FOR SAAS-9D-4E LOCAL IMPLEMENTATION: **GO after separate explicit authorization; independence from 4D proved**
+
+READY FOR PRODUCTION WRITE: **NO**
+
+## SAAS-9D-4D / 4E final planning verdict
+
+4D EXACT FUNCTION SCOPE: **6**
+
+4E EXACT FUNCTION SCOPE: **1**
+
+GLOBAL ROLE SECURITY REFERENCES AFTER TARGET: **0 active authority references**
+
+DATA MODEL BLOCKER: **NO**
+
+APP CHANGE REQUIRED: **YES for full 4D; NO for 4D-1 and 4E**
+
+EXPECTED SECURITY DEFINER AFTER 4D: **69**
+
+EXPECTED SECURITY DEFINER AFTER 4E: **69**
+
+COMPATIBILITY DEFAULTS: **7/7**
+
+4D DEPLOYMENT ORDER: **4D-1 DB-ONLY; 4D-2 APP-FIRST / TWO-STEP after trusted 9E context**
+
+4E DEPLOYMENT ORDER: **DB-ONLY**
+
+READY FOR 9D-5: **NO-GO until 4D/4E production PASS/checkpoint and 9E caller cutover**
+
+SECOND TENANT: **NO-GO**
+
+SEC-004: **OPEN**
+
 ## 42. SAAS-9D-4C — OWNER LIFECYCLE FINAL PLAN
 
 Planning baseline: repository and production checkpoint
