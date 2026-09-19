@@ -5,6 +5,7 @@ import {
   getAuthUserFailureMessage,
   verifyAuthUser,
 } from "@/lib/server/auth-user-verification";
+import { tenantResourceMatches } from "@/lib/server/tenant-resource-scope";
 
 type CancellationPayload = {
   registrationId?: unknown;
@@ -171,6 +172,12 @@ export async function POST(request: Request) {
         { error: "Nieprawidłowy identyfikator zapisu na szkolenie." },
         { status: 400 }
       );
+    }
+
+    const tenantSlug = new URL(request.url).searchParams.get("tenant");
+    if (tenantSlug !== null &&
+        !await tenantResourceMatches(supabase, tenantSlug, "event_registrations", registrationId)) {
+      return NextResponse.json({ error: "Nie znaleziono zapisu w tej lokalizacji." }, { status: 404 });
     }
 
     const { data: rpcData, error: rpcError } = await supabase.rpc(

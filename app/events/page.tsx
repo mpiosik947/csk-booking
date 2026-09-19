@@ -82,11 +82,11 @@ function getAlreadyRegisteredMessage(code: string) {
   return "Masz już aktywny zapis na to szkolenie.";
 }
 
-async function fetchPublicEvents(search: string, page: number) {
-  const { data, error } = await supabase.rpc(
-    "get_public_event_list_v2",
-    { p_search: search || null, p_scope: "upcoming", p_page: page, p_page_size: EVENT_LIST_PAGE_SIZE }
-  );
+async function fetchPublicEvents(search: string, page: number, tenantId?: string) {
+  const args = { p_search: search || null, p_scope: "upcoming", p_page: page, p_page_size: EVENT_LIST_PAGE_SIZE };
+  const { data, error } = tenantId
+    ? await supabase.rpc("get_public_event_list_v3", { ...args, p_tenant_id: tenantId })
+    : await supabase.rpc("get_public_event_list_v2", args);
 
   if (error) {
     return { events: null, error };
@@ -99,7 +99,7 @@ async function fetchPublicEvents(search: string, page: number) {
     : { result: null, error: new Error("Invalid public event response") };
 }
 
-export default function EventsPage() {
+export default function EventsPage({ tenantId, tenantSlug }: { tenantId?: string; tenantSlug?: string } = {}) {
   const [events, setEvents] = useState<Event[]>([]);
   const [selectedEventId, setSelectedEventId] = useState("");
   const [loading, setLoading] = useState(true);
@@ -171,7 +171,7 @@ export default function EventsPage() {
       if (!active) return;
       setUserId(user?.id ?? "");
 
-      const { result, error } = await fetchPublicEvents(search, page);
+      const { result, error } = await fetchPublicEvents(search, page, tenantId);
 
       if (!active) return;
       setLoading(false);
@@ -189,7 +189,7 @@ export default function EventsPage() {
 
     void loadData();
     return () => { active = false; };
-  }, [filtersReady, page, reloadKey, search]);
+  }, [filtersReady, page, reloadKey, search, tenantId]);
 
   function updateList(searchValue: string, pageValue = 1) {
     const params = buildEventSearchParams({ q: searchValue, page: pageValue });
@@ -279,7 +279,9 @@ export default function EventsPage() {
         return;
       }
 
-      const registrationResponse = await fetch("/api/register-event", {
+      const registrationResponse = await fetch(
+        tenantSlug ? `/api/register-event?tenant=${encodeURIComponent(tenantSlug)}` : "/api/register-event",
+        {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -289,7 +291,8 @@ export default function EventsPage() {
           eventId: eventItem.id,
           asReserve,
         }),
-      });
+        }
+      );
 
       const registrationResult: unknown = await registrationResponse
         .json()
@@ -352,7 +355,7 @@ export default function EventsPage() {
       }
 
       const { result: refreshedResult, error: refreshError } =
-        await fetchPublicEvents(search, page);
+        await fetchPublicEvents(search, page, tenantId);
 
       if (refreshError || !refreshedResult) {
         reportClientError("Public event availability refresh failed", refreshError);
@@ -496,7 +499,9 @@ export default function EventsPage() {
           ) : !isLoggedIn ? (
             <div className="grid gap-3 sm:grid-cols-2">
               <a
-                href="/login?redirectTo=%2Fevents"
+                href={tenantSlug
+                  ? `/login?redirectTo=${encodeURIComponent(`/t/${tenantSlug}/events`)}`
+                  : "/login?redirectTo=%2Fevents"}
                 className="min-h-12 rounded-xl bg-[#536143] px-5 py-3 text-center font-semibold text-[#f2efe4] transition hover:bg-[#78865f] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#c5a861] focus-visible:ring-offset-2 focus-visible:ring-offset-[#191e19]"
               >
                 Zaloguj się, aby się zapisać

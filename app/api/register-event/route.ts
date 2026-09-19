@@ -4,6 +4,7 @@ import {
   getAuthUserFailureMessage,
   verifyAuthUser,
 } from "@/lib/server/auth-user-verification";
+import { tenantResourceMatches } from "@/lib/server/tenant-resource-scope";
 
 type RegisterEventPayload = {
   eventId?: unknown;
@@ -225,6 +226,12 @@ export async function POST(request: Request) {
         { error: "Nieprawidłowy tryb zapisu." },
         { status: 400 }
       );
+    }
+
+    const tenantSlug = new URL(request.url).searchParams.get("tenant");
+    if (tenantSlug !== null &&
+        !await tenantResourceMatches(supabase, tenantSlug, "events", eventId)) {
+      return NextResponse.json({ error: "Nie znaleziono szkolenia w tej lokalizacji." }, { status: 404 });
     }
 
     const { data: rpcData, error: rpcError } = await supabase.rpc(

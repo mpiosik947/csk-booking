@@ -6,6 +6,10 @@ import {
   getStaffRouteContext,
   getUserRouteContext,
 } from "@/lib/server/tenant-route-context";
+import BookingPage from "@/app/booking/page";
+import EventsPage from "@/app/events/page";
+import MyReservationsPage from "@/app/my-reservations/page";
+import MyEventsPage from "@/app/my-events/page";
 
 export default async function TenantModuleShell({
   params,
@@ -32,6 +36,12 @@ export default async function TenantModuleShell({
   }
 
   if (route.kind === "staff" && !route.known) notFound();
+
+  const tenantId = publicContext.value.tenantId;
+  if (route.path === "booking") return <BookingPage tenantId={tenantId} tenantSlug={slug} />;
+  if (route.path === "events") return <EventsPage tenantId={tenantId} tenantSlug={slug} />;
+  if (route.path === "my-reservations") return <MyReservationsPage tenantId={tenantId} tenantSlug={slug} />;
+  if (route.path === "my-events") return <MyEventsPage tenantId={tenantId} tenantSlug={slug} />;
 
   const oldPath = legacyCskPath(slug, route);
   return (

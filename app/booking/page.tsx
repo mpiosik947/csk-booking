@@ -13,7 +13,7 @@ import {
 } from "../../lib/public-booking-configuration";
 import BookingForm from "./BookingForm";
 
-export default function BookingPage() {
+export default function BookingPage({ tenantId, tenantSlug }: { tenantId?: string; tenantSlug?: string } = {}) {
   const [families, setFamilies] = useState<BookingLaneFamily[]>([]);
   const [lanes, setLanes] = useState<BookingLane[]>([]);
   const [durations, setDurations] = useState<BookingDuration[]>([]);
@@ -26,9 +26,9 @@ export default function BookingPage() {
       setLoading(true);
       setMessage("");
 
-      const configurationResult = await supabase.rpc(
-        "get_public_booking_configuration_v1"
-      );
+      const configurationResult = tenantId
+        ? await supabase.rpc("get_public_booking_configuration_v2", { p_tenant_id: tenantId })
+        : await supabase.rpc("get_public_booking_configuration_v1");
 
       if (configurationResult.error) {
         setMessage(
@@ -57,7 +57,7 @@ export default function BookingPage() {
     }
 
     loadBookingConfiguration();
-  }, []);
+  }, [tenantId]);
 
   return (
     <main className="min-h-screen bg-[#090b09] px-4 py-6 text-[#f2efe4] sm:px-6 sm:py-8">
@@ -112,6 +112,8 @@ export default function BookingPage() {
               lanes={lanes}
               durations={durations}
               pricingRules={pricingRules}
+              tenantId={tenantId}
+              tenantSlug={tenantSlug}
             />
           </section>
         )}

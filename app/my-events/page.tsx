@@ -190,7 +190,7 @@ function getEventHistoryClass(status: string) {
   return "border-[#343a31] bg-[#171a17] text-[#858c7f]";
 }
 
-export default function MyEventsPage() {
+export default function MyEventsPage({ tenantId, tenantSlug }: { tenantId?: string; tenantSlug?: string } = {}) {
   const [items, setItems] = useState<EventRegistration[]>([]);
   const [filtersReady, setFiltersReady] = useState(false);
   const [scope, setScope] = useState<MyEventScope>("upcoming");
@@ -254,9 +254,15 @@ export default function MyEventsPage() {
 
       setIsLoggedIn(true);
 
-      const { data, error } = await supabase.rpc("get_my_event_registrations_v1", {
-        p_scope: scope, p_status: statusFilter || null, p_page: page, p_page_size: EVENT_LIST_PAGE_SIZE,
-      });
+      const { data, error } = tenantId
+        ? await supabase.rpc("get_my_event_registrations_v2", {
+            p_tenant_id: tenantId, p_scope: scope, p_status: statusFilter || null,
+            p_page: page, p_page_size: EVENT_LIST_PAGE_SIZE,
+          })
+        : await supabase.rpc("get_my_event_registrations_v1", {
+            p_scope: scope, p_status: statusFilter || null,
+            p_page: page, p_page_size: EVENT_LIST_PAGE_SIZE,
+          });
 
       if (!active) return;
       if (error) {
@@ -267,7 +273,7 @@ export default function MyEventsPage() {
         return;
       }
 
-      const parsed = parseMyEventList(data);
+      const parsed = parseMyEventList(data, tenantId ? 2 : 1);
       if (!parsed) {
         setMessage("Nie udało się poprawnie wczytać zapisów na szkolenia.");
         setLoadError(true);
@@ -282,7 +288,7 @@ export default function MyEventsPage() {
 
     void loadMyEvents();
     return () => { active = false; };
-  }, [filtersReady, page, reloadKey, scope, statusFilter]);
+  }, [filtersReady, page, reloadKey, scope, statusFilter, tenantId]);
 
   function updateFilters(nextScope: MyEventScope, nextStatus: string, nextPage = 1) {
     const params = buildEventSearchParams({ scope: nextScope === "upcoming" ? null : nextScope, status: nextStatus, page: nextPage });
@@ -341,14 +347,17 @@ export default function MyEventsPage() {
         return;
       }
 
-      const response = await fetch("/api/cancel-event-registration", {
+      const response = await fetch(
+        tenantSlug ? `/api/cancel-event-registration?tenant=${encodeURIComponent(tenantSlug)}` : "/api/cancel-event-registration",
+        {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${session.access_token}`,
         },
         body: JSON.stringify({ registrationId: item.id }),
-      });
+        }
+      );
       const data = (await response.json().catch(() => null)) as
         | CancellationResponse
         | null;
@@ -784,7 +793,7 @@ export default function MyEventsPage() {
           </a>
 
           <a
-            href="/events"
+            href={tenantSlug ? `/t/${tenantSlug}/events` : "/events"}
             className="inline-flex min-h-12 items-center justify-center rounded-xl bg-[#536143] px-5 py-3 text-center text-sm font-semibold text-[#f2efe4] transition hover:bg-[#78865f] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d7c895] focus-visible:ring-offset-2 focus-visible:ring-offset-[#141814]"
           >
             Zobacz szkolenia

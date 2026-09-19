@@ -127,8 +127,8 @@ function parseMyItem(value: unknown): MyEventRegistration | null {
   return value as MyEventRegistration;
 }
 
-export function parseMyEventList(value: unknown): EventPage<MyEventRegistration> | null {
-  if (!record(value) || value.ok !== true || value.code !== "ok" || value.contract_version !== 1 || !Array.isArray(value.items)) return null;
+export function parseMyEventList(value: unknown, expectedVersion: 1 | 2 = 1): EventPage<MyEventRegistration> | null {
+  if (!record(value) || value.ok !== true || value.code !== "ok" || value.contract_version !== expectedVersion || !Array.isArray(value.items)) return null;
   const page = pagination(value.pagination);
   const items = value.items.map(parseMyItem);
   return page && !items.some((item) => item === null) ? { ...page, items: items as MyEventRegistration[] } : null;

@@ -37,6 +37,8 @@ type BookingFormProps = {
   lanes: BookingLane[];
   durations: BookingDuration[];
   pricingRules: BookingPricingRule[];
+  tenantId?: string;
+  tenantSlug?: string;
 };
 
 
@@ -190,6 +192,8 @@ export default function BookingForm({
   lanes,
   durations,
   pricingRules,
+  tenantId,
+  tenantSlug,
 }: BookingFormProps) {
   const [checkingUser, setCheckingUser] = useState(true);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
@@ -309,9 +313,9 @@ export default function BookingForm({
         .eq("user_id", user.id)
         .maybeSingle();
 
-      const { data: verificationRows } = await supabase.rpc(
-        "get_my_active_tenant_verification_v1"
-      );
+      const { data: verificationRows } = tenantId
+        ? await supabase.rpc("get_my_tenant_verification_v2", { p_tenant_id: tenantId })
+        : await supabase.rpc("get_my_active_tenant_verification_v1");
       const tenantVerification = (
         Array.isArray(verificationRows) ? verificationRows[0] : null
       ) as TenantVerificationData | null;
@@ -330,7 +334,7 @@ export default function BookingForm({
     }
 
     loadUser();
-  }, []);
+  }, [tenantId]);
 
   const loadAvailability = useCallback(async (
     targetLaneId: string,
@@ -537,7 +541,9 @@ export default function BookingForm({
     setLoading(true);
 
     try {
-      const response = await fetch("/api/create-reservation", {
+      const response = await fetch(
+        tenantSlug ? `/api/create-reservation?tenant=${encodeURIComponent(tenantSlug)}` : "/api/create-reservation",
+        {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -552,7 +558,8 @@ export default function BookingForm({
           creationRequestId: getCreationRequestId(),
           reservationNote: reservationNote.trim() || null,
         }),
-      });
+        }
+      );
       const result: unknown = await response.json().catch(() => null);
 
       if (!isCreateReservationResponse(result)) {
@@ -683,7 +690,9 @@ export default function BookingForm({
           Zaloguj się, aby utworzyć rezerwację.
         </p>
         <a
-          href="/login?redirectTo=%2Fbooking"
+          href={tenantSlug
+            ? `/login?redirectTo=${encodeURIComponent(`/t/${tenantSlug}/booking`)}`
+            : "/login?redirectTo=%2Fbooking"}
           className="mt-5 inline-flex rounded-xl bg-[#536143] px-5 py-3 font-semibold"
         >
           Zaloguj się

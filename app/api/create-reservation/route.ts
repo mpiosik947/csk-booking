@@ -8,6 +8,7 @@ import {
   parseCreateReservationPayload,
 } from "@/lib/server/create-reservation-contract";
 import { verifyAuthUser } from "@/lib/server/auth-user-verification";
+import { tenantResourceMatches } from "@/lib/server/tenant-resource-scope";
 
 function getAuthenticatedSupabaseClient(accessToken: string) {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -84,6 +85,12 @@ export async function POST(request: Request) {
     const body = parseCreateReservationPayload(parsedBody);
 
     if (!body) {
+      return jsonError("invalid_request", 400);
+    }
+
+    const tenantSlug = new URL(request.url).searchParams.get("tenant");
+    if (tenantSlug !== null &&
+        !await tenantResourceMatches(supabase, tenantSlug, "shooting_lanes", body.laneId)) {
       return jsonError("invalid_request", 400);
     }
 
