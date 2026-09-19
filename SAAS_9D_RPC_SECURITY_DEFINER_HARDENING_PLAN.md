@@ -867,15 +867,24 @@ READY FOR PRODUCTION WRITE: **NO**
 |---|---|---|---|---|---|---|---|
 | `get_public_booking_configuration_v1` | `()` returning the existing 14-column booking DTO | public Booking; `app/booking/page.tsx` | DEFINER / `postgres` / SP1 / N+A+S | `2aee39e3d37d3d1a19f58c3626aa0365` | no actor role; currently reads all configuration and has no explicit tenant predicate | PII-free; no demonstrated service caller; dormant Tenant B config could mix | retain v1 signature/DTO as an exact-single-active wrapper; move rows to a closed INVOKER core with explicit resolved tenant; remove S after zero-caller proof; 4E |
 
+Implementation inventory correction: the earlier shortened value
+`2aee39e3d37d3a19f58c3626aa0365` omitted two characters. The authoritative
+CRLF/CR-normalized pre-change MD5 read from `pg_get_functiondef` is
+`2aee39e3d37d3d1a19f58c3626aa0365`. The migration uses this full value as its
+fail-closed input guard.
+
 No other public Events reader, busy-range reader, writer, helper or 9D-5 bridge
 is moved into 4E.
 
 ### 46.2 Authoritative implementation contract
 
 1. Add one closed, owner-only, SECURITY INVOKER core whose input is an already
-   validated tenant UUID. Every `shooting_lanes`, parent, booking-rule,
-   duration and pricing join is constrained to that same tenant before
-   hierarchy/coverage aggregation.
+   validated tenant UUID. `shooting_lanes` is filtered by that tenant and the
+   parent join is constrained to the same tenant before hierarchy/coverage
+   aggregation. The three configuration tables have no `tenant_id`; their
+   ownership is derived exclusively through validated `lane_id` foreign keys
+   to the already tenant-filtered lane. The migration fails closed on any
+   orphan or missing/unvalidated FK instead of inventing tenant ownership.
 2. Keep `get_public_booking_configuration_v1()` as the public SECURITY DEFINER
    compatibility wrapper. It resolves `active_single_tenant_id_v1()` and fails
    closed unless exactly one active tenant exists, then calls the core.
@@ -931,6 +940,39 @@ build, runtime smoke, cleanup zero and `git diff --check`.
 SAAS-9D-4E TECHNICAL PLAN: **READY**
 
 READY FOR SAAS-9D-4E LOCAL IMPLEMENTATION: **GO after separate explicit authorization; independence from 4D proved**
+
+READY FOR PRODUCTION WRITE: **NO**
+
+### 46.5 SAAS-9D-4E local implementation result
+
+Local implementation is complete for the exact one-function scope. Forward-
+only migration `20260924100000_harden_public_booking_configuration.sql`
+retains the argument-free public v1 wrapper and its exact 14-field DTO, derives
+the active tenant only through `active_single_tenant_id_v1()`, and delegates to
+the new closed SECURITY INVOKER core
+`get_public_booking_configuration_v1__saas9d4e_core(uuid)`. The wrapper is
+executable only by `anon` and `authenticated`; the core denies direct EXECUTE
+to PUBLIC, anon, authenticated and service_role. Repository-wide inventory
+found one runtime caller (`app/booking/page.tsx`) and zero service-role runtime
+callers. Application source changes are zero.
+
+Authoritative normalized MD5 values after implementation: wrapper
+`0134f91776a7e967c06a016714f732ca`; core
+`ff6f0a91a7c8ad66d885e2fd0c5df265`. Migration SHA-256:
+`95DFD2F91523205B0F80412C8A2926F9E3BBA792A50857B8E6139F3B1855500C`.
+
+Local evidence: focused rollback-only SQL 26/26 PASS, including active Tenant A
+versus dormant Tenant B, zero/one/multiple-active behavior, hierarchy/FK
+integrity, exact DTO, PII exclusion and cleanup; full DB 1402/1402 PASS; Node
+750/750 PASS; TypeScript PASS; production build PASS; focused Playwright 1/1
+PASS; SECURITY DEFINER remains 69; compatibility defaults remain 7/7; fixture
+post-check zero. `npm audit --omit=dev` reports one unrelated moderate
+`baseline-browser-mapping` development-tool advisory and no production code
+change was made for it.
+
+SAAS-9D-4E LOCAL: **PASS**
+
+READY FOR SAAS-9D-4E PRODUCTION PREFLIGHT: **GO**
 
 READY FOR PRODUCTION WRITE: **NO**
 

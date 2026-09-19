@@ -243,7 +243,7 @@ begin
     (select pg_catalog.strpos(procedure_record.prosrc,'update public.profiles')=0 from pg_catalog.pg_proc procedure_record where procedure_record.oid='public.update_profile_verification(uuid,text,text)'::regprocedure));
   perform pg_temp.ok(35,'4D-2 and 4E functions remain unchanged',
     pg_catalog.md5(pg_catalog.replace(pg_catalog.replace(pg_catalog.pg_get_functiondef('public.get_my_role()'::regprocedure),E'\r\n',E'\n'),E'\r',E'\n'))='eec66d2c695d3892caec4d4242756ed0'
-    and pg_catalog.md5(pg_catalog.replace(pg_catalog.replace(pg_catalog.pg_get_functiondef('public.get_public_booking_configuration_v1()'::regprocedure),E'\r\n',E'\n'),E'\r',E'\n'))='2aee39e3d37d3d1a19f58c3626aa0365');
+    and pg_catalog.md5(pg_catalog.replace(pg_catalog.replace(pg_catalog.pg_get_functiondef('public.get_public_booking_configuration_v1()'::regprocedure),E'\r\n',E'\n'),E'\r',E'\n'))='0134f91776a7e967c06a016714f732ca');
   perform pg_temp.ok(36,'fixture is transaction-scoped',
     (select pg_catalog.count(*)=1 from public.tenants where id=tenant_b)
     and (select pg_catalog.count(*)=8 from auth.users where id in(admin_a,employee_a,owner_a,b_only,global_admin,pending_admin,suspended_admin,no_membership)));
