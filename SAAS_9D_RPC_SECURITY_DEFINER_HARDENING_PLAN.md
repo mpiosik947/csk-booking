@@ -649,6 +649,313 @@ SECOND TENANT: **NO-GO**
 
 SEC-004: **OPEN**
 
+## SAAS-9E — FINAL PLAN
+
+Planning baseline: `a6324cda94dbdf14ddf850240e0dfe59d9ca96f5` on
+`main` and `origin/main` (divergence `0/0`), after 9D-4E PROD PASS. This is a
+technical plan, not implementation authority. `AGENTS.md` is unrelated and
+excluded. The production read-only function inventory has 69 public SECURITY
+DEFINER functions, 7/7 CSK compatibility defaults, one active CSK tenant and
+the partial unique second-active guard. No second tenant was activated.
+Older phase sections elsewhere in this document retain their historical
+at-the-time readiness verdicts; this section states the current 9E position.
+
+### 9E.1 Actual boundary and decision
+
+Use a canonical, explicit, lowercase tenant slug in the URL:
+`/t/[slug]/...`. Resolve it on the server to an *active* tenant ID through a
+minimal, PII-free, versioned resolver. The slug is a selector, never proof of
+authorization. Every privileged DB operation must independently validate
+`auth.uid()`, active membership and permitted role for the resolved tenant;
+every resource operation must derive tenant from the persisted resource and
+reject a mismatch with the route context. A public DB reader can accept a
+validated tenant selector only if its own contract rechecks active status and
+filters every read by that tenant. No client-provided UUID, slug, cookie,
+header, localStorage value, JWT custom metadata or `profiles.role` is
+authority. No broad service-role proxy for tenant lookup.
+
+The selected tenant is carried by the canonical path and a server-rendered
+context envelope (`id`, `slug`, public display name, active status), then
+passed to the UI for navigation. The envelope is not a capability: browser
+RPCs still revalidate it. A preference cookie may remember a slug for the
+global tenant chooser only; it must not override a route or resource, grant
+membership, or be trusted by an RPC. Two tabs with different tenant paths
+must remain independent. A dormant/unknown slug gets a generic 404 (or a
+controlled no-access response for privileged flows), not an implicit CSK
+fallback.
+
+| Candidate source | Trust / spoofable? | Server validation and resource binding | Public / auth fit | Risk and app impact |
+|---|---|---|---|---|
+| Route slug | untrusted selector / yes | resolve active tenant; DB checks membership or resource independently | both; chosen canonical source | low after checks; route shells, links and RPC callers change |
+| Raw tenant UUID in query/UI | untrusted / yes | can only be looked up and compared; never authority | poor UX | high IDOR risk; reject as primary source |
+| Host/subdomain | untrusted incoming host without allowlist / yes | map allowlisted verified domain to active tenant; still DB checks | good later for branded public entry | DNS/domain ownership, preview-host and proxy trust work; defer optional alias until 9H, not the 9E authority |
+| Resource-derived tenant | trusted only after DB fetch under scoped authorization / resource ID itself guessable | persisted `tenant_id` wins; compare selected route | mutations, token/deep links | required even with canonical route; DB changes to contextless writers |
+| Session/cookie selection | preference / yes or stale | active tenant lookup; cannot authorize | global chooser only | two-tab and stale-session race; no security use |
+| Membership-derived candidate list | DB-trusted relation after authenticated user verification | status/role and active tenant checked per request | staff switcher | never infer one tenant if several; owner customer relationship may exist without membership |
+| Public tenant selection | public slug / yes | public active-only projection, no private tenant metadata | anonymous booking/events | active-slug enumeration acceptable only for approved public fields; no PII |
+
+The existing `get_my_tenant_role_v1(uuid)` and `has_tenant_role_v1(uuid,text[])`
+already check `auth.uid()`, active membership and active tenant. They are
+role-evidence for a *resolved* tenant, not tenant selectors. Application
+staff role strings must map `employee` to legacy UI `pracownik` and
+`instructor` to `instruktor` only at presentation/route-permission boundaries;
+they must never be compared as identical strings or mirror global role
+authority.
+
+### 9E.2 Context classes and routing
+
+| Current route | Canonical target | Tenant source / authorization | Compatibility / app work |
+|---|---|---|---|
+| `/` | `/` directory/chooser and `/t/[slug]` tenant home | active public slug | retain global homepage; tenant-specific links explicit |
+| `/booking` | `/t/[slug]/booking` | active slug, then tenant-scoped public config; reservation writes derive lane | explicit, time-limited CSK redirect while one active; Booking form/caller change |
+| `/events` | `/t/[slug]/events` | active slug and PII-free tenant-filtered public list/availability; registration derives event | CSK redirect; public list/detail/caller change |
+| `/my-reservations` | `/t/[slug]/my-reservations` | verified user plus own reservation and tenant filter; cancellation derives reservation | CSK redirect; list RPC/caller change |
+| `/my-events` | `/t/[slug]/my-events` | verified user plus own registration and tenant filter; promotion/cancellation derive registration/event | CSK redirect; list/caller change |
+| `/admin` and `/admin/{reservations,calendar,reports,users,check-in,events,lane-blocks,lane-configuration}` | `/t/[slug]/admin` and same child paths | active membership/role in slug tenant at middleware/server; each RPC rechecks; resource tenant wins | old routes CSK-only temporary redirects after auth; update all page navigation, API calendar feed and role gates |
+| `/account`, `/dashboard`, `/login`, `/register` | remain global | global Auth/profile; selected tenant is optional navigation preference, not account authority | keep account-wide export/delete global; sanitize relative `next` redirect |
+| `/check-in/[token]`, `/events/confirm/[token]`, ICS and email deep links | preserve token/resource routes; optionally include tenant path later | token resolves persisted resource tenant in DB; compare route slug if supplied | never select tenant from token text or cookie; avoid breaking distributed links |
+
+The public user needs no membership to browse an active venue. A customer
+with an authenticated account sees only own tenant-owned reservations and
+registrations, even where no active staff membership exists. A customer
+related to A and B can switch explicitly, with independent state. Staff
+switcher lists only active memberships to active tenants; pending/suspended
+and global `profiles.role=admin` confer no access. Instructor scope is
+unchanged; unknown admin routes stay admin-only after the tenant path is
+stripped for the existing permission matrix. Direct links to another tenant
+re-resolve slug and role on every request; stale preference does not redirect
+back or elevate.
+
+### 9E.3 Resource-first authority and app cutover inventory
+
+Route A + persisted resource B must return controlled DENY/404 at the DB/API
+boundary, never silently operate in B or return a partial A response. This
+applies to reservations, events/registrations, lanes/blocks, check-in,
+report resource filters and operationally related user profile actions.
+Report aggregate/export must use one verified selected tenant and reject a
+foreign lane filter. Audit for tenant-owned changes must record the resolved
+resource tenant, never a cookie/route override. Account-wide export,
+anonymization and Auth deletion remain separate global actions; future
+leave-tenant cannot invoke them.
+
+The current application is largely browser-Supabase: `app/booking/page.tsx`
+calls the zero-argument public config RPC; `app/events/page.tsx` calls
+`get_public_event_list_v2`; `app/my-reservations/page.tsx` and
+`app/my-events/page.tsx` call owner list RPCs; admin pages call current
+contextless read/write RPCs. `middleware.ts` still reads `profiles.role` for
+`/admin/*`; `app/api/admin/calendar-feed/route.ts` still calls
+`get_my_role()`. No current `/t/[slug]` route or hostname mapping exists.
+The browser client uses the anon key, while server API routes use verified
+Bearer Auth for normal operations; reserve-promotion and mail completion
+have narrowly scoped server service-role paths. Do not place service-role in
+the browser or use it as a general selected-tenant adapter.
+
+For a versioned DB contract with an explicit tenant parameter, the parameter
+is only a selector. Public contracts check tenant active; staff contracts
+check active membership/role; owner contracts check `auth.uid()` and row
+tenant; existing-resource mutations derive tenant from the row and compare.
+The caller must not gain a write by changing the route. New SQL must use
+closed cores, minimal EXECUTE, fixed `search_path`, exact fingerprints and
+no extra DTO/PII fields. No old signature is changed in place while old app
+still runs.
+
+### 9E.4 Exact-single-active bridge residual inventory
+
+Production `pg_proc.prosrc` read-only inventory returned **22 distinct public
+function bodies** containing `active_single_tenant_id_v1`, plus the closed
+helper definition itself (**23 database objects**). This is a textual
+inventory, not 22 independently live application endpoints: it includes a
+one-time backfill helper and frozen internal cores. An exact active-caller
+and dependency audit is an exit gate for each replacement, rather than
+blindly dropping 23 objects.
+
+| Function(s) with direct reference | Why / public or private | 9E target; retirement gate |
+|---|---|---|
+| `get_public_booking_configuration_v1`, `get_public_event_list_v2`, `get_public_event_availability_v1` | public exact-single wrappers | versioned active-slug/tenant readers with same PII-free DTO; old wrappers remain while CSK URLs exist, retire at 9D-5/9H gate |
+| `admin_create_event_v2`, `admin_create_event_v2__saas9d2b1_core`, `admin_list_events_v1`, `admin_list_events_v1__saas9d2b1_core` | private contextless create/list and frozen core reference | selected tenant plus membership, explicit event tenant and lane binding; core body references audited; old callers zero before retirement |
+| `admin_create_lane_booking_family_v1`, `admin_get_lane_booking_configuration_v1`, `admin_get_lane_booking_configuration_v2` | private family create/config read | versioned selected tenant plus active admin; family hierarchy resource binding; retire compatibility after caller cutover |
+| `admin_get_reservation_report_v2`, `admin_get_reservation_report_export_v1` | private aggregate/export | selected tenant plus active admin and foreign-resource filter DENY; zero old caller gate |
+| `admin_list_users_v1`, `admin_set_user_note_v1`, `admin_set_user_role_v1`, `update_profile_identity`, `update_profile_contact_details`, `update_profile_verification` | private operational user workflows | selected tenant + active role + relationship; target identity alone never grants visibility/write; exact same-user A/B isolation |
+| `get_my_active_tenant_verification_v1`, `update_my_profile_v1`, `update_profile_verification` | self/verification context and account-linked mutation | self ownership, tenant-specific verification, no global fallback; account-wide profile update remains global where appropriate |
+| `prevent_non_admin_profile_privilege_changes` | closed trigger reference, not a route | replace sole-active bridge only with verified writer/resource context; preserve frozen legacy privilege fields; do not make route/cookie authority |
+| `_backfill_csk_tenant_user_verifications_v1` | dormant one-time helper | no runtime cutover; owner-only cleanup assessment at 9D-5, fingerprint first |
+| `active_single_tenant_id_v1()` itself | closed exact-count helper | keep while old signatures/CSK bridge can execute; retire only after 9E/9F/4D-2 zero-call and 9D-5 audit |
+
+`update_profile_verification` appears in both the operational and self-context
+classification but is **one** of the 22 definitions. Seven CSK column
+defaults are separate residuals, not included in this count. Indirect callers
+and any SQL/RLS dependency on the helper need a transitive audit before its
+removal. A zero- or multi-active result currently fails closed; this remains
+the old-app safety net and must not be repurposed to choose an arbitrary
+tenant.
+
+### 9E.5 4D-2 unblock map
+
+| Function | Current global helper / active caller | Target trusted context / tenant and resource source | APP / DB cutover |
+|---|---|---|---|
+| `get_my_role()` | global `profiles.role`; `app/page.tsx`, Admin root/Calendar/Reports/Users/Events/Lane Configuration and `/api/admin/calendar-feed` | server-resolved active route tenant; `get_my_tenant_role_v1(id)` independently verifies active membership; page-specific resource checks | app-first every caller, including homepage presentation, then DB authenticated EXECUTE revoke; body retained owner-only to 9D-5 |
+| `is_admin()` | legacy global profile-role helper; prior trigger dependency removed in 4D-1 | no substitute as global predicate; closed tenant role for actual resource/route | prove zero active DB caller, ACL-only revoke, later drop |
+| `is_admin_or_employee()` | legacy global predicate; no live caller in prior 9C inventory | selected tenant + `has_tenant_role_v1(id,['admin','employee'])`, DB resource comparison | zero-caller re-audit, ACL-only revoke, later drop |
+| `is_admin_or_staff()` | global predicate including instructor; no live caller in prior inventory | selected tenant membership plus unchanged per-page instructor scope | zero-caller re-audit, ACL-only revoke, later drop |
+
+Additional direct application authorization uses must be included in the
+APP-FIRST cutover: `middleware.ts` (`profiles.role`), Admin Check-in profile
+role read, Dashboard, and reservation-cancellation server role read. In
+particular, the middleware must not treat a client role or `get_my_role()` as
+tenant permission; its `canRoleAccessAdminRoute` map must operate on the
+canonical tenant-stripped path with `employee`/`instructor` mapping and be
+backed by the server/DB membership check. Calendar-feed API retains its own
+Bearer/Auth and server-side tenant check. No 4D-2 helper ACL closure until
+production proves *all* active callers have cut over. `handle_new_user` and
+the hardened profile privilege trigger are not 4D-2 ACL targets.
+
+### 9E.6 Phases, intermediate states and rollback
+
+1. **9E-A — context foundation (DB-first, then server shell).** Define and
+   test one active-slug-to-public-tenant contract with approved public fields
+   only, plus server resolution and route parser. No current RPC/body, RLS,
+   compatibility default or old URL changes. First migration adds the
+   versioned resolver; expected SECURITY DEFINER **70** if a closed
+   owner-backed resolver is needed for the locked `tenants` table. Its public
+   wrapper must not reveal dormant/private metadata. OLD APP + NEW DB works.
+   Roll back unused app shell without DB rollback; revoke/drop the new
+   resolver only through a reviewed forward migration if necessary.
+2. **9E-B — canonical routing and context propagation (APP-first for new
+   paths, no authority cutover).** Introduce `/t/[slug]` pages, tenant-scoped
+   navigation, server-validated envelope and CSK compatibility redirects.
+   Existing legacy RPCs remain gated by exactly one active tenant; new paths
+   may initially render controlled unavailable states for unsupported tenant
+   modules, never falsely show CSK data for B. Keep second-active guard.
+   Roll back B app to old routes safely while exactly one tenant is active.
+3. **9E-C — versioned public/customer/staff caller cutover in bounded domain
+   slices.** DB-first add selected-tenant public readers and owner/staff list
+   contracts; deploy app callers per Booking/Events, owner views, then
+   Admin/Calendar/Reports/Users/Check-in. Resource writers move only after
+   same-tenant checks and scoped audit are proven. Each slice has OLD APP +
+   NEW DB and NEW APP + NEW DB compatibility, a rollback point, and direct
+   A/B/negative tests. A new app must never call an absent RPC (feature flag
+   or DB-first gate). No second-active switch while any old single-active
+   caller remains. 9F is the explicit full module rollout/proof stage, not
+   silently claimed by this context foundation.
+4. **4D-2 after 9E production context proof:** app-first global-role caller
+   removal, production zero-caller verification, then ACL closure. **9D-5**
+   later audits/drops legacy bridges and removes all seven CSK defaults only
+   after every writer explicitly sets or derives tenant. The unique
+   second-active guard stays through 9G cross-tenant tests and 9H SEC-004
+   closure; no partial 9E deployment activates B.
+
+The versioned 9E-C RPC inventory and therefore its exact incremental
+SECURITY DEFINER count must be frozen in the separate 9E-C implementation
+review after each domain's signatures/ACL are specified. **70 is the exact
+9E-A/B target, not a fabricated full 9E-C total.** Before 4D-2/9D-5, the
+baseline cannot drop below 69 without an independently approved cleanup;
+after 4D-2 the four owner-only legacy definers remain counted until 9D-5.
+The 7/7 defaults remain through all 9E phases; their removal is an explicit
+later gate before second-tenant activation. If any proposal requires their
+early removal or activating a second tenant for production testing: STOP.
+
+Existing `/booking`, `/events` and other CSK paths have an explicit, bounded
+compatibility mapping to `/t/csk/...`, not a generic "first active tenant"
+fallback. During transition, preserve old deep-link signatures and auth
+callbacks; document a deprecation window and remove redirects only after
+clients/email links have migrated and 9H review approves it. A stalled
+deployment stays functional for CSK and fail-closed for B. Once the
+second-active guard is removed, rolling back to the old app is **not** safe;
+the 9H gate must require a forward-fix/rollback plan for the fully tenant-aware
+state before that irreversible activation.
+
+### 9E.7 Tests and blocking decisions
+
+#### 9E-A local foundation implementation (2026-09-19)
+
+The bounded 9E-A implementation adds only
+`resolve_active_tenant_by_slug_v1(text)` (active, canonical slug to the
+PII-free `tenant_id`/`tenant_slug`/`tenant_name`/`tenant_status` DTO) and the server-side
+`lib/server/tenant-context.ts` parser/resolution/check helpers. Anonymous and
+authenticated callers can execute the new resolver; direct `tenants` table
+access remains closed. Staff context uses `get_my_tenant_role_v1` for the
+resolved tenant and explicit allowed roles, while resource context compares
+persisted ownership. A resolved slug or context envelope never authorizes a
+write on its own. There is no service-role adapter or cookie authority.
+
+This is a **foundation, not a route or caller cutover**: no `/t/[slug]` pages,
+old URL redirects, current RPCs, middleware, RLS, compatibility defaults,
+bridge helper, account lifecycle, audit writer or business flow changed.
+The exact-single-active bridge remains 22 body references plus its helper;
+seven defaults remain. Baseline SECURITY DEFINER is 69, the new resolver
+adds one, and the local target is 70. Existing CSK app with new DB is
+compatible; deploying the helper before its resolver (new app + old DB) is
+not a functional tenant-context state, so rollout is DB-first. 9E-B owns
+canonical route propagation; 9E-C owns versioned tenant-aware caller/DB
+contracts. 4D-2 and 9D-5 remain blocked until their separate cutover proofs.
+
+The focused SQL test uses only a local transaction and ROLLBACK for dormant
+Tenant B, member and lane fixtures; there is no production Tenant B. After
+an explicitly authorized `--local` reset, the test passed 25/25 and the full
+DB suite passed 1427/1427. The historical test inventory was updated only
+for the one additive resolver and expected 69-to-70 definer count; no
+historical migrations or business functions changed. The implementation
+report records the app regression and zero-fixture evidence. Production
+preflight is a separate future gate, not performed by local PASS.
+
+Local fixture only: Tenant A and dormant B under controlled test settings;
+never activate B in production. Public A route returns A data, B route B
+data in local multi-active test, invalid/dormant slug fails closed. Customer
+A-only/B-only/both sees only own rows in the selected tenant. Admin A cannot
+access B; employee A retains current scope; instructor A gains nothing new;
+global profile-admin without membership and pending/suspended membership
+are denied. Exercise route A/resource B and inverse for lane, reservation,
+event, registration, check-in, report filter and user operational relation;
+ensure PII and audit tenant binding. Verify DTO parity and no cross-tenant
+config, booking overcapacity or mixed hierarchy. In two tabs switch A/B in
+parallel; test stale cookie/session, route change during mutation, inactive
+tenant between resolution and commit, and authorization recheck inside DB.
+Test middleware direct URL, API direct calls, old CSK redirects, deep links,
+invalid slug, `next` redirect sanitization, mobile chooser and no secret in
+URL. Focused SQL/RLS/ACL, full DB, Node, TypeScript, build and Playwright
+for each domain slice; no real production Tenant B.
+
+Blocking implementation decisions for the next reviewed subphase:
+
+- freeze public resolver DTO, case/Unicode normalization, slug uniqueness and
+  whether any custom domain alias is in scope (default **no**);
+- enumerate exact versioned 9E-C RPC signatures and caller matrix, then
+  compute the SECURITY DEFINER delta per slice rather than guessing it;
+- decide owner customer handling when membership is absent and ensure the
+  DB ownership relation, not a cookie, is authoritative (recommended above);
+- agree the date/telemetry gate for removing old CSK redirects and the 9F/9G
+  evidence required before the second-active guard can be removed.
+
+SAAS-9E TECHNICAL PLAN: **READY for phased 9E-A; 9E-C signatures require a separate exact-scope review**
+
+TRUSTED TENANT CONTEXT MODEL: **canonical route slug resolved server-side to active tenant; DB membership and resource revalidation**
+
+EXACT-SINGLE-ACTIVE BRIDGE RESIDUALS: **22 direct-reference function bodies + 1 helper; 7 column defaults separate**
+
+APP CHANGE REQUIRED: **YES**
+
+DB CHANGE REQUIRED: **YES**
+
+4D-2 UNBLOCKED BY TARGET: **YES, only after production 9E context/caller proof**
+
+DATA MODEL BLOCKER: **NO for 9E-A; versioned 9E-C contract inventory is a phase gate**
+
+DEPLOYMENT ORDER: **9E-A DB-first -> server context -> 9E-B routing -> 9E-C DB-first contracts/app cutovers -> 4D-2 -> 9F/9G -> 9D-5/9H gates**
+
+EXPECTED SECURITY DEFINER AFTER 9E: **70 after 9E-A/B; full 9E-C exact count pending versioned RPC scope gate**
+
+COMPATIBILITY DEFAULTS: **7/7**
+
+READY FOR SAAS-9E LOCAL IMPLEMENTATION: **NO-GO until separate 9E-A authorization/review**
+
+READY FOR 4D-2: **NO-GO until 9E trusted context production PASS**
+
+READY FOR 9D-5: **NO-GO**
+
+SECOND TENANT: **NO-GO**
+
+SEC-004: **OPEN**
+
 ## SAAS-9D-4D — FINAL PLAN
 
 Planning baseline: checkpoint `46dd54e2a9863d4f5684b6d01480c4ad2879327c`,

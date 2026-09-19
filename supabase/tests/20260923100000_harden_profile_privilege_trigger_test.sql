@@ -114,8 +114,8 @@ begin
     (select pg_catalog.strpos(procedure_record.prosrc,'public.is_admin')=0 and procedure_record.prosrc !~ 'select[^;]*profile[.]role' from pg_catalog.pg_proc procedure_record where procedure_record.oid='public.prevent_non_admin_profile_privilege_changes()'::regprocedure));
   perform pg_temp.ok(5,'tenant membership helper is the privileged authority',
     (select pg_catalog.strpos(procedure_record.prosrc,'get_my_tenant_role_v1')>0 and pg_catalog.strpos(procedure_record.prosrc,'tenant_memberships')>0 from pg_catalog.pg_proc procedure_record where procedure_record.oid='public.prevent_non_admin_profile_privilege_changes()'::regprocedure));
-  perform pg_temp.ok(6,'SECURITY DEFINER count remains 69',
-    (select pg_catalog.count(*)=69 from pg_catalog.pg_proc procedure_record join pg_catalog.pg_namespace namespace_record on namespace_record.oid=procedure_record.pronamespace where namespace_record.nspname='public' and procedure_record.prosecdef));
+  perform pg_temp.ok(6,'SECURITY DEFINER count is 70 after 9E-A',
+    (select pg_catalog.count(*)=70 from pg_catalog.pg_proc procedure_record join pg_catalog.pg_namespace namespace_record on namespace_record.oid=procedure_record.pronamespace where namespace_record.nspname='public' and procedure_record.prosecdef));
   perform pg_temp.ok(7,'compatibility defaults remain 7/7',
     (select pg_catalog.count(*)=7 from information_schema.columns where table_schema='public' and table_name in('shooting_lanes','reservations','lane_blocks','events','event_lanes','event_registrations','email_deliveries') and column_name='tenant_id' and column_default='''c5c00000-0000-4000-8000-000000000001''::uuid'));
 
