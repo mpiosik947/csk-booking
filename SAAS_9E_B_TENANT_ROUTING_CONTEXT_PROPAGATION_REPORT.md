@@ -92,6 +92,40 @@ SECOND TENANT: **NO-GO**
 
 SEC-004: **OPEN**
 
+## PRODUCTION DEPLOYMENT & FINAL VERIFICATION — historical blocked attempt (superseded below)
+
+The approved local checkpoint was created as `ac717243dad9c9631c5538726ed481adb63c3d43` (`SAAS-9E-B add tenant-aware routing context`). Staging contained exactly the 14 scoped files in the deployment-readiness table: nine runtime/dependency, three test, and two report/plan files. Both temporary Client Component probes were absent; `AGENTS.md` was excluded and remained unstaged. No migration, SQL, 9E-C, 4D-2 or 9D-5 file was committed. The initial staged whitespace check exposed Markdown hard-break trailing spaces in this report; those were removed, and the repeated `git diff --cached --check` passed before commit.
+
+Pre-deploy regression was repeated: standard Node **767/767**, Playwright **16/16**, TypeScript, production build and changed-file ESLint **PASS**. Both direct client-import denials, positive server import and zero client-chunk references were established in the preceding preflight. `git fetch origin` succeeded; immediately before the attempted push, local `main` was one commit ahead and zero behind `origin/main`, with parent exactly `47c86f1e8ae0a3a48bc3c77f790d58577c59252b`. This was a fast-forward candidate.
+
+The ordinary `git push origin main` could not connect to GitHub from the sandbox. The required elevated retry was **rejected by the environment's approval reviewer** as a risk of transmitting repository contents to the external remote; no push occurred. No alternative mechanism or bypass was attempted. Consequently `origin/main` still refers to the previous commit as last observed, and no Vercel deployment of `ac71724` is established. The target `csk-booking-5nwh` was **not** verified as running the new commit. Production `/t/[slug]` routing, server-only behavior and runtime smoke cannot be marked PASS after deployment because deployment did not occur. The already measured DB preflight baseline (22 bridge references, 70 SECURITY DEFINER, 7/7 defaults, one active CSK) is not a post-deploy measurement. Production DB writes and migrations performed in this checkpoint: **0**.
+
+This is an authorization/environment delivery blocker, **not evidence of an application defect**. To resume, the user must give explicit direct approval for the specific external `git push origin main` of `ac717243dad9c9631c5538726ed481adb63c3d43` to `https://github.com/mpiosik947/csk-booking.git`, acknowledging that it transmits the committed repo diff and triggers Vercel. Then repeat the remote fast-forward gate before pushing; do not assume the remote remained unchanged.
+
+SAAS-9E-B APP DEPLOY: **FAIL — not performed**
+VERCEL DEPLOY: **FAIL — not verified**
+PRODUCTION VERSION: **FAIL — new commit not established**
+EXACT ROUTE/CALLER SCOPE: **3 locally / production unverified**
+SERVER-ONLY BOUNDARY: **PASS locally / production unverified**
+CLIENT BUNDLE EXPOSURE: **0 in local build / production unverified**
+PUBLIC ROUTING: **FAIL — production unverified**
+AUTH USER ROUTING: **FAIL — production unverified**
+STAFF ROUTING: **FAIL — production unverified**
+CSK DATA SUBSTITUTION UNDER FOREIGN SLUG: **ABSENT locally / production unverified**
+BACKWARD COMPATIBILITY: **PASS locally / post-deploy unverified**
+OPERATIONAL DB CALLER CUTOVERS: **0 in commit**
+DB CHANGES: **0 in commit; production SQL write 0**
+EXACT-SINGLE-ACTIVE BRIDGE REFERENCES: **22 pre-deploy**
+SECURITY DEFINER COUNT: **70 pre-deploy**
+COMPATIBILITY DEFAULTS: **7/7 pre-deploy**
+SECOND TENANT: **NO-GO**
+READY FOR FINAL 9E-B CHECKPOINT: **NO — push/deploy/postcheck pending**
+READY FOR 9E-C PLANNING: **NO-GO until 9E-B production PASS**
+READY FOR 9E-C IMPLEMENTATION: **NO-GO**
+READY FOR 4D-2: **NO-GO**
+READY FOR 9D-5: **NO-GO**
+SEC-004: **OPEN**
+
 ## PRODUCTION PREFLIGHT & DEPLOYMENT READINESS (historical stopped review; superseded below)
 
 **Result: FAIL / NOT READY.** This section supersedes the local report's `SERVER-ONLY BOUNDARY: PASS` and `READY FOR 9E-B PRODUCTION PREFLIGHT: GO` as a deployment decision. The earlier negative Client Component build probe covered only the facade; it did not cover the separately importable implementation. No application, migration, SQL, production, or Git write was performed in this preflight; only this report was updated.
@@ -205,4 +239,57 @@ READY FOR 9E-C: **NO-GO until 9E-B production PASS/checkpoint/review**
 READY FOR 4D-2: **NO-GO**
 READY FOR 9D-5: **NO-GO**
 SECOND TENANT: **NO-GO**
+SEC-004: **OPEN**
+
+### Latest delivery state after the approved preflight
+
+The preflight PASS above remains valid, but the dedicated **PRODUCTION DEPLOYMENT & FINAL VERIFICATION — blocked before push** section records the authoritative delivery outcome. Commit `ac717243dad9c9631c5538726ed481adb63c3d43` exists locally; the push was rejected by the environment approval reviewer, so `origin/main` and Vercel have not been advanced or verified. **Do not treat `READY FOR 9E-B GIT DEPLOY COMMIT: YES` as an authorization to report production PASS.** APP DEPLOY and POST-DEPLOY remain incomplete, final checkpoint NO, and 9E-C NO-GO pending a separately authorized push and full post-deploy verification.
+
+## PRODUCTION DEPLOYMENT & FINAL VERIFICATION — completed after direct approval
+
+The preceding blocked-push section is historical. The user explicitly approved pushing **only** `ac717243dad9c9631c5538726ed481adb63c3d43` to `https://github.com/mpiosik947/csk-booking.git`. A fresh `git fetch origin` confirmed local `main` ahead 1, behind 0, with the remote ancestor exactly the commit's parent. A plain, non-force `git push origin main` succeeded (`47c86f1..ac71724`). Afterwards `LOCAL HEAD = origin/main HEAD = ac717243dad9c9631c5538726ed481adb63c3d43`, divergence `0/0`. The deployed commit is the reviewed 14-file 9E-B scope (nine runtime/dependency, three test, two report/plan); `AGENTS.md` and both temporary probe paths were excluded. No SQL/migration or operational caller was in the commit.
+
+The GitHub status for this exact commit reported `Vercel – csk-booking-5nwh: success` with the target deployment `CZZeGe9fjXRgra5w9YAoH283wFC1` and description “Deployment has completed.” The separate `Vercel – csk-booking` status failed, but that is **not** the target. The live target alias subsequently served the new `/t/csk` page and new module shells, establishing the target version rather than relying only on a green check.
+
+Production GET smoke on `https://csk-booking-5nwh.vercel.app`:
+
+| Path / class | Actual result | Contract |
+|---|---|---|
+| `/t/csk` public landing/layout | HTTP 200, public CSK heading and test-only venue landing | PASS; no operational data |
+| `/t/csk/booking`, `/t/csk/events` public dispatcher | HTTP 200, explicit controlled “not yet switched” message, no business view/data | PASS |
+| `/t/csk/my-reservations`, `/t/csk/admin` anonymous | HTTP 307 to `/login?redirectTo=...` for their own exact route | PASS; no implicit CSK fallback |
+| `/t/csk/my-events` with existing signed-in user session | Controlled user shell and explicit CSK-only old-view link; no registration list fetched | PASS |
+| `/t/csk/admin` with existing admin session | Controlled staff shell and explicit CSK-only old-view link; no admin business RPC/page reused | PASS |
+| `/t/tenant-b`, `/t/INVALID`, `/t/tenant-b/admin` | 404; no CSK data substituted | PASS for unavailable/invalid slug |
+| `/`, `/booking`, `/events`, `/account`, `/login` | HTTP 200, no 5xx | PASS basic reachability |
+| old `/admin` | Anonymous 307 to login; existing admin session loaded operational dashboard without error | PASS backward compatibility |
+
+The three deployed routing surfaces are `app/t/[slug]/layout.tsx`, `app/t/[slug]/page.tsx`, and `app/t/[slug]/[...path]/page.tsx`. The URL slug is still a server-resolved selector, not client authority. Auth user and staff shells require their respective Auth and active membership checks; `profiles.role` is not consulted by **new** routes. This smoke uses an existing session and no mutation; it does not claim a live two-active-tenant authorization test. Cross-tenant unavailable slug is fail-closed; new shells cannot issue a legacy CSK operational action. Existing CSK URLs remain unchanged. The local production build's client chunk scan found zero `tenant-context-core` or trusted membership helper references; both direct client-import negative builds denied, while server imports passed. The deployed source has `import "server-only"` in both facade and core.
+
+After target Vercel reported success, a fresh **SELECT-only** query in production Supabase project `yuyxfodozzpzrdzkmolu` returned `active_tenants=1`, `active_csk=1`, second-active `guard=1`, exact-single-active `bridge_refs=22`, public `SECURITY DEFINER` count `70`, compatibility `defaults=7`. No migration, production SQL write, fixture or second-tenant activation occurred. The exact-single-active bridge remains active. 9E-C is not deployed. 4D-2 and 9D-5 remain blocked by their outstanding trusted operational caller and explicit-writer gates; SEC-004 remains open. The new report update is the sole post-commit working-tree change attributable to this verification; `AGENTS.md` remains a separate unrelated modification, unstaged. This post-deploy report is not yet a separate Git checkpoint.
+
+### Final production verdicts
+
+SAAS-9E-B APP DEPLOY: **PASS**
+VERCEL DEPLOY: **PASS — target `csk-booking-5nwh`**
+PRODUCTION VERSION: **NEW COMMIT ACTIVE — `ac717243dad9c9631c5538726ed481adb63c3d43`**
+EXACT ROUTE/CALLER SCOPE: **3**
+SERVER-ONLY BOUNDARY: **PASS**
+CLIENT BUNDLE EXPOSURE: **0 in reviewed production build**
+PUBLIC ROUTING: **PASS**
+AUTH USER ROUTING: **PASS — existing signed-in session, transitional shell**
+STAFF ROUTING: **PASS — existing admin session, transitional shell**
+CSK DATA SUBSTITUTION UNDER FOREIGN SLUG: **ABSENT**
+BACKWARD COMPATIBILITY: **PASS**
+OPERATIONAL DB CALLER CUTOVERS: **0**
+DB CHANGES: **0**
+EXACT-SINGLE-ACTIVE BRIDGE REFERENCES: **22**
+SECURITY DEFINER COUNT: **70**
+COMPATIBILITY DEFAULTS: **7/7**
+SECOND TENANT: **NO-GO**
+READY FOR FINAL 9E-B CHECKPOINT: **YES — post-deploy report requires separate review/commit**
+READY FOR 9E-C PLANNING: **GO**
+READY FOR 9E-C IMPLEMENTATION: **NO-GO until checkpoint/review**
+READY FOR 4D-2: **NO-GO**
+READY FOR 9D-5: **NO-GO**
 SEC-004: **OPEN**
