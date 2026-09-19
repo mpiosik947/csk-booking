@@ -649,6 +649,171 @@ SECOND TENANT: **NO-GO**
 
 SEC-004: **OPEN**
 
+## SAAS-9E-C — FINAL PLAN (post-9E-B checkpoint, planning only)
+
+Baseline: `main`/`origin/main` at `6c3b961378d423a064f616e9bfe56e3d2fbf6e34` (divergence 0/0). 9E-B is CLOSED / PROD PASS on the `csk-booking-5nwh` target. The postdeploy production inventory has one active CSK, 22 public-function bodies referencing `active_single_tenant_id_v1()` (the helper itself is **not** one of the 22), 70 SECURITY DEFINER functions and 7/7 compatibility defaults. A read-only query against the local schema at migration `20260925100000` independently reproduced 22 / 70. This is a technical target, not implementation permission: no SQL, app, or migration change is made by this section. `AGENTS.md` is unrelated and excluded.
+
+### Scope and counting rule
+
+The 22 are **function definitions**, not 22 browser/API call sites. The proposed cutover selects 16 bridge-backed public RPC contracts: 15 have direct current application call sites, while public availability is a retained public DB contract with no direct app call in this checkout. Two internal INVOKER event cores, one historical verification backfill, one lane configuration v1 reader used indirectly by the legacy v2 contract, the active profile-privilege trigger, and the account-wide `update_my_profile_v1` account contract make up the other six. Other currently active reservation/event/check-in RPCs already derive tenant from a persisted resource or a tenant-owned row; they still need a *route/resource equivalence* gate at their application entry points, not a new single-active-tenant replacement merely for the sake of the count. A global account action is not converted into a tenant action.
+
+The proposed 9E-C design uses **16 versioned tenant-explicit SECURITY DEFINER wrappers**, each with a closed, tenant-explicit INVOKER core where code reuse requires it. It does **not** rewrite an old public signature to accept a client-selected tenant, change the old CSK compatibility wrapper, or drop any of the 22 definitions. Thus the exact bridge-reference target immediately after 9E-C is **22** (16 old public wrappers plus six residual definitions); a reduction to zero is a separate 9D-5 retirement gate after old-call zero proof. Expected public SECURITY DEFINER count is **70 + 16 = 86** after 9E-C, **86** after ACL-only 4D-2, and **86** immediately before 9D-5. If implementation needs a seventeenth privileged wrapper, or changes an old definition/SECURITY mode, this plan's count gate fails and the design must be reviewed before implementation; it must not silently adjust the expected count. Defaults remain 7/7. This count concerns the proposed 9E-C target, not an observed production state.
+
+### Exact bridge-definition inventory and planned selected-tenant contracts
+
+`T` below means the canonical server-resolved active tenant ID from `/t/[slug]`. It is a selector only; each DB wrapper must independently check active tenant status, authenticated actor where needed, active membership and allowed role, and resource ownership. No browser-supplied UUID, query value, localStorage value or global `profiles.role` is authority. A direct RPC call with another active tenant can access only the caller's independently authorized tenant scope; route A itself never grants B. Existing signatures remain for old-app compatibility. Wrapper names/signatures are design targets and must be frozen in the per-phase migration before implementation.
+
+| Existing function (exact signature where overloaded) | Active caller / file | Current source | 9E-C target and authority | Class; resource; membership | Change / risk |
+|---|---|---|---|---|---|
+| `get_public_booking_configuration_v1()` | `/booking`, `app/booking/page.tsx` | single-active bridge | tenant-explicit v2 reader, active T, existing closed booking core | public; no resource; none | app+DB; HIGH |
+| `get_public_event_list_v2(text,text,integer,integer)` | `/events`, `app/events/page.tsx` | bridge → closed core | tenant-explicit v3 list, bounded page | public; no resource; none | app+DB; HIGH |
+| `get_public_event_availability_v1()` | public availability contract; event list/read tests | bridge → closed core | tenant-explicit v2 availability, PII-free | public; no resource; none | app+DB; HIGH |
+| `get_my_active_tenant_verification_v1()` | `app/booking/BookingForm.tsx`, plus account/dashboard compatibility callers | bridge | tenant-explicit v2 owner verification; global account/dashboard callers stay compatibility-only until separately migrated | user; user identity; Auth owner, no staff membership | app+DB; HIGH |
+| `admin_create_event_v2(text,text,date,time,time,text,numeric,integer,uuid[])` | `app/admin/events/page.tsx` | bridge and legacy INVOKER core | tenant-explicit v3 create; check all lane IDs in T, write explicit T | staff; supplied lanes; active admin/employee | app+DB; CRITICAL |
+| `admin_list_events_v1(text,text,text,integer,integer)` | `app/admin/events/page.tsx` | bridge and legacy INVOKER core | tenant-explicit v2 list, bounded/sorted T rows | staff; no resource; permitted membership role | app+DB; HIGH |
+| `admin_create_lane_booking_family_v1(jsonb)` | `app/admin/lane-configuration/page.tsx` | bridge | tenant-explicit v2 create; root/children in T, concurrency guard | staff; lane family; active admin | app+DB; CRITICAL |
+| `admin_get_lane_booking_configuration_v2()` | `app/admin/lane-configuration/page.tsx` | bridge | tenant-explicit v3 reader, preserve DTO/order | staff; no resource; active admin | app+DB; HIGH |
+| `admin_get_reservation_report_v2(date,date,uuid,text,text,text,integer,integer)` | `app/admin/reports/page.tsx` | bridge | tenant-explicit v3 aggregate/details; filters and 50-row page bound to T | staff; filtered lane; active admin | app+DB; HIGH/PII |
+| `admin_get_reservation_report_export_v1(date,date,uuid,text,text,text)` | `app/admin/reports/page.tsx` | bridge | tenant-explicit v2 export, existing 5000-row limit and CSV safety | staff; filtered lane; active admin | app+DB; HIGH/PII |
+| `admin_list_users_v1(integer,integer,text,text,text,text)` | `app/admin/users/page.tsx` | bridge | tenant-explicit v2, operational-relation-first eligible set | staff; target user relation; active admin | app+DB; CRITICAL/PII |
+| `admin_set_user_note_v1(uuid,text)` | `app/admin/users/page.tsx` | bridge | tenant-explicit v2, note/audit bound to T and related user | staff; target user; active admin | app+DB; CRITICAL/PII |
+| `admin_set_user_role_v1(uuid,text)` | `app/admin/users/page.tsx` | bridge | tenant-explicit v2, tenant-local last-admin lock and membership | staff; target membership; active admin | app+DB; CRITICAL |
+| `update_profile_verification(uuid,text,text)` | `app/admin/users/page.tsx` | bridge | tenant-explicit versioned writer; tenant verification only | staff; target user relation; active admin | app+DB; CRITICAL/PII |
+| `update_profile_identity(uuid,text,text)` | `app/admin/users/page.tsx` | bridge | tenant-explicit versioned writer; approved relation first | staff; target user relation; active admin | app+DB; CRITICAL/PII |
+| `update_profile_contact_details(uuid,text,text,text,text,text,text)` | `app/admin/users/page.tsx` | bridge | tenant-explicit versioned writer; employee only in existing customer scope | staff; target user relation; active admin/constrained employee | app+DB; CRITICAL/PII |
+
+The local catalog also confirms these **six** residual definitions, which are not six additional 9E-C public wrappers:
+
+| Remaining bridge reference | Why not replace with route-only authority in 9E-C | Caller and removal phase |
+|---|---|---|
+| `admin_create_event_v2__saas9d2b1_core(...)` | old signature/core must remain callable by the old CSK wrapper during rollout; new wrapper gets a separate explicit-T INVOKER core | old event wrapper; retire after old-call proof in 9D-5 |
+| `admin_list_events_v1__saas9d2b1_core(...)` | same legacy compatibility dependency | old event-list wrapper; 9D-5 |
+| `admin_get_lane_booking_configuration_v1()` | no direct app call, but the legacy v2 reader invokes v1 internally; do not broaden its contract | old v2 dependency, then retirement after zero-call proof in 9D-5 |
+| `_backfill_csk_tenant_user_verifications_v1()` | historical CSK one-way backfill, not runtime routing | migration-only; 9D-5 retire after zero-call proof |
+| `prevent_non_admin_profile_privilege_changes()` | active global-profile trigger; cannot infer a route from a global profile UPDATE | exact writer/trigger reconciliation after 4D-2; 9D-5 |
+| `update_my_profile_v1(...)` | account-wide profile operation; its legacy response selects CSK verification for compatibility, but an account update must not become a tenant-leave or tenant-scoped mutation | `/account` global compatibility; versioned account response/zero-call gate in 9D-5 |
+
+All **22** old definitions (the 16 public legacy signatures plus the six above) remain bridge references after the additive 9E-C rollout. `active_single_tenant_id_v1()` itself remains owner-only and is reviewed for final retirement in 9D-5. Counting only newly introduced functions would hide this debt and is prohibited.
+
+### Non-bridge operational callers and 4D-2 dependency proof
+
+These are real active app surfaces, not additional entries in the 22-definition count. Each old CSK URL must be mapped to a canonical `/t/csk` route or receive the same trusted server context; no silent fallback from absent/foreign tenant to CSK. The entry point compares the persisted resource tenant to T **before** response/side effect. DB resource ownership wins; route A + resource B and route B + resource A both DENY. Staff checks always require active membership in T and the existing allowed role; instructor scope is unchanged. The DB retains its own existing resource/membership authorization. Multi-tab A/B has no shared tenant cookie.
+
+| Active surface / file | RPC, table read or role dependency | Tenant rule; 9E-C action | 4D-2 relevance |
+|---|---|---|---|
+| `app/booking/BookingForm.tsx`, `app/api/create-reservation/route.ts` | busy ranges, `create_reservation_v2`, lane table/profile verification | public lanes listed for T; persisted lane tenant must equal T at booking API; authenticated owner writer remains resource-bound | no global role |
+| `app/my-reservations/page.tsx`, `app/api/calendar/reservations/[id]/route.ts`, `lib/reservation-actions.ts` | `get_my_reservations_v2`, `cancel_reservation`, ICS | owner plus reservation tenant=T; filter paged list and compare every detail/mutation | no global role |
+| `app/events/page.tsx`, `app/api/register-event/route.ts`, `app/api/cancel-event-registration/route.ts`, `app/api/confirm-event-reserve-promotion/route.ts` | public list plus event/registration IDs | public reader T; persisted event/registration tenant=T on every user write; preserve atomic capacity and reserve semantics | no global role |
+| `app/my-events/page.tsx`, `app/api/calendar/event-registrations/[id]/route.ts` | `get_my_event_registrations_v1`, ICS | Auth owner, event registration tenant=T, scoped page | no global role |
+| `app/admin/page.tsx`, `app/admin/reservations/page.tsx`, `app/admin/calendar/page.tsx`, `app/api/admin/calendar-feed/route.ts` | direct reservations/lanes/events/blocks, `cancel_reservation`, `get_my_role` | staff membership T, table/RPC rows filtered T, resource comparison on writes; calendar-feed server-side check | **yes**; remove `get_my_role` |
+| `app/admin/reports/page.tsx`, `app/admin/users/page.tsx` | 9E-C wrappers plus `get_my_role` | admin membership T, DTO/PII scope T; remove role RPC | **yes** |
+| `app/admin/lane-configuration/page.tsx`, `app/admin/lane-blocks/page.tsx` | config, family/block writers, direct lane/block reads, `get_my_role` | admin/employee as currently allowed; lane/block tenant=T; no sibling/cross-tenant projection | **yes** for configuration |
+| `app/admin/events/page.tsx` and reserve-promotion server helper | event wrappers, participants, promotion, paid/approve, `get_my_role` | staff membership T; event/registration resource tenant=T; no cross-tenant promotion/email | **yes** |
+| `app/admin/check-in/page.tsx`, `app/check-in/[token]/page.tsx` | direct profile role/PII read, reservation/profile/attendance/verification RPC | server staff T for admin view; token/check-in resource tenant=T for staff actions; public token is resource-bound without route-derived staff authority | **yes** for direct `profiles.role` |
+| `app/api/send-reservation-{confirmation,cancellation}/route.ts`, event mail/promotion routes | resource-bound prepare/complete, profile-role branch in cancellation | derive persisted reservation/event tenant, compare T when tenant route initiated; service-role only for existing delivery completion; no arbitrary recipient | **yes** for cancellation role branch |
+| `middleware.ts`, `app/page.tsx`, `app/admin/{page,calendar,reports,users,events,lane-configuration}/page.tsx`, `app/api/admin/calendar-feed/route.ts` | direct `profiles.role` and eight `get_my_role` call sites | replace with server-resolved T + active `get_my_tenant_role_v1(T)` and page-specific role matrix; old URL canonical redirect requires exact CSK eligibility | **critical zero-caller gate** |
+| `app/dashboard/page.tsx`, `app/account/page.tsx`, global account export/delete APIs | legacy CSK verification response and account-wide operations | do not turn global account into tenant leave; only tenant-specific verification display may use T; global export/anonymization/Auth deletion remain account-wide | classify direct role usage; no tenant privilege |
+
+Inventory methodology: repository `rg` of `.rpc(`, `.from(`, `get_my_role`, `profiles.role` and all app/API routes; local catalog at `20260925100000`; production 9E-B read-only count. The 16 above are the **active bridge-backed RPC contracts** to cut over, not the total number of source call sites. Before each implementation phase, freeze the full per-file caller list (including direct PostgREST reads and dynamic `lib/reservation-actions.ts` dispatch), and fail closed on any new caller. No route wrapper alone authorizes a legacy RPC.
+
+### 4D-2 function-by-function unblock gate
+
+| 4D-2 function | Current global helper / caller | Target context and 9E-C cutover | Resource and membership context | Ready after completed 9E-C? |
+|---|---|---|---|---|
+| `get_my_role()` | homepage, Admin root/Calendar/Reports/Users/Events/Lane Configuration, calendar-feed | replace all eight application calls with trusted T role resolution; zero app references required | no resource for navigation; active membership T and per-page allowed role | YES, only after production zero-call proof |
+| `is_admin()` | closed legacy helper; 4D-1 removed its authorization use from profile privilege trigger | no app caller; preserve body until 4D-2 ACL revoke | old trigger dependency must remain zero | YES after production catalog/caller proof |
+| `is_admin_or_employee()` | closed legacy helper, no active app/RLS caller in 4D inventory | ACL-only closure | membership roles checked by active tenant-aware paths | YES after zero-call proof |
+| `is_admin_or_staff()` | closed legacy helper, no active app/RLS caller in 4D inventory | ACL-only closure; no instructor widening | role matrix from active membership T | YES after zero-call proof |
+
+`middleware.ts`, Admin Check-in, Dashboard and reservation-cancellation server code must also pass the **direct** `profiles.role` authority search. Thus 4D-2 is not automatically GO from adding the 16 RPCs. Its separate production preflight must show zero active application calls to all four helpers and zero direct global-role authorization decisions, including old CSK URLs. **4D-2 unblocked after 9E-C: YES only if the complete 9E-C production cutover and that zero-caller proof pass; currently NO-GO.**
+
+### Phasing, compatibility and rollback
+
+9E-C is too broad for one migration or deployment. Proposed planning split for review:
+
+1. **9E-C1, DB-first public/user:** add the four public/owner selected-tenant wrappers (booking config, event list, availability, my verification), explicit-T INVOKER cores as necessary; add route/resource mismatch tests. Old signatures stay intact. App then enables `/t/[slug]/booking`, `/events`, `/my-reservations`, `/my-events` and corresponding reservation/event APIs against T, with old CSK URLs forwarding only to `/t/csk` after parity.
+2. **9E-C2, DB-first staff:** add the twelve staff wrappers and explicit-T cores (event create/list, lane family/config, reports/export, user list/role/note/identity/contact/verification). Move Admin, reservations, Calendar/calendar-feed, Check-in, Events, lane blocks/config and users to trusted server T plus existing resource-bound RPCs/direct reads constrained to T. Preserve existing role matrices, pagination, PII and audit contracts.
+3. **9E-C3, app-first legacy URL/role gate:** remove eight `get_my_role` app calls and direct `profiles.role` authorization branches (middleware, check-in, cancellation, dashboard where relevant). Ensure every old CSK operational URL either canonicalizes to `/t/csk/...` or performs the same server T check, without a foreign-slug CSK path. Prove zero active bridge-wrapper app calls and zero global-role authority. Do **not** revoke 4D-2 ACLs here; that is a separate authorized phase.
+
+Each C1/C2 deployment is **TWO-STEP, DB-FIRST per bounded domain**, followed by a separately gated APP switch; C3 is APP-only after all target RPCs exist. Compatibility for each bounded domain:
+
+| State | Security/functionality |
+|---|---|
+| CURRENT APP + CURRENT DB | PASS for current single-active CSK; Tenant B remains blocked |
+| CURRENT APP + NEW DB | PASS because new RPCs are additive and old signatures/bridge/defaults remain; old routes remain CSK-only |
+| NEW APP + CURRENT DB | **UNSAFE to deploy**: required versioned RPCs are absent; app must fail closed, but functionality is unavailable |
+| NEW APP + NEW DB | PASS only after phase-specific cross-tenant, caller, DTO and old-URL parity tests |
+
+Rollback of an APP phase is to the immediately previous app commit while the additive DB phase remains; old signatures stay available. A failed transactional DB migration rolls back. After production use, no migration repair or destructive downgrade: a separately reviewed corrective migration is required. No default, sync trigger or legacy function is removed during 9E-C. A failed authorization, mismatch, unexpected function fingerprint, count 86, 7/7 default or old-app compatibility gate stops the phase. Production second-active guard is never disabled for a test.
+
+### Required test and security matrix
+
+Local two-tenant fixture: public A sees A-only booking config/events/availability; public B sees B-only; invalid/inactive slug 404. User A and B see only tenant-bound reservation/event registration/ICS/check-in state; a global user related to both has independent per-route state. Admin A, employee A and instructor A obey their existing distinct scopes; A staff with B resource DENY, B staff with A resource DENY, pending/suspended/no membership DENY, global `profiles.role=admin` without target active membership DENY. Both route A/resource B and route B/resource A DENY even when the actor has memberships in both; resource tenant wins and cannot be reassigned by route. Profile/user list and reports/export return zero foreign PII. Multi-tab A/B preserves path-specific context, with no preference-cookie race. Public DTO, count/capacity, pagination, CSK legacy parity, event reserve/promotion/payment, booking conflict/cancellation, Check-in, admin reports CSV, audit tenant binding and account-wide lifecycle are regression gates. Concurrency covers lane/event creation, last-admin role changes, cross-tenant resource races and no duplicate audit; deadlocks and contamination must be zero. Test explicit denial of direct old bridge-wrapper calls **from new operational UI** by source inventory, while old compatibility endpoints remain callable only under current single-active guard.
+
+Run focused SQL for every versioned RPC, full Supabase DB suite, all Node tests, TypeScript, production build, focused Playwright for each tenant route and legacy URL, `npm audit --omit=dev`, changed-files ESLint, `git diff --check`; production uses read-only catalog/runtime checks and rollback-only synthetic matrices, no heavy load. Final count checks: 18 planned selected-tenant contracts, stored bridge definitions 22, SECURITY DEFINER 88, unexpected drift 0, defaults 7/7, fixture residue 0. Old bridge callers cannot be counted as zero until the legacy URL/caller cutover actually removes them; Account and Dashboard remain explicit legacy sites after C1. The production guard continues to prevent a second active tenant; local A/B tests are not a production authorization claim.
+
+### Blocking decisions and phase exit
+
+The selected-T wrapper names, exact SQL signatures/DTOs and core reuse must be specified in the C1 and C2 implementation reviews and fingerprint-gated before writing migrations. The existing direct PostgREST staff reads require a per-route server comparison or tenant equality filter plus active membership; if an existing RLS path could still return a B row under route A, replace that read with a bounded tenant-scoped server/RPC contract before enabling the route. C3 must specify and test the old URL canonicalization/redirect map and include every server/API role branch. These are implementation review gates, not permission to guess or ship a partial cross-tenant cutover. Any one wrapper beyond the approved eighteen, unexpected extra bridge reference, or function-count drift requires a plan revision. No production write, migration, app deployment, 4D-2 ACL change or second-tenant activation is authorized by this plan.
+
+SAAS-9E-C TECHNICAL PLAN: **READY — PHASED C1/C2/C3; exact wrapper/count gates fixed above**
+
+ACTIVE OPERATIONAL CALLERS TO CUT OVER: **15 original direct-call bridge contracts, one retained public availability contract, and two approved owner-list contracts = 18 versioned targets; additional resource-bound/direct-read and role-gate surfaces listed above**
+
+### 9E-C direct-call-site allocation correction (approved before C1 implementation)
+
+Counting units are distinct. The pre-C1 inventory contains **15 unique RPC names** with a direct app call at **17 direct app call sites**. The approved target now contains **18 tenant-explicit contracts**: the original 15, retained public availability, and two versioned owner lists. The three direct calls to `get_my_active_tenant_verification_v1()` are not one call site. The table below is the complete **pre-C1 bridge-call inventory**; the two new owner-list tenant-route call sites are additional and recorded in the C1 owner-list addendum. `T` is the server-resolved active route tenant, never an authority supplied by browser state. `G` means a global `/account` or `/dashboard` page without a tenant slug. Phase 1 uses T only on the new `/t/[slug]` route; the global G callers remain on the old exact-single-active bridge until Phase 2. They are never imported into a `/t/[slug]` module.
+
+| RPC contract | Direct caller and site | Current source | Target source | Resource-bound? / class | Cutover | Legacy after C1? / safety |
+|---|---|---|---|---|---|---|
+| public booking config v1 | `app/booking/page.tsx:29` | single active | server T, active public reader | no / PUBLIC | C1 | no; old CSK page remains separately bridge-compatible until canonical redirect |
+| public event list v2 | `app/events/page.tsx:86` | single active | server T, active public reader | no / PUBLIC | C1 | no; old CSK page remains separately bridge-compatible until canonical redirect |
+| my active verification v1 | `app/booking/BookingForm.tsx:312` | single active | server T + `auth.uid()` | owner identity / AUTH USER | C1 | no on tenant booking; no staff authority |
+| my active verification v1 | `app/account/page.tsx:315` | single active | global account G; later tenant-aware presentation decision | owner identity / AUTH USER | C2 | **yes**; global account route has no slug and is not imported into `/t/*` |
+| my active verification v1 | `app/dashboard/page.tsx:108` | single active | global dashboard G; later tenant-aware presentation decision | owner identity / AUTH USER | C2 | **yes**; global dashboard route has no slug and is not imported into `/t/*` |
+| admin event list v1 | `app/admin/events/page.tsx:479` | single active | server T + active membership | no / STAFF | C2 | yes; old CSK URL single-active only |
+| admin create event v2 | `app/admin/events/page.tsx:640` | single active | server T + membership + each lane tenant=T | lanes / STAFF | C2 | yes; old CSK URL single-active only |
+| admin lane config v2 | `app/admin/lane-configuration/page.tsx:521` | single active | server T + admin membership | no / STAFF | C2 | yes; old CSK URL single-active only |
+| admin create family v1 | `app/admin/lane-configuration/page.tsx:681` | single active | server T + admin membership + family lanes=T | family / STAFF | C2 | yes; old CSK URL single-active only |
+| admin report v2 | `app/admin/reports/page.tsx:143` | single active | server T + admin membership | filtered lane / STAFF | C2 | yes; old CSK URL single-active only |
+| admin report export v1 | `app/admin/reports/page.tsx:188` | single active | server T + admin membership | filtered lane / STAFF | C2 | yes; old CSK URL single-active only |
+| admin list users v1 | `app/admin/users/page.tsx:364` | single active | server T + admin membership + operational relation | user relation / STAFF | C2 | yes; old CSK URL single-active only |
+| admin set role v1 | `app/admin/users/page.tsx:514` | single active | server T + admin membership + target membership | user relation / STAFF | C2 | yes; old CSK URL single-active only |
+| admin set note v1 | `app/admin/users/page.tsx:565` | single active | server T + admin membership + target relation | user relation / STAFF | C2 | yes; old CSK URL single-active only |
+| update verification | `app/admin/users/page.tsx:614` | single active | server T + admin membership + target relation | user relation / STAFF | C2 | yes; old CSK URL single-active only |
+| update identity | `app/admin/users/page.tsx:665` | single active | server T + admin membership + target relation | user relation / STAFF | C2 | yes; old CSK URL single-active only |
+| update contact | `app/admin/users/page.tsx:712` | single active | server T + allowed staff membership + target relation | user relation / STAFF | C2 | yes; old CSK URL single-active only |
+
+`get_public_event_availability_v1()` has **no direct app call site** in this repository; its planned selected-tenant successor is the fourth original C1 RPC because the public standalone DB contract must not be left CSK-only. All 17 pre-C1 **bridge-call** rows are phase-assigned for migration ownership: **C1 = 3, C2 = 14, C3 = 0; sum = 17**. The owner-list approval expands the tracked UI inventory by two existing legacy sites (`app/my-reservations/page.tsx`, `app/my-events/page.tsx`) and Phase 1 adds **five new selected-tenant sites** (three for original C1 wrappers, two owner readers). Thus the reviewed UI source inventory is **24 = 17 original bridge + 2 original owner-list + 5 selected-tenant**; active legacy UI sites remain **19**. A further server-side legacy call to `get_my_reservations_v2()` exists in `app/api/calendar/reservations/[id]/route.ts` for owner ICS, separately tracked for later cutover. Contract allocation is **C1 = 6, C2 = 12, C3 = 0; sum = 18**.
+
+Bridge definitions remain **22 before and after C1**. The implementation retains old CSK compatibility branches, so **all 17 original bridge sites and both old owner-list UI sites still contain an active legacy path after C1**; the new tenant-route branches add five C1 sites rather than deleting those old branches. The owner ICS server-side legacy call is separately active. This metric counts source locations, not possible runtime invocations through multiple URLs. C1 must not mount the old CSK component under a foreign `/t/[slug]` route. Phase 1 SECURITY DEFINER target is **76** (70 + six reviewed wrappers); C2 adds twelve for **88**; C3 changes no DB functions and remains **88**. 4D-2 zero-caller gate is **NOT MET** after C1 and C2; C3 must remove the eight `get_my_role` application sites and the direct `profiles.role` authorization branches, then prove zero callers before a separately approved 4D-2 ACL phase. Account and Dashboard remaining legacy after C1 neither receive a slug nor expose Tenant B data as Tenant A; the exact-single-active guard keeps them functional and fails closed if active-tenant cardinality changes. A route/session preference cannot turn them into T-scoped staff authority.
+
+DB CHANGE REQUIRED: **YES**
+
+APP CHANGE REQUIRED: **YES**
+
+DEPLOYMENT ORDER: **MULTI-PHASE; DB-FIRST + APP per C1/C2, then APP-only C3**
+
+BRIDGE REFERENCES BEFORE: **22**
+
+BRIDGE REFERENCES AFTER TARGET: **22 (legacy definitions deliberately retained until 9D-5)**
+
+4D-2 UNBLOCKED AFTER 9E-C: **YES only after complete production PASS and separate zero-caller review; currently NO-GO**
+
+EXPECTED SECURITY DEFINER AFTER 9E-C: **88**
+
+COMPATIBILITY DEFAULTS: **7/7**
+
+READY FOR SAAS-9E-C LOCAL IMPLEMENTATION: **GO — C1 ONLY, after exact signatures/DTO review**
+
+READY FOR 4D-2: **NO-GO until 9E-C production PASS and review**
+
+READY FOR 9D-5: **NO-GO**
+
+SECOND TENANT: **NO-GO**
+
+SEC-004: **OPEN**
+
 ## SAAS-9E — FINAL PLAN
 
 Planning baseline: `a6324cda94dbdf14ddf850240e0dfe59d9ca96f5` on
@@ -6673,6 +6838,48 @@ SAAS-9D-4C DB PHASE LOCAL: **PASS**
 READY FOR 4C DB PRODUCTION PREFLIGHT: **GO**
 
 READY FOR 4D / 4E: **NO-GO until 4C production PASS/checkpoint**
+
+READY FOR PRODUCTION WRITE: **NO**
+
+SECOND TENANT: **NO-GO**
+
+SEC-004: **OPEN**
+
+## SAAS-9E-C1 — implementation gate correction (supersedes C1 GO above)
+
+The approved caller-count correction is complete: 15 distinct directly called RPC names, 17 literal application call sites, and 16 planned versioned contracts. The per-call-site table in `SAAS-9E-C — FINAL PLAN` assigns C1 3 sites / 4 contracts, C2 14 sites / 12 contracts, C3 0 / 0. Account and Dashboard verification calls remain global legacy sites for C2 and are not mounted under `/t/[slug]`.
+
+Local implementation uncovered a separate **scope blocker**: C1 also promises operational `/t/[slug]/my-reservations` and `/t/[slug]/my-events`, but neither existing owner-list RPC accepts a tenant argument. `get_my_reservations_v2()` returns a table without `tenant_id`; it aggregates all active memberships. `get_my_event_registrations_v1(text,text,integer,integer)` returns a pre-paginated JSON DTO from a core that joins all active tenant memberships and has no tenant filter. Filtering either result in the browser or after pagination would leak/omit another tenant's rows or break stable counts/page boundaries. Authenticated direct table reads are not an equivalent drop-in: reservation SELECT RLS additionally requires membership, and recreating the event date/status pagination outside its DB contract would change behavior. A route slug alone cannot repair a DB owner-list contract.
+
+The four C1 wrappers in the approved allocation cover public booking configuration, public event list, standalone public availability, and own tenant verification. They do **not** provide tenant-scoped owner reservation/event lists. Adding two versioned owner-list contracts (whether INVOKER or DEFINER) changes the approved 16-contract allocation; definer-based versions also change the projected 74/86 counts. Alternatively, removing the two `/my-*` routes from C1 changes its approved functional scope. Neither decision is authorized implicitly. **C1 implementation is therefore STOPPED before application cutover.** The additive four-function draft was applied to the explicitly local database `127.0.0.1:54322` only; its file was then quarantined at `supabase/drafts/20260926100000_add_tenant_scoped_public_operational_readers.sql`, outside the automatic migration chain. Local catalog still reports migration `20260926100000`, four target functions, 74 SECURITY DEFINER and 22 bridge references, so local DB history is ahead of repository migration files until a separately approved reconciliation/reset. No app code, production SQL, deployment or Git staging/commit/push was changed. This draft must not be production-preflighted or pushed until the scope and owner-reader decision is approved and the full C1 tests pass.
+
+SAAS-9E-C1 LOCAL IMPLEMENTATION: **FAIL / BLOCKED AT OWNER-LIST CONTRACT**
+
+READY FOR SAAS-9E-C1 PRODUCTION PREFLIGHT: **NO-GO**
+
+### SAAS-9E-C1 — approved owner-list contract decision (supersedes the owner-list blocker)
+
+The owner-list blocker is resolved by the approved addition of two **versioned** DB-level tenant-scoped readers. They do not replace the old global/multi-membership signatures. Inventory-derived target signatures are `get_my_reservations_v3(uuid,integer,integer)` (successor to `get_my_reservations_v2()`) and `get_my_event_registrations_v2(uuid,text,text,integer,integer)` (successor to `get_my_event_registrations_v1(text,text,integer,integer)`). Both require `auth.uid()`, an active selected tenant, and owner rows with `row.tenant_id = selected tenant` before filtering, ordering, counting, limit or offset. The tenant argument selects scope but grants no account or staff authority. Their DTOs, ordering, filter semantics and status vocabulary must be verified against the old RPCs in focused tests. The old `/my-reservations` and `/my-events` remain explicitly legacy until later URL cutover; their new `/t/[slug]/...` counterparts must use the new readers, never app-side filtering of the old list.
+
+The two new owner readers require `SECURITY DEFINER`: reservation RLS requires active tenant membership even for historical owner rows, lane-name joins may include inactive resources, and the event join must preserve historical owner registrations even when the event is inactive. `SECURITY INVOKER` would change the established owner DTO. Each DEFINER must enforce identity, active tenant and exact row tenant internally, with no role-based foreign-owner access. The four other C1 reader wrappers remain subject to full review; the quarantined draft is not a canonical migration.
+
+Inventory counting is now: **15 original unique directly called bridge RPC names; 17 original bridge app call sites; two new owner-list versioned contracts; 18 planned 9E-C contracts total (C1 6, C2 12, C3 0)**. The full C1 UI source inventory also includes two existing old owner-list sites and five new selected-tenant sites, hence **24 physical UI direct sites = 19 legacy + 5 selected-tenant**. One separate server-side ICS owner-list call remains legacy. BookingForm is C1; Account and Dashboard remain legacy until C2. C1 route owner lists are assigned C1, while the two existing global owner-list UI calls are legacy until C3 URL cutover. The 17-row pre-existing bridge-call table above remains the original inventory; the owner sites are explicit additions, not a silent reclassification of those 17.
+
+| Added C1 direct site | Source | Selected tenant | Authority / safe boundary | Legacy branch |
+|---|---|---|---|---|
+| `get_public_booking_configuration_v2` | `app/booking/page.tsx` under `/t/[slug]/booking` | server-resolved active tenant UUID | public DB wrapper validates active tenant | same component's `/booking` branch remains v1 |
+| `get_public_event_list_v3` | `app/events/page.tsx` under `/t/[slug]/events` | server-resolved active tenant UUID | public DB wrapper filters tenant before pagination | same component's `/events` branch remains v2 |
+| `get_my_tenant_verification_v2` | `app/booking/BookingForm.tsx` under `/t/[slug]/booking` | server-resolved active tenant UUID | `auth.uid()` owner, no global role | same component's `/booking` branch remains v1 |
+| `get_my_reservations_v3` | `app/my-reservations/page.tsx` under `/t/[slug]/my-reservations` | server-resolved active tenant UUID | `auth.uid()` plus row tenant in DB before count/page | same component's `/my-reservations` branch remains v2 |
+| `get_my_event_registrations_v2` | `app/my-events/page.tsx` under `/t/[slug]/my-events` | server-resolved active tenant UUID | `auth.uid()` plus row tenant in DB before filters/count/page | same component's `/my-events` branch remains v1 |
+
+The sixth C1 contract, standalone `get_public_event_availability_v2(uuid)`, has **no direct app call site**; it is a retained PII-free public DB contract. Active legacy UI source sites after C1 remain 19 (17 original bridge sites plus two old owner lists), including Account and Dashboard; the server-side owner ICS call makes 20 if API routes are included. Neither metric is the 22 stored bridge-definition count.
+
+SECURITY DEFINER inventory target: current production **70**, C1 additions **6**, after C1 **76**, C2 additions **12**, full 9E-C target **88**. The 22 old bridge definitions remain until a separately approved retirement. 4D-2 remains NO-GO because zero-old-caller has not been proven. The previously applied draft in the local database is not a deployable artifact. After the final C1 migration is prepared and verified, an explicitly local-only reset targeting `127.0.0.1:54322` may rebuild the canonical chain; migration repair and production writes remain prohibited.
+
+READY FOR 9E-C2: **NO-GO**
+
+READY FOR 4D-2: **NO-GO**
 
 READY FOR PRODUCTION WRITE: **NO**
 
