@@ -956,6 +956,118 @@ SECOND TENANT: **NO-GO**
 
 SEC-004: **OPEN**
 
+### SAAS-9E-B — FINAL PLAN
+
+Planning baseline: `main`/`origin/main` at `47c86f1e8ae0a3a48bc3c77f790d58577c59252b` after the final 9E-A checkpoint (divergence 0/0). The 9E-A resolver and inert server helper are deployed; production has one active CSK, SECURITY DEFINER 70, seven CSK compatibility defaults and 22 function bodies referencing the exact-single-active bridge. `AGENTS.md` remains unrelated and excluded. This is a plan only: no route, app, DB, migration, or deployment change is authorized by this section. The earlier 9E table describes the *eventual* URL target, not a claim that every route can be made operational in 9E-B.
+
+#### B.1 Server-only boundary and exact 9E-B scope
+
+`lib/server/tenant-context.ts` currently has no client import and no active route caller, but its directory name and TypeScript types are **not** an import barrier. The pinned Next.js 16.3.4 local authentication guide recommends `import 'server-only'`; the package is not presently a top-level dependency (`node_modules/server-only` absent), although Next bundles its internal marker. In 9E-B, explicitly add `server-only` as a declared application dependency and import it at the top of the request-scoped server facade. Keep pure slug/path validation in a separate import-safe module if necessary: the existing direct Node test imports the current TS module and would otherwise fail outside the Next server compiler. Do not simply delete the test or silently mock the marker. A deliberate test Client Component importing the guarded facade must fail `next build` with the server-only diagnostic; the normal build, server route import, direct Node core tests and zero client-bundle import scan must pass. Never expose a service-role client through the facade. Current protection: convention plus zero imports. Target protection: compile-time server-only poison import. Failure mode: a client import fails build, not a runtime secret leak. App impact: helper/test split and declared dependency, no DB change.
+
+9E-B consists of **three route surfaces** and supporting server utilities, not a copy of all existing business pages: (1) a server `app/t/[slug]/layout.tsx` that resolves the canonical active slug per request through 9E-A with a request-scoped anon-key Supabase server client; (2) a PII-free `app/t/[slug]/page.tsx` venue landing/navigation shell; (3) a bounded `app/t/[slug]/[...path]/page.tsx` dispatcher (or equivalent explicit server route shells) that recognizes the listed future module paths, checks Auth and active membership/role for staff paths, and returns a controlled *not-yet-available* state for any module whose tenant-aware DB reader/writer has not been cut over. Unknown paths and invalid/inactive/dormant slugs return generic 404. The catch-all must not shadow subsequent explicit 9E-C routes. It must not import/reuse the existing CSK Client Component as a B page, call a contextless legacy RPC under a B URL, or substitute CSK data for B. Build a PII-free client navigation envelope only from the server-validated `id`, `slug`, public name and active status; this is display context, not a capability. No business API/RPC caller, existing middleware grant, old page, writer, compatibility default or DB object is changed in 9E-B. Proposed app files are these three route surfaces, the guarded helper/pure parser split, minimal scoped navigation/role mapping, package manifest/lockfile, and focused tests. Exact file names for auxiliary utilities are implementation details, not permission to expand the scope.
+
+At 9E-B, the three surfaces are the complete active route/caller scope. The ten potential operational route groups below are **recognized but not cut over**: Booking, Events, My Reservations, My Events, Admin root, Admin Check-in, Admin Users, Admin Reports, seven other Admin children as one permission-matrix group, and global Account. Existing `/` and Auth routes remain global. An explicit route grouping is used for review; `app/api/*`, token/ICS/email paths and mutations are separately inventoried but remain unchanged. Thus the 9E-B operational DB caller cutover count is **0** and bridge reference count remains **22**. This narrow boundary is what makes 9E-B reversible without a new DB contract.
+
+#### B.2 Route and caller matrix
+
+For every `/t/[slug]` request, the slug is a selector validated by the server resolver, never an authorization fact. An existing resource's persisted tenant always wins, and route/resource disagreement is DENY/404. The table records the current source, proposed target, and actual phase; `B shell` means *no business data or mutation* in 9E-B. `C` means a separate versioned tenant-aware RPC and app-caller review in 9E-C, not implied authorization now.
+
+| Route/caller group | Current route and tenant source | Target route and trusted source | Class; resource binding; membership | 9E-B action / 9E-C cutover / DB change |
+|---|---|---|---|---|
+| Public Booking (`app/booking/page.tsx`, `BookingForm.tsx`, create/confirmation API) | `/booking`; `get_public_booking_configuration_v1()` exact-single bridge, reservation/lane-backed writes | `/t/[slug]/booking`; active slug for read, persisted lane/reservation for writes | public/user; lane/reservation yes; no public membership | B shell only; C config/read and writer-caller cutover; DB **C yes**, B no |
+| Public Events (`app/events/page.tsx`, register/confirmation APIs) | `/events`; `get_public_event_list_v2()` and availability bridge, event-bound registration | `/t/[slug]/events`; active slug for PII-free reads, event/registration for writes | public/user; event/registration yes; no public membership | B shell only; C public readers and registration callers; DB **C yes**, B no |
+| My Reservations (`app/my-reservations/page.tsx`, ICS/cancel APIs) | `/my-reservations`; `get_my_reservations_v2()` owner list, resource-bound cancellation | `/t/[slug]/my-reservations`; verified user + own reservation tenant | user; reservation yes; no staff membership | B authenticated shell, no list; C tenant-scoped owner list/action links; DB **C yes**, B no |
+| My Events (`app/my-events/page.tsx`, ICS/cancel/promotion APIs) | `/my-events`; `get_my_event_registrations_v1()` owner list | `/t/[slug]/my-events`; verified user + own registration/event tenant | user; registration/event yes; no staff membership | B authenticated shell, no list; C tenant-scoped list/actions; DB **C yes**, B no |
+| Admin root (`app/admin/page.tsx`) | `/admin`; `get_my_role()`, browser RPCs and `middleware.ts` global `profiles.role` | `/t/[slug]/admin`; active membership + allowed role for resolved tenant, DB recheck for every action | staff; action-dependent; **yes** | B staff shell only; C dashboard data and global-role caller removal; DB **C yes**, B no |
+| Admin Check-in (`app/admin/check-in/page.tsx`) | `/admin/check-in`; client check-in/reservation RPCs, legacy middleware | `/t/[slug]/admin/check-in`; membership + resource reservation/event tenant | staff admin/employee; yes; **yes** | B guarded unavailable; C resource-bound calls and DTO; DB **C yes**, B no |
+| Admin Users (`app/admin/users/page.tsx`) | `/admin/users`; `get_my_role`, list/note/role/verification/identity/contact RPCs | `/t/[slug]/admin/users`; admin membership + tenant-owned operational relationship | staff admin; user relation yes; **yes** | B guarded unavailable; C minimal DTO/relationship-scoped calls; DB **C yes**, B no |
+| Admin Reports (`app/admin/reports/page.tsx`) | `/admin/reports`; `get_my_role`, aggregate/export RPCs | `/t/[slug]/admin/reports`; admin membership + tenant-selected aggregate, foreign lane filter DENY | staff admin; filter resource yes; **yes** | B guarded unavailable; C versioned report/export calls; DB **C yes**, B no |
+| Other Admin children (reservations, calendar, events, lane-blocks, lane-configuration) | `/admin/*`; `middleware.ts` global-role gate, browser RPCs and calendar-feed server API | `/t/[slug]/admin/*`; original per-route role matrix after stripping `/t/[slug]`, then member/resource DB checks | staff, instructor only on existing calendar/events pages; yes; **yes** | B guarded unavailable; C per-domain reads/writes and independent calendar-feed API gate; DB **C yes**, B no |
+| Account/dashboard and Auth (`app/account`, dashboard, login/register) | global `/account`, `/dashboard`, `/login`, `/register`; global identity/account lifecycle | unchanged global paths; optional tenant navigation preference only | global user; account-wide export/delete; no route membership authority | B links/redirect sanitization only, no account action cutover; C tenant-linked verification presentation if separately approved; DB B no |
+
+Old operational URLs remain functional and **are not redirected to an unavailable shell**. During 9E-B, `/booking`, `/events`, `/my-reservations`, `/my-events`, `/admin` and all admin children remain the live **CSK-only operational URLs** under the one-active-tenant guard. The new `/t/csk/...` path is a reserved, controlled shell, not falsely declared the canonical working service. After each 9E-C module is truly functional, perform a reviewed **temporary GET-only 307 redirect** for the corresponding old path to `/t/csk/...`, preserving safe filter/query state and never redirecting a POST or leaking token/PII. New canonical module links then use the explicit slug. The old-to-new map is path-preserving (`/booking`→`/t/csk/booking`, `/events`→`/t/csk/events`, `/my-reservations`→`/t/csk/my-reservations`, `/my-events`→`/t/csk/my-events`, `/admin[/child]`→`/t/csk/admin[/child]`), applied **per finished module**, not as a broad 9E-B rewrite. `/`, `/account`, `/dashboard`, `/login`, `/register`, account APIs and token/ICS links remain global/resource-bound; no automatic `/t/csk/account` alias. Remove CSK redirects only after 9F/9G link/telemetry proof and 9H review, before a second active tenant; exact calendar date is a business/rollout decision, not a hidden default. An invalid slug never redirects to CSK.
+
+The current middleware matches only `/admin/:path*` and checks `profiles.role`; it remains untouched for legacy CSK URLs in B. The **new** tenant-admin shell must independently call the server staff helper and apply the existing permission matrix to the tenant-stripped `/admin/...` path (including unknown future routes admin-only). An explicit tenant-admin matcher in middleware/proxy is optional defense in depth but cannot be the only gate; an unguarded direct URL is forbidden. Before any actual admin business page or `/api/admin/calendar-feed` is moved in C, replace their global-role checks with active membership, retain the independent server API authorization, and prove both route and API direct access. `employee`↔`pracownik` and `instructor`↔`instruktor` mapping occurs only at the permission-matrix boundary. No instructor privilege expansion.
+
+The global account represents one Auth identity; a user may have relationships with A, B or both without staff membership. The selected route is a display/filter preference and cannot grant visibility. For any later resource action, fetch persisted resource tenant under owner/role scope and compare to route tenant inside the DB contract. A tenant selector cookie, if added, is **preference only** for the global chooser; B can omit it entirely. Two tabs at `/t/a` and `/t/b` remain independent; stale preference has no effect. The existing partial unique guard forbids two active tenants **even locally**: test public A/B active-route logic with isolated mocked resolver responses, and use a real dormant B in local SQL to prove fail-closed behavior. Do not disable/drop the guard or activate B in production to manufacture an end-to-end A/B result; real dual-active DB proof belongs to the separately authorized 9G/9H readiness gate. A B shell does not receive CSK data even when the exact-single bridge still returns CSK.
+
+#### B.3 Bridge, 4D-2 and security inventory
+
+The 22 textual bridge references are **unchanged in B**, and the closed helper is a 23rd object. Exact mapping from 9E.4: 3 public readers; 4 event create/list wrappers/cores; 3 lane-family create/config; 2 report readers; 6 operational user/profile writers/list; 2 self/verification functions; 1 privilege trigger; 1 one-time backfill helper = **22 distinct bodies**. B cuts over **zero** of these callers. C adds versioned explicit-tenant contracts per domain and moves *active* callers; old definitions can remain as compatibility objects. Therefore the conservative textual reference count is **22 after B, 22 after C, and 22 immediately before 9D-5** unless a separately reviewed migration replaces/drops a specific old body. Active runtime use should reach zero by the C/9F/4D-2 exit gate; textual inventory and active-call inventory must be reported separately. 9D-5 is the removal review, never an assumed bulk DROP. Seven CSK column defaults remain through B/C; remove only after explicit-writer proof in 9D-5 and before second tenant.
+
+| 4D-2 function | Required context / resource | 9E-A enough? | B enough? | C and active caller cutover? |
+|---|---|---|---|---|
+| `get_my_role()` | resolved route tenant + active membership for Admin/home presentation; persisted resource in calendar-feed/actions | no | **no**: existing homepage, Admin root/Calendar/Reports/Users/Events/Lane Configuration and calendar-feed still call it | **yes**: app-first replace every listed caller and middleware; then zero-caller production proof |
+| `is_admin()` | tenant membership or resource-derived role; no global predicate substitute | no | no | active SQL/function caller inventory and independently approved ACL-only closure |
+| `is_admin_or_employee()` | selected tenant + admin/employee membership, resource tenant for operations | no | no | active caller proof; ACL-only closure after replacement |
+| `is_admin_or_staff()` | selected tenant + role-permitted page, unchanged instructor scope | no | no | active caller proof; ACL-only closure after replacement |
+
+Additional live global-role boundaries from repo: `middleware.ts` reads `profiles.role`; homepage `app/page.tsx` and Admin root/Calendar/Reports/Users/Events/Lane Configuration call `get_my_role`; `app/api/admin/calendar-feed/route.ts` calls it independently. Admin Check-in, Dashboard and reservation-cancellation server role/privilege paths require their own direct authorization inventory and negative tests before 4D-2; a quick string search is not proof of absence. No 4D-2 ACL revoke belongs in B. **4D-2 UNBLOCKED AFTER 9E-B: NO.** It requires production PASS for the actual 9E-C app-first caller cutover and zero-active-caller proof. 9D-5 remains NO-GO.
+
+SECURITY DEFINER: **70 after 9E-B** because B is app-only. **After 9E-C: `70 + approved per-slice new definer delta - approved retirements`**, not a manufactured constant: C cannot start without a versioned signature/ACL inventory that fixes each slice's exact count. **Before 4D-2:** the measured, approved post-C count (at least the current 70 unless a separately approved cleanup changes it). **Before 9D-5:** the measured post-C/4D-2 count; 4D-2 ACL-only closure does not itself remove function definitions or change count. All B values are exact; C/4D-2 numeric delta is an explicit future gate, not an unresolved B implementation choice. Compatibility defaults: **7/7 throughout B**. No new SECURITY DEFINER, RLS grant, service-role browser path or tenant-B production state in B.
+
+#### B.4 Implementation order, compatibility, tests and rollback
+
+Order after separate approval: (1) establish declared `server-only` facade and preserve pure Node tests; (2) test route parser/slug resolver with unknown, malformed, inactive and dormant slugs; (3) add server tenant layout/landing and PII-free envelope; (4) add guarded module-path shells, including the existing admin role matrix on tenant-stripped paths; (5) inventory all links/API/token entry points and keep old operational URLs live; (6) prove local A/B shells and negative role/mismatch contracts; (7) run full regression and only then propose an APP-only deployment. Any operational module that cannot use an explicit tenant-aware backend contract stays unavailable under `/t/[slug]`, not copied from a legacy page. This is **APP-FIRST only in the sense of additive new app routes with the already-deployed 9E-A DB**; no 9E-B migration. Compatibility: OLD APP + CURRENT DB **PASS** (current production); NEW B APP + CURRENT DB **PASS** if resolver/guard and old CSK paths pass; NEW B APP + NEW DB **N/A** (no B DB); NEW B APP + pre-9E-A DB **UNSAFE** and prohibited. No permanent implicit CSK fallback.
+
+Focused tests: negative Client Component import/build for `server-only`; route slug and resolver DTO/active-only; public A and *mock-resolved* B shell content with no cross-data, plus real dormant B DENY; signed-in A-only/B-only/A+B user shell simulations and owner-data absence before C; Admin/employee/instructor role matrix, global `profiles.role=admin` without member, pending/suspended/no membership; direct unknown admin route; route A/resource B and inverse fail-closed checks at the existing helper boundary without claiming new writer cutover; stale cookie and two-tab independence; no PII/JWT/service-role in URLs/envelope; account-wide export/delete unchanged; token/ICS/email deep links unchanged; old CSK URLs and login `redirectTo` sanitized; no B call to old contextless RPC. Verify 22 textual bridge references, 70 definers, 7/7 defaults, zero client tenant authority, production runtime no 5xx, and fixture cleanup 0. Run focused Node, full Node, TypeScript, build, changed-files ESLint, relevant Playwright, `npm audit --omit=dev`, `git diff --check`; full DB suite only if the implementation unexpectedly needs DB changes, in which case STOP and re-plan rather than widening B. Deployment rollback: revert only the new B app routes/facade while one active CSK and old operational paths remain; do not roll back the deployed 9E-A resolver or remove the second-active guard.
+
+SAAS-9E-B TECHNICAL PLAN: **READY — bounded additive route shells only; implementation requires separate approval**
+
+EXACT ROUTE/CALLER SCOPE: **3 new route surfaces; 0 operational DB caller cutovers**
+
+SERVER-ONLY BOUNDARY: **PASS as a planned, testable compile-time gate; current helper is not yet explicitly guarded**
+
+PUBLIC ROUTING MODEL: **canonical active slug resolved server-side; B shell PII-free, no legacy B data**
+
+AUTH USER ROUTING MODEL: **single global Auth identity; selected route is context, own resource remains authority**
+
+STAFF ROUTING MODEL: **active tenant membership + current per-route role matrix; no global-role grant**
+
+BACKWARD COMPATIBILITY: **PASS as planned: old CSK operational URLs remain; per-module temporary redirect only after 9E-C equivalence proof**
+
+APP CHANGE REQUIRED: **YES**
+
+DB CHANGE REQUIRED: **NO**
+
+DEPLOYMENT ORDER: **APP ONLY on deployed 9E-A DB; 9E-C separately DB-first per domain, then app cutover**
+
+EXACT-SINGLE-ACTIVE BRIDGE REFERENCES AFTER 9E-B: **22**
+
+4D-2 UNBLOCKED AFTER 9E-B: **NO**
+
+EXPECTED SECURITY DEFINER AFTER 9E-B: **70**
+
+COMPATIBILITY DEFAULTS: **7/7**
+
+READY FOR SAAS-9E-B LOCAL IMPLEMENTATION: **GO only after explicit review/authorization of this plan**
+
+READY FOR 4D-2: **NO-GO until trusted context caller cutover is production PASS**
+
+READY FOR 9D-5: **NO-GO**
+
+SECOND TENANT: **NO-GO**
+
+SEC-004: **OPEN**
+
+#### 9E-B local implementation evidence (2026-09-19)
+
+The separately authorized local 9E-B implementation added exactly the three planned route surfaces: server `/t/[slug]` layout, public tenant landing, and bounded tenant module dispatcher. The dispatcher renders controlled unavailable shells rather than the old CSK business pages; old operational URLs are untouched. No operational RPC caller, middleware grant, DB migration, SQL function, RLS/ACL policy, service-role path or compatibility default changed. `lib/server/tenant-context.ts` is now guarded by the declared `server-only@0.0.1` marker; dependency-injected pure contracts moved to `tenant-context-core.ts` for the existing Node tests. A temporary Client Component import caused the expected Next build failure and was deleted; the final production build passed. No tenant cookie is used. The route slug selects an active tenant but never grants staff authority: server Auth identity, active membership and allowed role are checked independently for staff shells. The existing permission matrix is applied to the tenant-stripped Admin path. No resource is loaded by the B shells; resource-bound data/writer cutover remains in 9E-C.
+
+Focused Node tests 16/16, full Node 766/766, TypeScript, final build, changed-file ESLint, relevant Playwright 16/16 and diff check passed. No DB fixture was created; SQL files changed 0. `npm audit --omit=dev` reports one moderate `baseline-browser-mapping@2.10.30` advisory already present at the baseline checkpoint; it was not remediated under 9E-B. The 9E-B report records route and test evidence. No production preflight/deployment is implied by local PASS. The exact-single-active bridge stays at 22 references, SECURITY DEFINER at 70 and defaults 7/7 by unchanged DB scope; remeasure them during production preflight. 4D-2 is still blocked by active global-role callers, 9D-5 is blocked, Tenant B is not activated, and SEC-004 remains open.
+
+SAAS-9E-B LOCAL: **PASS**
+
+READY FOR 9E-B PRODUCTION PREFLIGHT: **GO — separate review and authorization required**
+
+READY FOR 9E-C IMPLEMENTATION: **NO-GO until review**
+
+READY FOR 4D-2 / 9D-5 / SECOND TENANT: **NO-GO**
+
+#### 9E-B server-only boundary correction and production preflight
+
+The final implementation marks **both** `tenant-context.ts` and `tenant-context-core.ts` with `import "server-only"`; the earlier description of the core as an import-safe pure module is superseded. The isolated Node core unit test substitutes only the marker in its test process, while separate direct Client Component import probes for each module fail the production build and a normal server build succeeds. Full standard `node --test` is 767/767, affected Playwright 16/16, TypeScript/build/changed-file ESLint/diff check PASS. The production read-only preflight remeasured 22 bridge references, 70 SECURITY DEFINER functions, 7/7 compatibility defaults and one active CSK. Operational caller cutovers and DB changes remain 0. The separate 9E-B report contains the current deploy-readiness decision; 9E-C, 4D-2, 9D-5 and second tenant remain blocked.
+
 ## SAAS-9D-4D — FINAL PLAN
 
 Planning baseline: checkpoint `46dd54e2a9863d4f5684b6d01480c4ad2879327c`,
