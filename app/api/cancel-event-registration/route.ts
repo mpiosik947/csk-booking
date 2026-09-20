@@ -175,14 +175,23 @@ export async function POST(request: Request) {
     }
 
     const tenantSlug = new URL(request.url).searchParams.get("tenant");
-    if (tenantSlug !== null &&
-        !await tenantResourceMatches(supabase, tenantSlug, "event_registrations", registrationId)) {
-      return NextResponse.json({ error: "Nie znaleziono zapisu w tej lokalizacji." }, { status: 404 });
+    let selectedTenantId: string | null = null;
+    if (tenantSlug !== null) {
+      const { data: tenants, error: tenantError } = await supabase.rpc(
+        "resolve_active_tenant_by_slug_v1", { p_slug: tenantSlug }
+      );
+      const resolved: unknown = Array.isArray(tenants) && tenants.length === 1
+        ? tenants[0]?.tenant_id : null;
+      if (tenantError || typeof resolved !== "string" || !UUID_PATTERN.test(resolved) ||
+          !await tenantResourceMatches(supabase, tenantSlug, "event_registrations", registrationId)) {
+        return NextResponse.json({ error: "Nie znaleziono zapisu w tej lokalizacji." }, { status: 404 });
+      }
+      selectedTenantId = resolved;
     }
 
     const { data: rpcData, error: rpcError } = await supabase.rpc(
-      "cancel_event_registration",
-      { p_registration_id: registrationId }
+      selectedTenantId ? "cancel_event_registration_v2" : "cancel_event_registration",
+      { p_registration_id: registrationId, ...(selectedTenantId ? { p_tenant_id: selectedTenantId } : {}) }
     );
 
     if (rpcError) {
@@ -229,7 +238,7 @@ export async function POST(request: Request) {
     }
 
     try {
-      const promotionResult = await promoteEventReserve(rpcData.event_id);
+      const promotionResult = await promoteEventReserve(rpcData.event_id, selectedTenantId ?? undefined);
 
       if (!promotionResult.success) {
         console.error(

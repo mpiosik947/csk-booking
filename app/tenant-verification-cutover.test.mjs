@@ -4,10 +4,13 @@ import test from "node:test";
 
 const read = (path) => readFileSync(new URL(path, import.meta.url), "utf8");
 
-test("owner surfaces read tenant verification through the controlled RPC", () => {
+test("global Account/Dashboard do not read implicit tenant verification; legacy Booking remains separate", () => {
+  for (const path of ["./account/page.tsx", "./dashboard/page.tsx"]) {
+    assert.doesNotMatch(read(path), /get_my_active_tenant_verification_v1|active_single_tenant_id_v1/);
+  }
+  assert.match(read("./booking/BookingForm.tsx"), /get_my_active_tenant_verification_v1/);
   for (const path of ["./account/page.tsx", "./dashboard/page.tsx", "./booking/BookingForm.tsx"]) {
     const source = read(path);
-    assert.match(source, /get_my_active_tenant_verification_v1/);
     const profileSelects = [...source.matchAll(/\.from\("profiles"\)[\s\S]{0,1600}?\.select\(([\s\S]{0,1200}?)\)/g)];
     assert.ok(profileSelects.length > 0, `${path} must retain its owner profile read`);
     for (const [, selection] of profileSelects) {

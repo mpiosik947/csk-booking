@@ -10,6 +10,10 @@ import BookingPage from "@/app/booking/page";
 import EventsPage from "@/app/events/page";
 import MyReservationsPage from "@/app/my-reservations/page";
 import MyEventsPage from "@/app/my-events/page";
+import AdminEventsPage from "@/app/admin/events/page";
+import AdminLaneConfigurationPage from "@/app/admin/lane-configuration/page";
+import AdminReportsPage from "@/app/admin/reports/page";
+import AdminUsersPage from "@/app/admin/users/page";
 
 export default async function TenantModuleShell({
   params,
@@ -42,6 +46,18 @@ export default async function TenantModuleShell({
   if (route.path === "events") return <EventsPage tenantId={tenantId} tenantSlug={slug} />;
   if (route.path === "my-reservations") return <MyReservationsPage tenantId={tenantId} tenantSlug={slug} />;
   if (route.path === "my-events") return <MyEventsPage tenantId={tenantId} tenantSlug={slug} />;
+  if (route.kind === "staff" && route.path === "admin/events") {
+    return <AdminEventsPage tenantId={tenantId} tenantSlug={slug} />;
+  }
+  if (route.kind === "staff" && route.path === "admin/lane-configuration") {
+    return <AdminLaneConfigurationPage tenantId={tenantId} tenantSlug={slug} />;
+  }
+  if (route.kind === "staff" && route.path === "admin/reports") {
+    return <AdminReportsPage tenantId={tenantId} tenantSlug={slug} />;
+  }
+  if (route.kind === "staff" && route.path === "admin/users") {
+    return <AdminUsersPage tenantId={tenantId} tenantSlug={slug} />;
+  }
 
   const oldPath = legacyCskPath(slug, route);
   return (

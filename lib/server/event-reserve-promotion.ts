@@ -7,6 +7,7 @@ import { createClient } from "@supabase/supabase-js";
 
 type EventRecord = {
   id: string;
+  tenant_id: string;
   title: string | null;
   event_date: string | null;
   start_time: string | null;
@@ -18,6 +19,8 @@ type EventRecord = {
 
 type ReserveRegistration = {
   id: string;
+  tenant_id: string;
+  event_id: string;
   customer_email: string | null;
   customer_name: string | null;
 };
@@ -257,7 +260,8 @@ function formatPrice(price?: number | null) {
 // Obecna promocja może ponownie wygenerować tokeny przy ponownym wywołaniu.
 // Idempotencja zostanie wzmocniona w osobnym etapie.
 export async function promoteEventReserve(
-  eventId: string
+  eventId: string,
+  expectedTenantId?: string
 ): Promise<EventReservePromotionResult> {
   try {
     const supabase = getAdminSupabaseClient();
@@ -424,6 +428,7 @@ export async function promoteEventReserve(
       .select(
         `
           id,
+          tenant_id,
           title,
           event_date,
           start_time,
@@ -436,7 +441,8 @@ export async function promoteEventReserve(
       .eq("id", eventId)
       .maybeSingle();
 
-    if (eventError || !eventData) {
+    if (eventError || !eventData ||
+        (expectedTenantId && eventData.tenant_id !== expectedTenantId)) {
       await failPreparedPromotions("unexpected_error");
 
       return {
@@ -458,10 +464,11 @@ export async function promoteEventReserve(
     );
     const { data: registrationData, error: registrationError } = await supabase
       .from("event_registrations")
-      .select("id, customer_email, customer_name")
+      .select("id, tenant_id, event_id, customer_email, customer_name")
       .in("id", registrationIds);
 
-    if (registrationError) {
+    if (registrationError || registrationData?.length !== registrationIds.length ||
+        registrationData?.some((row) => row.tenant_id !== eventData.tenant_id || row.event_id !== eventId)) {
       await failPreparedPromotions("unexpected_error");
       logPromotionFailure("recipient_query", registrationError);
 

@@ -1,16 +1,14 @@
 ﻿"use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { supabase } from "../../lib/supabase";
 import {
   getProfileDisplayName,
   hasStructuredProfileName,
 } from "../../lib/profile-display-name";
 
-type Role = "admin" | "pracownik" | "instruktor" | "user";
-
 type ProfileData = {
-  role: Role | null;
   first_name: string | null;
   last_name: string | null;
   full_name: string | null;
@@ -22,11 +20,6 @@ type ProfileData = {
   house_number: string | null;
 };
 
-type TenantVerificationData = {
-  verification_status: string | null;
-  permissions_verified: boolean | null;
-};
-
 function hasValue(value: string | null | undefined) {
   return Boolean(value && value.trim().length > 0);
 }
@@ -34,11 +27,7 @@ function hasValue(value: string | null | undefined) {
 export default function DashboardPage() {
   const [email, setEmail] = useState("");
   const [fullName, setFullName] = useState("");
-  const [role, setRole] = useState<Role>("user");
-
   const [profileComplete, setProfileComplete] = useState(false);
-  const [verificationStatus, setVerificationStatus] = useState("");
-  const [permissionsVerified, setPermissionsVerified] = useState(false);
 
   const [loading, setLoading] = useState(true);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
@@ -75,17 +64,13 @@ export default function DashboardPage() {
       const { data: profile } = await supabase
         .from("profiles")
         .select(
-          "role, first_name, last_name, full_name, email, phone, postal_code, city, street, house_number"
+          "first_name, last_name, full_name, email, phone, postal_code, city, street, house_number"
         )
         .eq("user_id", user.id)
         .single();
 
       if (profile) {
         const profileData = profile as ProfileData;
-
-        if (profileData.role) {
-          setRole(profileData.role);
-        }
 
         const displayedName = getProfileDisplayName({
           first_name: profileData.first_name,
@@ -104,15 +89,6 @@ export default function DashboardPage() {
             hasValue(profileData.house_number)
         );
       }
-
-      const { data: verificationRows } = await supabase.rpc(
-        "get_my_active_tenant_verification_v1"
-      );
-      const tenantVerification = (
-        Array.isArray(verificationRows) ? verificationRows[0] : null
-      ) as TenantVerificationData | null;
-      setVerificationStatus(tenantVerification?.verification_status ?? "pending");
-      setPermissionsVerified(Boolean(tenantVerification?.permissions_verified));
 
       setLoading(false);
     }
@@ -174,12 +150,6 @@ export default function DashboardPage() {
     );
   }
 
-  const canAccessAdmin =
-    role === "admin" || role === "pracownik" || role === "instruktor";
-
-  const accountVerified =
-    verificationStatus === "verified" || permissionsVerified === true;
-
   return (
     <main className="min-h-screen bg-[#090b09] px-4 py-6 text-[#f2efe4] sm:px-6 sm:py-8">
       <section className="mx-auto max-w-6xl rounded-[2rem] border border-[#30372c] bg-[#141814] p-5 shadow-2xl shadow-black/20 sm:p-8">
@@ -236,7 +206,7 @@ export default function DashboardPage() {
           </div>
         )}
 
-        {profileComplete && !accountVerified && (
+        {profileComplete && (
           <div
             role="status"
             className="mt-6 rounded-2xl border border-[#806a32] bg-[#2b2618] p-5 sm:p-6"
@@ -246,8 +216,8 @@ export default function DashboardPage() {
             </h2>
 
             <p className="mt-2 max-w-3xl leading-7 text-[#e1c477]">
-              Konto oczekuje na weryfikację podczas pierwszej wizyty. Profil
-              uzupełniony nie oznacza jeszcze konta zweryfikowanego.
+              Weryfikacja uprawnień zależy od wybranej lokalizacji. Globalny panel
+              nie przedstawia statusu jednej strzelnicy jako statusu konta.
             </p>
           </div>
         )}
@@ -356,36 +326,23 @@ export default function DashboardPage() {
           </div>
         </section>
 
-        {canAccessAdmin && (
-          <section
-            aria-labelledby="admin-action-heading"
-            className="mt-6 rounded-2xl border border-[#30372c] bg-[#191e19] p-5"
-          >
-            <h2
-              id="admin-action-heading"
-              className="text-lg font-semibold text-[#d7c895]"
-            >
-              Panel administracyjny
-            </h2>
-            <p className="mt-2 text-sm leading-6 text-[#a9ada4]">
-              Zarządzanie rezerwacjami, eventami, check-in oraz obsługą systemu.
-            </p>
-            <a
-              href="/admin"
-              className="mt-4 inline-flex min-h-11 items-center rounded-xl border border-[#536143] px-5 py-3 text-sm font-semibold text-[#d7c895] transition hover:bg-[#20251d] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d7c895] focus-visible:ring-offset-2 focus-visible:ring-offset-[#191e19]"
-            >
-              Panel administracyjny
-            </a>
-          </section>
-        )}
+        <section aria-labelledby="location-heading" className="mt-6 rounded-2xl border border-[#30372c] bg-[#191e19] p-5">
+          <h2 id="location-heading" className="text-lg font-semibold text-[#d7c895]">Wybierz lokalizację</h2>
+          <p className="mt-2 text-sm leading-6 text-[#a9ada4]">
+            Funkcje obsługi i status weryfikacji są dostępne w kontekście wybranej lokalizacji.
+          </p>
+          <Link href="/t/csk" className="mt-4 inline-flex min-h-11 items-center rounded-xl border border-[#536143] px-5 py-3 text-sm font-semibold text-[#d7c895] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d7c895]">
+            CSK — przejdź do lokalizacji
+          </Link>
+        </section>
 
         <div className="mt-8 flex justify-end border-t border-[#30372c] pt-6">
-          <a
+          <Link
             href="/"
             className="inline-flex min-h-11 items-center justify-center rounded-xl border border-[#30372c] bg-[#191e19] px-5 py-3 text-sm font-semibold text-[#a9ada4] transition hover:border-[#536143] hover:bg-[#20251d] hover:text-[#f2efe4] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d7c895] focus-visible:ring-offset-2 focus-visible:ring-offset-[#141814]"
           >
             ← Strona główna
-          </a>
+          </Link>
         </div>
       </section>
     </main>

@@ -36,13 +36,6 @@ type ProfileData = {
 
 };
 
-type TenantVerificationData = {
-  verification_status: string | null;
-  permissions_verified: boolean | null;
-  permissions_verified_at: string | null;
-  updated_at: string | null;
-};
-
 type PermissionValues = {
   permissionSport: boolean;
   permissionCollector: boolean;
@@ -90,37 +83,6 @@ function havePermissionValuesChanged(
       currentValues.qualificationPzssLicense ||
     initialValues.qualificationHunter !== currentValues.qualificationHunter
   );
-}
-
-function getVerificationLabel(status: string) {
-  switch (status) {
-    case "verified":
-      return "Zweryfikowane";
-    case "pending":
-      return "Oczekuje na weryfikację";
-    case "rejected":
-      return "Wymaga poprawy";
-    case "niezweryfikowane":
-      return "Niezweryfikowane";
-    default:
-      return status || "Niezweryfikowane";
-  }
-}
-
-function getVerificationClass(status: string, permissionsVerified: boolean) {
-  if (status === "verified" && permissionsVerified) {
-    return "rounded-xl border border-[#3f6848] bg-[#1b2a1d] p-4 text-sm text-[#a9d4ad]";
-  }
-
-  if (status === "rejected") {
-    return "rounded-xl border border-[#744545] bg-[#2a1b1b] p-4 text-sm text-[#e0a0a0]";
-  }
-
-  if (status === "pending") {
-    return "rounded-xl border border-[#806a32] bg-[#2b2618] p-4 text-sm text-[#e1c477]";
-  }
-
-  return "rounded-xl border border-[#343a31] bg-[#171a17] p-4 text-sm text-[#a9ada4]";
 }
 
 function getMessageClass(message: string) {
@@ -220,20 +182,12 @@ export default function AccountPage() {
   const [initialPermissionValues, setInitialPermissionValues] =
     useState<PermissionValues | null>(null);
 
-  const [verificationStatus, setVerificationStatus] =
-    useState("niezweryfikowane");
-  const [permissionsVerified, setPermissionsVerified] = useState(false);
-  const [permissionsVerifiedAt, setPermissionsVerifiedAt] = useState("");
 
   const [newPassword, setNewPassword] = useState("");
   const [repeatPassword, setRepeatPassword] = useState("");
 
   const [message, setMessage] = useState("");
   const [isLoggedIn, setIsLoggedIn] = useState(false);
-
-  useEffect(() => {
-    loadUser();
-  }, []);
 
   async function loadUser() {
     setLoading(true);
@@ -311,24 +265,6 @@ export default function AccountPage() {
       return;
     }
 
-    const { data: verificationRows, error: verificationError } =
-      await supabase.rpc("get_my_active_tenant_verification_v1");
-
-    if (verificationError) {
-      reportClientError("Account tenant verification read failed", verificationError);
-      setMessage("Nie udało się pobrać statusu weryfikacji. Spróbuj ponownie.");
-      setLoading(false);
-      return;
-    }
-
-    const tenantVerification = (
-      Array.isArray(verificationRows) ? verificationRows[0] : null
-    ) as TenantVerificationData | null;
-
-    setVerificationStatus(tenantVerification?.verification_status ?? "pending");
-    setPermissionsVerified(Boolean(tenantVerification?.permissions_verified));
-    setPermissionsVerifiedAt(tenantVerification?.permissions_verified_at ?? "");
-
     if (profile) {
       const profileData = profile as ProfileData;
 
@@ -403,6 +339,11 @@ export default function AccountPage() {
 
     setLoading(false);
   }
+
+  useEffect(() => {
+    // Run the initial async read after the effect; avoid synchronous state updates.
+    void Promise.resolve().then(loadUser);
+  }, []);
 
   function validateProfile() {
     if (!phone.trim()) {
@@ -528,9 +469,6 @@ export default function AccountPage() {
     }
 
     if (permissionsChanged || profileResult.declarations_changed) {
-      setVerificationStatus(profileResult.verification_status ?? "pending");
-      setPermissionsVerified(profileResult.permissions_verified ?? false);
-      setPermissionsVerifiedAt(profileResult.permissions_verified_at ?? "");
       setInitialPermissionValues(currentPermissionValues);
       setMessage(
         "Dane zostały zapisane. Zmiana deklarowanych uprawnień wymaga ponownej weryfikacji przez pracownika."
@@ -954,40 +892,11 @@ export default function AccountPage() {
             </section>
 
             <section className="rounded-2xl border border-[#30372c] bg-[#191e19] p-4 sm:p-6">
-              <h2 className="mb-4 text-xl font-semibold text-[#f2efe4]">
-                Status weryfikacji
-              </h2>
-
-              <div
-                className={getVerificationClass(
-                  verificationStatus,
-                  permissionsVerified
-                )}
-              >
-                <p className="font-semibold">
-                  Konto: {getVerificationLabel(verificationStatus)}
-                </p>
-
-                <p className="mt-1">
-                  Uprawnienia:{" "}
-                  {permissionsVerified
-                    ? "sprawdzone przez obsługę"
-                    : "do sprawdzenia podczas wizyty"}
-                </p>
-
-                {permissionsVerifiedAt && (
-                  <p className="mt-1 text-xs opacity-80">
-                    Data weryfikacji:{" "}
-                    {new Date(permissionsVerifiedAt).toLocaleString("pl-PL")}
-                  </p>
-                )}
-
-                <p className="mt-3 text-xs opacity-80">
-                  Pełna możliwość korzystania z systemu może wymagać
-                  sprawdzenia uprawnień przez pracownika CSK podczas wizyty na
-                  strzelnicy.
-                </p>
-              </div>
+              <h2 className="mb-4 text-xl font-semibold text-[#f2efe4]">Weryfikacja w lokalizacji</h2>
+              <p className="text-sm leading-6 text-[#a9ada4]">
+                Status weryfikacji uprawnień dotyczy konkretnej strzelnicy. Sprawdź go po wybraniu lokalizacji;
+                ten globalny profil nie przedstawia statusu żadnej lokalizacji jako statusu całego konta.
+              </p>
             </section>
 
             <section className="rounded-2xl border border-[#30372c] bg-[#191e19] p-4 sm:p-6">

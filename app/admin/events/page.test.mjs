@@ -27,7 +27,7 @@ test("admin events uses the bounded backend event contract", async () => {
 
   assert.match(source, /type AdminEvent[\s\S]*from "\.\.\/\.\.\/\.\.\/lib\/admin\/events\/event-management"/);
   assert.match(source, /useState<AdminEvent\[\]>\(\[\]\)/);
-  assert.match(loadEvents, /\.rpc\("admin_list_events_v1"/);
+  assert.match(loadEvents, /selectedTenant \? "admin_list_events_v2" : "admin_list_events_v1"/);
   assert.match(loadEvents, /p_search:eventSearch\|\|null/);
   assert.match(loadEvents, /p_scope:eventScope/);
   assert.match(loadEvents, /p_sort:eventSortOrder/);
@@ -129,9 +129,9 @@ test("event status filter has safe empty states and preserves V2 management RPCs
   assert.match(source, /Brak minionych szkoleń\./);
   assert.match(source, /Brak nieaktywnych szkoleń\./);
   assert.match(source, /Brak szkoleń\./);
-  assert.match(source, /\.rpc\(\s*"admin_create_event_v2",\s*payload\s*\)/);
-  assert.match(source, /\.rpc\(\s*"admin_update_event_v2",\s*payload\.value\s*\)/);
-  assert.match(source, /\.rpc\(\s*"admin_set_event_active_v2",\s*payload\.value\s*\)/);
+  assert.match(source, /selectedTenant \? "admin_create_event_v3" : "admin_create_event_v2"/);
+  assert.match(source, /selectedTenant \? "admin_update_event_v3" : "admin_update_event_v2"/);
+  assert.match(source, /selectedTenant \? "admin_set_event_active_v3" : "admin_set_event_active_v2"/);
 });
 
 test("event registration payment uses only the controlled minimal RPC", async () => {
@@ -144,7 +144,7 @@ test("event registration payment uses only the controlled minimal RPC", async ()
 
   assert.match(
     paymentAction,
-    /\.rpc\(\s*"mark_event_registration_paid",\s*\{ p_registration_id: registrationId \}\s*\)/
+    /selectedTenant \? "mark_event_registration_paid_v2" : "mark_event_registration_paid"/
   );
   assert.doesNotMatch(paymentAction, /\.from\("event_registrations"\)/);
   assert.doesNotMatch(paymentAction, /\.update\(|\.insert\(|\.delete\(|\.upsert\(/);
@@ -158,7 +158,7 @@ test("event registration payment uses only the controlled minimal RPC", async ()
   assert.match(paymentAction, /data\.new_payment_status !== "paid_on_site"/);
   assert.match(paymentAction, /data\.event_id !== selectedEventId/);
   assert.match(paymentAction, /finally[\s\S]*endRegistrationAction\(registrationId\)/);
-  assert.equal((paymentAction.match(/mark_event_registration_paid/g) ?? []).length, 1);
+  assert.equal((paymentAction.match(/\.rpc\(/g) ?? []).length, 1);
 });
 
 test("participant management requests and validates only the minimal operational DTO", async () => {
@@ -169,7 +169,7 @@ test("participant management requests and validates only the minimal operational
     "function openRegistrations("
   );
 
-  assert.match(loadRegistrations, /\.rpc\("admin_list_event_registrations_v1"/);
+  assert.match(loadRegistrations, /selectedTenant \? "admin_list_event_registrations_v2" : "admin_list_event_registrations_v1"/);
   assert.doesNotMatch(loadRegistrations, /\.select\(\s*["'`]\*["'`]\s*\)/);
   assert.match(loadRegistrations, /p_status:nextStatus\|\|null/);
   assert.match(loadRegistrations, /p_payment_status:nextPayment\|\|null/);
@@ -280,15 +280,15 @@ test("create, edit, and toggle use only hierarchy-aware V2 RPCs while public eve
 
   assert.match(openCreateConfirmation, /buildCreateEventPayload\(form\.value\)/);
   assert.doesNotMatch(openCreateConfirmation, /\.rpc\("admin_create_event_v2", payload\)/);
-  assert.match(confirmCreateEvent, /\.rpc\(\s*"admin_create_event_v2",\s*payload\s*\)/);
+  assert.match(confirmCreateEvent, /selectedTenant \? "admin_create_event_v3" : "admin_create_event_v2"/);
   assert.doesNotMatch(confirmCreateEvent, /\.from\("events"\)\.insert\(/);
   assert.doesNotMatch(confirmCreateEvent, /error\.message/);
   assert.match(saveEditedEvent, /buildUpdateEventPayload\(eventId, form\.value\)/);
-  assert.match(saveEditedEvent, /\.rpc\(\s*"admin_update_event_v2",\s*payload\.value\s*\)/);
+  assert.match(saveEditedEvent, /selectedTenant \? "admin_update_event_v3" : "admin_update_event_v2"/);
   assert.doesNotMatch(saveEditedEvent, /\.from\("events"\)[\s\S]*\.update\(/);
   assert.doesNotMatch(saveEditedEvent, /error\.message/);
   assert.match(toggleEvent, /buildSetEventActivePayload\(eventId, targetStatus\)/);
-  assert.match(toggleEvent, /\.rpc\(\s*"admin_set_event_active_v2",\s*payload\.value\s*\)/);
+  assert.match(toggleEvent, /selectedTenant \? "admin_set_event_active_v3" : "admin_set_event_active_v2"/);
   assert.doesNotMatch(toggleEvent, /\.from\("events"\)[\s\S]*\.update\(/);
   assert.doesNotMatch(toggleEvent, /error\.message/);
   assert.doesNotMatch(adminSource, /["']admin_create_event["']/);
@@ -400,7 +400,7 @@ test("active lanes load only for management roles with a fail-closed stable cont
   assert.match(source, /return \(\) => \{[\s\S]*componentMountedRef\.current = false[\s\S]*activeLanesRequestRef\.current \+= 1/);
   assert.match(loadRole, /role === "admin" \|\| role === "pracownik"/);
   assert.match(loadRole, /void loadActiveLanes\(\)/);
-  assert.doesNotMatch(loadRole, /instruktor[\s\S]*loadActiveLanes/);
+  assert.match(loadRole, /if \(role === "admin" \|\| role === "pracownik"\) \{\s*void loadActiveLanes\(\)/);
   assert.match(loadActiveLanes, /\.from\("shooting_lanes"\)/);
   assert.match(
     loadActiveLanes,
@@ -538,7 +538,7 @@ test("edit form preserves assigned inactive lanes and saves only through admin_u
   assert.match(saveEditedEvent, /validateEventRpcResult\(data\)/);
   assert.match(saveEditedEvent, /result\.ok && result\.value\.event_id !== eventId/);
   assert.match(saveEditedEvent, /getEventManagementMessage\(/);
-  assert.match(saveEditedEvent, /\.rpc\(\s*"admin_update_event_v2",\s*payload\.value\s*\)/);
+  assert.match(saveEditedEvent, /selectedTenant \? "admin_update_event_v3" : "admin_update_event_v2"/);
   assert.doesNotMatch(saveEditedEvent, /\.from\("events"\)[\s\S]*\.update\(/);
   assert.match(saveEditedEvent, /result\.value\.code === "updated"[\s\S]*void loadEvents\(\)[\s\S]*resetEditingState\(\)/);
   assert.match(saveEditedEvent, /result\.value\.code === "no_change"[\s\S]*resetEditingState\(\)/);

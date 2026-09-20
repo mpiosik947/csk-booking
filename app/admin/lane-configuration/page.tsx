@@ -474,7 +474,8 @@ function ConfigurationDetailsDialog({
   );
 }
 
-export default function AdminLaneConfigurationPage() {
+export default function AdminLaneConfigurationPage({ tenantId, tenantSlug }: Readonly<{ tenantId?: string; tenantSlug?: string }> = {}) {
+  const selectedTenant = tenantId !== undefined;
   const [snapshot, setSnapshot] = useState<AdminLaneConfigurationSnapshot | null>(
     null
   );
@@ -509,7 +510,9 @@ export default function AdminLaneConfigurationPage() {
       return;
     }
 
-    const { data: roleData, error: roleError } = await supabase.rpc("get_my_role");
+    const { data: roleData, error: roleError } = selectedTenant
+      ? await supabase.rpc("get_my_tenant_role_v1", { p_tenant_id: tenantId })
+      : await supabase.rpc("get_my_role");
     if (requestId !== requestRef.current) return;
     if (roleError || roleData !== "admin") {
       setSnapshot(null);
@@ -519,7 +522,8 @@ export default function AdminLaneConfigurationPage() {
     }
 
     const { data, error } = await supabase.rpc(
-      "admin_get_lane_booking_configuration_v2"
+      selectedTenant ? "admin_get_lane_booking_configuration_v3" : "admin_get_lane_booking_configuration_v2",
+      selectedTenant ? { p_tenant_id: tenantId } : {}
     );
     if (requestId !== requestRef.current) return;
 
@@ -540,7 +544,7 @@ export default function AdminLaneConfigurationPage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [selectedTenant, tenantId]);
 
   useEffect(() => {
     const timeoutId = window.setTimeout(() => {
@@ -648,8 +652,9 @@ export default function AdminLaneConfigurationPage() {
       acknowledgeFutureObligations: boolean
     ) => {
       const { data, error } = await supabase.rpc(
-        "admin_set_lane_booking_family_configuration_v2",
+        selectedTenant ? "admin_set_lane_booking_family_configuration_v3" : "admin_set_lane_booking_family_configuration_v2",
         {
+          ...(selectedTenant ? { p_tenant_id: tenantId } : {}),
           p_root_lane_id: rootLaneId,
           p_expected_version: expectedVersion,
           p_resources: payload,
@@ -662,7 +667,7 @@ export default function AdminLaneConfigurationPage() {
       }
       return parseLaneConfigurationWriteResult(data);
     },
-    []
+    [selectedTenant, tenantId]
   );
 
   const completeEditor = useCallback(
@@ -679,8 +684,8 @@ export default function AdminLaneConfigurationPage() {
   const createLaneFamily = useCallback(
     async (payload: LaneFamilyCreateWritePayload) => {
       const { data, error } = await supabase.rpc(
-        "admin_create_lane_booking_family_v1",
-        { p_family: payload }
+        selectedTenant ? "admin_create_lane_booking_family_v2" : "admin_create_lane_booking_family_v1",
+        { p_family: payload, ...(selectedTenant ? { p_tenant_id: tenantId } : {}) }
       );
       if (error) {
         console.error("Admin lane family creation failed:", error.code);
@@ -688,7 +693,7 @@ export default function AdminLaneConfigurationPage() {
       }
       return parseLaneFamilyCreateResult(data);
     },
-    []
+    [selectedTenant, tenantId]
   );
 
   const completeCreation = useCallback(
@@ -742,7 +747,7 @@ export default function AdminLaneConfigurationPage() {
             {loading ? "Odświeżanie…" : "Odśwież"}
           </button>
           <Link
-            href="/admin"
+            href={selectedTenant ? `/t/${tenantSlug}` : "/admin"}
             className="inline-flex min-h-11 items-center justify-center rounded-xl border border-[#3d4638] px-4 py-2 text-sm font-semibold text-[#c7cbbf] transition hover:bg-[#1d211b] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d7c895]"
           >
             ← Wróć do panelu

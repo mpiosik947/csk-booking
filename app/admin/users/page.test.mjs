@@ -8,10 +8,15 @@ const pagePath = new URL("./page.tsx", import.meta.url);
 test("admin users keeps hardened server-side read and writer RPCs", async () => {
   const source = await readFile(pagePath, "utf8");
 
-  assert.match(source, /rpc\("admin_list_users_v1"/);
-  assert.match(source, /rpc\("admin_set_user_role_v1"/);
-  assert.match(source, /rpc\("admin_set_user_note_v1"/);
-  assert.match(source, /rpc\("update_profile_verification"/);
+  for (const [versioned, legacy] of [
+    ["admin_list_users_v2", "admin_list_users_v1"],
+    ["admin_set_user_role_v2", "admin_set_user_role_v1"],
+    ["admin_set_user_note_v2", "admin_set_user_note_v1"],
+    ["update_tenant_profile_verification_v2", "update_profile_verification"],
+  ]) {
+    assert.match(source, new RegExp(`selectedTenant \\? "${versioned}" : "${legacy}"`));
+  }
+  assert.match(source, /p_tenant_id: tenantId/);
   assert.match(source, /p_limit:\s*PAGE_SIZE/);
   assert.match(source, /p_offset:\s*page \* PAGE_SIZE/);
   assert.match(source, /p_search:\s*search\.trim\(\) \|\| null/);
@@ -68,8 +73,8 @@ test("details are an accessible dialog with compact semantic sections", async ()
   }
   assert.match(source, /if \(!value\?\.trim\(\)\) return null/);
   assert.match(source, /getAddress\(selectedProfile\)\.length > 0/);
-  assert.match(source, /rpc\("update_profile_identity"/);
-  assert.match(source, /rpc\("update_profile_contact_details"/);
+  assert.match(source, /selectedTenant \? "update_tenant_profile_identity_v2" : "update_profile_identity"/);
+  assert.match(source, /selectedTenant \? "update_tenant_profile_contact_details_v2" : "update_profile_contact_details"/);
   assert.match(source, /Zapisz dane podstawowe/);
   assert.match(source, /Zapisz dane kontaktowe/);
 });

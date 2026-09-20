@@ -34,8 +34,8 @@ test("account passes only contact and declaration fields to the self-service RPC
   assert.doesNotMatch(source, /p_(?:user_id|role|verification_status|admin_note|created_at)\s*:/);
 });
 
-test("account keeps the declaration re-verification UX", () => {
+test("account keeps the declaration re-verification UX without global tenant status", () => {
   assert.match(source, /profileResult\.declarations_changed/);
-  assert.match(source, /setVerificationStatus\(profileResult\.verification_status \?\? "pending"\)/);
+  assert.doesNotMatch(source, /setVerificationStatus|get_my_active_tenant_verification_v1/);
   assert.match(source, /Zmiana deklarowanych uprawnień wymaga ponownej weryfikacji/);
 });

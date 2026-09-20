@@ -28,7 +28,7 @@ test("runtime uses only the admin V2 read contract", async () => {
   const [page, editor, , , helper] = await sources();
   const runtime = `${page}\n${editor}`;
 
-  assert.match(page, /rpc\(\s*"admin_get_lane_booking_configuration_v2"/);
+  assert.match(page, /selectedTenant \? "admin_get_lane_booking_configuration_v3" : "admin_get_lane_booking_configuration_v2"/);
   assert.doesNotMatch(runtime, /admin_get_lane_booking_configuration_v1/);
   assert.match(helper, /ADMIN_LANE_CONFIGURATION_CONTRACT_VERSION = 2/);
   assert.match(helper, /value\.contract_version !== ADMIN_LANE_CONFIGURATION_CONTRACT_VERSION/);
@@ -57,8 +57,8 @@ test("existing edits and new-family creation use only their controlled RPCs", as
   const [page, editor, , , , createDialog] = await sources();
   const runtime = `${page}\n${editor}\n${createDialog}`;
 
-  assert.match(page, /rpc\(\s*"admin_set_lane_booking_family_configuration_v2"/);
-  assert.match(page, /rpc\(\s*"admin_create_lane_booking_family_v1"/);
+  assert.match(page, /selectedTenant \? "admin_set_lane_booking_family_configuration_v3" : "admin_set_lane_booking_family_configuration_v2"/);
+  assert.match(page, /selectedTenant \? "admin_create_lane_booking_family_v2" : "admin_create_lane_booking_family_v1"/);
   assert.equal(
     [...runtime.matchAll(/admin_set_lane_booking_family_configuration_v2/g)].length,
     1

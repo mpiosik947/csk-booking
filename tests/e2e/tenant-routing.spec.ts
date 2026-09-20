@@ -42,7 +42,7 @@ test("Phase 1 booking uses the tenant route without widening staff authority", a
   await expect(page).not.toHaveURL(/\/t\//);
 });
 
-test("authenticated tenant owner routes use scoped readers while account and dashboard stay legacy", async ({ page }) => {
+test("authenticated tenant owner routes use scoped readers while global account/dashboard avoid tenant verification", async ({ page }) => {
   const marker = randomUUID();
   const email = `phase1-routing-${marker}@example.invalid`;
   const password = `Local-Phase1-${marker}!Aa1`;
@@ -109,7 +109,7 @@ test("authenticated tenant owner routes use scoped readers while account and das
     await expect(page.getByRole("heading", { name: /Moje konto|Konto/ })).toBeVisible();
     await page.goto("/dashboard");
     await expect(page).toHaveURL(/\/dashboard$/);
-    await expect.poll(() => legacyCalls.includes("get_my_active_tenant_verification_v1")).toBe(true);
+    expect(legacyCalls).toEqual([]);
   } finally {
     const { error: cleanupError } = await service.auth.admin.deleteUser(data.user.id);
     if (cleanupError) throw new Error(`Cannot clean local Phase 1 user: ${cleanupError.message}`);
