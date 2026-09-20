@@ -3,6 +3,8 @@ import { spawn, spawnSync } from "node:child_process";
 
 const container = "supabase_db_csk-booking";
 const tenant = "c5c00000-0000-4000-8000-000000000001";
+// Reuse the same local race fixture for the C2-D versioned tenant contracts.
+const selectedTenant = process.argv.includes("--selected-tenant");
 const runId = randomUUID().replaceAll("-", "");
 const adminA = randomUUID();
 const adminB = randomUUID();
@@ -23,7 +25,7 @@ function roleCall(actor, target) {
 select pg_catalog.set_config('request.jwt.claims',pg_catalog.jsonb_build_object('sub','${actor}','role','authenticated')::text,true);
 select pg_catalog.set_config('request.jwt.claim.sub','${actor}',true);
 set local role authenticated;
-select public.admin_set_user_role_v1('${target}'::uuid,'user');
+select public.${selectedTenant ? "admin_set_user_role_v2" : "admin_set_user_role_v1"}(${selectedTenant ? `'${tenant}'::uuid,` : ""}'${target}'::uuid,'user');
 commit;`;
   return new Promise((resolve, reject) => {
     const child = spawn("docker", ["exec", "-i", container, "psql", "-v", "ON_ERROR_STOP=1", "-U", "postgres", "-d", "postgres", "-At"]);
@@ -86,8 +88,8 @@ try {
   console.log("SAAS9D4B1B_CONCURRENCY_PASS active_admins=1 changed_audits=1 deadlocks=0 contamination=0");
   const remainingAdmin = psqlSync(`select user_id from public.tenant_memberships where tenant_id='${tenant}' and status='active' and role='admin' and user_id in('${adminA}'::uuid,'${adminB}'::uuid);`);
   await Promise.all([
-    profileCall(remainingAdmin, `public.update_profile_identity('${customer}'::uuid,'Concurrent','Identity')`),
-    profileCall(remainingAdmin, `public.update_profile_contact_details('${customer}'::uuid,'555000111','00-001','Warszawa','Concurrent','1',null)`),
+    profileCall(remainingAdmin, `public.${selectedTenant ? "update_tenant_profile_identity_v2" : "update_profile_identity"}(${selectedTenant ? `'${tenant}'::uuid,` : ""}'${customer}'::uuid,'Concurrent','Identity')`),
+    profileCall(remainingAdmin, `public.${selectedTenant ? "update_tenant_profile_contact_details_v2" : "update_profile_contact_details"}(${selectedTenant ? `'${tenant}'::uuid,` : ""}'${customer}'::uuid,'555000111','00-001','Warszawa','Concurrent','1',null)`),
   ]);
   const profileState = psqlSync(`select (first_name='Concurrent' and last_name='Identity' and phone='555000111')::int from public.profiles where user_id='${customer}'::uuid;`);
   const profileAudits = Number(psqlSync(`select count(*) from public.audit_logs where target_id='${customer}'::uuid and action in('tenant_user_identity_updated','tenant_user_contact_updated');`));

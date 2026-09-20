@@ -16,7 +16,7 @@ test("update_profile_verification has exactly one active application caller", ()
     "app/api/send-reservation-cancellation/route.ts",
   ];
   const callers = files.filter((file) =>
-    /rpc\("update_profile_verification"/.test(read(file)),
+    /selectedTenant \? "update_tenant_profile_verification_v2" : "update_profile_verification"/.test(read(file)),
   );
   assert.deepEqual(callers, ["app/admin/users/page.tsx"]);
 });

@@ -271,7 +271,7 @@ begin
       join pg_catalog.pg_namespace namespace on namespace.oid=procedure.pronamespace
       where namespace.nspname='public' and procedure.prosecdef
         and procedure.proname like '%tenant%'
-        and procedure.proname not in ('is_tenant_member_v1','has_tenant_role_v1','get_my_tenant_role_v1','active_single_tenant_id_v1','is_active_public_tenant_v1','get_my_active_tenant_verification_v1','resolve_active_tenant_by_slug_v1','get_my_tenant_verification_v2')
+        and procedure.proname not in ('is_tenant_member_v1','has_tenant_role_v1','get_my_tenant_role_v1','active_single_tenant_id_v1','is_active_public_tenant_v1','get_my_active_tenant_verification_v1','resolve_active_tenant_by_slug_v1','get_my_tenant_verification_v2','update_tenant_profile_verification_v2','update_tenant_profile_identity_v2','update_tenant_profile_contact_details_v2')
     ),
     'No tenant management writer may be introduced in SAAS-9C-1.');
 

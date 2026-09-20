@@ -27,6 +27,30 @@ create temporary table expected_function_acl(
 ) on commit drop;
 
 insert into expected_function_acl values
+  -- SAAS-9E-C Phase 2: exact versioned RPC/closed-core inventory.
+  ('public.admin_list_events_v2(uuid,text,text,text,integer,integer)','C',false,true,false),
+  ('public.admin_create_event_v3(uuid,text,text,date,time without time zone,time without time zone,text,numeric,integer,uuid[])','C',false,true,false),
+  ('public.admin_create_event_v3__saas9ec2a_core(uuid,text,text,date,time without time zone,time without time zone,text,numeric,integer,uuid[])','A',false,false,false),
+  ('public.admin_list_event_registrations_v2(uuid,uuid,text,text,integer,integer)','C',false,true,false),
+  ('public.admin_update_event_v3(uuid,uuid,text,text,date,time without time zone,time without time zone,text,numeric,integer,uuid[])','C',false,true,false),
+  ('public.admin_set_event_active_v3(uuid,uuid,boolean)','C',false,true,false),
+  ('public.approve_event_registration_v2(uuid,uuid)','C',false,true,false),
+  ('public.cancel_event_registration_v2(uuid,uuid)','B',false,true,false),
+  ('public.mark_event_registration_paid_v2(uuid,uuid)','C',false,true,false),
+  ('public.admin_get_lane_booking_configuration_v3__c2b_resource(uuid)','A',false,false,false),
+  ('public.admin_get_lane_booking_configuration_v3__saas9ec2b_core(uuid)','A',false,false,false),
+  ('public.admin_create_lane_booking_family_v2__saas9ec2b_core(uuid,jsonb)','A',false,false,false),
+  ('public.admin_get_lane_booking_configuration_v3(uuid)','C',false,true,false),
+  ('public.admin_create_lane_booking_family_v2(uuid,jsonb)','C',false,true,false),
+  ('public.admin_set_lane_booking_family_configuration_v3(uuid,uuid,bigint,jsonb,boolean)','C',false,true,false),
+  ('public.admin_get_reservation_report_v3(uuid,date,date,uuid,text,text,text,integer,integer)','C',false,true,false),
+  ('public.admin_get_reservation_report_export_v2(uuid,date,date,uuid,text,text,text)','C',false,true,false),
+  ('public.admin_list_users_v2(uuid,integer,integer,text,text,text,text)','C',false,true,false),
+  ('public.admin_set_user_role_v2(uuid,uuid,text)','C',false,true,false),
+  ('public.admin_set_user_note_v2(uuid,uuid,text)','C',false,true,false),
+  ('public.update_tenant_profile_verification_v2(uuid,uuid,text,text)','C',false,true,false),
+  ('public.update_tenant_profile_identity_v2(uuid,uuid,text,text)','C',false,true,false),
+  ('public.update_tenant_profile_contact_details_v2(uuid,uuid,text,text,text,text,text,text)','C',false,true,false),
   ('public._backfill_csk_tenant_user_verifications_v1()','A',false,false,false),
   ('public._apply_tenant_user_verification_v1(uuid,uuid,text,text,text,uuid)','A',false,false,false),
   ('public._tenant_verification_status_for_lane_v1(uuid,uuid)','A',false,false,false),
@@ -247,8 +271,8 @@ begin
     and procedure.proname<>'csk_sec002_default_acl_probe';
 
   perform pg_temp.record_result(1,'Complete public function inventory',
-    (select pg_catalog.count(*)=129 from pg_temp.expected_function_acl)
-    and v_actual_count=129
+    (select pg_catalog.count(*)=152 from pg_temp.expected_function_acl)
+    and v_actual_count=152
     and not exists(
       select 1 from pg_temp.expected_function_acl expected
       where pg_catalog.to_regprocedure(expected.signature) is null
@@ -264,7 +288,7 @@ begin
           where pg_catalog.to_regprocedure(expected.signature)=procedure.oid
         )
     ),
-    'The exact 129-function inventory has no missing or unexpected signature.');
+    'The exact 152-function inventory has no missing or unexpected signature.');
 
   perform pg_temp.record_result(2,'PUBLIC executes no public function',
     not exists(
@@ -294,8 +318,8 @@ begin
       where pg_catalog.has_function_privilege('authenticated',expected.signature,'EXECUTE')
         is distinct from expected.authenticated_execute
     )
-    and (select pg_catalog.count(*)=60 from pg_temp.expected_function_acl where authenticated_execute),
-    'authenticated has exactly the 60 user, policy-helper and internally authorized RPC grants.');
+    and (select pg_catalog.count(*)=79 from pg_temp.expected_function_acl where authenticated_execute),
+    'authenticated has exactly the 79 user, policy-helper and internally authorized RPC grants.');
 
   perform pg_temp.record_result(5,'Exact service_role ACL matrix',
     not exists(
@@ -357,14 +381,14 @@ begin
     'Future functions created by postgres receive no client or PUBLIC EXECUTE.');
 
   perform pg_temp.record_result(8,'Application function creator scope is exact',
-    (select pg_catalog.count(*)=129
+    (select pg_catalog.count(*)=152
       from pg_catalog.pg_proc procedure
       join pg_catalog.pg_namespace namespace on namespace.oid=procedure.pronamespace
       join pg_catalog.pg_roles owner_role on owner_role.oid=procedure.proowner
       where namespace.nspname='public' and procedure.prokind='f'
         and procedure.proname<>'csk_sec002_default_acl_probe'
         and owner_role.rolname='postgres'),
-    'All 129 application functions are owned by postgres, whose public-schema defaults are hardened.');
+    'All 152 application functions are owned by postgres, whose public-schema defaults are hardened.');
 
   perform pg_temp.record_result(9,'New function inherits owner-only execution',
     not pg_catalog.has_function_privilege('anon','public.csk_sec002_default_acl_probe()','EXECUTE')

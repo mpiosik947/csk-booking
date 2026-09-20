@@ -6886,3 +6886,321 @@ READY FOR PRODUCTION WRITE: **NO**
 SECOND TENANT: **NO-GO**
 
 SEC-004: **OPEN**
+
+## SAAS-9E-C PHASE 2 — IMPLEMENTATION REVIEW (post-Phase-1 checkpoint; plan only)
+
+Checkpoint: `main` and `origin/main` both `8e97858107d113b170a9fd5ca957572bf19d37d1`, divergence 0/0. Phase 1 production/checkpoint is accepted. The Phase 1 production inventory is **76 SECURITY DEFINER**, **22 stored bridge definitions**, **7/7 CSK compatibility defaults**, exactly one active CSK tenant and **20 active legacy source call sites** (19 UI, one reservation ICS server caller). Those are different units: the original inventory has 15 unique RPC names at 17 app call sites; C2 owns 12 new staff contracts at 12 old staff call sites, plus two additional Account/Dashboard calls to the already-deployed `get_my_tenant_verification_v2(uuid)`. No migration, production catalog mutation, application cutover or second tenant is authorized by this review.
+
+### Route decision and explicit caller allocation
+
+`T` is the active tenant resolved by the server from the canonical `/t/[slug]` route, then independently validated inside every DB contract. An argument `p_tenant_id` selects a scope but is **not** authority; browser JSON, localStorage, a preference cookie, global `profiles.role` and a bare target `user_id` confer no access. For old global URLs, do not mount a legacy page under a foreign tenant route. The proposed C2 app cutover makes `/t/[slug]/admin/{events,lane-configuration,reports,users}` real tenant-aware surfaces rather than the current staff placeholder linking to `/admin/...`; it also audits all direct reads and mutations below. Old `/admin/*` operational URLs must redirect to canonical `/t/csk/admin/*` only while exactly one active CSK exists and the user has the corresponding active CSK membership. Otherwise fail closed. The route resolver is a defense in depth, never a replacement for DB authorization.
+
+The Account/Dashboard choice is deliberately different: the global `/account` remains the **account-wide** profile/export/delete/password surface, and `/dashboard` remains global navigation. Their tenant verification badges must no longer silently imply CSK for all future tenants. Add selected-tenant verification presentation under server-validated `/t/[slug]/account` and `/t/[slug]/dashboard` (or an equivalent separately reviewed tenant-bound component), using the **existing C1 RPC** `get_my_tenant_verification_v2(uuid)` and `auth.uid()`; remove the old bridge verification reads from the global displays or display a neutral tenant-selection state. Do not move account-wide export, anonymization, Auth deletion or future leave-tenant into a tenant-only action. Routing for these two URLs is **not implemented today** in `lib/tenant-routing.ts`; this is mandatory C2 app work, not a claim that the routes already function. If a selected-tenant account/dashboard UI cannot be made unambiguous without changing global account semantics, **stop the C2 app cutover for these sites and re-review**, not implicitly fall back to CSK.
+
+The table records every one of the **14 original C2 sites**; line references are from the checkpoint and must be rediscovered before editing. `G` means current exact-single-active bridge, `R` means persisted resource relation; every target uses server-resolved T plus independent DB verification. The old source call must be removed or made unreachable after its selected-T counterpart is live; merely adding a parallel branch does not reduce the active-legacy metric.
+
+| RPC contract / signature | Caller file and call site | Current → target tenant source | Class; resource-bound?; membership | Bridge now?; C2 app/DB action |
+|---|---|---|---|---|
+| `get_my_active_tenant_verification_v1()` → deployed `get_my_tenant_verification_v2(uuid)` | `app/account/page.tsx:315` | G → server T for tenant verification only | USER; owner `auth.uid()`; no staff membership | yes; tenant display/routing app only; account-wide actions remain global |
+| same | `app/dashboard/page.tsx:108` | G → server T for tenant verification only | USER; owner; no staff membership | yes; tenant dashboard display/routing app only |
+| `admin_list_events_v1(text,text,text,integer,integer)` | `app/admin/events/page.tsx:479` | G → T | STAFF; no input resource; active existing admin/employee scope | yes; new tenant-scoped list DB + app |
+| `admin_create_event_v2(text,text,date,time,time,text,numeric,integer,uuid[])` | `app/admin/events/page.tsx:640` | G → T and every supplied lane R=T | STAFF; resource-bound lane set; active existing admin/employee scope | yes; new atomic create DB + app |
+| `admin_get_lane_booking_configuration_v2()` | `app/admin/lane-configuration/page.tsx:521` | G → T | STAFF; no input resource; active admin | yes; new tenant config reader DB + app |
+| `admin_create_lane_booking_family_v1(jsonb)` | `app/admin/lane-configuration/page.tsx:681` | G → T and family/root/children R=T | STAFF; resource-bound hierarchy; active admin | yes; new atomic family writer DB + app |
+| `admin_get_reservation_report_v2(date,date,uuid,text,text,text,integer,integer)` | `app/admin/reports/page.tsx:143` | G → T before aggregation/page | STAFF; optional lane R=T; active admin (employee DENY) | yes; tenant-scoped KPI/details DB + app |
+| `admin_get_reservation_report_export_v1(date,date,uuid,text,text,text)` | `app/admin/reports/page.tsx:188` | G → T before export | STAFF; optional lane R=T; active admin | yes; tenant-scoped bounded export DB + app |
+| `admin_list_users_v1(integer,integer,text,text,text,text)` | `app/admin/users/page.tsx:364` | G → T before eligible-user set/filter/page | STAFF; operational relationship R; active admin | yes; least-PII tenant list DB + app |
+| `admin_set_user_role_v1(uuid,text)` | `app/admin/users/page.tsx:514` | G → T and target tenant membership R | STAFF; membership resource; active admin | yes; tenant-local role/last-admin DB + app |
+| `admin_set_user_note_v1(uuid,text)` | `app/admin/users/page.tsx:565` | G → T and target relationship R | STAFF; tenant note resource; active admin | yes; tenant note/audit DB + app |
+| `update_profile_verification(uuid,text,text)` | `app/admin/users/page.tsx:614` | G → T and target relationship R | STAFF; tenant verification; active admin | yes; versioned tenant writer DB + app |
+| `update_profile_identity(uuid,text,text)` | `app/admin/users/page.tsx:665` | G → T and target relationship R | STAFF; global identity fields, tenant operational relation; active admin | yes; separately reviewed least-privilege writer DB + app |
+| `update_profile_contact_details(uuid,text,text,text,text,text,text)` | `app/admin/users/page.tsx:712` | G → T and target relationship R | STAFF; contact fields, existing constrained employee scope only | yes; separately reviewed least-privilege writer DB + app |
+
+These 14 source locations are **not 14 new RPCs**: the first two reuse one deployed C1 owner contract, while the remaining twelve require twelve versioned tenant-explicit contracts. The old functions/signatures/ACL remain compatible for the old app during DB-first rollout. The exact new SQL names, parameter defaults, DTO names, owner/search_path/ACL, and approved normalized input fingerprints are **freeze gates in the local implementation review**; do not treat illustrative suffixes from the earlier FINAL PLAN as an existing catalog contract. Current old implementations include the event INVOKER cores (`20260913100000`), the hardened family reader/writer (`20260916100000`), report core (`20260918100000`), tenant notes (`20260919100000`), role/identity/contact (`20260919150000`), and tenant verification cutover/legacy closure (`20260920150000`, `20260921100000`). Re-read their latest live definitions and compare normalized fingerprints in the preflight before migration authoring/deployment.
+
+### Authority, least privilege and expected SECURITY DEFINER delta
+
+| C2 group (number of new privileged entry points) | Why a privileged wrapper rather than direct client DML / broad RLS | Required scope and regression gate |
+|---|---|---|
+| Event list/create (2) | Historical/inactive admin read and multi-table event/lane creation cannot be granted as broad browser SELECT/INSERT; keep closed INVOKER core where safe. | T-filter **before** count/page; write T explicitly; all lanes T; old event DTO, pagination and employee scope; no instructor widening. |
+| Lane configuration/create (2) | Configuration/rules/pricing and atomic root/child family mutation require restricted privileged access; direct client DML is prohibited. | Admin membership T; every root/child/reference T; explicit ownership, lock/concurrency and unique hierarchy checks; unchanged DTO and ordering. |
+| Report aggregate/export (2) | Aggregate over reservation/payment state and bounded export need privileged, constrained read; not raw browser fetch. | Admin only; tenant predicate in the relational core **before joins/aggregation/page/export**, optional resource belongs to T; 50-row page, 5000-row CSV cap/injection protection and no PII expansion. |
+| User list and role/note/verification/identity/contact writers (6) | Private profile/membership/note data and audited atomic mutations cannot be opened by generic table RLS/ACL. | Admin except existing constrained employee contact scope; approved reservation/event-registration/membership operational relationship; B-only and unrelated users DENY; tenant-local role/note/verification and audit T; identity/contact are global fields modified only under proven related-user authority, never a cross-tenant information oracle. |
+
+**Provisional target = 76 + 12 = 88 SECURITY DEFINER** because each of these twelve independently authorized public entry points needs a narrow privileged operation against tables not granted to the browser. Internal reusable cores should be closed `SECURITY INVOKER`, direct EXECUTE denied to PUBLIC/anon/authenticated/service_role; no extra DEFINER is silently counted. If a safer INVOKER entry point is demonstrated using existing RLS without expanded table grants, or any extra helper must be DEFINER, revise the exact numeric target and obtain review **before** writing the migration. New wrappers must set an explicit safe `search_path`, intended `postgres` ownership and minimum EXECUTE (authenticated only for staff browser paths, absent service role unless a proved current caller needs it). Direct calls with forged T must independently enforce active membership/role and input resource-T equality. `profiles.role` alone never authorizes; pending, suspended and no-membership deny. Preserve all 7 compatibility defaults and the 22 old bridge definitions; no RLS expansion or 4D-2 ACL change in C2.
+
+Role/resource matrix for every writer/reader: ADMIN_A+R_A ALLOW within current workflow; ADMIN_A+R_B DENY even if an ID is known; EMPLOYEE_A only on currently approved event/contact operations, not reports/role/note; INSTRUCTOR_A unchanged; global admin without active membership A DENY; PENDING/SUSPENDED/no membership DENY; Parent A+Child B, Family A+Lane B, event A+lane B, route A+resource B DENY. A user operationally related only to B or unrelated globally must not appear in A list or be mutated through A. Same user's tenant A/B notes, role and verification remain independent. Keep global account export/delete distinct from tenant-leave.
+
+### Staff route dependencies, legacy metric and 4D-2
+
+Staff placeholders in `app/t/[slug]/[...path]/page.tsx` currently link to legacy `/admin/*`; they do **not** prove tenant-safe staff UI. Before enabling each selected-T page, inventory and bind its direct PostgREST reads (e.g. Events lanes; Admin Dashboard reservations/events; Reservations reservations/lanes; Lane Blocks lanes/blocks; Check-in profiles/reservations), its resource-bound RPCs/actions, and calendar-feed/API calls. Ensure tenant predicates are enforced **server/DB-side before pagination/aggregation and before response or side effect**; if RLS/ACL cannot express that, add a separately reviewed bounded read contract, never rely on a client post-filter. No old global component may render B under A. Preserve PII-minimal participant/customer DTO, admin-only reports/users, employee lanes/events/check-in scope, URL state without PII, and no service_role in browser. This is an independent **blocking app gate** for the staff cutover, not one of the twelve bridge-RPC signatures.
+
+Active old-call metric at C2 entry: **20 = 17 original bridge UI + 2 global owner-list UI + 1 ICS server**. C2 targets **14 original UI source calls** (twelve staff and Account/Dashboard). If and only if those old calls are actually removed/replaced and old global pages cannot invoke them after canonicalization, target active old calls after C2 is **6 = 3 old public/Booking branches + 2 global owner-list branches + 1 ICS**. Merely introducing new selected-T branches while retaining old global CSK call paths leaves **20**; report the measured result honestly and do not claim the 6 target. Bridge **definitions remain 22** in either case. Source-count changes from newly added tenant-route calls must be reported separately; neither definitions nor projected new calls may be subtracted from active old source sites. C3 owns the six remaining old URLs/ICS and the global-role cleanup.
+
+4D-2 inventory at this checkpoint: `get_my_role()` has **8 direct app/API call sites** (`app/page.tsx`, `app/admin/{page,calendar,reports,users,events,lane-configuration}/page.tsx`, `app/api/admin/calendar-feed/route.ts`). The other three helpers (`is_admin`, `is_admin_or_employee`, `is_admin_or_staff`) have no identified direct app call, but DB dependencies/ACL still require fresh catalog proof. C2 may remove the four Admin Events/Lane Configuration/Reports/Users role checks as part of replacing those pages, but the **target before C3 is at least the four remaining old sites** (home, Admin root, Calendar, calendar-feed), plus any retained compatibility branch and direct `profiles.role` checks in middleware/check-in/cancellation. Freeze a fresh repo+catalog inventory at each gate; do not claim a four-site target if old pages remain callable. C3 is the zero-app-helper/zero-global-role-authority cutover. **4D-2 zero-caller gate after C2: NOT MET; ACL closure remains separately blocked until C3 production caller proof.**
+
+### Implementation order, deployment, tests and rollback
+
+1. **C2-A — event/lane contracts:** freeze four old fingerprints, exact signatures/DTO/ACL and required role matrix; local-only additive migration with four tenant wrappers and closed cores, focused cross-tenant/hierarchy/concurrency SQL. Old app + new DB verified. Independently switch tenant staff Events and Lane Configuration plus their direct reads/actions; no placeholder link to global page. If non-bridge reads need additional contracts, stop/re-scope before the app cutover.
+2. **C2-B — reports/users contracts:** freeze eight old fingerprints and operational-relation/PII map; additive migration for two report and six user contracts, report filter scope before aggregation/export, user eligible set before page, last-admin and audit locks. Switch tenant Reports/Users only after DB PASS; test CSV, pagination, role/notes/verification and identity/contact privacy. No global profile visibility expansion.
+3. **C2-C — entry-point completion:** resolve Account/Dashboard verification presentation with the existing C1 owner RPC, canonical selected-tenant routes and neutral global display; finish Admin root/Reservations/Calendar/Check-in/Lane Blocks and associated server APIs/direct reads under a trusted T, with page-by-page role and resource gates. Only then retire the fourteen old bridge-call paths and independently measure the six-site residual. Do not label C2 complete if a staff placeholder or direct cross-tenant read remains. No second tenant is activated in production for these gates.
+
+Each DB slice is **DB FIRST, then separately approved APP cutover**. CURRENT APP+CURRENT DB = current CSK PASS. OLD APP+NEW DB = PASS by additive versions and unchanged legacy signatures/defaults. NEW APP+OLD DB = **NO DEPLOY** (missing RPCs; fail closed). NEW APP+NEW DB = PASS only after focused SQL, active role/IDOR, DTO, PII, direct-read, runtime and production smoke. A production failure after DB migration requires an app rollback to the previous compatible app; no destructive DB downgrade, migration repair or default removal. Release gates check correct project/migration history/SHA/fingerprints, only intended pending migrations, dry-run, count delta, 7/7 defaults, 22 bridges and zero unexpected drift. No production write follows from this plan.
+
+Local tests: focused SQL for every new entry point; A/B role, inactive/missing membership and same-user cross-tenant matrices; event lane mismatch and family hierarchy race; report filters/KPI/export cross-tenant and no PII; pagination bounded before client read; users relation/last-admin/audit/no-change; global account-wide lifecycle separation; direct DML denied; concurrent mutation no deadlocks/contamination. Full DB, Node, TypeScript, build, targeted Playwright for selected/legacy URLs and back/forward/multitab, npm audit, changed-files ESLint and diff check. Production: read-only integrity/catalog checks, narrowly scoped rollback-only synthetic tests where approved, old-app/new-DB and new-app/new-DB runtime smoke, exact synthetic cleanup=0; never enable a second active tenant to manufacture a production A/B test.
+
+Blocking decisions before **local implementation**: freeze precise twelve target names/signatures/DTOs and whether internal INVOKER cores are needed; demonstrate staff direct-read coverage without widening RLS; decide and validate the selected-tenant Account/Dashboard presentation while preserving account-wide actions; document per-page current employee/instructor role matrix and old URL/ICS ownership. The recommended design above resolves *direction*, but those implementation-specific inventories must be completed before the first local migration. If any check fails, stop and amend this review. Phase 2 can proceed in bounded local slices only; no approval to implement was given by this checkpoint request.
+
+SAAS-9E-C PHASE 2 PLAN: **READY — phased design; freeze gates mandatory**
+
+PHASE 2 RPC CONTRACTS: **12**
+
+PHASE 2 CALL SITES: **14 original bridge-call sites (12 staff + 2 Account/Dashboard)**
+
+ACTIVE LEGACY CALL SITES BEFORE: **20**
+
+ACTIVE LEGACY CALL SITES AFTER TARGET: **6, conditional on actual old-call removal; otherwise 20**
+
+SECURITY DEFINER BEFORE: **76**
+
+SECURITY DEFINER AFTER PHASE 2 TARGET: **88 provisional, subject to exact wrapper/core freeze**
+
+BRIDGE DEFINITIONS: **22**
+
+4D-2 ZERO-CALLER GATE AFTER PHASE 2: **NOT MET**
+
+READY FOR PHASE 2 LOCAL IMPLEMENTATION: **NO-GO until separate authorization and freeze gates**
+
+READY FOR 4D-2: **NO-GO until production caller proof**
+
+READY FOR 9D-5: **NO-GO**
+
+SECOND TENANT: **NO-GO**
+
+SEC-004: **OPEN**
+
+## SAAS-9E-C Phase 2 — approved pre-implementation freeze
+
+This section supersedes the preceding conditional readiness statement. Phase 1 checkpoint is `8e97858107d113b170a9fd5ca957572bf19d37d1`; production baseline is 76 public SECURITY DEFINER, 22 stored bridge definitions, 7/7 CSK defaults, 20 active legacy call sites. These are separate units. Phase 2 owns **12 new staff RPC contracts** and **14 old app call sites** (12 staff plus Account/Dashboard). The latter two use the *existing* Phase 1 owner RPC rather than adding DB functions. No production write, Git staging/commit/push, 4D-2, 9D-5 or second tenant is authorized.
+
+### A. Twelve exact contracts
+
+All twelve are STAFF, `OWNER postgres`, `SET search_path=pg_catalog,public,pg_temp`, with `EXECUTE` granted only to `authenticated` after REVOKE from PUBLIC/anon/authenticated/service_role. They take a route/server-resolved active tenant UUID as the **first** parameter, but DB independently checks tenant status, `auth.uid()`, active membership/allowed role and resource ownership. The UUID itself is not authority. **One reader is SECURITY INVOKER; eleven entry points are SECURITY DEFINER.** The INVOKER event list is safe under existing authenticated SELECT grants and staff RLS on `events`, `event_lanes` and `shooting_lanes`, plus the callable tenant-role helper; it must reimplement the bounded list and may not invoke the closed legacy core. The other eleven need protected tables/closed cores or atomic audited writes unavailable through existing client grants. Any internal reusable core is closed INVOKER with direct EXECUTE revoked. Old signatures remain intact.
+
+| New function identity signature | Old caller/DTO freeze | Role; resource/tenant source | PII; audit; concurrency reason for DEFINER |
+|---|---|---|---|
+| `admin_list_events_v2(uuid,text,text,text,integer,integer)` | `admin_list_events_v1`; same JSON keys/filters/page/count/order | admin/employee/**instructor**; T before list | **INVOKER**: existing staff SELECT RLS covers events/lanes; no participant PII/audit; read-only consistent snapshot; explicit T before totals/page |
+| `admin_create_event_v3(uuid,text,text,date,time without time zone,time without time zone,text,numeric,integer,uuid[])` | `admin_create_event_v2`; same `{ok,changed,code,event_id}` | admin/employee; T and every supplied lane T | no participant PII; preserve event audit; atomic event+lane writes with lane locking |
+| `admin_get_lane_booking_configuration_v3(uuid)` | `admin_get_lane_booking_configuration_v2`; same JSON hierarchy/rules/durations/pricing/version/order | admin; T before all hierarchy joins | no customer PII; read-only consistent snapshot of protected configuration |
+| `admin_create_lane_booking_family_v2(uuid,jsonb)` | `admin_create_lane_booking_family_v1`; same `{ok,changed,code,root_lane_id,configuration_version,created_resource_count}` | admin; T, root, children and references T | no customer PII; preserve creation audit; atomic family/rules/pricing and hierarchy locks |
+| `admin_get_reservation_report_v3(uuid,date,date,uuid,text,text,text,integer,integer)` | `admin_get_reservation_report_v2`; same JSON `ok,code,contract_version,filters,filter_options,range,summary,details,pagination,history` | admin; T **before** aggregate/count/group/page; optional lane T | existing details only: customer name/email/phone; read-only consistent snapshot, protected report core |
+| `admin_get_reservation_report_export_v2(uuid,date,date,uuid,text,text,text)` | `admin_get_reservation_report_export_v1`; same JSON `ok,code,contract_version,total,max_rows,rows`; same row keys/date/time/resource/type/status/payment/price | admin; T before export/5000-row cap; optional lane T | no email/phone/address/note in export; read-only protected rows core |
+| `admin_list_users_v2(uuid,integer,integer,text,text,text,text)` | `admin_list_users_v1`; exact 30-column TABLE DTO below | admin; eligible T membership/reservation/registration relation **before** search/count/page | existing approved profile/contact/verification/note PII only; read-only protected join |
+| `admin_set_user_role_v2(uuid,uuid,text)` | `admin_set_user_role_v1`; same JSON codes/change/target/previous/new role/time | admin; target T membership required | role/user ID; tenant audit on change only; T-keyed advisory lock, active-admin row locks and last-admin check |
+| `admin_set_user_note_v2(uuid,uuid,text)` | `admin_set_user_note_v1`; same JSON result/codes | admin; target operational relationship T | tenant note PII; tenant audit on change; atomic upsert/lock |
+| `update_tenant_profile_verification_v2(uuid,uuid,text,text)` | `update_profile_verification`; same JSON result/codes | admin; target relationship T | tenant verification/note PII; tenant audit; protected apply helper/row lock; no global mirror |
+| `update_tenant_profile_identity_v2(uuid,uuid,text,text)` | `update_profile_identity`; same JSON result/codes | admin; target relationship T | global name PII, changed only after tenant relation proof; tenant audit; profile row lock |
+| `update_tenant_profile_contact_details_v2(uuid,uuid,text,text,text,text,text,text)` | `update_profile_contact_details`; same JSON result/codes | admin or employee **only in existing customer scope**; relation T | global contact/address PII, tenant audit; profile row/relation lock |
+
+The Users TABLE DTO is fixed in ordinal order: `user_id uuid,email text,first_name text,last_name text,full_name text,phone text,role text,verification_status text,admin_note text,created_at timestamptz,updated_at timestamptz,postal_code text,city text,street text,house_number text,apartment_number text,permission_sport boolean,permission_collector boolean,permission_hunting boolean,permission_training boolean,permission_personal_protection boolean,permission_other boolean,qualification_instructor boolean,qualification_range_officer boolean,qualification_pzss_license boolean,qualification_hunter boolean,permissions_verified boolean,permissions_verified_at timestamptz,permissions_verification_note text,total_count bigint`. This preserves an existing admin DTO; it is not permission for new fields. `role` maps tenant membership; note and verification come only from T. The exact JSON keys of all other contracts are their hardened old RPC's returned keys and must be compared key-for-key in focused tests; no wrapper may add profile PII.
+
+**Fingerprint strategy for each of the 12:** normalized `pg_get_functiondef` (CRLF→LF, CR→LF) of its exact old signature plus owner/security/search_path/ACL is a fail-closed input guard. Local target migration/tests record twelve normalized target fingerprints after definition; production preflight must compare all twelve. Dynamic source copying, if used, must assert each replacement count, tenant predicate and absence of bridge call. Snapshot and compare all out-of-scope function fingerprints; unexpected drift must be zero. This fixes the strategy, not a fabricated pre-code hash.
+
+### B. Fourteen exact original call sites
+
+`app/account/page.tsx:315` and `app/dashboard/page.tsx:108` (AUTH USER verification, PII, owner `auth.uid()`, no staff membership) remove `get_my_active_tenant_verification_v1()` from their global pages. Any tenant-specific verification display uses deployed `get_my_tenant_verification_v2(T)` only on an explicitly selected tenant route. The twelve STAFF sites are `app/admin/events/page.tsx:479,640`, `app/admin/lane-configuration/page.tsx:521,681`, `app/admin/reports/page.tsx:143,188`, `app/admin/users/page.tsx:364,514,565,614,665,712`, in the same order as the twelve contracts in A (except configuration list/create follows its own pair). Their current source is the exact-single-active bridge and target is server-resolved T; each new RPC repeats membership/role and resource checks. PII is present in Reports details, Users DTO/writers and owner verification, not in public contracts. All fourteen are C2. A new selected-T branch does not retire an old active source call unless the old call is removed or rendered unreachable and proved so.
+
+### C/G. Staff route and old-URL map
+
+| Old active global URL (temporary CSK compatibility until C3) | Real selected-tenant Phase 2 route | Authority |
+|---|---|---|
+| `/admin/events` | `/t/[slug]/admin/events` | active T membership: page admin/employee/instructor; create RPC only admin/employee |
+| `/admin/lane-configuration` | `/t/[slug]/admin/lane-configuration` | admin T |
+| `/admin/reports` | `/t/[slug]/admin/reports` | admin T |
+| `/admin/users` | `/t/[slug]/admin/users` | admin T |
+| `/admin`, `/admin/reservations`, `/admin/calendar`, `/admin/check-in`, `/admin/lane-blocks` | corresponding `/t/[slug]/admin/*` | preserve existing page matrix: root/calendar admin+employee+instructor; reservations/check-in/lane-blocks admin+employee |
+
+Existing `/t/[slug]/admin/*` placeholders/links to `/admin/*` are insufficient. Each real selected route must use server-validated slug, active T membership/role, tenant-aware RPC and server/DB-bound direct reads/resources before render/action. In particular audit Events lanes, Admin root reservations/events, Reservations reservations/lanes, Lane Blocks lanes/blocks, Check-in profiles/reservations and calendar-feed. No client-side post-filter over a global query. Old global URLs remain *active* until C3 but may use a server-bound CSK context and new RPC while the original bridge call is retired. They must never silently serve foreign T through a legacy page. Do not add a permanent CSK fallback.
+
+### D/E. Global Account and Dashboard
+
+`/account` remains global identity/profile/password/export/delete; remove its bridge verification read. Use a neutral facility-specific verification message and an explicit link to tenant context, not an implicit CSK status. `/dashboard` remains a global landing/tenant selector; remove its bridge status read and do not derive tenant authorization from `profiles.role`. Tenant operational verification lives under selected T. Neither page becomes tenant-leave, nor changes account-wide lifecycle. A global relationship summary, if later added, is owner data and never tenant authority; it is not required here.
+
+### F. Role matrix
+
+| RPC group | Admin | Employee | Instructor | User/owner | System/service_role direct EXECUTE | Authority |
+|---|---|---|---|---|---|---|
+| Event list | allow | allow | allow | deny | deny | active T membership; old hardened list includes instructor |
+| Event create | allow | allow | deny | deny | deny | active T membership + same-T lanes |
+| Lane config/create | allow | deny | deny | deny | deny | active T admin membership |
+| Report KPI/export | allow | deny | deny | deny | deny | active T admin membership + optional same-T resource |
+| User list/role/note/verification/identity | allow | deny | deny | deny | deny | active T admin membership + target relation; role target membership |
+| Contact writer | allow | only current customer target | deny | deny | deny | active T admin/employee membership + target relation/role |
+
+The existing Phase 1 `get_my_tenant_verification_v2(T)` is AUTH USER, owner `auth.uid()`, no staff membership and no anon access. PUBLIC contracts are unchanged. Legacy `pracownik`↔tenant `employee`, `instruktor`↔tenant `instructor` mapping is preserved, but global `profiles.role` cannot authorize these RPCs.
+
+### H/I/J. ICS, counts and 4D-2
+
+`app/api/calendar/reservations/[id]/route.ts` remains C3 legacy **unchanged**: same owner-list RPC, same bridge, no new tenant-route exposure. Starting legacy source-call sites **20**. Phase 2 aims to retire 14 old sites; measured target **6** for C3: old global Booking config, Events list, BookingForm verification, My Reservations list, My Events list, reservation ICS. If old admin compatibility URLs retain their old RPC branches, the measured count is greater than six and must be reported as such; 22 stored bridge definitions remain. **One new INVOKER** (`admin_list_events_v2`) and **eleven new DEFINER** entry points are frozen under current ACL/RLS: **76 + 11 = 87** after Phase 2/full 9E-C; closed INVOKER cores do not change that count. A different security mode requires evidence and plan revision before migration. 7/7 defaults stay.
+
+Eight direct `get_my_role()` app/API sites exist before C2: homepage, Admin root, Calendar, Reports, Users, Events, Lane Configuration, calendar-feed. Four might leave with those four staff pages; **at least four** (home, Admin root, Calendar, feed), plus any retained compatibility branches, remain for C3. `is_admin()`, `is_admin_or_employee()`, `is_admin_or_staff()` have zero known direct app callers; DB/RLS callers require fresh inventory. Direct `profiles.role` authority in middleware/Check-in/cancellation is another C3 gate. **4D-2 zero-caller gate NOT MET after local C2** and 4D-2 remains NO-GO until production C3 and separate zero-caller proof.
+
+PRE-IMPLEMENTATION: **12 contracts / 14 call sites / names-signatures-DTO-security modes fixed / staff route map, Account, Dashboard, role matrix, old URL and ICS decisions fixed / 0 unresolved architectural blockers.** Deployment remains **MULTI-PHASE, DB-FIRST then separately gated APP per slice**; old app+new DB compatible, new app+old DB unsafe, new app+new DB gated. No production write, Git staging/commit/push, 4D-2, 9D-5 or second tenant is approved by this freeze.
+
+### Phase 2 correction — fail-closed staff-surface gate (supersedes readiness above)
+
+The twelve named RPC contracts and fourteen direct legacy-bridge call sites are **not** a complete inventory of the actions needed by the four required *real* tenant-aware staff surfaces. The frozen 12/14 count remains a valid inventory of the specified cutover subset, but it cannot be used as proof that the new routes are safe or operational. A local implementation attempt was stopped before application cutover and its uncommitted migration file was removed. Its prototype functions were applied to the **local-only** Supabase database as a rehearsal; local DB reset/replay is required before relying on a clean migration-chain test. No production write or Git write occurred.
+
+| Required selected-tenant surface | Additional active operation outside the frozen 12 | Why the route cannot yet receive PASS |
+|---|---|---|
+| `/t/[slug]/admin/events` | `admin_list_event_registrations_v1`, `admin_update_event_v2`, `admin_set_event_active_v2`, `approve_event_registration`, `mark_event_registration_paid`, reserve-promotion/cancellation paths; direct `shooting_lanes` read | Selected route T is not currently bound to every event, participant, lane and write action. Existing resource-bound RPC authorization does not by itself prove that the resource belongs to the tenant selected in the URL when a caller has relationships to more than one tenant. |
+| `/t/[slug]/admin/lane-configuration` | `admin_set_lane_booking_family_configuration_v2` | Existing configuration write takes a root lane, not the selected route T. A separate same-T resource check is needed before exposing it on the selected route. |
+| `/t/[slug]/admin/reports` | `get_my_role()` for the page authorization branch | The current page still interprets global legacy role; it must be replaced with the trusted staff context on the selected route. |
+| `/t/[slug]/admin/users` | `get_my_role()` for the page authorization branch | Same global-role dependency; selected route must never authorize from `profiles.role`. |
+| Other known `/t/[slug]/admin/*` paths in existing routing | Admin root, Reservations, Check-in and Lane Blocks direct table reads/actions; Calendar calls `/api/admin/calendar-feed` | The current route shell returns a transitional placeholder for all staff paths. Rendering existing legacy pages without a server/DB same-T read and action boundary could expose CSK data under a different selected slug. |
+
+Consequently, **STAFF ROUTE MAP = BLOCKED**, **ALL REQUIRED DTO/OPERATIONAL CONTRACTS FROZEN = NO**, **UNRESOLVED BLOCKERS > 0**, and **READY FOR PHASE 2 LOCAL IMPLEMENTATION = NO-GO** under the user's instruction to stop if any gate fails. This does not invalidate the separate 12 RPC proposal; it rejects the unsupported claim that those 12 alone finish the required tenant-aware staff surfaces. Before a fresh authorization, freeze the remaining selected-route operations and exact resource-to-route tenant checks (including multi-membership A/B cases), preserve the old `/admin/*` compatibility until C3, then recalculate the function count and implementation scope. Do not silently expand the 12-contract approval, use client-side filters as authority, or treat a resource's own tenant check as proof of selected-route tenant consistency.
+
+## SAAS-9E-C PHASE 2 — COMPLETE OPERATIONAL SURFACE FREEZE
+
+Planning-only revision after the approved STOP. No migration, app cutover, local reset, production write or Git write is authorized by this section. It **supersedes** the 12-RPC/14-site implementation projection and the earlier 87-DEFINER target, but retains the twelve old RPCs as a proper subset. Inventory source: current `app/admin/{events,lane-configuration,reports,users}/page.tsx`, child components, called API and promotion service, and canonical migrations through Phase 1. The rehearsal-only definitions in the dirty local DB are **not** a migration-chain baseline; reset/replay only after separate approval of the final scope. Counts below distinguish source-code call sites, distinct operation contracts and internal calls.
+
+### Inventory notation and trust boundary
+
+`T` = UUID resolved from `/t/[slug]` **on the server**, then checked by the DB against active tenant and active `tenant_memberships` for `auth.uid()`. A browser-provided `p_tenant_id` is a selector, never authority. `E/R/L/F/U` = persisted event/registration/lane/family/target-user relationship; `R→E`, `L→F`, `event_lanes→E+L` must resolve to the same T. `M` = active T membership and the role stated per row. `B` = legacy exact-single-active bridge; `G` = global `get_my_role()` (not tenant authority). PII: `0` none, `C` existing customer name/email/phone, `P` existing profile/contact/verification/note, `S` reserve recipient/token inside service only. Audit: `—` none, `T` tenant-bound existing mutation audit, `S` existing send/claim accounting. `V` = new versioned RPC with explicit T, `I` = existing read/API reused with mandatory route→resource T binding, `H` = existing tenant-role helper replacing G. All entries are Phase 2 for the *new selected route*; original `/admin/*` stays C3 compatibility. Each old signature remains callable only in its approved old scope.
+
+For an existing resource-bound RPC, `get_my_tenant_role_v1(resource.tenant_id)` proves the actor's resource membership, **not** the URL's tenant equality. For selected-route writes the new version must check `p_tenant_id = persisted resource.tenant_id` and resource role in the *same DB transaction*. A separate browser precheck or a non-atomic server read followed by the old writer is insufficient. Tenant-consistent FK, internal row/claim locks, status and audit rules remain. Selected T does not expand a role or permit a new object type. Errors for a foreign resource remain controlled/not-found or not-allowed without PII.
+
+### Events — ten direct screen calls
+
+`app/admin/events/page.tsx` contains all networking; child rendering/helpers add no network call. The list has search/scope/sort/page; participants use a bounded event-specific list/status/payment/page. No standalone reject RPC or event-delete action exists here: event activation is a boolean toggle, and participant cancellation is the API flow. Reserve promotion is **not** a direct button; it is an effect of successful cancellation through the API/service below.
+
+| # / caller line | Operation; existing contract/signature | R/W; persisted source | Current → selected source / required role | PII; audit; bridge | Decision |
+|---|---|---|---|---|---|
+| E1 `:409` | page role, `get_my_role()` | R; actor | G → `get_my_tenant_role_v1(T)` and server staff context; admin/employee/instructor | 0; —; G | H; no new RPC |
+| E2 `:434` | active lane picker, `shooting_lanes.select(id,name,type,is_active,display_order,resource_kind,parent_lane_id)` | R; L | unscoped client query → explicit `tenant_id=T`, active T staff route and DB/RLS; admin/employee only (not instructor picker) | 0; —; no B | I; no service-role browser read |
+| E3 `:479` | bounded event list, `admin_list_events_v1(text,text,text,integer,integer)` | R; E/event_lanes→L | B → T before list, count, joins and page; admin/employee/instructor | 0; —; B | V `admin_list_events_v2(uuid,text,text,text,integer,integer)`, INVOKER after RLS proof |
+| E4 `:514` | participants, `admin_list_event_registrations_v1(uuid,text,text,integer,integer)` | R; E/R→E | resource E membership → `T=E.tenant_id=R.tenant_id`; admin/employee/instructor | C; —; no B | V `admin_list_event_registrations_v2(uuid,uuid,text,text,integer,integer)`; T then event ID |
+| E5 `:640` | create + event lanes, `admin_create_event_v2(text,text,date,time,time,text,numeric,integer,uuid[])` | W; E/L | B → T; all supplied lanes T; admin/employee | 0; T; B | V `admin_create_event_v3(uuid,text,text,date,time,time,text,numeric,integer,uuid[])` |
+| E6 `:814` | edit + lane assignment, `admin_update_event_v2(uuid,text,text,date,time,time,text,numeric,integer,uuid[])` | W; E/L | persisted E role → `T=E=each L`; admin/employee | 0; T; no B | V `admin_update_event_v3(uuid,uuid,text,text,date,time,time,text,numeric,integer,uuid[])` |
+| E7 `:930` | activate/deactivate, `admin_set_event_active_v2(uuid,boolean)` | W; E | persisted E role → `T=E`; admin/employee | 0; T; no B | V `admin_set_event_active_v3(uuid,uuid,boolean)` |
+| E8 `:1111` | approve registration, `approve_event_registration(uuid)` | W; R→E | persisted R role → `T=R=E`; admin/employee | C (existing result); T; no B | V `approve_event_registration_v2(uuid,uuid)` |
+| E9 `:1229` | cancel registration, `POST /api/cancel-event-registration` JSON `{registrationId}` | W; R→E | old API optional slug → selected route **requires** validated T, `T=R=E`; admin/employee staff (legacy owner self-cancel preserved) | C in bounded result; T/S; no B | I API with mandatory selected-route T; DB V `cancel_event_registration_v2(uuid,uuid)` enforces equality atomically |
+| E10 `:1313` | mark paid, `mark_event_registration_paid(uuid)` | W; R→E | persisted R role → `T=R=E`; admin/employee | C (existing result); T; no B | V `mark_event_registration_paid_v2(uuid,uuid)` |
+
+The new E4/E6–E8/E10/cancellation DB wrappers may delegate to existing *closed INVOKER cores only after* verifying T, active role and resource equality in the same transaction. They preserve existing signatures' non-T arguments, DTOs, idempotency, optimistic/concurrency behavior, last action eligibility and audit. No extra participant fields or instructor mutation rights. The source `admin_list_events_v1` core can be made a new INVOKER list only if current staff SELECT RLS returns the approved bounded DTO without PII expansion; otherwise stop and revise the security-mode count before implementation.
+
+### Events cancellation — seven downstream operational calls
+
+`app/api/cancel-event-registration/route.ts` authenticates a bearer session, validates one registration ID and currently accepts an **optional** `tenant` query. Its `tenantResourceMatches()` in `lib/server/tenant-resource-scope-core.ts` resolves the slug and reads the resource tenant; for the selected route that guard becomes mandatory, **but the new DB cancellation wrapper is the final same-statement T check**. `lib/server/event-reserve-promotion.ts` uses service_role on the server only after a successful cancellation that freed capacity. The separate `/api/send-event-reserve-promotion` endpoint is not called from this screen; it is outside this direct UI graph.
+
+| # / downstream file | Existing contract/signature | R/W; source and tenant binding | Role; PII/audit; bridge | Decision |
+|---|---|---|---|---|
+| D1 `tenant-resource-scope-core.ts` | `resolve_active_tenant_by_slug_v1(text)` | R; slug→active T, not authority alone | request context; 0/—; no B | I reuse |
+| D2 same helper | `event_registrations.select(tenant_id).eq(id,R)` | R; R→T under caller RLS | owner or staff; 0/—; no B | I reuse as early denial, not final authority |
+| D3 `app/api/cancel-event-registration/route.ts:183` | `cancel_event_registration(uuid)` | W; old resource R → selected `cancel_event_registration_v2(T,R)` with `T=R=E` in DB | owner or admin/employee under current contract; C/T; no B | V DB; legacy API path retains old signature until C3 |
+| D4 `event-reserve-promotion.ts:264` | `prepare_event_reserve_promotions(uuid)` | W; event ID returned by cancellation, claim/event tenant derived in DB | server service_role only; S/S; no B | I reuse after D3 success |
+| D5 same `:315` | `complete_event_reserve_promotion(uuid,uuid,boolean,text)` | W; claim+registration+tenant bound in DB | server service_role only; S/S; no B | I reuse |
+| D6 same `:423` | `events.select(id,title,event_date,start_time,end_time,location,price,max_participants).eq(id,E)` | R; E from D3/D4, server-only | service_role; public event content/—; no B | I reuse, verify result E belongs to the claimed T |
+| D7 same `:460` | `event_registrations.select(id,customer_email,customer_name).in(id,preparedIds)` | R; only D4 claim-bound IDs | service_role; S/—; no B | I reuse, assert every returned row belongs to claim T before delivery |
+
+Service-role recipient reads are not browser contracts. If D6/D7 cannot prove every event/registration ID remains T-bound under the claim and approved 9D-2C-2 constraints, this is a **cutover failure**, not permission to send a cross-tenant message. No extra email on a failed or foreign-T cancellation. OAuth/ICS paths are untouched.
+
+### Lane Configuration — four direct screen calls
+
+`app/admin/lane-configuration/page.tsx` performs all networking; `_components/LaneConfigurationEditor.tsx` and `LaneFamilyCreateDialog.tsx` only build payloads/render. One atomic family writer implements lane property/active state, hierarchy, rule, duration and pricing edits; no separate direct per-field writer is called.
+
+| # / caller line | Operation; existing contract/signature | R/W; source | Current → selected T / role | PII; audit; bridge | Decision |
+|---|---|---|---|---|---|
+| L1 `:512` | page role `get_my_role()` | R; actor | G → tenant helper(T); admin | 0/—; G | H reuse |
+| L2 `:521` | family/config reader `admin_get_lane_booking_configuration_v2()` | R; F/L/rules/pricing/durations | B → filter T before hierarchy/aggregation; admin | 0/—; B | V `admin_get_lane_booking_configuration_v3(uuid)` |
+| L3 `:650` | atomic family writer `admin_set_lane_booking_family_configuration_v2(uuid,bigint,jsonb,boolean)` | W; root F, every payload L and linked reservation/block/event lane | resource-bound → `T=F=all L=dependent tenant`; admin | 0/T; no B | V `admin_set_lane_booking_family_configuration_v3(uuid,uuid,bigint,jsonb,boolean)`; first UUID T |
+| L4 `:681` | create family `admin_create_lane_booking_family_v1(jsonb)` | W; new F/L/rules/pricing/durations | B → explicit T for root, children and all inserts; admin | 0/T; B | V `admin_create_lane_booking_family_v2(uuid,jsonb)` |
+
+L3 retains expected-version optimistic lock, obligations acknowledgement, row/advisory ordering and existing business snapshot. Lock/check parent/root and all affected resources inside the writer; mixed `F_A+L_B`, `parent_A+child_B`, rule/pricing/duration B under A, or even an admin of both T_A and T_B attempting mismatched route T must DENY before mutation/audit. 9B-3 composite tenant FKs remain the last integrity defense. The payload itself cannot authorize a tenant.
+
+### Reports — three direct screen calls
+
+| # / caller line | Existing contract/signature | R/W; source | Current → selected T / role | PII; audit; bridge | Decision |
+|---|---|---|---|---|---|
+| P1 `app/admin/reports/page.tsx:122` | `get_my_role()` | R; actor | G → tenant helper(T); admin | 0/—; G | H reuse |
+| P2 `:143` | KPI+filters+paginated details `admin_get_reservation_report_v2(date,date,uuid,text,text,text,integer,integer)` | R; reservations/L | B → T **before** aggregate, count, group, detail page, lane filter; admin | C details/—; B | V `admin_get_reservation_report_v3(uuid,date,date,uuid,text,text,text,integer,integer)` |
+| P3 `:188` | full filtered export `admin_get_reservation_report_export_v1(date,date,uuid,text,text,text)` | R; reservations/L | B → T before count, 5000-row cap and CSV scope; admin | approved reduced fields/—; B | V `admin_get_reservation_report_export_v2(uuid,date,date,uuid,text,text,text)` |
+
+Date/status/payment/type/lane filters and pagination are arguments of P2/P3, not additional network calls. CSV BOM, escaping/formula neutralization and download are client-local helpers; no separate export API, drilldown or lane lookup is invoked by this page. Preserve page-size 50, export cap 5000, exact DTO and PII minimization.
+
+### Users — seven direct screen calls
+
+| # / caller line | Existing contract/signature | R/W; resource | Current → selected T / role | PII; audit; bridge | Decision |
+|---|---|---|---|---|---|
+| U1 `app/admin/users/page.tsx:349` | `get_my_role()` | R; actor | G → tenant helper(T); admin | 0/—; G | H reuse |
+| U2 `:364` | list/filter/page `admin_list_users_v1(integer,integer,text,text,text,text)` | R; U operational relation | B → T before relationship join/search/count/page; admin | P/—; B | V `admin_list_users_v2(uuid,integer,integer,text,text,text,text)` |
+| U3 `:514` | role `admin_set_user_role_v1(uuid,text)` | W; target U membership | B → active admin T, target T membership, last-admin lock; admin | P/T; B | V `admin_set_user_role_v2(uuid,uuid,text)` |
+| U4 `:565` | note `admin_set_user_note_v1(uuid,text)` | W; target U relation/note | B → T relationship before note read/write; admin | P/T; B | V `admin_set_user_note_v2(uuid,uuid,text)` |
+| U5 `:614` | verification `update_profile_verification(uuid,text,text)` | W; target U relation/tenant verification | B → T relationship and tenant verification, no profile fallback; admin | P/T; B | V `update_tenant_profile_verification_v2(uuid,uuid,text,text)` |
+| U6 `:665` | identity `update_profile_identity(uuid,text,text)` | W; target U relation/global profile identity | B → T relationship, no foreign U; admin | P/T; B | V `update_tenant_profile_identity_v2(uuid,uuid,text,text)` |
+| U7 `:712` | contact `update_profile_contact_details(uuid,text,text,text,text,text,text)` | W; target U relation/global profile contact | B → T relationship; admin or employee **only existing customer-only scope** | P/T; B | V `update_tenant_profile_contact_details_v2(uuid,uuid,text,text,text,text,text,text)` |
+
+The target Users page stays **admin-only**; the U7 RPC must not narrow or expand its separately approved employee/customer workflow. Its employees do not acquire `/admin/users` access. Input validation, search/filter/sort, display components and dialog actions add no other network call. No direct client profile UPDATE or audit INSERT. U2's TABLE DTO (including field order and `total_count`) remains the exact approved legacy DTO quoted in section A above; note and verification fields are T-specific. Global identity/contact mutation is permitted only after same-T operational-relationship proof. Account-wide delete/export, Auth deletion and future leave-tenant remain separate.
+
+### Per-operation role matrix and resource equality
+
+`A/E/I/U/O/S` below mean active tenant admin/employee/instructor/ordinary user/record owner/server service_role; `✓` only within the row's current hardened contract. The selected staff route *also* requires the server role for that page before rendering. `—` is denied. SYSTEM is not an app-role bypass and service-only steps are not exposed to browser. The source of role authority is `get_my_tenant_role_v1(T)`/active membership, never `profiles.role` or browser JSON.
+
+| Operation IDs | A | E | I | U/O | S | Mandatory resource binding |
+|---|---|---|---|---|---|---|
+| E1/E3/E4 | ✓ | ✓ | ✓ | — | — | role T, list E=T, participant E=R=T |
+| E2/E5/E6/E7/E8/E10 | ✓ | ✓ | — | — | — | lane/event/registration and T equality as above |
+| E9/D3 selected staff | ✓ | ✓ | — | owner self-cancel only under preexisting API contract | — | T=R=E in DB |
+| L1–L4 | ✓ | — | — | — | — | T=F=root=all L/rules/pricing/durations |
+| P1–P3 | ✓ | — | — | — | — | T before filters/aggregation/export |
+| U1–U6 | ✓ | — | — | — | — | related U, or target membership for role |
+| U7 RPC | ✓ | ✓, customer-only | — | — | — | related U, employee cannot edit self/staff |
+| D1 public resolver | ✓ | ✓ | ✓ | ✓ (also anon) | — | published active slug only; **not authority** |
+| D2 registration guard read | ✓ | ✓ | ✓ only within preexisting event-read RLS, not cancellation rights | owner only under current RLS | — | R.tenant_id under RLS; selected staff cancellation still requires A/E at D3 |
+| D4/D5 | — | — | — | — | ✓, server-only | claim+event+registration tenant binding |
+| D6/D7 | — | — | — | — | ✓, server-only | only result IDs from validated claim, T match |
+
+No instructor writer rights, no global-role authority and no new PUBLIC/anon function grant. Resource-bound wrappers derive persisted E/R/F tenant, compare with caller-selected T, and check membership. Tenant A staff with membership in B still cannot use route A to operate B. Pending/suspended/no membership cannot exercise privileged operations. Tests must cover route A with B resource, same actor A+B, mixed event lanes and mixed family child/rules, failed-write no audit, concurrency and unchanged old CSK route behavior.
+
+### URL, global pages and deferred paths
+
+| Old URL | New route | Old active? | New route now? | Cutover condition/removal |
+|---|---|---|---|---|
+| `/admin/events` | `/t/[slug]/admin/events` | yes, legacy CSK | placeholder / **not ready now** | 100% E1–E10+D1–D7 T-safe; C3 removes old URL |
+| `/admin/lane-configuration` | `/t/[slug]/admin/lane-configuration` | yes | placeholder / **not ready now** | 100% L1–L4 T-safe; C3 removal |
+| `/admin/reports` | `/t/[slug]/admin/reports` | yes | placeholder / **not ready now** | 100% P1–P3 T-safe; C3 removal |
+| `/admin/users` | `/t/[slug]/admin/users` | yes | placeholder / **not ready now** | 100% U1–U7 T-safe; C3 removal |
+
+Current `app/t/[slug]/[...path]/page.tsx` resolves server slug/member/role but returns a placeholder and old `/admin/*` link for staff routes. The four real selected pages are *new*, not an alias that silently renders legacy CSK queries. Preserve old pages while building selected branches; thus old global call sites remain active until C3. Other staff placeholders (root, Reservations, Check-in, Calendar, Lane Blocks) are **not** approved for activation by this four-route Phase 2 plan and remain later cutover work. A live route requires zero old bridge/global operational calls on **that selected route**; old URL legacy calls counted separately. Avoid permanent CSK fallback. Tenant-bound resource verification is final in the DB writer; server route context and filtered reads are additional defense.
+
+| Selected route | Total operational calls in full graph | End-to-end selected-T-safe as-is | Legacy/global/unbound if old page were mounted as-is | Target selected-T-safe / legacy | Ready for cutover now? |
+|---|---:|---:|---:|---|---|
+| Events | 17 (10 direct + 7 downstream) | 0 complete chains | 17 require route binding (some inner steps already resource-bound) | 17 / 0, after DB/API/app tests | **NO** |
+| Lane Configuration | 4 | 0 | 4 | 4 / 0, after writer concurrency/hierarchy tests | **NO** |
+| Reports | 3 | 0 | 3 | 3 / 0, after KPI/export tenant-filter tests | **NO** |
+| Users | 7 | 0 | 7 | 7 / 0, after relationship/PII/last-admin tests | **NO** |
+
+The `0` as-is refers to complete **selected-route** chains, not a claim that all existing hardened RPCs are unsafe in their approved legacy/resource scope. The current routes display placeholders and perform none of these operations; the hypothetical unsafe mounting is explicitly prohibited. Implementation gate: only activate an individual new route when its target numerator equals its total and the selected-route legacy/global denominator is **zero**, including downstream server side effects. Old URL calls are reported in a different column and remain active until C3.
+
+`/account` remains GLOBAL/account-wide and `/dashboard` remains GLOBAL landing/selector. Their two `get_my_active_tenant_verification_v1()` calls (`app/account/page.tsx:315`, `app/dashboard/page.tsx:108`) are removed/neutralized without selecting CSK, affecting **two additional app sites** and **one distinct old owner-verification contract**. They do not become staff routes or display implicit tenant verification. Preserve global export/delete/profile and dashboard navigation. Tenant-specific status belongs only on explicitly selected tenant context. Reservation ICS `app/api/calendar/reservations/[id]/route.ts` is **legacy C3**, unchanged caller, RPC, bridge and exposure; no selected-route ICS link is introduced by Phase 2.
+
+### Exact planning arithmetic and SECURITY DEFINER decision
+
+Four screens: **24 direct UI call sites** (Events 10 + Lane Configuration 4 + Reports 3 + Users 7), **21 distinct direct contracts** (the same role helper appears on four pages). Cancellation adds **7 downstream call sites and 7 distinct contracts** (D1–D7), yielding **31 staff call sites / 28 distinct staff operation contracts**. Two global owner-verification app sites are additionally removed: **26 directly affected app sites**, **33 all-layer affected sites**, **29 distinct affected contracts including the one global removed contract**. Auth-session reads and pure UI transforms are not business operational contracts. No manual reserve-promotion button, reject RPC, report drilldown or per-field lane writer was found.
+
+| Disposition among 28 staff contracts | Count | Exact membership |
+|---|---:|---|
+| Existing reusable without a **new RPC**, with prescribed selected-route adaptation | 9 | E1 role helper, E2 lane read, E9 API endpoint, D1 resolver, D2 tenant guard read, D4/D5 service claim/complete, D6/D7 scoped service reads |
+| New/versioned INVOKER | 1 | E3 event list |
+| New/versioned DEFINER | 18 | E4–E8 and E10 (**6**), D3 cancellation (**1**), L2–L4 (**3**), P2–P3 (**2**), U2–U7 (**6**) |
+| New/versioned total | **19** | 1 INVOKER + 18 DEFINER; old signatures unchanged |
+| Deferred operation *inside the four selected routes* | **0 target**, subject to full contract implementation/tests | An unsafe operation blocks its entire route; no partial live surface |
+
+SECURITY DEFINER: current production **76**; proposed new DEFINER **18**; proposed after Phase 2 **94**. New INVOKER **1**. Full 9E-C target **94** under the currently approved **APP-only C3**; any later C3 DB-scope change requires a separate plan and count reapproval. Reasons for each DEFINER: E4 protected participant/PII joins; E5 atomic event+lanes creation; E6 atomic event+lane edit; E7 protected event status write; E8 protected registration approval; E10 protected payment change; D3 atomic tenant-bound cancellation/audit/capacity; L2 protected full configuration DTO; L3 atomic family/config/hierarchy/version locks; L4 atomic family creation; P2 protected aggregate/detail core; P3 protected bounded export core; U2 protected profile/relationship/tenant note+verification join; U3 last-admin membership/role lock; U4 protected tenant note/audit; U5 protected tenant verification/apply helper; U6 protected global identity gated by relationship/audit; U7 protected contact gated by relationship and employee customer-only restriction. Each uses postgres owner, fixed `pg_catalog,public,pg_temp` search path, authenticated-only EXECUTE, explicit T+role+resource checks, approved output only. No service_role client EXECUTE for these new entry points. E3 is INVOKER only after SELECT grants/RLS and exact DTO proof; otherwise fail-closed plan revision, not silent DEFINER substitution.
+
+The old pages retain their legacy behavior until C3; active bridge definition count stays **22** and 7/7 CSK compatibility defaults stay. Distinguish total legacy function definitions from active old call sites. For 4D-2: `get_my_role()` has **8 direct app/API source call sites** now and still **8** after this plan because four old global pages remain active while new tenant pages use `get_my_tenant_role_v1(T)`; the other four are home, Admin root, Calendar and calendar-feed. `is_admin()`, `is_admin_or_employee()`, `is_admin_or_staff()` each have **0 direct app/API call sites** and **0 remaining active public RLS policy/function-body references** in the read-only local catalog inventory, but old RPCs themselves remain; production metadata must be rechecked before deletion. **4D-2 ZERO-CALLER GATE NOT MET.** No 4D-2 implementation or removal is authorized.
+
+**Planning verdict, not deployment evidence:** complete four-screen operational inventory **PASS**; Events/Lane Configuration/Reports/Users call graphs **PASS as inventory**, selected routes **BLOCKED until implementation** (0 currently live/ready, 4 gated), all resource-to-route T requirements **DEFINED**, role matrix/old-new map/Account/Dashboard decisions **PASS**, ICS **DEFERRED C3**. Unresolved *architectural* blockers **0** under this exact 19-new-RPC/9-reuse contract; implementation/test gates remain substantial. A failed local INVOKER/RLS/claim invariant or an additional real caller discovered during implementation reopens the plan rather than broadening authorization. **READY FOR PHASE 2 LOCAL IMPLEMENTATION: GO for a separate approval only.** PRODUCTION WRITE: NO; GIT WRITE: NO; SECOND TENANT: NO-GO; SEC-004: OPEN.
+
+Implementation verification gate for the separately approved next step: clean **local-only** reset/replay against `127.0.0.1:54322` (not the rehearsal state), exact 19-function metadata/DTO/fingerprint/ACL test, route T_A/resource T_B with actor member of both, inactive/pending/suspended membership, instructor read-only, employee customer-contact-only, PII/no-audit-on-denial, registration cancellation→reserve claim/email tenant binding, family version/concurrency and mixed hierarchy, reports aggregates/CSV from T only, account-wide operations unchanged, all four selected pages with zero legacy/network call to global authority, old URL compatibility, full DB/Node/TypeScript/build/Playwright and fixture cleanup. Do **not** infer production readiness from this planning PASS; production preflight, migration deployment and app switch each need their own authorization.
