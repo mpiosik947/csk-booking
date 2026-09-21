@@ -101,7 +101,7 @@ insert into expected_function_acl values
   ('public.get_my_reservations_v3(uuid,integer,integer)','B',false,true,false),
   ('public.get_my_event_registrations_v1(text,text,integer,integer)','B',false,true,false),
   ('public.get_my_event_registrations_v2(uuid,text,text,integer,integer)','B',false,true,false),
-  ('public.get_my_role()','B',false,true,false),
+  ('public.get_my_role()','A',false,false,false),
   ('public.get_my_active_tenant_verification_v1()','B',false,true,false),
   ('public.get_my_tenant_verification_v2(uuid)','B',false,true,false),
   ('public.get_my_tenant_role_v1(uuid)','B',false,true,false),
@@ -120,9 +120,9 @@ insert into expected_function_acl values
   ('public.handle_new_user()','E',false,false,false),
   ('public.has_tenant_role_v1(uuid,text[])','B',false,true,false),
   ('public.is_active_public_tenant_v1(uuid)','B',true,true,false),
-  ('public.is_admin_or_employee()','C',false,true,false),
-  ('public.is_admin_or_staff()','C',false,true,false),
-  ('public.is_admin()','C',false,true,false),
+  ('public.is_admin_or_employee()','A',false,false,false),
+  ('public.is_admin_or_staff()','A',false,false,false),
+  ('public.is_admin()','A',false,false,false),
   ('public.is_tenant_member_v1(uuid)','B',false,true,false),
   ('public.is_reservation_check_in_token_usable_v1(date,time without time zone,time without time zone,text,timestamp with time zone)','A',false,false,false),
   ('public.lane_booking_family_business_snapshot_v2(uuid)','A',false,false,false),
@@ -321,8 +321,8 @@ begin
       where pg_catalog.has_function_privilege('authenticated',expected.signature,'EXECUTE')
         is distinct from expected.authenticated_execute
     )
-    and (select pg_catalog.count(*)=81 from pg_temp.expected_function_acl where authenticated_execute),
-    'authenticated has exactly the 81 user, policy-helper and internally authorized RPC grants.');
+    and (select pg_catalog.count(*)=77 from pg_temp.expected_function_acl where authenticated_execute),
+    'authenticated has exactly the 77 active user and internally authorized RPC grants.');
 
   perform pg_temp.record_result(5,'Exact service_role ACL matrix',
     not exists(
@@ -436,17 +436,17 @@ begin
     ),
     'All SECURITY DEFINER functions remain postgres-owned with an explicit search_path.');
 
-  perform pg_temp.record_result(12,'RLS helper ACL is authenticated-only',
+  perform pg_temp.record_result(12,'Retired global-role helper ACL is owner-only',
     not exists(
       select 1 from (values
         ('public.get_my_role()'),('public.is_admin()'),
         ('public.is_admin_or_employee()'),('public.is_admin_or_staff()')
       ) helper(signature)
-      where not pg_catalog.has_function_privilege('authenticated',helper.signature,'EXECUTE')
+      where pg_catalog.has_function_privilege('authenticated',helper.signature,'EXECUTE')
         or pg_catalog.has_function_privilege('anon',helper.signature,'EXECUTE')
         or pg_catalog.has_function_privilege('service_role',helper.signature,'EXECUTE')
     ),
-    'Policy helpers remain available to authenticated policies without anonymous/service RPC exposure.');
+    'Closed helper bodies remain owner-only until the separate 9D-5 retirement gate.');
 
   v_denied:=false;
   begin
