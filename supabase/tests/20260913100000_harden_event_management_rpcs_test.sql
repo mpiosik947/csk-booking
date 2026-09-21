@@ -132,7 +132,7 @@ begin
   result:=pg_temp.as_actor_json('anon',null,format('select public.get_public_event_list_v2(%L,''upcoming'',1,50)',marker));
   perform pg_temp.ok(30,'public events remain available and PII-free',result->>'code'='ok' and result::text !~* 'customer|user_id|registration_id|token|admin_note|phone|email','public event contract regressed');
   perform pg_temp.ok(31,'temporary event defaults remain',(select count(*)=2 from information_schema.columns where table_schema='public' and table_name in('events','event_lanes') and column_name='tenant_id' and column_default='''c5c00000-0000-4000-8000-000000000001''::uuid'),'temporary defaults changed');
-  perform pg_temp.ok(32,'SECURITY DEFINER inventory includes 9E-A resolver',(select count(*)=94 from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.prosecdef),'definer inventory drifted');
+  perform pg_temp.ok(32,'SECURITY DEFINER inventory includes 9E-A resolver',(select count(*)=96 from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.prosecdef),'definer inventory drifted');
 end;$tests$;
 
 select case when passed then 'ok ' else 'not ok ' end||test_order||' - '||test_name||case when passed then '' else E'\n# '||result end from test_results order by test_order;

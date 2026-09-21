@@ -6,7 +6,7 @@ import test from "node:test";
 const root = resolve(import.meta.dirname, "..", "..");
 const read = (path) => readFileSync(resolve(root, path), "utf8");
 
-test("update_profile_verification has exactly one active application caller", () => {
+test("update_profile_verification has no active application caller after tenant cutover", () => {
   const files = [
     "app/admin/users/page.tsx",
     "app/admin/check-in/page.tsx",
@@ -16,9 +16,10 @@ test("update_profile_verification has exactly one active application caller", ()
     "app/api/send-reservation-cancellation/route.ts",
   ];
   const callers = files.filter((file) =>
-    /selectedTenant \? "update_tenant_profile_verification_v2" : "update_profile_verification"/.test(read(file)),
+    /"update_profile_verification"/.test(read(file)),
   );
-  assert.deepEqual(callers, ["app/admin/users/page.tsx"]);
+  assert.deepEqual(callers, []);
+  assert.match(read("app/admin/users/page.tsx"), /"update_tenant_profile_verification_v2"/);
 });
 
 test("active application profile reads do not select legacy verification fields", () => {

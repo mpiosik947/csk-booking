@@ -31,7 +31,7 @@ begin
   perform pg_temp.ok(9,'wrapper derives exact active tenant',strpos(pg_get_functiondef('public.get_public_booking_configuration_v1()'::regprocedure),'active_single_tenant_id_v1()')>0);
   perform pg_temp.ok(10,'core filters root tenant',pg_get_functiondef('public.get_public_booking_configuration_v1__saas9d4e_core(uuid)'::regprocedure) ~ 'resource\.tenant_id\s*=\s*p_tenant_id');
   perform pg_temp.ok(11,'core binds parent to resource tenant',pg_get_functiondef('public.get_public_booking_configuration_v1__saas9d4e_core(uuid)'::regprocedure) ~ 'parent\.tenant_id\s*=\s*resource\.tenant_id');
-  perform pg_temp.ok(12,'SECURITY DEFINER count is 94 after Phase 2',(select count(*)=94 from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.prosecdef));
+  perform pg_temp.ok(12,'SECURITY DEFINER count is 96 after Phase 2',(select count(*)=96 from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.prosecdef));
   perform pg_temp.ok(13,'compatibility defaults remain 7/7',(select count(*)=7 from information_schema.columns where table_schema='public' and table_name in('shooting_lanes','reservations','lane_blocks','events','event_lanes','event_registrations','email_deliveries') and column_name='tenant_id' and column_default='''c5c00000-0000-4000-8000-000000000001''::uuid'));
   select count(*) into a_count from public.get_public_booking_configuration_v1();
   perform pg_temp.ok(14,'one active CSK resolves exactly its configuration',a_count=(select count(*) from public.get_public_booking_configuration_v1__saas9d4e_core(tenant_a)));

@@ -64,7 +64,7 @@ begin
     pg_catalog.to_regprocedure('public.get_my_reservations_v2()') is not null
     and pg_catalog.to_regprocedure('public.get_my_event_registrations_v1(text,text,integer,integer)') is not null);
   perform pg_temp.ok(5,'definer inventory is 76 and bridge definitions 22',
-    (select count(*)=94 from pg_catalog.pg_proc p join pg_catalog.pg_namespace n on n.oid=p.pronamespace
+    (select count(*)=96 from pg_catalog.pg_proc p join pg_catalog.pg_namespace n on n.oid=p.pronamespace
       where n.nspname='public' and p.prosecdef)
     and (select count(*)=22 from pg_catalog.pg_proc p join pg_catalog.pg_namespace n on n.oid=p.pronamespace
       where n.nspname='public' and p.prosrc like '%active_single_tenant_id_v1%'));
