@@ -59,7 +59,7 @@ test("event reserve preset reaches the existing bounded participant RPC", async 
   const events = await source("./events/page.tsx");
   assert.match(events, /params\.get\("participantStatus"\)/);
   assert.match(events, /participantStatus, participantPayment/);
-  assert.match(events, /admin_list_event_registrations_v1/);
+  assert.match(events, /admin_list_event_registrations_v2/);
   assert.match(events, /p_page_size:EVENT_PARTICIPANT_PAGE_SIZE/);
   assert.match(events, /Preset „Lista rezerwowa” jest aktywny/);
 });

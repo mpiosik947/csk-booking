@@ -20,8 +20,7 @@ export async function GET(request: Request, { params }: RouteContext) {
     if (!context.ok) return context.response;
 
     const { data, error } = await context.supabase
-      .rpc("get_my_reservations_v2")
-      .eq("id", id)
+      .rpc("get_my_reservation_calendar_v1", { p_reservation_id: id })
       .maybeSingle();
 
     if (error) {
@@ -39,7 +38,8 @@ export async function GET(request: Request, { params }: RouteContext) {
       typeof reservation.start_time !== "string" ||
       typeof reservation.end_time !== "string" ||
       typeof reservation.reservation_status !== "string" ||
-      typeof reservation.lane_display_name !== "string"
+      typeof reservation.lane_display_name !== "string" ||
+      typeof reservation.tenant_public_name !== "string"
     ) {
       console.error("Reservation calendar read returned invalid data");
       return calendarError("internal_error", 500, "Nie udało się przygotować kalendarza.");
@@ -55,7 +55,7 @@ export async function GET(request: Request, { params }: RouteContext) {
       date: reservation.reservation_date,
       startTime: reservation.start_time,
       endTime: reservation.end_time,
-      summary: "CSK — Rezerwacja strzelnicy",
+      summary: `${reservation.tenant_public_name} — Rezerwacja strzelnicy`,
       description: `Rezerwacja: ${reservation.lane_display_name}`,
     });
 
@@ -64,7 +64,7 @@ export async function GET(request: Request, { params }: RouteContext) {
       return calendarError("internal_error", 500, "Nie udało się przygotować kalendarza.");
     }
 
-    return calendarFile(calendar, "csk-rezerwacja.ics");
+    return calendarFile(calendar, "rezerwacja.ics");
   } catch {
     console.error("Reservation calendar endpoint failed");
     return calendarError("internal_error", 500, "Nie udało się przygotować kalendarza.");

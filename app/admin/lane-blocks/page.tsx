@@ -33,7 +33,7 @@ type LaneBlockFilter = "all" | "active" | "inactive";
 const LANE_DATA_LOAD_ERROR =
   "Nie udało się poprawnie wczytać zasobów i blokad.";
 
-export default function LaneBlocksPage() {
+export default function LaneBlocksPage({ tenantId, tenantSlug }: Readonly<{ tenantId: string; tenantSlug: string }>) {
   const [lanes, setLanes] = useState<LaneHierarchyDisplayItem[]>([]);
   const [blocks, setBlocks] = useState<LaneBlock[]>([]);
   const [loading, setLoading] = useState(true);
@@ -60,10 +60,12 @@ export default function LaneBlocksPage() {
         .from("shooting_lanes")
         .select(
           "id,name,resource_kind,parent_lane_id,display_order,is_active"
-        ),
+        )
+        .eq("tenant_id", tenantId),
       supabase
         .from("lane_blocks")
         .select("id,lane_id,block_date,start_time,end_time,reason,is_active")
+        .eq("tenant_id", tenantId)
         .order("block_date", { ascending: true })
         .order("start_time", { ascending: true })
         .order("id", { ascending: true }),
@@ -508,7 +510,7 @@ export default function LaneBlocksPage() {
 
         <div className="mt-8">
           <Link
-            href="/admin"
+            href={`/t/${tenantSlug}/admin`}
             className="inline-flex min-h-11 max-w-full items-center rounded-xl border border-[#3d4638] px-5 py-3 text-sm font-semibold text-[#c7cbbf] transition hover:border-[#536143] hover:bg-[#20271e] hover:text-[#f2efe4] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d7c895]"
           >
             ← Panel administratora

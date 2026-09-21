@@ -108,8 +108,8 @@ test.describe.serial("V1.1-02 exact cancellation deadline", () => {
     const forbidden = await guardLocalRequests(page);
     await login(page);
 
-    await mockRpc(page, "get_my_reservations_v2", () => [
-      {
+    await mockRpc(page, "get_my_reservations_v3", () => ({
+      ok: true, contract_version: 3, items: [{
         id: "00000000-0000-4000-8000-000000001102",
         reservation_date: "2026-12-20",
         start_time: "10:00:00",
@@ -121,8 +121,8 @@ test.describe.serial("V1.1-02 exact cancellation deadline", () => {
         attendance_status: "planned",
         checked_in_at: null,
         lane_display_name: "[TEST] Oś — Stanowisko 1",
-      },
-    ]);
+      }],
+    }));
     await page.goto("/my-reservations");
     await expect(
       page.getByText(
@@ -138,10 +138,10 @@ test.describe.serial("V1.1-02 exact cancellation deadline", () => {
       await expectNoPageOverflow(page);
     }
 
-    await mockRpc(page, "get_my_event_registrations_v1", (body) => ({
+    await mockRpc(page, "get_my_event_registrations_v2", (body) => ({
       ok: true,
       code: "ok",
-      contract_version: 1,
+      contract_version: 2,
       filters: { scope: body.p_scope ?? "upcoming", status: null },
       pagination: { page: 1, page_size: 20, total: 1 },
       items: [

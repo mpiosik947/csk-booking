@@ -436,7 +436,7 @@ export default function AccountPage() {
     }
 
     const { data: profileResultData, error: profileError } = await supabase.rpc(
-      "update_my_profile_v1",
+      "update_my_profile_v2",
       {
         p_phone: phone.trim(),
         p_postal_code: postalCode,

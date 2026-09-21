@@ -4,11 +4,12 @@ import test from "node:test";
 
 const read = (path) => readFileSync(new URL(path, import.meta.url), "utf8");
 
-test("global Account/Dashboard do not read implicit tenant verification; legacy Booking remains separate", () => {
+test("global Account/Dashboard do not read implicit tenant verification; Booking is explicit", () => {
   for (const path of ["./account/page.tsx", "./dashboard/page.tsx"]) {
     assert.doesNotMatch(read(path), /get_my_active_tenant_verification_v1|active_single_tenant_id_v1/);
   }
-  assert.match(read("./booking/BookingForm.tsx"), /get_my_active_tenant_verification_v1/);
+  assert.match(read("./booking/BookingForm.tsx"), /get_my_tenant_verification_v2/);
+  assert.doesNotMatch(read("./booking/BookingForm.tsx"), /get_my_active_tenant_verification_v1/);
   for (const path of ["./account/page.tsx", "./dashboard/page.tsx", "./booking/BookingForm.tsx"]) {
     const source = read(path);
     const profileSelects = [...source.matchAll(/\.from\("profiles"\)[\s\S]{0,1600}?\.select\(([\s\S]{0,1200}?)\)/g)];

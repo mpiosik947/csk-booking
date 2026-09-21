@@ -88,6 +88,14 @@ export function getApplicationSecurityHeaders() {
 }
 
 const nextConfig: NextConfig = {
+  async redirects() {
+    return [
+      { source: "/booking", destination: "/t/csk/booking", permanent: false },
+      { source: "/events", destination: "/t/csk/events", permanent: false },
+      { source: "/my-reservations", destination: "/t/csk/my-reservations", permanent: false },
+      { source: "/my-events", destination: "/t/csk/my-events", permanent: false },
+    ];
+  },
   async headers() {
     const securityHeaders = getApplicationSecurityHeaders();
 
@@ -107,6 +115,14 @@ const nextConfig: NextConfig = {
       },
       {
         source: "/admin/:path*",
+        headers: PRIVATE_NO_STORE_HEADERS,
+      },
+      {
+        source: "/t/:slug/admin/:path*",
+        headers: PRIVATE_NO_STORE_HEADERS,
+      },
+      {
+        source: "/t/:slug/:path(my-reservations|my-events)",
         headers: PRIVATE_NO_STORE_HEADERS,
       },
       {

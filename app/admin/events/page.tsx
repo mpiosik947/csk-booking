@@ -235,8 +235,7 @@ function LaneSelectionSummary({ lanes }: { lanes: AdminEventLane[] }) {
   );
 }
 
-export default function AdminEventsPage({ tenantId, tenantSlug }: Readonly<{ tenantId?: string; tenantSlug?: string }> = {}) {
-  const selectedTenant = tenantId !== undefined && tenantSlug !== undefined;
+export default function AdminEventsPage({ tenantId, tenantSlug }: Readonly<{ tenantId: string; tenantSlug: string }>) {
   const [loading, setLoading] = useState(true);
   const [events, setEvents] = useState<AdminEvent[]>([]);
   const [eventSortOrder, setEventSortOrder] =
@@ -407,9 +406,7 @@ export default function AdminEventsPage({ tenantId, tenantSlug }: Readonly<{ ten
   }
 
   async function loadRole() {
-    const { data, error } = selectedTenant
-      ? await supabase.rpc("get_my_tenant_role_v1", { p_tenant_id: tenantId })
-      : await supabase.rpc("get_my_role");
+    const { data, error } = await supabase.rpc("get_my_tenant_role_v1", { p_tenant_id: tenantId });
 
     if (!componentMountedRef.current) {
       return;
@@ -439,7 +436,7 @@ export default function AdminEventsPage({ tenantId, tenantSlug }: Readonly<{ ten
         "id,name,type,is_active,display_order,resource_kind,parent_lane_id"
       )
       .eq("is_active", true);
-    if (selectedTenant) query = query.eq("tenant_id", tenantId);
+    query = query.eq("tenant_id", tenantId);
     const { data, error } = await query
       .order("display_order", { ascending: true })
       .order("name", { ascending: true })
@@ -481,8 +478,8 @@ export default function AdminEventsPage({ tenantId, tenantSlug }: Readonly<{ ten
     const requestId = ++eventsLoadRequestRef.current;
     setLoading(true);
     setEventsLoadError(false);
-    const { data, error } = await supabase.rpc(selectedTenant ? "admin_list_events_v2" : "admin_list_events_v1", {
-      ...(selectedTenant ? { p_tenant_id: tenantId } : {}),
+    const { data, error } = await supabase.rpc("admin_list_events_v2", {
+      p_tenant_id: tenantId,
       p_search:eventSearch||null,p_scope:eventScope,p_sort:eventSortOrder,p_page:eventPage,p_page_size:EVENT_LIST_PAGE_SIZE,
     });
 
@@ -517,8 +514,8 @@ export default function AdminEventsPage({ tenantId, tenantSlug }: Readonly<{ ten
   async function loadRegistrations(eventId: string, nextPage=1, nextStatus=participantStatus, nextPayment=participantPayment) {
     setSelectedEventId(eventId);
     setParticipantsLoadError(false);
-    const { data, error } = await supabase.rpc(selectedTenant ? "admin_list_event_registrations_v2" : "admin_list_event_registrations_v1", {
-      ...(selectedTenant ? { p_tenant_id: tenantId } : {}),
+    const { data, error } = await supabase.rpc("admin_list_event_registrations_v2", {
+      p_tenant_id: tenantId,
       p_event_id:eventId,p_status:nextStatus||null,p_payment_status:nextPayment||null,p_page:nextPage,p_page_size:EVENT_PARTICIPANT_PAGE_SIZE,
     });
 
@@ -645,8 +642,8 @@ export default function AdminEventsPage({ tenantId, tenantSlug }: Readonly<{ ten
 
     try {
       const { data, error } = await supabase.rpc(
-        selectedTenant ? "admin_create_event_v3" : "admin_create_event_v2",
-        selectedTenant ? { ...payload, p_tenant_id: tenantId } : payload
+        "admin_create_event_v3",
+        { ...payload, p_tenant_id: tenantId }
       );
 
       if (error) {
@@ -819,8 +816,8 @@ export default function AdminEventsPage({ tenantId, tenantSlug }: Readonly<{ ten
 
     try {
       const { data, error } = await supabase.rpc(
-        selectedTenant ? "admin_update_event_v3" : "admin_update_event_v2",
-        selectedTenant ? { ...payload.value, p_tenant_id: tenantId } : payload.value
+        "admin_update_event_v3",
+        { ...payload.value, p_tenant_id: tenantId }
       );
 
       if (error) {
@@ -935,8 +932,8 @@ export default function AdminEventsPage({ tenantId, tenantSlug }: Readonly<{ ten
 
     try {
       const { data, error } = await supabase.rpc(
-        selectedTenant ? "admin_set_event_active_v3" : "admin_set_event_active_v2",
-        selectedTenant ? { ...payload.value, p_tenant_id: tenantId } : payload.value
+        "admin_set_event_active_v3",
+        { ...payload.value, p_tenant_id: tenantId }
       );
 
       if (!componentMountedRef.current) {
@@ -1116,8 +1113,8 @@ export default function AdminEventsPage({ tenantId, tenantSlug }: Readonly<{ ten
 
     try {
       const { data, error } = await supabase.rpc(
-        selectedTenant ? "approve_event_registration_v2" : "approve_event_registration",
-        { p_registration_id: registrationId, ...(selectedTenant ? { p_tenant_id: tenantId } : {}) }
+        "approve_event_registration_v2",
+        { p_registration_id: registrationId, p_tenant_id: tenantId }
       );
 
       if (error) {
@@ -1233,7 +1230,7 @@ export default function AdminEventsPage({ tenantId, tenantSlug }: Readonly<{ ten
         return;
       }
 
-      const response = await fetch(selectedTenant ? `/api/cancel-event-registration?tenant=${encodeURIComponent(tenantSlug)}` : "/api/cancel-event-registration", {
+      const response = await fetch(`/api/cancel-event-registration?tenant=${encodeURIComponent(tenantSlug)}`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -1318,8 +1315,8 @@ export default function AdminEventsPage({ tenantId, tenantSlug }: Readonly<{ ten
 
     try {
       const { data, error } = await supabase.rpc(
-        selectedTenant ? "mark_event_registration_paid_v2" : "mark_event_registration_paid",
-        { p_registration_id: registrationId, ...(selectedTenant ? { p_tenant_id: tenantId } : {}) }
+        "mark_event_registration_paid_v2",
+        { p_registration_id: registrationId, p_tenant_id: tenantId }
       );
 
       if (error) {
@@ -2685,14 +2682,14 @@ export default function AdminEventsPage({ tenantId, tenantSlug }: Readonly<{ ten
 
         <div className="mt-8 flex flex-col gap-3 sm:flex-row">
           <a
-            href={selectedTenant ? `/t/${tenantSlug}` : "/admin"}
+            href={`/t/${tenantSlug}/admin`}
             className="rounded-xl border border-[#30372c] bg-[#141814] px-5 py-3 text-center text-sm font-semibold text-[#a9ada4] transition hover:border-[#536143] hover:text-[#f2efe4] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d7c895] focus-visible:ring-offset-2 focus-visible:ring-offset-[#141814]"
           >
             ← Panel administratora
           </a>
 
           <a
-            href={selectedTenant ? `/t/${tenantSlug}/events` : "/events"}
+            href={`/t/${tenantSlug}/events`}
             className="rounded-xl border border-[#536143] bg-[#536143] px-5 py-3 text-center text-sm font-semibold text-[#f2efe4] transition hover:border-[#78865f] hover:bg-[#78865f] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d7c895] focus-visible:ring-offset-2 focus-visible:ring-offset-[#141814]"
           >
             Zobacz stronę szkoleń

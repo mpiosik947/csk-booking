@@ -302,7 +302,7 @@ function getCheckInUrl(token: string, siteUrl: string) {
   return `${siteUrl}/admin/check-in?token=${token}`;
 }
 
-export default function MyReservationsPage({ tenantId, tenantSlug }: { tenantId?: string; tenantSlug?: string } = {}) {
+export default function MyReservationsPage({ tenantId, tenantSlug }: { tenantId: string; tenantSlug: string }) {
   const [reservations, setReservations] = useState<Reservation[]>([]);
   const [loading, setLoading] = useState(true);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
@@ -339,20 +339,16 @@ export default function MyReservationsPage({ tenantId, tenantSlug }: { tenantId?
     setIsLoggedIn(true);
 
     const result = await loadAllMyReservations(async (from, to) => {
-      if (tenantId) {
-        const { data, error } = await supabase.rpc("get_my_reservations_v3", {
-          p_tenant_id: tenantId,
-          p_page: Math.floor(from / (to - from + 1)) + 1,
-          p_page_size: to - from + 1,
-        });
-        const body = data as { ok?: boolean; contract_version?: number; items?: unknown } | null;
-        return {
-          data: body?.ok === true && body.contract_version === 3 ? body.items : null,
-          error,
-        };
-      }
-      const { data, error } = await supabase.rpc("get_my_reservations_v2").range(from, to);
-      return { data, error };
+      const { data, error } = await supabase.rpc("get_my_reservations_v3", {
+        p_tenant_id: tenantId,
+        p_page: Math.floor(from / (to - from + 1)) + 1,
+        p_page_size: to - from + 1,
+      });
+      const body = data as { ok?: boolean; contract_version?: number; items?: unknown } | null;
+      return {
+        data: body?.ok === true && body.contract_version === 3 ? body.items : null,
+        error,
+      };
     });
 
     if (!result.ok) {
@@ -810,7 +806,7 @@ export default function MyReservationsPage({ tenantId, tenantSlug }: { tenantId?
           className="mt-8 flex flex-col gap-3 border-t border-[#30372c] pt-6 sm:flex-row"
         >
           <a
-            href={tenantSlug ? `/t/${tenantSlug}/booking` : "/booking"}
+            href={`/t/${tenantSlug}/booking`}
             className="inline-flex min-h-12 items-center justify-center rounded-xl bg-[#536143] px-5 py-3 text-sm font-semibold text-[#f2efe4] transition hover:bg-[#78865f] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d7c895] focus-visible:ring-offset-2 focus-visible:ring-offset-[#141814]"
           >
             Nowa rezerwacja

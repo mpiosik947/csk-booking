@@ -21,8 +21,8 @@ test("calendar routes require bearer auth and use only the authenticated anon cl
 
 test("reservation route is owner-scoped and hides foreign or missing records", async () => {
   const source = await readFile(reservationRouteUrl, "utf8");
-  assert.match(source, /\.rpc\("get_my_reservations_v2"\)/u);
-  assert.match(source, /\.eq\("id", id\)/u);
+  assert.match(source, /\.rpc\("get_my_reservation_calendar_v1", \{ p_reservation_id: id \}\)/u);
+  assert.doesNotMatch(source, /get_my_reservations_v2/u);
   assert.match(source, /\.maybeSingle\(\)/u);
   assert.match(source, /"not_found", 404/u);
   assert.match(source, /isCancelledReservationStatus/u);
@@ -69,8 +69,8 @@ test("ICS responses use attachment, no-store, nosniff and safe fixed filenames",
   assert.match(helper, /"Content-Disposition": `attachment; filename=/u);
   assert.match(helper, /"Cache-Control": ICS_CACHE_CONTROL/u);
   assert.match(helper, /"X-Content-Type-Options": "nosniff"/u);
-  assert.match(reservation, /"csk-rezerwacja\.ics"/u);
-  assert.match(event, /"csk-szkolenie\.ics"/u);
+  assert.match(reservation, /"rezerwacja\.ics"/u);
+  assert.match(event, /"szkolenie\.ics"/u);
 });
 
 test("UI exposes CTA only on active reservations and registered or approved events", async () => {

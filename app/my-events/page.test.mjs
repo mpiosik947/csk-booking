@@ -49,7 +49,7 @@ test("cancellation CTA matches the Warsaw 72-hour backend boundary", async () =>
 test("my events keeps owner scope and refreshes the local cancellation state", async () => {
   const source = await readPage();
 
-  assert.match(source, /\.rpc\("get_my_event_registrations_v1"/);
+  assert.match(source, /\.rpc\("get_my_event_registrations_v2"/);
   assert.match(source, /p_scope: scope/);
   assert.match(source, /p_status: statusFilter \|\| null/);
   assert.match(source, /p_page: page/);

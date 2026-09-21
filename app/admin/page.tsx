@@ -298,9 +298,11 @@ function StatCard({
 function AdminModuleTile({
   tile,
   allowed,
+  tenantSlug,
 }: {
   tile: AdminTile;
   allowed: boolean;
+  tenantSlug: string;
 }) {
   if (!allowed) {
     return (
@@ -322,7 +324,7 @@ function AdminModuleTile({
 
   return (
     <Link
-      href={tile.href}
+      href={tile.href.replace(/^\/admin(?=\/|$)/, `/t/${tenantSlug}/admin`)}
       className="group rounded-2xl border border-[#30372c] bg-[#191e19] p-6 transition hover:border-[#536143] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d7c895] focus-visible:ring-offset-2 focus-visible:ring-offset-[#141814]"
     >
       <div className="mb-5 flex h-12 w-12 items-center justify-center rounded-xl border border-[#536143] bg-[#141814] text-xl font-bold text-[#d7c895] transition group-hover:border-[#78865f]">
@@ -340,10 +342,11 @@ function AdminModuleTile({
   );
 }
 
-export default function AdminPage() {
+export default function AdminPage({ tenantId, tenantSlug }: Readonly<{ tenantId: string; tenantSlug: string }>) {
   const today = getWarsawDateISO();
   const monthRange = getMonthRange();
   const queueLinks = buildAdminActionQueueLinks();
+  const tenantHref = (path: string) => path.replace(/^\/admin(?=\/|\?|$)/, `/t/${tenantSlug}/admin`);
 
   const [loading, setLoading] = useState(true);
   const [role, setRole] = useState<Role | null>(null);
@@ -362,7 +365,7 @@ export default function AdminPage() {
     setMessage("");
 
     const { data: roleData, error: roleError } = await supabase.rpc(
-      "get_my_role"
+      "get_my_tenant_role_v1", { p_tenant_id: tenantId }
     );
 
     if (roleError) {
@@ -372,7 +375,9 @@ export default function AdminPage() {
       return;
     }
 
-    const currentRole = (roleData as Role) || "user";
+    const currentRole = roleData === "employee" ? "pracownik"
+      : roleData === "instructor" ? "instruktor"
+      : roleData === "admin" ? "admin" : "user";
     setRole(currentRole);
     const canReadCustomerOperations = hasAccess(currentRole, [
       "admin",
@@ -408,6 +413,7 @@ export default function AdminPage() {
               `
             )
             .eq("reservation_date", today)
+            .eq("tenant_id", tenantId)
             .order("start_time", { ascending: true })
         : Promise.resolve({ data: [], error: null }),
 
@@ -436,6 +442,7 @@ export default function AdminPage() {
             )
             .gte("reservation_date", monthRange.start)
             .lte("reservation_date", monthRange.end)
+            .eq("tenant_id", tenantId)
             .order("reservation_date", { ascending: true })
             .order("start_time", { ascending: true })
         : Promise.resolve({ data: [], error: null }),
@@ -457,6 +464,7 @@ export default function AdminPage() {
         `
         )
         .eq("is_active", true)
+        .eq("tenant_id", tenantId)
         .gte("event_date", today)
         .order("event_date", { ascending: true })
         .order("start_time", { ascending: true })
@@ -642,7 +650,7 @@ export default function AdminPage() {
                   title="Oczekiwani dzisiaj"
                   value={pendingCheckIns.length}
                   description="Potwierdzone wizyty zaplanowane na dziś, jeszcze bez check-in."
-                  href={queueLinks.expectedToday}
+                  href={tenantHref(queueLinks.expectedToday)}
                   tone={pendingCheckIns.length > 0 ? "yellow" : "green"}
                   variant="alert"
                 />
@@ -651,7 +659,7 @@ export default function AdminPage() {
                   title="Nieopłacone"
                   value={unpaidToday.length}
                   description="Dzisiejsze potwierdzone rezerwacje ze statusem nieopłacona."
-                  href={queueLinks.unpaid}
+                  href={tenantHref(queueLinks.unpaid)}
                   tone={unpaidToday.length > 0 ? "red" : "green"}
                   variant="alert"
                 />
@@ -659,7 +667,7 @@ export default function AdminPage() {
                 <StatCard
                   title="Lista rezerwowa eventów"
                   description="Otwórz szkolenia z przygotowanym filtrem uczestników: lista rezerwowa."
-                  href={queueLinks.eventReserve}
+                  href={tenantHref(queueLinks.eventReserve)}
                   tone="yellow"
                   variant="alert"
                 />
@@ -668,7 +676,7 @@ export default function AdminPage() {
                   title="Dzisiejsze rezerwacje"
                   value={todayReservations.length}
                   description="Wszystkie rezerwacje z dzisiejszą datą, także zakończone i anulowane."
-                  href={queueLinks.todayReservations}
+                  href={tenantHref(queueLinks.todayReservations)}
                   tone="blue"
                 />
               </div>
@@ -692,7 +700,7 @@ export default function AdminPage() {
                   title="Rezerwacje dziś"
                   value={activeTodayReservations.length}
                   description="Aktywne rezerwacje bez anulowanych."
-                  href="/admin/reservations"
+                  href={tenantHref("/admin/reservations")}
                   tone="blue"
                 />
 
@@ -708,7 +716,7 @@ export default function AdminPage() {
                       ? `${nextReservation.customer_name || "Klient"} · ${getLaneName(nextReservation)}`
                       : "Brak kolejnych rezerwacji na dziś."
                   }
-                  href="/admin/check-in"
+                  href={tenantHref("/admin/check-in")}
                   tone={nextReservation ? "yellow" : "green"}
                 />
 
@@ -716,7 +724,7 @@ export default function AdminPage() {
                   title="Do check-in"
                   value={pendingCheckIns.length}
                   description="Wizyty zaplanowane, jeszcze nieobsłużone."
-                  href="/admin/check-in"
+                  href={tenantHref("/admin/check-in")}
                   tone={pendingCheckIns.length > 0 ? "yellow" : "green"}
                 />
 
@@ -724,7 +732,7 @@ export default function AdminPage() {
                   title="Do pobrania"
                   value={`${paymentToCollectToday.toFixed(0)} zł`}
                   description={`${payOnSiteToday.length} wizyt z płatnością na miejscu.`}
-                  href="/admin/check-in"
+                  href={tenantHref("/admin/check-in")}
                   tone={payOnSiteToday.length > 0 ? "yellow" : "green"}
                 />
               </div>
@@ -742,7 +750,7 @@ export default function AdminPage() {
                   </div>
 
                   <Link
-                    href="/admin/check-in"
+                    href={tenantHref("/admin/check-in")}
                     className="inline-flex min-h-11 items-center rounded-lg px-2 text-sm font-semibold text-[#d7c895] hover:text-[#f2efe4] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d7c895] focus-visible:ring-offset-2 focus-visible:ring-offset-[#191e19]"
                   >
                     Check-in →
@@ -798,7 +806,7 @@ export default function AdminPage() {
 
                             <td className="py-4 pr-4">
                               <Link
-                                href="/admin/check-in"
+                                href={tenantHref("/admin/check-in")}
                                 className="inline-flex min-h-11 items-center rounded-lg border border-[#536143] bg-[#191e19] px-3 py-2 text-xs font-bold text-[#d7c895] transition hover:border-[#78865f] hover:text-[#f2efe4] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d7c895] focus-visible:ring-offset-2 focus-visible:ring-offset-[#141814]"
                               >
                                 Check-in
@@ -827,7 +835,7 @@ export default function AdminPage() {
                   </div>
 
                   <Link
-                    href="/admin/events"
+                    href={tenantHref("/admin/events")}
                     className="inline-flex min-h-11 items-center rounded-lg px-2 text-sm font-semibold text-[#d7c895] hover:text-[#f2efe4] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d7c895] focus-visible:ring-offset-2 focus-visible:ring-offset-[#191e19]"
                   >
                     Zarządzaj szkoleniami →
@@ -854,7 +862,7 @@ export default function AdminPage() {
                       return (
                         <Link
                           key={eventItem.id}
-                          href="/admin/events"
+                          href={tenantHref("/admin/events")}
                           className="rounded-xl border border-[#30372c] bg-[#141814] p-5 transition hover:border-[#536143] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d7c895] focus-visible:ring-offset-2 focus-visible:ring-offset-[#191e19]"
                         >
                           <div className="mb-3 flex items-start justify-between gap-3">
@@ -919,7 +927,7 @@ export default function AdminPage() {
                     title="Dzisiejszy przychód"
                     value={`${todayRevenue.toFixed(0)} zł`}
                     description="Tylko rezerwacje opłacone."
-                    href="/admin/reports"
+                    href={tenantHref("/admin/reports")}
                     tone="green"
                   />
 
@@ -927,7 +935,7 @@ export default function AdminPage() {
                     title="Przychód miesiąca"
                     value={`${monthRevenue.toFixed(0)} zł`}
                     description="Suma opłaconych rezerwacji w tym miesiącu."
-                    href="/admin/reports"
+                    href={tenantHref("/admin/reports")}
                     tone="green"
                   />
 
@@ -935,7 +943,7 @@ export default function AdminPage() {
                     title="Średnia wartość rezerwacji"
                     value={`${averageReservationValue} zł`}
                     description="Na podstawie aktywnych rezerwacji w miesiącu."
-                    href="/admin/reports"
+                    href={tenantHref("/admin/reports")}
                   />
 
                   <StatCard
@@ -944,7 +952,7 @@ export default function AdminPage() {
                     description={
                       topLane ? `${topLane[1]} rez. w miesiącu` : "Brak danych"
                     }
-                    href="/admin/reports"
+                    href={tenantHref("/admin/reports")}
                     tone="blue"
                   />
                 </div>
@@ -982,6 +990,7 @@ export default function AdminPage() {
                     key={tile.href + tile.title}
                     tile={tile}
                     allowed={hasAccess(role, tile.roles)}
+                    tenantSlug={tenantSlug}
                   />
                   ))}
               </div>

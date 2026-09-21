@@ -474,8 +474,7 @@ function ConfigurationDetailsDialog({
   );
 }
 
-export default function AdminLaneConfigurationPage({ tenantId, tenantSlug }: Readonly<{ tenantId?: string; tenantSlug?: string }> = {}) {
-  const selectedTenant = tenantId !== undefined;
+export default function AdminLaneConfigurationPage({ tenantId, tenantSlug }: Readonly<{ tenantId: string; tenantSlug: string }>) {
   const [snapshot, setSnapshot] = useState<AdminLaneConfigurationSnapshot | null>(
     null
   );
@@ -510,9 +509,7 @@ export default function AdminLaneConfigurationPage({ tenantId, tenantSlug }: Rea
       return;
     }
 
-    const { data: roleData, error: roleError } = selectedTenant
-      ? await supabase.rpc("get_my_tenant_role_v1", { p_tenant_id: tenantId })
-      : await supabase.rpc("get_my_role");
+    const { data: roleData, error: roleError } = await supabase.rpc("get_my_tenant_role_v1", { p_tenant_id: tenantId });
     if (requestId !== requestRef.current) return;
     if (roleError || roleData !== "admin") {
       setSnapshot(null);
@@ -522,8 +519,8 @@ export default function AdminLaneConfigurationPage({ tenantId, tenantSlug }: Rea
     }
 
     const { data, error } = await supabase.rpc(
-      selectedTenant ? "admin_get_lane_booking_configuration_v3" : "admin_get_lane_booking_configuration_v2",
-      selectedTenant ? { p_tenant_id: tenantId } : {}
+      "admin_get_lane_booking_configuration_v3",
+      { p_tenant_id: tenantId }
     );
     if (requestId !== requestRef.current) return;
 
@@ -544,7 +541,7 @@ export default function AdminLaneConfigurationPage({ tenantId, tenantSlug }: Rea
     } finally {
       setLoading(false);
     }
-  }, [selectedTenant, tenantId]);
+  }, [tenantId]);
 
   useEffect(() => {
     const timeoutId = window.setTimeout(() => {
@@ -652,9 +649,9 @@ export default function AdminLaneConfigurationPage({ tenantId, tenantSlug }: Rea
       acknowledgeFutureObligations: boolean
     ) => {
       const { data, error } = await supabase.rpc(
-        selectedTenant ? "admin_set_lane_booking_family_configuration_v3" : "admin_set_lane_booking_family_configuration_v2",
+        "admin_set_lane_booking_family_configuration_v3",
         {
-          ...(selectedTenant ? { p_tenant_id: tenantId } : {}),
+          p_tenant_id: tenantId,
           p_root_lane_id: rootLaneId,
           p_expected_version: expectedVersion,
           p_resources: payload,
@@ -667,7 +664,7 @@ export default function AdminLaneConfigurationPage({ tenantId, tenantSlug }: Rea
       }
       return parseLaneConfigurationWriteResult(data);
     },
-    [selectedTenant, tenantId]
+    [tenantId]
   );
 
   const completeEditor = useCallback(
@@ -684,8 +681,8 @@ export default function AdminLaneConfigurationPage({ tenantId, tenantSlug }: Rea
   const createLaneFamily = useCallback(
     async (payload: LaneFamilyCreateWritePayload) => {
       const { data, error } = await supabase.rpc(
-        selectedTenant ? "admin_create_lane_booking_family_v2" : "admin_create_lane_booking_family_v1",
-        { p_family: payload, ...(selectedTenant ? { p_tenant_id: tenantId } : {}) }
+        "admin_create_lane_booking_family_v2",
+        { p_family: payload, p_tenant_id: tenantId }
       );
       if (error) {
         console.error("Admin lane family creation failed:", error.code);
@@ -693,7 +690,7 @@ export default function AdminLaneConfigurationPage({ tenantId, tenantSlug }: Rea
       }
       return parseLaneFamilyCreateResult(data);
     },
-    [selectedTenant, tenantId]
+    [tenantId]
   );
 
   const completeCreation = useCallback(
@@ -747,7 +744,7 @@ export default function AdminLaneConfigurationPage({ tenantId, tenantSlug }: Rea
             {loading ? "Odświeżanie…" : "Odśwież"}
           </button>
           <Link
-            href={selectedTenant ? `/t/${tenantSlug}` : "/admin"}
+            href={`/t/${tenantSlug}/admin`}
             className="inline-flex min-h-11 items-center justify-center rounded-xl border border-[#3d4638] px-4 py-2 text-sm font-semibold text-[#c7cbbf] transition hover:bg-[#1d211b] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d7c895]"
           >
             ← Wróć do panelu

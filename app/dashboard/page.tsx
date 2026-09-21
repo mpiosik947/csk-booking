@@ -231,8 +231,8 @@ export default function DashboardPage() {
           </h2>
 
           <div className="mt-4 grid gap-4 md:grid-cols-2">
-            <a
-              href="/booking"
+            <Link
+              href="/t/csk/booking"
               className="group min-h-40 rounded-2xl border border-[#536143] bg-[#20251d] p-6 transition hover:border-[#78865f] hover:bg-[#293026] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d7c895] focus-visible:ring-offset-2 focus-visible:ring-offset-[#141814]"
             >
               <div className="flex items-start justify-between gap-4">
@@ -249,10 +249,10 @@ export default function DashboardPage() {
                   →
                 </span>
               </div>
-            </a>
+            </Link>
 
-            <a
-              href="/events"
+            <Link
+              href="/t/csk/events"
               className="group min-h-40 rounded-2xl border border-[#6f5a2e] bg-[#221f18] p-6 transition hover:border-[#9a7c3e] hover:bg-[#2b271d] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d7c895] focus-visible:ring-offset-2 focus-visible:ring-offset-[#141814]"
             >
               <div className="flex items-start justify-between gap-4">
@@ -269,7 +269,7 @@ export default function DashboardPage() {
                   →
                 </span>
               </div>
-            </a>
+            </Link>
           </div>
         </section>
 
@@ -282,18 +282,18 @@ export default function DashboardPage() {
           </h2>
 
           <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            <a
-              href="/my-reservations"
+            <Link
+              href="/t/csk/my-reservations"
               className="min-h-24 rounded-2xl border border-[#30372c] bg-[#191e19] p-5 transition hover:border-[#536143] hover:bg-[#20251d] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d7c895] focus-visible:ring-offset-2 focus-visible:ring-offset-[#141814]"
             >
               <h3 className="font-semibold text-[#f2efe4]">Moje rezerwacje</h3>
               <p className="mt-2 text-sm leading-6 text-[#858c7f]">
                 Sprawdź swoje terminy, statusy rezerwacji oraz płatności.
               </p>
-            </a>
+            </Link>
 
-            <a
-              href="/my-events"
+            <Link
+              href="/t/csk/my-events"
               className="min-h-24 rounded-2xl border border-[#30372c] bg-[#191e19] p-5 transition hover:border-[#536143] hover:bg-[#20251d] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d7c895] focus-visible:ring-offset-2 focus-visible:ring-offset-[#141814]"
             >
               <h3 className="font-semibold text-[#f2efe4]">Moje szkolenia</h3>
@@ -301,7 +301,7 @@ export default function DashboardPage() {
                 Sprawdź szkolenia, na które jesteś zapisany oraz status
                 uczestnictwa.
               </p>
-            </a>
+            </Link>
 
             <a
               href="/account"

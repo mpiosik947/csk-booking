@@ -155,7 +155,7 @@ async function login(page: Page) {
 }
 
 async function mockReport(page: Page, response: "success" | "empty" | "error") {
-  await page.route("**/rest/v1/rpc/admin_get_reservation_report_v2", async (route: Route) => {
+  await page.route("**/rest/v1/rpc/admin_get_reservation_report_v3", async (route: Route) => {
     if (response === "error") {
       await route.fulfill({ status: 500, contentType: "application/json", body: "{}" });
       return;
@@ -229,7 +229,7 @@ test.describe.serial("REPORTS-6C responsive UX", () => {
     await expect(page.getByText("Brak danych do eksportu dla aktywnych filtrów.")).toBeVisible();
     await expect(page.getByRole("button", { name: "Eksportuj CSV" })).toBeDisabled();
 
-    await page.unroute("**/rest/v1/rpc/admin_get_reservation_report_v2");
+    await page.unroute("**/rest/v1/rpc/admin_get_reservation_report_v3");
     await mockReport(page, "error");
     await page.reload();
     await expect(

@@ -21,11 +21,6 @@ type ReservationCancellationPayload = {
   reservationId?: unknown;
 };
 
-type OperatorProfile = {
-  user_id: string;
-  role: string | null;
-};
-
 type OwnerProfile = {
   first_name: string | null;
   last_name: string | null;
@@ -35,6 +30,7 @@ type OwnerProfile = {
 
 type ReservationRecord = {
   id: string;
+  tenant_id: string;
   user_id: string;
   customer_name: string | null;
   customer_email: string | null;
@@ -202,28 +198,12 @@ export async function POST(request: Request) {
       );
     }
 
-    const { data: operatorProfileData, error: operatorProfileError } =
-      await supabase
-        .from("profiles")
-        .select("user_id, role")
-        .eq("user_id", user.id)
-        .maybeSingle();
-
-    if (operatorProfileError) {
-      console.error("Reservation cancellation role read failed", {
-        code: operatorProfileError.code,
-      });
-      return jsonError("internal_error", 500);
-    }
-
-    const operatorProfile = operatorProfileData as OperatorProfile | null;
-    const operatorRole = operatorProfile?.role?.trim().toLowerCase() ?? "";
-
     const { data: reservationData, error: reservationError } = await supabase
       .from("reservations")
       .select(
         `
         id,
+        tenant_id,
         user_id,
         customer_name,
         customer_email,
@@ -253,7 +233,11 @@ export async function POST(request: Request) {
 
     const reservation = reservationData as ReservationRecord;
     const isOwner = reservation.user_id === user.id;
-    const isStaff = operatorRole === "admin" || operatorRole === "pracownik";
+    const { data: operatorRole, error: operatorRoleError } = await supabase.rpc(
+      "get_my_tenant_role_v1", { p_tenant_id: reservation.tenant_id }
+    );
+    if (operatorRoleError) return jsonError("internal_error", 500);
+    const isStaff = operatorRole === "admin" || operatorRole === "employee";
 
     if (!isOwner && !isStaff) {
       return jsonError("forbidden", 403);

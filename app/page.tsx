@@ -4,8 +4,6 @@ import Image from "next/image";
 import { useEffect, useState } from "react";
 import { supabase } from "../lib/supabase";
 
-type UserRole = "admin" | "pracownik" | "instruktor" | "user";
-
 type AppIconName =
   | "calendar"
   | "training"
@@ -113,7 +111,6 @@ function AppIcon({
 
 export default function Home() {
   const [email, setEmail] = useState("");
-  const [role, setRole] = useState<UserRole | null>(null);
 
   useEffect(() => {
     async function loadUser() {
@@ -123,21 +120,6 @@ export default function Home() {
 
       setEmail(user?.email ?? "");
 
-      if (!user) {
-        setRole(null);
-        return;
-      }
-
-      const { data: roleData, error: roleError } = await supabase.rpc(
-        "get_my_role"
-      );
-
-      if (roleError) {
-        setRole(null);
-        return;
-      }
-
-      setRole((roleData as UserRole) ?? null);
     }
 
     loadUser();
@@ -146,12 +128,10 @@ export default function Home() {
   async function handleLogout() {
     await supabase.auth.signOut();
     setEmail("");
-    setRole(null);
     window.location.href = "/";
   }
 
-  const canSeeAdminPanel =
-    role === "admin" || role === "pracownik" || role === "instruktor";
+  const canSeeLocationPanel = Boolean(email);
 
   return (
     <main className="min-h-screen bg-[#090b09] px-4 py-6 text-[#f2efe4] sm:px-6 sm:py-8">
@@ -394,9 +374,9 @@ export default function Home() {
               />
             </a>
 
-            {canSeeAdminPanel && (
+            {canSeeLocationPanel && (
               <a
-                href="/admin"
+                href="/dashboard"
                 className="group flex items-center rounded-2xl border border-[#4a513e] bg-[#1d211b] p-4 text-left transition hover:border-[#657052] hover:bg-[#252a22] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#a8b58a] focus-visible:ring-offset-2 focus-visible:ring-offset-[#141814]"
               >
                 <AppIcon
@@ -404,7 +384,7 @@ export default function Home() {
                   className="mr-4 h-6 w-6 shrink-0 text-[#b9c39f]"
                 />
                 <span className="min-w-0 flex-1 font-semibold">
-                  Panel administratora
+                  Wybierz lokalizację
                 </span>
                 <AppIcon
                   name="arrow"

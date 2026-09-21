@@ -81,21 +81,21 @@ test.describe.serial("V1.1-03 admin action queues", () => {
 
     await expect(page.getByRole("link", { name: /Oczekiwani dzisiaj/u })).toHaveAttribute(
       "href",
-      `/admin/check-in?date=${today}&attendance=expected&page=1`
+      `/t/csk/admin/check-in?date=${today}&attendance=expected&page=1`
     );
     await expect(page.getByRole("link", { name: /^Nieopłacone/u })).toHaveAttribute(
       "href",
-      `/admin/reservations?date=${today}&status=confirmed&payment=unpaid&page=1`
+      `/t/csk/admin/reservations?date=${today}&status=confirmed&payment=unpaid&page=1`
     );
     await expect(page.getByRole("link", { name: /Lista rezerwowa eventów/u })).toHaveAttribute(
       "href",
-      "/admin/events?participantStatus=reserve&participantPage=1&page=1"
+      "/t/csk/admin/events?participantStatus=reserve&participantPage=1&page=1"
     );
 
     await page.getByRole("link", { name: /Oczekiwani dzisiaj/u }).click();
-    await expect(page).toHaveURL(new RegExp(`/admin/check-in\\?date=${today}&attendance=expected&page=1$`, "u"));
+    await expect(page).toHaveURL(new RegExp(`/t/csk/admin/check-in\\?date=${today}&attendance=expected&page=1$`, "u"));
     await page.goBack();
-    await expect(page).toHaveURL(/\/admin$/u);
+    await expect(page).toHaveURL(/\/t\/csk\/admin$/u);
   });
 
   test("operational admin split reads and unaffected modules load without server errors", async ({ page }) => {

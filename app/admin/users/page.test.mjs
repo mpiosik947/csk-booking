@@ -8,13 +8,13 @@ const pagePath = new URL("./page.tsx", import.meta.url);
 test("admin users keeps hardened server-side read and writer RPCs", async () => {
   const source = await readFile(pagePath, "utf8");
 
-  for (const [versioned, legacy] of [
-    ["admin_list_users_v2", "admin_list_users_v1"],
-    ["admin_set_user_role_v2", "admin_set_user_role_v1"],
-    ["admin_set_user_note_v2", "admin_set_user_note_v1"],
-    ["update_tenant_profile_verification_v2", "update_profile_verification"],
+  for (const versioned of [
+    "admin_list_users_v2",
+    "admin_set_user_role_v2",
+    "admin_set_user_note_v2",
+    "update_tenant_profile_verification_v2",
   ]) {
-    assert.match(source, new RegExp(`selectedTenant \\? "${versioned}" : "${legacy}"`));
+    assert.match(source, new RegExp(`"${versioned}"`));
   }
   assert.match(source, /p_tenant_id: tenantId/);
   assert.match(source, /p_limit:\s*PAGE_SIZE/);
@@ -73,8 +73,8 @@ test("details are an accessible dialog with compact semantic sections", async ()
   }
   assert.match(source, /if \(!value\?\.trim\(\)\) return null/);
   assert.match(source, /getAddress\(selectedProfile\)\.length > 0/);
-  assert.match(source, /selectedTenant \? "update_tenant_profile_identity_v2" : "update_profile_identity"/);
-  assert.match(source, /selectedTenant \? "update_tenant_profile_contact_details_v2" : "update_profile_contact_details"/);
+  assert.match(source, /"update_tenant_profile_identity_v2"/);
+  assert.match(source, /"update_tenant_profile_contact_details_v2"/);
   assert.match(source, /Zapisz dane podstawowe/);
   assert.match(source, /Zapisz dane kontaktowe/);
 });
@@ -126,7 +126,7 @@ test("role selection requires an explicit confirmed save and handles last admin"
   assert.match(source, /setRoleDrafts/);
   assert.match(source, /window\.confirm/);
   assert.match(source, /Zapisz zmianę roli/);
-  assert.match(source, /admin_set_user_role_v1/);
+  assert.match(source, /admin_set_user_role_v2/);
   assert.match(source, /Nie można zmienić roli ostatniego administratora\./);
   assert.match(source, /pełny dostęp administracyjny/);
   assert.doesNotMatch(source, /onChange=\{\(event\)\s*=>\s*saveRole/);
@@ -138,7 +138,7 @@ test("admin note has explicit save, counter and backend-aligned limit", async ()
   assert.match(source, /maxLength=\{2000\}/);
   assert.match(source, /\.length\} \/ 2000/);
   assert.match(source, /Zapisz notatkę/);
-  assert.match(source, /admin_set_user_note_v1/);
+  assert.match(source, /admin_set_user_note_v2/);
   assert.doesNotMatch(source, /onChange=\{[^}]*saveAdminNote/);
 });
 

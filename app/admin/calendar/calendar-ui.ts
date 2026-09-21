@@ -105,7 +105,7 @@ export type CalendarEntryPreviewData =
     };
 
 export type CalendarEntryPreviewNavigation = {
-  href: "/admin/reservations" | "/admin/lane-blocks" | "/admin/events";
+  href: string;
   label: "Otwórz rezerwacje" | "Otwórz blokady" | "Otwórz eventy";
 };
 

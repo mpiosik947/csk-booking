@@ -28,7 +28,7 @@ test("runtime uses only the admin V2 read contract", async () => {
   const [page, editor, , , helper] = await sources();
   const runtime = `${page}\n${editor}`;
 
-  assert.match(page, /selectedTenant \? "admin_get_lane_booking_configuration_v3" : "admin_get_lane_booking_configuration_v2"/);
+  assert.match(page, /"admin_get_lane_booking_configuration_v3"/);
   assert.doesNotMatch(runtime, /admin_get_lane_booking_configuration_v1/);
   assert.match(helper, /ADMIN_LANE_CONFIGURATION_CONTRACT_VERSION = 2/);
   assert.match(helper, /value\.contract_version !== ADMIN_LANE_CONFIGURATION_CONTRACT_VERSION/);
@@ -44,8 +44,8 @@ test("route, dashboard tile and runtime role check remain admin-only", async () 
   assert.deepEqual(ADMIN_ROUTE_PERMISSIONS["/admin/lane-configuration"], ["admin"]);
   assert.match(page, /roleData !== "admin"/);
   assert.ok(
-    page.indexOf('rpc("get_my_role")') <
-      page.indexOf('"admin_get_lane_booking_configuration_v2"')
+    page.indexOf('rpc("get_my_tenant_role_v1"') <
+      page.indexOf('"admin_get_lane_booking_configuration_v3"')
   );
   assert.match(
     dashboard,
@@ -57,14 +57,14 @@ test("existing edits and new-family creation use only their controlled RPCs", as
   const [page, editor, , , , createDialog] = await sources();
   const runtime = `${page}\n${editor}\n${createDialog}`;
 
-  assert.match(page, /selectedTenant \? "admin_set_lane_booking_family_configuration_v3" : "admin_set_lane_booking_family_configuration_v2"/);
-  assert.match(page, /selectedTenant \? "admin_create_lane_booking_family_v2" : "admin_create_lane_booking_family_v1"/);
+  assert.match(page, /"admin_set_lane_booking_family_configuration_v3"/);
+  assert.match(page, /"admin_create_lane_booking_family_v2"/);
   assert.equal(
-    [...runtime.matchAll(/admin_set_lane_booking_family_configuration_v2/g)].length,
+    [...runtime.matchAll(/admin_set_lane_booking_family_configuration_v3/g)].length,
     1
   );
   assert.equal(
-    [...runtime.matchAll(/admin_create_lane_booking_family_v1/g)].length,
+    [...runtime.matchAll(/admin_create_lane_booking_family_v2/g)].length,
     1
   );
   assert.doesNotMatch(runtime, /admin_set_lane_booking_configuration\s*["'(]/);
@@ -400,7 +400,7 @@ test("new lane workflow is explicit, dynamic and safe by default", async () => {
   const [page, , , , helper, createDialog] = await sources();
 
   assert.match(page, /\+ Dodaj nową oś/);
-  assert.match(page, /admin_create_lane_booking_family_v1/);
+  assert.match(page, /admin_create_lane_booking_family_v2/);
   assert.match(page, /p_family: payload/);
   assert.match(createDialog, /createInitialLaneFamilyCreateState/);
   assert.match(createDialog, /Nowa rodzina startuje bezpiecznie jako nieaktywna i offline/);

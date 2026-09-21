@@ -5,7 +5,7 @@ import test from "node:test";
 const source = readFileSync(new URL("./page.tsx", import.meta.url), "utf8");
 
 test("Reports uses one bounded authoritative RPC instead of browser-side raw datasets", () => {
-  assert.equal((source.match(/admin_get_reservation_report_v2/g) ?? []).length, 1);
+  assert.equal((source.match(/admin_get_reservation_report_v3/g) ?? []).length, 1);
   assert.match(source, /p_start_date: filters\.startDate/);
   assert.match(source, /p_end_date: filters\.endDate/);
   assert.match(source, /p_resource_id: filters\.resourceId/);
@@ -41,7 +41,7 @@ test("filters are URL-restorable, reset pagination and fail closed", () => {
 
 test("CSV export uses the dedicated filtered PII-minimal contract", () => {
   assert.equal(
-    (source.match(/admin_get_reservation_report_export_v1/g) ?? []).length,
+    (source.match(/admin_get_reservation_report_export_v2/g) ?? []).length,
     1,
   );
   assert.match(source, /buildAdminReservationCsv\(parsed\.export\.rows\)/);

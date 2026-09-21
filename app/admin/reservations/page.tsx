@@ -269,7 +269,7 @@ function formatCsvTextForExcel(value: string | null) {
   return `="${value.replace(/"/g, "\"\"")}"`;
 }
 
-export default function AdminReservationsPage() {
+export default function AdminReservationsPage({ tenantId, tenantSlug }: Readonly<{ tenantId: string; tenantSlug: string }>) {
   const [reservations, setReservations] = useState<Reservation[]>([]);
   const [loading, setLoading] = useState(false);
   const [savingReservationId, setSavingReservationId] = useState<string | null>(
@@ -346,7 +346,8 @@ export default function AdminReservationsPage() {
           parent_lane_id,
           display_order,
           is_active
-        `);
+        `)
+        .eq("tenant_id", tenantId);
 
       if (!laneError && laneData) {
         let hydratedLanes;
@@ -399,7 +400,7 @@ export default function AdminReservationsPage() {
           is_active
         )
       `
-    );
+    ).eq("tenant_id", tenantId);
 
     if (phrase) {
       const searchParts = [
@@ -506,7 +507,7 @@ export default function AdminReservationsPage() {
     } finally {
       setLoading(false);
     }
-  }, [search, statusFilter, paymentFilter, dateFilter, sort]);
+  }, [search, statusFilter, paymentFilter, dateFilter, sort, tenantId]);
 
   useEffect(() => {
     if (!urlParamsLoaded) return;
@@ -790,7 +791,7 @@ export default function AdminReservationsPage() {
       description="Podgląd rezerwacji klientów, statusów płatności i obsługa wizyt."
       actions={
         <Link
-          href="/admin"
+          href={`/t/${tenantSlug}/admin`}
           className="inline-flex min-h-11 w-full items-center justify-center rounded-xl border border-[#495044] px-5 py-3 text-sm font-semibold text-[#d8dbd3] transition hover:border-[#8b986f] hover:bg-[#1b211b] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d7c895] sm:w-auto"
         >
           ← Wróć do panelu

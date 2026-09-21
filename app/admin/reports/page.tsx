@@ -41,8 +41,7 @@ function getBookingTypeLabel(resourceKind: ReportDetail["resourceKind"]) {
   return resourceKind === "position" ? "Pojedyncze stanowisko" : "Cała oś";
 }
 
-export default function AdminReportsPage({ tenantId, tenantSlug }: Readonly<{ tenantId?: string; tenantSlug?: string }> = {}) {
-  const selectedTenant = tenantId !== undefined;
+export default function AdminReportsPage({ tenantId, tenantSlug }: Readonly<{ tenantId: string; tenantSlug: string }>) {
   const today = getWarsawToday();
 
   const [filters, setFilters] = useState<AdminReportFilters>({
@@ -121,8 +120,8 @@ export default function AdminReportsPage({ tenantId, tenantSlug }: Readonly<{ te
     }
 
     const { data: roleData, error: roleError } = await supabase.rpc(
-      selectedTenant ? "get_my_tenant_role_v1" : "get_my_role",
-      selectedTenant ? { p_tenant_id: tenantId } : {},
+      "get_my_tenant_role_v1",
+      { p_tenant_id: tenantId },
     );
 
     if (requestId !== reportRequestRef.current) return;
@@ -143,9 +142,9 @@ export default function AdminReportsPage({ tenantId, tenantSlug }: Readonly<{ te
     setHasAccess(true);
 
     const { data, error } = await supabase.rpc(
-      selectedTenant ? "admin_get_reservation_report_v3" : "admin_get_reservation_report_v2",
+      "admin_get_reservation_report_v3",
       {
-        ...(selectedTenant ? { p_tenant_id: tenantId } : {}),
+        p_tenant_id: tenantId,
         p_start_date: filters.startDate,
         p_end_date: filters.endDate,
         p_resource_id: filters.resourceId,
@@ -176,7 +175,7 @@ export default function AdminReportsPage({ tenantId, tenantSlug }: Readonly<{ te
     setReport(parsedReport);
     setReportReady(true);
     setLoading(false);
-  }, [detailOffset, filters, selectedTenant, tenantId]);
+  }, [detailOffset, filters, tenantId]);
 
   useEffect(() => {
     // Report data is an external Supabase resource synchronized to the selected range.
@@ -189,9 +188,9 @@ export default function AdminReportsPage({ tenantId, tenantSlug }: Readonly<{ te
     setExporting(true);
     setExportMessage("");
     const { data, error } = await supabase.rpc(
-      selectedTenant ? "admin_get_reservation_report_export_v2" : "admin_get_reservation_report_export_v1",
+      "admin_get_reservation_report_export_v2",
       {
-        ...(selectedTenant ? { p_tenant_id: tenantId } : {}),
+        p_tenant_id: tenantId,
         p_start_date: exportFilters.startDate,
         p_end_date: exportFilters.endDate,
         p_resource_id: exportFilters.resourceId,
@@ -257,7 +256,7 @@ export default function AdminReportsPage({ tenantId, tenantSlug }: Readonly<{ te
       title="Raport"
       description="Rezerwacje, przychód i szacowane obłożenie osi."
       actions={
-        <Link href={selectedTenant ? `/t/${tenantSlug}` : "/admin"} className="inline-flex min-h-11 w-full items-center justify-center rounded-xl border border-[#495044] px-5 py-3 text-sm font-semibold text-[#d8dbd3] transition hover:border-[#8b986f] hover:bg-[#1b211b] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d7c895] sm:w-auto">
+        <Link href={`/t/${tenantSlug}/admin`} className="inline-flex min-h-11 w-full items-center justify-center rounded-xl border border-[#495044] px-5 py-3 text-sm font-semibold text-[#d8dbd3] transition hover:border-[#8b986f] hover:bg-[#1b211b] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d7c895] sm:w-auto">
           ← Wróć do panelu
         </Link>
       }

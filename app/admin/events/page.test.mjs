@@ -27,7 +27,7 @@ test("admin events uses the bounded backend event contract", async () => {
 
   assert.match(source, /type AdminEvent[\s\S]*from "\.\.\/\.\.\/\.\.\/lib\/admin\/events\/event-management"/);
   assert.match(source, /useState<AdminEvent\[\]>\(\[\]\)/);
-  assert.match(loadEvents, /selectedTenant \? "admin_list_events_v2" : "admin_list_events_v1"/);
+  assert.match(loadEvents, /"admin_list_events_v2"/);
   assert.match(loadEvents, /p_search:eventSearch\|\|null/);
   assert.match(loadEvents, /p_scope:eventScope/);
   assert.match(loadEvents, /p_sort:eventSortOrder/);
@@ -46,7 +46,7 @@ test("event hierarchy is returned by the single scalable event RPC", async () =>
     "async function loadRegistrations("
   );
 
-  assert.match(loadEvents, /admin_list_events_v1/);
+  assert.match(loadEvents, /admin_list_events_v2/);
   assert.doesNotMatch(loadEvents, /parent_lane:shooting_lanes|event_lanes\s*\(/);
   assert.match(loadEvents, /if \(error\)[\s\S]*EVENTS_LOAD_ERROR_MESSAGE/);
 });
@@ -129,9 +129,9 @@ test("event status filter has safe empty states and preserves V2 management RPCs
   assert.match(source, /Brak minionych szkoleń\./);
   assert.match(source, /Brak nieaktywnych szkoleń\./);
   assert.match(source, /Brak szkoleń\./);
-  assert.match(source, /selectedTenant \? "admin_create_event_v3" : "admin_create_event_v2"/);
-  assert.match(source, /selectedTenant \? "admin_update_event_v3" : "admin_update_event_v2"/);
-  assert.match(source, /selectedTenant \? "admin_set_event_active_v3" : "admin_set_event_active_v2"/);
+  assert.match(source, /"admin_create_event_v3"/);
+  assert.match(source, /"admin_update_event_v3"/);
+  assert.match(source, /"admin_set_event_active_v3"/);
 });
 
 test("event registration payment uses only the controlled minimal RPC", async () => {
@@ -144,7 +144,7 @@ test("event registration payment uses only the controlled minimal RPC", async ()
 
   assert.match(
     paymentAction,
-    /selectedTenant \? "mark_event_registration_paid_v2" : "mark_event_registration_paid"/
+    /"mark_event_registration_paid_v2"/
   );
   assert.doesNotMatch(paymentAction, /\.from\("event_registrations"\)/);
   assert.doesNotMatch(paymentAction, /\.update\(|\.insert\(|\.delete\(|\.upsert\(/);
@@ -169,7 +169,7 @@ test("participant management requests and validates only the minimal operational
     "function openRegistrations("
   );
 
-  assert.match(loadRegistrations, /selectedTenant \? "admin_list_event_registrations_v2" : "admin_list_event_registrations_v1"/);
+  assert.match(loadRegistrations, /"admin_list_event_registrations_v2"/);
   assert.doesNotMatch(loadRegistrations, /\.select\(\s*["'`]\*["'`]\s*\)/);
   assert.match(loadRegistrations, /p_status:nextStatus\|\|null/);
   assert.match(loadRegistrations, /p_payment_status:nextPayment\|\|null/);
@@ -280,23 +280,23 @@ test("create, edit, and toggle use only hierarchy-aware V2 RPCs while public eve
 
   assert.match(openCreateConfirmation, /buildCreateEventPayload\(form\.value\)/);
   assert.doesNotMatch(openCreateConfirmation, /\.rpc\("admin_create_event_v2", payload\)/);
-  assert.match(confirmCreateEvent, /selectedTenant \? "admin_create_event_v3" : "admin_create_event_v2"/);
+  assert.match(confirmCreateEvent, /"admin_create_event_v3"/);
   assert.doesNotMatch(confirmCreateEvent, /\.from\("events"\)\.insert\(/);
   assert.doesNotMatch(confirmCreateEvent, /error\.message/);
   assert.match(saveEditedEvent, /buildUpdateEventPayload\(eventId, form\.value\)/);
-  assert.match(saveEditedEvent, /selectedTenant \? "admin_update_event_v3" : "admin_update_event_v2"/);
+  assert.match(saveEditedEvent, /"admin_update_event_v3"/);
   assert.doesNotMatch(saveEditedEvent, /\.from\("events"\)[\s\S]*\.update\(/);
   assert.doesNotMatch(saveEditedEvent, /error\.message/);
   assert.match(toggleEvent, /buildSetEventActivePayload\(eventId, targetStatus\)/);
-  assert.match(toggleEvent, /selectedTenant \? "admin_set_event_active_v3" : "admin_set_event_active_v2"/);
+  assert.match(toggleEvent, /"admin_set_event_active_v3"/);
   assert.doesNotMatch(toggleEvent, /\.from\("events"\)[\s\S]*\.update\(/);
   assert.doesNotMatch(toggleEvent, /error\.message/);
   assert.doesNotMatch(adminSource, /["']admin_create_event["']/);
   assert.doesNotMatch(adminSource, /["']admin_update_event["']/);
   assert.doesNotMatch(adminSource, /["']admin_set_event_active["']/);
-  assert.equal((adminSource.match(/admin_create_event_v2/g) ?? []).length, 1);
-  assert.equal((adminSource.match(/admin_update_event_v2/g) ?? []).length, 1);
-  assert.equal((adminSource.match(/admin_set_event_active_v2/g) ?? []).length, 1);
+  assert.equal((adminSource.match(/admin_create_event_v3/g) ?? []).length, 1);
+  assert.equal((adminSource.match(/admin_update_event_v3/g) ?? []).length, 1);
+  assert.equal((adminSource.match(/admin_set_event_active_v3/g) ?? []).length, 1);
   assert.match(
     adminSource,
     /const canManageEvents = userRole === "admin" \|\| userRole === "pracownik"/
@@ -538,7 +538,7 @@ test("edit form preserves assigned inactive lanes and saves only through admin_u
   assert.match(saveEditedEvent, /validateEventRpcResult\(data\)/);
   assert.match(saveEditedEvent, /result\.ok && result\.value\.event_id !== eventId/);
   assert.match(saveEditedEvent, /getEventManagementMessage\(/);
-  assert.match(saveEditedEvent, /selectedTenant \? "admin_update_event_v3" : "admin_update_event_v2"/);
+  assert.match(saveEditedEvent, /"admin_update_event_v3"/);
   assert.doesNotMatch(saveEditedEvent, /\.from\("events"\)[\s\S]*\.update\(/);
   assert.match(saveEditedEvent, /result\.value\.code === "updated"[\s\S]*void loadEvents\(\)[\s\S]*resetEditingState\(\)/);
   assert.match(saveEditedEvent, /result\.value\.code === "no_change"[\s\S]*resetEditingState\(\)/);
@@ -640,13 +640,13 @@ test("event hierarchy presentation keeps dormant resources out and prepares acti
   assert.match(source, /normalizeActiveEventLanes/);
   assert.match(loadActiveLanes, /resource_kind,parent_lane_id/);
   assert.match(loadActiveLanes, /\.eq\("is_active", true\)/);
-  assert.match(loadEvents, /admin_list_events_v1/);
+  assert.match(loadEvents, /admin_list_events_v2/);
   assert.doesNotMatch(loadEvents, /parent_lane:shooting_lanes/);
   assert.match(source, /lane\.displayName/);
   assert.match(source, /HierarchyResourceLabel/);
   assert.match(source, /isPosition: lane\.isPosition/);
   assert.doesNotMatch(source, /Oś 100 m — Stanowisko 1/);
-  assert.equal((source.match(/admin_create_event_v2/g) ?? []).length, 1);
-  assert.equal((source.match(/admin_update_event_v2/g) ?? []).length, 1);
-  assert.equal((source.match(/admin_set_event_active_v2/g) ?? []).length, 1);
+  assert.equal((source.match(/admin_create_event_v3/g) ?? []).length, 1);
+  assert.equal((source.match(/admin_update_event_v3/g) ?? []).length, 1);
+  assert.equal((source.match(/admin_set_event_active_v3/g) ?? []).length, 1);
 });

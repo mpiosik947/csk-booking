@@ -98,7 +98,7 @@ function LoadingCalendar() {
   );
 }
 
-function AdminCalendarContent() {
+function AdminCalendarContent({ tenantId, tenantSlug }: Readonly<{ tenantId: string; tenantSlug: string }>) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const today = getWarsawCalendarDate();
@@ -131,6 +131,8 @@ function AdminCalendarContent() {
   const [selectedEntry, setSelectedEntry] = useState<CalendarEntry | null>(null);
   const previewActivatorRef = useRef<HTMLButtonElement | null>(null);
   const previewRoleRequestedRef = useRef(false);
+  const tenantCalendarUrl = useCallback((url: string) =>
+    url.replace(/^\/admin\/calendar(?=\?|$)/, `/t/${tenantSlug}/admin/calendar`), [tenantSlug]);
 
   const knownLanes = laneOptions.length > 0 ? laneOptions : feed?.lanes ?? [];
   const requestLaneId =
@@ -139,18 +141,18 @@ function AdminCalendarContent() {
       : laneId;
 
   function navigate(updates: Partial<CalendarPageState>) {
-    router.replace(buildCalendarPageUrl({ ...pageState, ...updates }), {
+    router.replace(tenantCalendarUrl(buildCalendarPageUrl({ ...pageState, ...updates })), {
       scroll: false,
     });
   }
 
   useEffect(() => {
-    const canonicalUrl = buildCalendarPageUrl(pageState);
+    const canonicalUrl = tenantCalendarUrl(buildCalendarPageUrl(pageState));
     const canonicalQuery = canonicalUrl.slice(canonicalUrl.indexOf("?") + 1);
     if (searchParams.toString() !== canonicalQuery) {
       router.replace(canonicalUrl, { scroll: false });
     }
-  }, [pageState, router, searchParams]);
+  }, [pageState, router, searchParams, tenantCalendarUrl]);
 
   useEffect(() => {
     const media = window.matchMedia("(max-width: 767px)");
@@ -164,11 +166,12 @@ function AdminCalendarContent() {
     if (previewRoleRequestedRef.current) return;
     previewRoleRequestedRef.current = true;
     async function loadPreviewRole() {
-      const { data, error } = await supabase.rpc("get_my_role");
-      setPreviewRole(error ? null : parseCalendarPreviewRole(data));
+      const { data, error } = await supabase.rpc("get_my_tenant_role_v1", { p_tenant_id: tenantId });
+      setPreviewRole(error ? null : parseCalendarPreviewRole(data === "employee" ? "pracownik"
+        : data === "instructor" ? "instruktor" : data));
     }
     loadPreviewRole();
-  }, []);
+  }, [tenantId]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -183,11 +186,12 @@ function AdminCalendarContent() {
 
       if (controller.signal.aborted) return;
       if (sessionError || !session?.access_token) {
-        router.replace("/login?redirectTo=%2Fadmin%2Fcalendar");
+        router.replace(`/login?redirectTo=${encodeURIComponent(`/t/${tenantSlug}/admin/calendar`)}`);
         return;
       }
 
       const params = new URLSearchParams({
+        tenant: tenantSlug,
         rangeStart,
         rangeEnd,
         laneId: requestLaneId,
@@ -203,7 +207,7 @@ function AdminCalendarContent() {
         });
         if (controller.signal.aborted) return;
         if (response.status === 401) {
-          router.replace("/login?redirectTo=%2Fadmin%2Fcalendar");
+          router.replace(`/login?redirectTo=${encodeURIComponent(`/t/${tenantSlug}/admin/calendar`)}`);
           return;
         }
         if (response.status === 403) {
@@ -212,7 +216,7 @@ function AdminCalendarContent() {
         }
         if (response.status === 404 && requestLaneId !== "all") {
           router.replace(
-            buildCalendarPageUrl({ view, date, laneId: "all" }),
+            tenantCalendarUrl(buildCalendarPageUrl({ view, date, laneId: "all" })),
             { scroll: false }
           );
           return;
@@ -239,7 +243,7 @@ function AdminCalendarContent() {
 
     loadFeed();
     return () => controller.abort();
-  }, [date, includeHistoricalStatuses, rangeEnd, rangeStart, requestLaneId, requestVersion, router, types, view]);
+  }, [date, includeHistoricalStatuses, rangeEnd, rangeStart, requestLaneId, requestVersion, router, tenantCalendarUrl, tenantSlug, types, view]);
 
   const dayEntries = useMemo(
     () =>
@@ -463,7 +467,7 @@ function AdminCalendarContent() {
 
       <div className="mt-6">
         <Link
-          href="/admin"
+          href={`/t/${tenantSlug}/admin`}
           className="inline-flex min-h-11 max-w-full items-center rounded-xl border border-[#3d4638] px-4 py-2.5 text-left text-sm font-semibold text-[#c7cbbf] hover:border-[#536143] hover:bg-[#20271e] hover:text-[#f2efe4] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d7c895]"
         >
           ← Wróć do panelu administracyjnego
@@ -473,10 +477,10 @@ function AdminCalendarContent() {
       {selectedEntry && (
         <CalendarEntryPreview
           entry={getCalendarEntryPreviewData(selectedEntry)}
-          navigation={getCalendarEntryPreviewNavigation(
-            selectedEntry.type,
-            previewRole
-          )}
+          navigation={(() => {
+            const item = getCalendarEntryPreviewNavigation(selectedEntry.type, previewRole);
+            return item ? { ...item, href: item.href.replace(/^\/admin(?=\/|$)/, `/t/${tenantSlug}/admin`) } : null;
+          })()}
           onClose={closeEntryPreview}
         />
       )}
@@ -484,10 +488,10 @@ function AdminCalendarContent() {
   );
 }
 
-export default function AdminCalendarPage() {
+export default function AdminCalendarPage({ tenantId, tenantSlug }: Readonly<{ tenantId: string; tenantSlug: string }>) {
   return (
     <Suspense fallback={<LoadingCalendar />}>
-      <AdminCalendarContent />
+      <AdminCalendarContent tenantId={tenantId} tenantSlug={tenantSlug} />
     </Suspense>
   );
 }

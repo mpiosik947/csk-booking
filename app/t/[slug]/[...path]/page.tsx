@@ -1,6 +1,5 @@
-import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { classifyTenantRoute, legacyCskPath } from "@/lib/tenant-routing";
+import { classifyTenantRoute } from "@/lib/tenant-routing";
 import {
   getPublicRouteContext,
   getStaffRouteContext,
@@ -14,6 +13,11 @@ import AdminEventsPage from "@/app/admin/events/page";
 import AdminLaneConfigurationPage from "@/app/admin/lane-configuration/page";
 import AdminReportsPage from "@/app/admin/reports/page";
 import AdminUsersPage from "@/app/admin/users/page";
+import AdminLaneBlocksPage from "@/app/admin/lane-blocks/page";
+import AdminReservationsPage from "@/app/admin/reservations/page";
+import AdminHomePage from "@/app/admin/page";
+import AdminCheckInPage from "@/app/admin/check-in/page";
+import AdminCalendarPage from "@/app/admin/calendar/page";
 
 export default async function TenantModuleShell({
   params,
@@ -58,19 +62,21 @@ export default async function TenantModuleShell({
   if (route.kind === "staff" && route.path === "admin/users") {
     return <AdminUsersPage tenantId={tenantId} tenantSlug={slug} />;
   }
+  if (route.kind === "staff" && route.path === "admin/lane-blocks") {
+    return <AdminLaneBlocksPage tenantId={tenantId} tenantSlug={slug} />;
+  }
+  if (route.kind === "staff" && route.path === "admin/reservations") {
+    return <AdminReservationsPage tenantId={tenantId} tenantSlug={slug} />;
+  }
+  if (route.kind === "staff" && route.path === "admin") {
+    return <AdminHomePage tenantId={tenantId} tenantSlug={slug} />;
+  }
+  if (route.kind === "staff" && route.path === "admin/check-in") {
+    return <AdminCheckInPage tenantId={tenantId} tenantSlug={slug} />;
+  }
+  if (route.kind === "staff" && route.path === "admin/calendar") {
+    return <AdminCalendarPage tenantId={tenantId} tenantSlug={slug} />;
+  }
 
-  const oldPath = legacyCskPath(slug, route);
-  return (
-    <section className="rounded-2xl border border-[#8b986f] bg-[#192019] p-6 sm:p-8">
-      <h1 className="text-xl font-semibold">Widok lokalizacji: {publicContext.value.name}</h1>
-      <p className="mt-3 max-w-2xl text-[#d0d5c9]">
-        Ten widok nie został jeszcze przełączony na tenantowy kontrakt danych. Nie pokazujemy tu danych z innej lokalizacji.
-      </p>
-      {oldPath && (
-        <Link href={oldPath} className="mt-6 inline-flex rounded-lg border border-[#d7c895] px-4 py-3 text-[#d7c895]">
-          Otwórz obecny widok CSK
-        </Link>
-      )}
-    </section>
-  );
+  notFound();
 }

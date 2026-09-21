@@ -5,7 +5,8 @@ import test from "node:test";
 const source = readFileSync(new URL("./page.tsx", import.meta.url), "utf8");
 
 test("account profile save uses the allowlisted self-service RPC", () => {
-  assert.match(source, /rpc\(\s*"update_my_profile_v1"/);
+  assert.match(source, /rpc\(\s*"update_my_profile_v2"/);
+  assert.doesNotMatch(source, /update_my_profile_v1/);
   assert.doesNotMatch(source, /\.from\("profiles"\)\s*\.update\(/);
 });
 

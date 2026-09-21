@@ -89,7 +89,7 @@ function myPayload(body: Record<string, unknown>) {
   return {
     ok: true,
     code: "ok",
-    contract_version: 1,
+    contract_version: 2,
     filters: { scope, status: body.p_status ?? null },
     pagination: { page: currentPage, page_size: 20, total: 21 },
     items: [item],
@@ -258,7 +258,7 @@ test.describe.serial("EVENTS-8C responsive UX", () => {
       await page.setViewportSize({ width: viewport.width, height: viewport.height });
       const forbidden = await guardLocalRequests(page);
       await mockLoggedOutUser(page);
-      await mockRpc(page, "get_public_event_list_v2", publicPayload);
+      await mockRpc(page, "get_public_event_list_v3", publicPayload);
       await page.goto("/events");
       await expect(page.getByText("[TEST] Szkolenie mobilne")).toBeVisible();
       await expect(page.getByText("Pełne", { exact: true })).toBeVisible();
@@ -271,7 +271,7 @@ test.describe.serial("EVENTS-8C responsive UX", () => {
   test("public search, pagination, controlled error and retry remain usable", async ({ page }) => {
     await guardLocalRequests(page);
     await mockLoggedOutUser(page);
-    await mockRpc(page, "get_public_event_list_v2", publicPayload);
+    await mockRpc(page, "get_public_event_list_v3", publicPayload);
     await page.goto("/events");
     await page.getByLabel("Szukaj szkolenia").fill("mobilne");
     await expect(page).toHaveURL(/q=mobilne/u);
@@ -279,8 +279,8 @@ test.describe.serial("EVENTS-8C responsive UX", () => {
     await expect(page).toHaveURL(/page=2/u);
     await expect(page.getByText("Strona 2 z 2")).toBeVisible();
 
-    await page.unroute("**/rest/v1/rpc/get_public_event_list_v2");
-    await page.route("**/rest/v1/rpc/get_public_event_list_v2", (route) =>
+    await page.unroute("**/rest/v1/rpc/get_public_event_list_v3");
+    await page.route("**/rest/v1/rpc/get_public_event_list_v3", (route) =>
       route.fulfill({ status: 500, contentType: "application/json", body: "{}" }),
     );
     await page.reload();
@@ -294,7 +294,7 @@ test.describe.serial("EVENTS-8C responsive UX", () => {
     await page.setViewportSize({ width: 320, height: 800 });
     const forbidden = await guardLocalRequests(page);
     await login(page);
-    await mockRpc(page, "get_my_event_registrations_v1", myPayload);
+    await mockRpc(page, "get_my_event_registrations_v2", myPayload);
     let calendarRequestWasAuthenticated = false;
     await page.route("**/api/calendar/event-registrations/*", async (route) => {
       calendarRequestWasAuthenticated = route.request().headers().authorization?.startsWith("Bearer ") ?? false;
@@ -340,8 +340,8 @@ test.describe.serial("EVENTS-8C responsive UX", () => {
     await page.setViewportSize({ width: 375, height: 900 });
     const forbidden = await guardLocalRequests(page);
     await login(page);
-    await mockRpc(page, "admin_list_events_v1", adminPayload);
-    await mockRpc(page, "admin_list_event_registrations_v1", participantPayload);
+    await mockRpc(page, "admin_list_events_v2", adminPayload);
+    await mockRpc(page, "admin_list_event_registrations_v2", participantPayload);
     await page.goto("/admin/events");
     await expect(page.getByText("[TEST] Admin szkolenie")).toBeVisible();
     await page.getByLabel("Szukaj").fill("admin");

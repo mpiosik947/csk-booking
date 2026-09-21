@@ -10,7 +10,7 @@ const service = createClient(env.supabaseUrl, env.serviceRoleKey, {
 });
 const CSK_ID = "c5c00000-0000-4000-8000-000000000001";
 
-test("tenant Admin Events uses scoped list and preserves legacy Events URL", async ({ page }) => {
+test("tenant admin modules use scoped contracts and legacy URLs hand off to CSK", async ({ page }) => {
   const marker = randomUUID();
   const email = `c2a-${marker}@example.invalid`;
   const password = `Local-C2A-${marker}!Aa1`;
@@ -75,9 +75,24 @@ test("tenant Admin Events uses scoped list and preserves legacy Events URL", asy
     await expect(page.getByRole("heading", { name: "Wybierz lokalizację" })).toBeVisible();
     expect(observed.some((call) => call.rpc === "get_my_active_tenant_verification_v1")).toBe(false);
 
+    for (const [route, heading] of [
+      ["admin", "Dashboard operacyjny"],
+      ["admin/reservations", "Rezerwacje"],
+      ["admin/calendar", "Kalendarz obłożenia"],
+      ["admin/check-in", "Check-in i obsługa wizyt"],
+      ["admin/lane-blocks", "Blokady osi"],
+    ]) {
+      observed.length = 0;
+      await page.goto(`/t/csk/${route}`);
+      await expect(page.getByRole("heading", { name: heading, exact: true })).toBeVisible();
+      expect(observed.some((call) => call.rpc === "get_my_role")).toBe(false);
+    }
+
     observed.length = 0;
     await page.goto("/admin/events?scope=all");
-    await expect.poll(() => observed.some((call) => call.rpc === "admin_list_events_v1")).toBe(true);
+    await expect(page).toHaveURL(/\/t\/csk\/admin\/events\?scope=all$/);
+    await expect.poll(() => observed.some((call) => call.rpc === "admin_list_events_v2" && call.tenantId === CSK_ID)).toBe(true);
+    expect(observed.some((call) => call.rpc === "admin_list_events_v1")).toBe(false);
   } finally {
     const { error: cleanupError } = await service.auth.admin.deleteUser(data.user.id);
     if (cleanupError) throw new Error(`Local C2-A cleanup failed: ${cleanupError.code}`);

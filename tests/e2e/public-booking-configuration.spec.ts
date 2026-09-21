@@ -17,11 +17,11 @@ const APPROVED_FIELDS = [
   "whole_lane_bookable",
 ].sort();
 
-test("public booking uses the argument-free, PII-free configuration contract", async ({
+test("public booking uses the tenant-scoped, PII-free configuration contract", async ({
   page,
 }) => {
   const responsePromise = page.waitForResponse((response) =>
-    response.url().includes("/rest/v1/rpc/get_public_booking_configuration_v1")
+    response.url().includes("/rest/v1/rpc/get_public_booking_configuration_v2")
   );
 
   const navigation = await page.goto("/booking");
@@ -29,7 +29,7 @@ test("public booking uses the argument-free, PII-free configuration contract", a
 
   const response = await responsePromise;
   expect(response.status()).toBe(200);
-  expect(response.request().postDataJSON()).toEqual({});
+  expect(response.request().postDataJSON()).toEqual({ p_tenant_id: "c5c00000-0000-4000-8000-000000000001" });
 
   const payload = await response.json();
   expect(Array.isArray(payload)).toBe(true);

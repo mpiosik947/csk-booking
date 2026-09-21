@@ -1,6 +1,7 @@
 ﻿"use client";
 
 import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { supabase } from "../../lib/supabase";
 import { reportClientError } from "../../lib/safe-client-error";
 import {
@@ -82,11 +83,9 @@ function getAlreadyRegisteredMessage(code: string) {
   return "Masz już aktywny zapis na to szkolenie.";
 }
 
-async function fetchPublicEvents(search: string, page: number, tenantId?: string) {
+async function fetchPublicEvents(search: string, page: number, tenantId: string) {
   const args = { p_search: search || null, p_scope: "upcoming", p_page: page, p_page_size: EVENT_LIST_PAGE_SIZE };
-  const { data, error } = tenantId
-    ? await supabase.rpc("get_public_event_list_v3", { ...args, p_tenant_id: tenantId })
-    : await supabase.rpc("get_public_event_list_v2", args);
+  const { data, error } = await supabase.rpc("get_public_event_list_v3", { ...args, p_tenant_id: tenantId });
 
   if (error) {
     return { events: null, error };
@@ -99,7 +98,7 @@ async function fetchPublicEvents(search: string, page: number, tenantId?: string
     : { result: null, error: new Error("Invalid public event response") };
 }
 
-export default function EventsPage({ tenantId, tenantSlug }: { tenantId?: string; tenantSlug?: string } = {}) {
+export default function EventsPage({ tenantId, tenantSlug }: { tenantId: string; tenantSlug: string }) {
   const [events, setEvents] = useState<Event[]>([]);
   const [selectedEventId, setSelectedEventId] = useState("");
   const [loading, setLoading] = useState(true);
@@ -280,7 +279,7 @@ export default function EventsPage({ tenantId, tenantSlug }: { tenantId?: string
       }
 
       const registrationResponse = await fetch(
-        tenantSlug ? `/api/register-event?tenant=${encodeURIComponent(tenantSlug)}` : "/api/register-event",
+        `/api/register-event?tenant=${encodeURIComponent(tenantSlug)}`,
         {
         method: "POST",
         headers: {
@@ -393,14 +392,6 @@ export default function EventsPage({ tenantId, tenantSlug }: { tenantId?: string
     }
   }
 
-  function getMessageClass(message: string) {
-    if (message.includes("Zostałeś")) {
-      return "mb-6 rounded-xl border border-green-800 bg-green-950 p-4 text-sm font-semibold text-green-300";
-    }
-
-    return "mb-6 rounded-xl border border-red-800 bg-red-950 p-4 text-sm font-semibold text-red-300";
-  }
-
   function toggleSelectedEvent(eventId: string) {
     setSelectedEventId((currentId) =>
       currentId === eventId ? "" : eventId
@@ -410,7 +401,7 @@ export default function EventsPage({ tenantId, tenantSlug }: { tenantId?: string
   const isLoggedIn = Boolean(userId);
   const selectedEvent = events.find((event) => event.id === selectedEventId);
 
-  function EventDetails({ event }: { event: Event }) {
+  function renderEventDetails(event: Event) {
     const participantsCount = event.registered_count;
     const reserveCount = event.reserve_count;
     const { directlyAvailableSpots, requiresReserveList } =
@@ -969,7 +960,7 @@ export default function EventsPage({ tenantId, tenantSlug }: { tenantId?: string
                 aria-labelledby={`event-summary-${selectedEvent.id}`}
                 className="mt-6 rounded-2xl border border-[#30372c] bg-[#191e19] p-5 sm:p-6"
               >
-                <EventDetails event={selectedEvent} />
+                {renderEventDetails(selectedEvent)}
               </section>
             )}
 
@@ -982,12 +973,12 @@ export default function EventsPage({ tenantId, tenantSlug }: { tenantId?: string
         )}
 
         <nav className="mt-8 border-t border-[#30372c] pt-5" aria-label="Nawigacja strony szkoleń">
-          <a
+          <Link
             href="/"
             className="inline-flex min-h-11 items-center rounded-xl border border-[#30372c] bg-[#191e19] px-5 py-3 text-center text-sm font-semibold text-[#a9ada4] transition hover:border-[#78865f] hover:text-[#f2efe4] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#c5a861] focus-visible:ring-offset-2 focus-visible:ring-offset-[#141814]"
           >
             ← Powrót do strony głównej
-          </a>
+          </Link>
         </nav>
       </section>
     </main>

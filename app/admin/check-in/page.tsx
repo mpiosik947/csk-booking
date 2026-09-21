@@ -530,7 +530,7 @@ function BooleanLine({
   );
 }
 
-function CheckInContent() {
+function CheckInContent({ tenantId, tenantSlug }: Readonly<{ tenantId: string; tenantSlug: string }>) {
   const router = useRouter();
   const params = useSearchParams();
   const token = params.get("token");
@@ -612,19 +612,15 @@ function CheckInContent() {
       return false;
     }
 
-    const { data: profile, error } = await supabase
-      .from("profiles")
-      .select("role,full_name,email")
-      .eq("user_id", user.id)
-      .maybeSingle();
-
-    const loadedRole = profile?.role
-      ? (String(profile.role) as UserRole)
-      : "";
+    const { data: tenantRole, error } = await supabase.rpc(
+      "get_my_tenant_role_v1", { p_tenant_id: tenantId }
+    );
+    const loadedRole = tenantRole === "employee" ? "pracownik"
+      : tenantRole === "admin" ? "admin" : "";
 
     if (error || (loadedRole !== "admin" && loadedRole !== "pracownik")) {
       setCurrentUserRole(loadedRole);
-      router.replace("/admin");
+      router.replace(`/t/${tenantSlug}/admin`);
       return false;
     }
 
@@ -697,6 +693,7 @@ function CheckInContent() {
         )
       `
       )
+      .eq("tenant_id", tenantId)
       .order("start_time", { ascending: true });
 
     if (dateFilter) {
@@ -763,6 +760,17 @@ function CheckInContent() {
 
     if (!reservation) {
       setMessage("Nie udało się bezpiecznie odczytać danych check-in.");
+      return;
+    }
+
+    const { data: scopedReservation, error: scopeError } = await supabase
+      .from("reservations")
+      .select("id")
+      .eq("id", reservation.id)
+      .eq("tenant_id", tenantId)
+      .maybeSingle();
+    if (scopeError || !scopedReservation) {
+      setMessage("Nie znaleziono aktywnego kodu check-in.");
       return;
     }
 
@@ -850,6 +858,7 @@ function CheckInContent() {
       `
       )
       .eq("id", reservationId)
+      .eq("tenant_id", tenantId)
       .single();
 
     if (error) {
@@ -1935,14 +1944,14 @@ function CheckInContent() {
   );
 }
 
-export default function CheckInPage() {
+export default function CheckInPage({ tenantId, tenantSlug }: Readonly<{ tenantId: string; tenantSlug: string }>) {
   return (
     <AdminShell
       eyebrow="CSK Booking"
       title="Check-in i obsługa wizyt"
       description="Obsługa dzisiejszych rezerwacji, obecności, no-show, płatności i weryfikacji klienta podczas pierwszej wizyty."
       actions={
-        <Link href="/admin" className="inline-flex min-h-11 w-full items-center justify-center rounded-xl border border-[#495044] px-5 py-3 text-sm font-semibold text-[#d8dbd3] transition hover:border-[#8b986f] hover:bg-[#1b211b] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d7c895] sm:w-auto">
+        <Link href={`/t/${tenantSlug}/admin`} className="inline-flex min-h-11 w-full items-center justify-center rounded-xl border border-[#495044] px-5 py-3 text-sm font-semibold text-[#d8dbd3] transition hover:border-[#8b986f] hover:bg-[#1b211b] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d7c895] sm:w-auto">
           ← Wróć do panelu
         </Link>
       }
@@ -1954,7 +1963,7 @@ export default function CheckInPage() {
           </div>
         }
       >
-        <CheckInContent />
+        <CheckInContent tenantId={tenantId} tenantSlug={tenantSlug} />
       </Suspense>
     </AdminShell>
   );

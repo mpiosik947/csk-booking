@@ -11,6 +11,7 @@ type RouteContext = { params: Promise<{ id: string }> };
 
 type EventRecord = {
   id: string;
+  tenant_id: string;
   title: string;
   description: string | null;
   event_date: string;
@@ -31,7 +32,7 @@ export async function GET(request: Request, { params }: RouteContext) {
 
     const { data, error } = await context.supabase
       .from("event_registrations")
-      .select("id,registration_status,events!inner(id,title,description,event_date,start_time,end_time,location)")
+      .select("id,tenant_id,registration_status,events!inner(id,tenant_id,title,description,event_date,start_time,end_time,location)")
       .eq("id", id)
       .eq("user_id", context.user.id)
       .maybeSingle();
@@ -57,6 +58,8 @@ export async function GET(request: Request, { params }: RouteContext) {
     if (
       !event ||
       typeof event.id !== "string" ||
+      typeof data.tenant_id !== "string" ||
+      event.tenant_id !== data.tenant_id ||
       typeof event.title !== "string" ||
       typeof event.event_date !== "string" ||
       typeof event.start_time !== "string" ||
@@ -74,8 +77,8 @@ export async function GET(request: Request, { params }: RouteContext) {
       date: event.event_date,
       startTime: event.start_time,
       endTime: event.end_time,
-      summary: `CSK — ${event.title}`,
-      description: event.description?.trim() || "Potwierdzony udział w wydarzeniu CSK.",
+      summary: event.title,
+      description: event.description?.trim() || "Potwierdzony udział w wydarzeniu.",
       location: event.location,
     });
 
@@ -84,7 +87,7 @@ export async function GET(request: Request, { params }: RouteContext) {
       return calendarError("internal_error", 500, "Nie udało się przygotować kalendarza.");
     }
 
-    return calendarFile(calendar, "csk-szkolenie.ics");
+    return calendarFile(calendar, "szkolenie.ics");
   } catch {
     console.error("Event registration calendar endpoint failed");
     return calendarError("internal_error", 500, "Nie udało się przygotować kalendarza.");

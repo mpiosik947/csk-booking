@@ -24,7 +24,7 @@ test("reports retain calculations and use a local scroll region for the detailed
   const content = await source("./reports/page.tsx");
 
   assert.match(content, /<AdminShell/);
-  assert.match(content, /admin_get_reservation_report_v2/);
+  assert.match(content, /admin_get_reservation_report_v3/);
   assert.match(content, /parseAdminReservationReport/);
   assert.match(content, /summary\.plannedRevenue/);
   assert.match(content, /summary\.paidRevenue/);
@@ -82,7 +82,7 @@ test("instructor is fail-closed for check-in navigation and customer dashboard r
     checkIn,
     /loadedRole !== "admin" && loadedRole !== "pracownik"/
   );
-  assert.match(checkIn, /router\.replace\("\/admin"\)/);
+  assert.match(checkIn, /router\.replace\(`\/t\/\$\{tenantSlug\}\/admin`\)/);
   assert.match(
     checkIn,
     /if \(!\(await loadCurrentUser\(\)\)\) \{[\s\S]*?return;[\s\S]*?\}[\s\S]*?\.from\("reservations"\)/

@@ -37,8 +37,8 @@ type BookingFormProps = {
   lanes: BookingLane[];
   durations: BookingDuration[];
   pricingRules: BookingPricingRule[];
-  tenantId?: string;
-  tenantSlug?: string;
+  tenantId: string;
+  tenantSlug: string;
 };
 
 
@@ -313,9 +313,9 @@ export default function BookingForm({
         .eq("user_id", user.id)
         .maybeSingle();
 
-      const { data: verificationRows } = tenantId
-        ? await supabase.rpc("get_my_tenant_verification_v2", { p_tenant_id: tenantId })
-        : await supabase.rpc("get_my_active_tenant_verification_v1");
+      const { data: verificationRows } = await supabase.rpc(
+        "get_my_tenant_verification_v2", { p_tenant_id: tenantId }
+      );
       const tenantVerification = (
         Array.isArray(verificationRows) ? verificationRows[0] : null
       ) as TenantVerificationData | null;
@@ -542,7 +542,7 @@ export default function BookingForm({
 
     try {
       const response = await fetch(
-        tenantSlug ? `/api/create-reservation?tenant=${encodeURIComponent(tenantSlug)}` : "/api/create-reservation",
+        `/api/create-reservation?tenant=${encodeURIComponent(tenantSlug)}`,
         {
         method: "POST",
         headers: {

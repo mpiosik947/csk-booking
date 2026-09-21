@@ -14,7 +14,7 @@ test("public events provides filter-aware empty, retry, and mobile pagination st
   assert.match(source, /setReloadKey\(\(current\) => current \+ 1\)/);
   assert.match(source, /grid grid-cols-2 gap-3 sm:flex/);
   assert.match(source, /min-h-12 w-full/);
-  assert.match(source, /get_public_event_list_v2/);
+  assert.match(source, /get_public_event_list_v3/);
   assert.doesNotMatch(source, /\.from\("event_registrations"\)/);
 });
 

@@ -297,8 +297,7 @@ function DetailItem({ label, value }: { label: string; value: string | null }) {
   );
 }
 
-export default function AdminUsersPage({ tenantId, tenantSlug }: Readonly<{ tenantId?: string; tenantSlug?: string }> = {}) {
-  const selectedTenant = tenantId !== undefined && tenantSlug !== undefined;
+export default function AdminUsersPage({ tenantId, tenantSlug }: Readonly<{ tenantId: string; tenantSlug: string }>) {
   const [currentRole, setCurrentRole] = useState<UserRole | null>(null);
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [totalCount, setTotalCount] = useState(0);
@@ -348,8 +347,8 @@ export default function AdminUsersPage({ tenantId, tenantSlug }: Readonly<{ tena
       }
 
       const { data: roleData, error: roleError } = await supabase.rpc(
-        selectedTenant ? "get_my_tenant_role_v1" : "get_my_role",
-        selectedTenant ? { p_tenant_id: tenantId } : {}
+        "get_my_tenant_role_v1",
+        { p_tenant_id: tenantId }
       );
       if (roleError || roleData !== "admin") {
         if (requestId === requestRef.current) {
@@ -365,8 +364,8 @@ export default function AdminUsersPage({ tenantId, tenantSlug }: Readonly<{ tena
         return;
       }
 
-      const { data, error } = await supabase.rpc(selectedTenant ? "admin_list_users_v2" : "admin_list_users_v1", {
-        ...(selectedTenant ? { p_tenant_id: tenantId } : {}),
+      const { data, error } = await supabase.rpc("admin_list_users_v2", {
+        p_tenant_id: tenantId,
         p_limit: PAGE_SIZE,
         p_offset: page * PAGE_SIZE,
         p_search: search.trim() || null,
@@ -415,7 +414,7 @@ export default function AdminUsersPage({ tenantId, tenantSlug }: Readonly<{ tena
     }, 250);
 
     return () => window.clearTimeout(timeoutId);
-  }, [page, roleFilter, search, sort, verificationFilter, selectedTenant, tenantId]);
+  }, [page, roleFilter, search, sort, verificationFilter, tenantId]);
 
   useEffect(() => {
     if (!selectedProfile) return;
@@ -516,8 +515,8 @@ export default function AdminUsersPage({ tenantId, tenantSlug }: Readonly<{ tena
 
     setSavingUserId(profile.user_id);
     setFeedback(null);
-    const { data, error } = await supabase.rpc(selectedTenant ? "admin_set_user_role_v2" : "admin_set_user_role_v1", {
-      ...(selectedTenant ? { p_tenant_id: tenantId } : {}),
+    const { data, error } = await supabase.rpc("admin_set_user_role_v2", {
+      p_tenant_id: tenantId,
       p_target_user_id: profile.user_id,
       p_new_role: nextRole,
     });
@@ -568,8 +567,8 @@ export default function AdminUsersPage({ tenantId, tenantSlug }: Readonly<{ tena
 
     setSavingUserId(profile.user_id);
     setFeedback(null);
-    const { data, error } = await supabase.rpc(selectedTenant ? "admin_set_user_note_v2" : "admin_set_user_note_v1", {
-      ...(selectedTenant ? { p_tenant_id: tenantId } : {}),
+    const { data, error } = await supabase.rpc("admin_set_user_note_v2", {
+      p_tenant_id: tenantId,
       p_target_user_id: profile.user_id,
       p_admin_note: note.trim() || null,
     });
@@ -618,8 +617,8 @@ export default function AdminUsersPage({ tenantId, tenantSlug }: Readonly<{ tena
     const note = verificationDrafts[profile.user_id] ?? "";
     setSavingUserId(profile.user_id);
     setFeedback(null);
-    const { data, error } = await supabase.rpc(selectedTenant ? "update_tenant_profile_verification_v2" : "update_profile_verification", {
-      ...(selectedTenant ? { p_tenant_id: tenantId } : {}),
+    const { data, error } = await supabase.rpc("update_tenant_profile_verification_v2", {
+      p_tenant_id: tenantId,
       p_target_user_id: profile.user_id,
       p_action: action,
       p_note: note.trim() || null,
@@ -670,8 +669,8 @@ export default function AdminUsersPage({ tenantId, tenantSlug }: Readonly<{ tena
 
     setSavingUserId(profile.user_id);
     setFeedback(null);
-    const { data, error } = await supabase.rpc(selectedTenant ? "update_tenant_profile_identity_v2" : "update_profile_identity", {
-      ...(selectedTenant ? { p_tenant_id: tenantId } : {}),
+    const { data, error } = await supabase.rpc("update_tenant_profile_identity_v2", {
+      p_tenant_id: tenantId,
       p_target_user_id: profile.user_id,
       p_first_name: firstName,
       p_last_name: lastName,
@@ -718,8 +717,8 @@ export default function AdminUsersPage({ tenantId, tenantSlug }: Readonly<{ tena
 
     setSavingUserId(profile.user_id);
     setFeedback(null);
-    const { data, error } = await supabase.rpc(selectedTenant ? "update_tenant_profile_contact_details_v2" : "update_profile_contact_details", {
-      ...(selectedTenant ? { p_tenant_id: tenantId } : {}),
+    const { data, error } = await supabase.rpc("update_tenant_profile_contact_details_v2", {
+      p_tenant_id: tenantId,
       p_target_user_id: profile.user_id,
       p_phone: draft.phone,
       p_postal_code: draft.postal_code,
@@ -769,7 +768,7 @@ export default function AdminUsersPage({ tenantId, tenantSlug }: Readonly<{ tena
       }
       actions={
         <Link
-          href={selectedTenant ? `/t/${tenantSlug}` : "/admin"}
+          href={`/t/${tenantSlug}/admin`}
           className="inline-flex min-h-11 items-center justify-center rounded-xl border border-[#46503f] px-4 py-2 text-sm font-semibold text-[#d7c895] transition hover:border-[#7a6a3c] hover:bg-[#1d211b] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d7c895]"
         >
           ← Wróć do panelu

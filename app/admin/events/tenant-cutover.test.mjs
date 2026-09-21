@@ -4,19 +4,20 @@ import test from "node:test";
 
 const source = (path) => readFile(new URL(path, import.meta.url), "utf8");
 
-test("selected Events route mounts tenant staff UI, legacy URL remains separately callable", async () => {
+test("selected Events route mounts tenant staff UI without legacy RPC branches", async () => {
   const shell = await source("../../t/[slug]/[...path]/page.tsx");
   const page = await source("./page.tsx");
   assert.match(shell, /route\.kind === "staff" && route\.path === "admin\/events"/);
   assert.match(shell, /<AdminEventsPage tenantId=\{tenantId\} tenantSlug=\{slug\}/);
-  assert.match(page, /selectedTenant \? "admin_list_events_v2" : "admin_list_events_v1"/);
+  assert.match(page, /"admin_list_events_v2"/);
   for (const rpc of ["admin_list_event_registrations_v2", "admin_create_event_v3", "admin_update_event_v3", "admin_set_event_active_v3", "approve_event_registration_v2", "mark_event_registration_paid_v2"]) {
-    assert.ok(page.includes(`selectedTenant ? "${rpc}" :`), `${rpc} not selected`);
+    assert.ok(page.includes(`"${rpc}"`), `${rpc} not selected`);
   }
-  assert.match(page, /selectedTenant\s*\? await supabase\.rpc\("get_my_tenant_role_v1", \{ p_tenant_id: tenantId \}\)/);
-  assert.match(page, /if \(selectedTenant\) query = query\.eq\("tenant_id", tenantId\)/);
-  assert.match(page, /selectedTenant \? `\/api\/cancel-event-registration\?tenant=/);
-  assert.match(page, /href=\{selectedTenant \? `\/t\/\$\{tenantSlug\}\/events` : "\/events"\}/);
+  assert.match(page, /await supabase\.rpc\("get_my_tenant_role_v1", \{ p_tenant_id: tenantId \}\)/);
+  assert.match(page, /query = query\.eq\("tenant_id", tenantId\)/);
+  assert.match(page, /`\/api\/cancel-event-registration\?tenant=\$\{encodeURIComponent\(tenantSlug\)\}`/);
+  assert.match(page, /href=\{`\/t\/\$\{tenantSlug\}\/events`\}/);
+  assert.doesNotMatch(page, /"admin_list_events_v1"|selectedTenant \?/);
 });
 
 test("cancellation checks persisted registration tenant in DB and service recipient reads stay event-bound", async () => {

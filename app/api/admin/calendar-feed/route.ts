@@ -14,6 +14,7 @@ import { parseCalendarFeedQuery } from "@/lib/admin/calendar/query";
 import { getWarsawCalendarDate } from "@/lib/admin/calendar/time";
 import type { CalendarFeedErrorCode } from "@/lib/admin/calendar/types";
 import { verifyAuthUser } from "@/lib/server/auth-user-verification";
+import { resolvePublicTenantContext } from "@/lib/server/tenant-context";
 
 const RESPONSE_HEADERS = { "Cache-Control": "private, no-store" };
 
@@ -71,7 +72,14 @@ export async function GET(request: Request) {
       );
     }
 
-    const parsedQuery = parseCalendarFeedQuery(new URL(request.url).searchParams);
+    const queryParams = new URL(request.url).searchParams;
+    if (queryParams.getAll("tenant").length !== 1) {
+      return jsonError("forbidden", "Brak uprawnień do kalendarza.", 403);
+    }
+    const requestedSlug = queryParams.get("tenant");
+    const calendarParams = new URLSearchParams(queryParams);
+    calendarParams.delete("tenant");
+    const parsedQuery = parseCalendarFeedQuery(calendarParams);
     if (!parsedQuery.ok) {
       return NextResponse.json(parsedQuery.error, {
         status: 400,
@@ -79,13 +87,20 @@ export async function GET(request: Request) {
       });
     }
 
-    const { data: roleData, error: roleError } = await supabase.rpc("get_my_role");
+    const tenant = await resolvePublicTenantContext(supabase, requestedSlug);
+    if (!tenant.ok) {
+      return jsonError("forbidden", "Brak uprawnień do kalendarza.", 403);
+    }
+    const { data: roleData, error: roleError } = await supabase.rpc(
+      "get_my_tenant_role_v1", { p_tenant_id: tenant.value.tenantId }
+    );
     if (roleError) {
       console.error("Calendar feed role lookup failed", { code: roleError.code });
       return jsonError("calendar_feed_failed", "Nie udało się pobrać kalendarza.", 500);
     }
 
-    const role = parseCalendarFeedRole(roleData);
+    const role = parseCalendarFeedRole(roleData === "employee" ? "pracownik"
+      : roleData === "instructor" ? "instruktor" : roleData);
     if (!role) {
       return jsonError("forbidden", "Brak uprawnień do kalendarza.", 403);
     }
@@ -95,7 +110,8 @@ export async function GET(request: Request) {
       .from("shooting_lanes")
       .select(
         "id,name,is_active,display_order,booking_step_minutes,resource_kind,parent_lane_id,whole_lane_bookable,positions_bookable,lane_booking_rules(online_bookable)"
-      );
+      )
+      .eq("tenant_id", tenant.value.tenantId);
     const { data: laneData, error: laneError } = await laneRequest;
 
     if (laneError) {
@@ -116,6 +132,7 @@ export async function GET(request: Request) {
       let reservationRequest = supabase
         .from("reservations")
         .select(getReservationSelectColumns(role))
+        .eq("tenant_id", tenant.value.tenantId)
         .gte("reservation_date", query.rangeStart)
         .lte("reservation_date", query.rangeEnd)
         .in(
@@ -140,6 +157,7 @@ export async function GET(request: Request) {
       let blockRequest = supabase
         .from("lane_blocks")
         .select("id,lane_id,block_date,start_time,end_time,reason,is_active")
+        .eq("tenant_id", tenant.value.tenantId)
         .gte("block_date", query.rangeStart)
         .lte("block_date", query.rangeEnd);
       if (!query.includeHistoricalStatuses) blockRequest = blockRequest.eq("is_active", true);
@@ -157,6 +175,7 @@ export async function GET(request: Request) {
       const { data, error } = await supabase
         .from("events")
         .select("id,title,event_date,start_time,end_time,location,max_participants,is_active,event_lanes(lane_id,shooting_lanes(id,name))")
+        .eq("tenant_id", tenant.value.tenantId)
         .gte("event_date", query.rangeStart)
         .lte("event_date", query.rangeEnd)
         .eq("is_active", true);

@@ -804,10 +804,12 @@ test("calendar read model requests hierarchy metadata without adding database wr
     /id,name,is_active,display_order,booking_step_minutes,resource_kind,parent_lane_id,whole_lane_bookable,positions_bookable,lane_booking_rules\(online_bookable\)/
   );
   assert.equal((routeSource.match(/\.from\("shooting_lanes"\)/g) ?? []).length, 1);
+  assert.equal((routeSource.match(/\.eq\("tenant_id", tenant\.value\.tenantId\)/g) ?? []).length, 4);
   assert.equal((routeSource.match(/lane_booking_rules\(online_bookable\)/g) ?? []).length, 1);
   assert.match(routeSource, /getCalendarFeedLaneScopeIds\(laneRows, query\.laneId\)/);
   assert.match(routeSource, /reservationRequest\.in\("lane_id", scopedLaneIds\)/);
-  assert.doesNotMatch(routeSource, /\.insert\(|\.update\(|\.delete\(|\.upsert\(/);
+  assert.doesNotMatch(routeSource, /\.(?:insert|update|upsert)\(/);
+  assert.doesNotMatch(routeSource, /(?:laneRequest|reservationRequest|blockRequest|eventRequest)\.delete\(/);
 });
 
 test("instructor calendar remains available without querying or emitting reservations", async () => {
@@ -1019,7 +1021,7 @@ test("calendar preview reads role once and does not add sensitive queries", asyn
   );
   const source = files.join("\n");
   const pageSource = files[0];
-  assert.equal((pageSource.match(/rpc\("get_my_role"\)/g) ?? []).length, 1);
+  assert.equal((pageSource.match(/rpc\("get_my_tenant_role_v1"/g) ?? []).length, 1);
   assert.doesNotMatch(
     source,
     /customer_name|customer_email|customer_phone|event_registrations|\.from\(["']profiles["']\)/i
@@ -1037,13 +1039,13 @@ test("calendar always renders one admin return link outside the preview modal", 
     new URL("./_components/CalendarEntryPreview.tsx", import.meta.url),
     "utf8"
   );
-  const linkIndex = pageSource.indexOf('href="/admin"');
+  const linkIndex = pageSource.indexOf('href={`/t/${tenantSlug}/admin`}');
   const lastViewIndex = pageSource.lastIndexOf('view === "month"');
   const modalIndex = pageSource.indexOf("{selectedEntry &&");
   assert.match(pageSource, /import Link from "next\/link"/);
-  assert.equal((pageSource.match(/href="\/admin"/g) ?? []).length, 1);
+  assert.equal((pageSource.match(/href=\{`\/t\/\$\{tenantSlug\}\/admin`\}/g) ?? []).length, 1);
   assert.match(pageSource, /← Wróć do panelu administracyjnego/);
-  assert.match(pageSource, /href="\/admin"[\s\S]*focus-visible:ring/);
+  assert.match(pageSource, /href=\{`\/t\/\$\{tenantSlug\}\/admin`\}[\s\S]*focus-visible:ring/);
   assert.ok(linkIndex > lastViewIndex);
   assert.ok(linkIndex < modalIndex);
   assert.doesNotMatch(previewSource, /← Wróć do panelu administracyjnego|href="\/admin"/);
