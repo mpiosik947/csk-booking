@@ -137,7 +137,9 @@ begin
     (v_instructor,'instruktor','[TEST]','6C-3J','[TEST][6C-3J]',
       'test-6c3j-instructor@example.invalid'),
     (v_user,'user','[TEST]','6C-3J','[TEST][6C-3J]',
-      'test-6c3j-user@example.invalid');
+      'test-6c3j-user@example.invalid')
+  on conflict(user_id) do update set role=excluded.role,first_name=excluded.first_name,
+    last_name=excluded.last_name,full_name=excluded.full_name,email=excluded.email;
 
   -- SAAS-9D-5A: global profile roles no longer create tenant authority.
   insert into public.tenant_memberships(tenant_id,user_id,role,status) values

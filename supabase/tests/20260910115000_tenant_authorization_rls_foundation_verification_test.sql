@@ -121,7 +121,8 @@ begin
   values
     (v_user,'00000000-0000-0000-0000-000000000000','authenticated','authenticated','saas9c2-foundation-'||v_run||'@example.invalid','',pg_catalog.now(),'{}','{}',pg_catalog.now(),pg_catalog.now()),
     (v_no_membership,'00000000-0000-0000-0000-000000000000','authenticated','authenticated','saas9c2-none-'||v_run||'@example.invalid','',pg_catalog.now(),'{}','{}',pg_catalog.now(),pg_catalog.now());
-  insert into public.profiles(user_id,email,role) values(v_user,'saas9c2-foundation-'||v_run||'@example.invalid','user');
+  insert into public.profiles(user_id,email,role) values(v_user,'saas9c2-foundation-'||v_run||'@example.invalid','user')
+  on conflict(user_id) do update set email=excluded.email,role=excluded.role;
   insert into public.tenants(id,name,slug,status) values(v_other,'[TEST][SAAS-9C-2] B','saas9c2-'||pg_catalog.left(v_run,16),'dormant');
   insert into public.tenant_memberships(tenant_id,user_id,role,status) values(v_other,v_user,'admin','active');
 

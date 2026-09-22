@@ -78,11 +78,20 @@ begin
     pg_catalog.now(),pg_catalog.now()
   from (values(user_x,'user'),(pending_user,'pending'),(admin_a,'admin'),(target_a,'target')) u(id,label);
 
-  perform pg_temp.ok(6,'global account trigger creates profile only',
+  perform pg_temp.ok(6,'canonical global account trigger creates profile only',
     exists(select 1 from public.profiles where user_id=user_x and role='user')
     and not exists(select 1 from public.tenant_memberships where user_id=user_x)
     and (select pg_catalog.count(*)=1 from pg_catalog.pg_trigger where not tgisinternal
-      and tgrelid='auth.users'::regclass and tgfoid='public.handle_new_user()'::regprocedure));
+      and tgrelid='auth.users'::regclass and tgname='on_auth_user_created'
+      and tgfoid='public.handle_new_user()'::regprocedure
+      and tgenabled='O' and tgtype=5 and tgqual is null)
+    and (select pg_catalog.md5(pg_catalog.regexp_replace(p.prosrc,'[[:space:]]+',' ','g'))
+      ='1de0460e8b4298219dd8be7d953bb0f5' from pg_catalog.pg_proc p
+      where p.oid='public.handle_new_user()'::regprocedure)
+    and (select pg_catalog.strpos(p.prosrc,'tenant_memberships')=0
+      and pg_catalog.strpos(p.prosrc,'active_single_tenant')=0
+      and pg_catalog.strpos(p.prosrc,'self_onboard_tenant')=0
+      from pg_catalog.pg_proc p where p.oid='public.handle_new_user()'::regprocedure));
   perform pg_temp.ok(7,'unauthenticated onboarding is denied',
     pg_temp.as_actor_raises(null,'select public.self_onboard_tenant_v1(''csk'')'));
   perform pg_temp.ok(8,'invalid tenant selector is denied',

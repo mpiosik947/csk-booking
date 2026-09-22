@@ -106,7 +106,8 @@ begin
     (v_user_a,'saas9c2-usera-'||v_run||'@example.invalid','user'),
     (v_user_b,'saas9c2-userb-'||v_run||'@example.invalid','user'),
     (v_pending,'saas9c2-pending-'||v_run||'@example.invalid','user'),
-    (v_suspended,'saas9c2-suspended-'||v_run||'@example.invalid','user');
+    (v_suspended,'saas9c2-suspended-'||v_run||'@example.invalid','user')
+  on conflict(user_id) do update set email=excluded.email,role=excluded.role;
 
   insert into public.tenant_memberships(tenant_id,user_id,role,status)
   values

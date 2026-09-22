@@ -54,13 +54,6 @@ begin
     (v_ambiguous,'00000000-0000-0000-0000-000000000000','saas9d4b2a-ambiguous@example.invalid','',now(),now(),now(),'{}','{}','authenticated','authenticated'),
     (v_default,'00000000-0000-0000-0000-000000000000','saas9d4b2a-default@example.invalid','',now(),now(),now(),'{}','{}','authenticated','authenticated');
 
-  insert into public.profiles(user_id,email,role,full_name)
-  values(v_admin,'saas9d4b2a-admin@example.invalid','admin','[TEST][SAAS-9D-4B-2A] Admin'),
-        (v_related,'saas9d4b2a-related@example.invalid','user','[TEST][SAAS-9D-4B-2A] Related'),
-        (v_unrelated,'saas9d4b2a-unrelated@example.invalid','user','[TEST][SAAS-9D-4B-2A] Unrelated'),
-        (v_ambiguous,'saas9d4b2a-ambiguous@example.invalid','user','[TEST][SAAS-9D-4B-2A] Ambiguous'),
-        (v_default,'saas9d4b2a-default@example.invalid','user','[TEST][SAAS-9D-4B-2A] Default');
-
   update public.profiles set role='user',full_name='[TEST][SAAS-9D-4B-2A]',verification_status='pending',permissions_verified=false
   where user_id in(v_related,v_unrelated,v_ambiguous,v_default);
   update public.profiles set role='admin',full_name='[TEST][SAAS-9D-4B-2A] Admin' where user_id=v_admin;

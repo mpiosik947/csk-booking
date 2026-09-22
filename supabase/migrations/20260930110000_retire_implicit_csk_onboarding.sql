@@ -1,5 +1,70 @@
 begin;
 
+-- The canonical auth trigger is not represented by the historical public-schema
+-- baseline dump, but it is present in production. Reconcile that dump boundary
+-- without replacing an already-correct production trigger. The function is
+-- guarded positively before any trigger is accepted or created.
+do $auth_profile_trigger_reconciliation$
+declare
+  v_function oid:=pg_catalog.to_regprocedure('public.handle_new_user()');
+  v_trigger_count integer;
+  v_definition text;
+begin
+  if v_function is null then
+    raise exception 'SAAS-9D-5A-3 preflight failed: canonical auth profile function is missing.';
+  end if;
+
+  select pg_catalog.replace(pg_catalog.replace(
+    pg_catalog.pg_get_functiondef(v_function),E'\r\n',E'\n'),E'\r',E'\n')
+  into v_definition;
+
+  if pg_catalog.md5(pg_catalog.regexp_replace(
+       (select p.prosrc from pg_catalog.pg_proc p where p.oid=v_function),
+       '[[:space:]]+',' ','g'))<>'1de0460e8b4298219dd8be7d953bb0f5'
+     or not exists(select 1 from pg_catalog.pg_proc p where p.oid=v_function
+       and pg_catalog.pg_get_function_identity_arguments(p.oid)=''
+       and p.prosecdef
+       and pg_catalog.pg_get_userbyid(p.proowner)='postgres'
+       and p.proconfig=array['search_path=public, pg_temp']::text[])
+     or pg_catalog.has_function_privilege('public',v_function,'EXECUTE')
+     or pg_catalog.has_function_privilege('anon',v_function,'EXECUTE')
+     or pg_catalog.has_function_privilege('authenticated',v_function,'EXECUTE')
+     or pg_catalog.has_function_privilege('service_role',v_function,'EXECUTE')
+     or pg_catalog.strpos(v_definition,'tenant_memberships')>0
+     or pg_catalog.strpos(v_definition,'active_single_tenant')>0
+     or pg_catalog.strpos(v_definition,'self_onboard_tenant')>0
+     or pg_catalog.strpos(v_definition,'sync_profile_role')>0
+     or pg_catalog.strpos(v_definition,'sync_csk_membership')>0 then
+    raise exception 'SAAS-9D-5A-3 preflight failed: canonical auth profile function drifted or gained tenant side effects.';
+  end if;
+
+  select pg_catalog.count(*) into v_trigger_count
+  from pg_catalog.pg_trigger t
+  where not t.tgisinternal and t.tgrelid='auth.users'::regclass;
+
+  if v_trigger_count=0 then
+    execute $trigger$
+      create trigger on_auth_user_created
+      after insert on auth.users
+      for each row
+      execute function public.handle_new_user()
+    $trigger$;
+  elsif v_trigger_count<>1
+     or not exists(select 1 from pg_catalog.pg_trigger t
+       where not t.tgisinternal and t.tgrelid='auth.users'::regclass
+         and t.tgname='on_auth_user_created' and t.tgfoid=v_function
+         and t.tgenabled='O' and t.tgtype=5 and t.tgqual is null) then
+    raise exception 'SAAS-9D-5A-3 preflight failed: auth profile trigger target or inventory differs.';
+  end if;
+
+  if (select pg_catalog.count(*) from pg_catalog.pg_trigger t
+      where not t.tgisinternal and t.tgrelid='auth.users'::regclass
+        and t.tgname='on_auth_user_created' and t.tgfoid=v_function)<>1 then
+    raise exception 'SAAS-9D-5A-3 preflight failed: canonical auth profile trigger is not unique.';
+  end if;
+end;
+$auth_profile_trigger_reconciliation$;
+
 do $preflight$
 declare v_expected record;
 begin
@@ -29,8 +94,9 @@ begin
   end if;
   if (select pg_catalog.count(*) from pg_catalog.pg_trigger
       where not tgisinternal and tgrelid='auth.users'::regclass
-        and tgfoid='public.handle_new_user()'::regprocedure)<>0 then
-    raise exception 'SAAS-9D-5A-3 preflight failed: auth profile trigger baseline differs.';
+        and tgname='on_auth_user_created'
+        and tgfoid='public.handle_new_user()'::regprocedure)<>1 then
+    raise exception 'SAAS-9D-5A-3 preflight failed: canonical auth profile trigger differs.';
   end if;
   if (select pg_catalog.count(*) from pg_catalog.pg_proc p
       join pg_catalog.pg_namespace n on n.oid=p.pronamespace
@@ -111,13 +177,6 @@ drop trigger sync_profile_role_to_csk_membership on public.profiles;
 drop trigger sync_csk_membership_role_to_profile on public.tenant_memberships;
 drop function public.sync_profile_role_to_csk_membership();
 drop function public.sync_csk_membership_role_to_profile();
-
-create trigger on_auth_user_created
-after insert on auth.users
-for each row
-when (new.raw_user_meta_data->>'accepted_terms'='true'
-  and new.raw_user_meta_data->>'accepted_privacy'='true')
-execute function public.handle_new_user();
 
 create or replace function public.prevent_non_admin_profile_privilege_changes()
 returns trigger
@@ -260,9 +319,16 @@ begin
       where not tgisinternal and tgrelid='auth.users'::regclass
         and tgfoid='public.handle_new_user()'::regprocedure
         and tgname='on_auth_user_created'
-        and pg_catalog.pg_get_triggerdef(oid) like '%accepted_terms%'
-        and pg_catalog.pg_get_triggerdef(oid) like '%accepted_privacy%')<>1 then
+        and tgenabled='O' and tgtype=5 and tgqual is null)<>1 then
     raise exception 'SAAS-9D-5A-3 postflight failed: global profile creation trigger differs.';
+  end if;
+  if pg_catalog.md5(pg_catalog.regexp_replace(
+       (select p.prosrc from pg_catalog.pg_proc p
+        where p.oid='public.handle_new_user()'::regprocedure),
+       '[[:space:]]+',' ','g'))<>'1de0460e8b4298219dd8be7d953bb0f5'
+     or pg_catalog.strpos((select p.prosrc from pg_catalog.pg_proc p
+       where p.oid='public.handle_new_user()'::regprocedure),'tenant_memberships')>0 then
+    raise exception 'SAAS-9D-5A-3 postflight failed: global profile function differs.';
   end if;
   if (select pg_catalog.strpos(p.prosrc,'active_single_tenant_id_v1') from pg_catalog.pg_proc p where p.oid=v_guard)<>0
      or (select pg_catalog.strpos(p.prosrc,'profile_role_rpc') from pg_catalog.pg_proc p where p.oid=v_guard)<>0 then

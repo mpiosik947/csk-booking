@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { execFileSync } from "node:child_process";
 import { createClient } from "@supabase/supabase-js";
 import { expect, test, type Page, type Route } from "@playwright/test";
 import { getLocalSupabaseTestEnvironment } from "./local-supabase";
@@ -29,17 +30,13 @@ async function createUser() {
   if (!data.user) throw new Error("V1.1-02 user was not created.");
   userId = data.user.id;
 
-  const { error: profileError } = await service
-    .from("profiles")
-    .update({
-      first_name: "[TEST]",
-      last_name: "Deadline",
-      full_name: "[TEST] Deadline",
-      email,
-      role: "user",
-    })
-    .eq("user_id", userId);
-  assertNoError(profileError, "configure V1.1-02 profile");
+  execFileSync(
+    "docker",
+    ["exec", "supabase_db_csk-booking", "psql", "-X", "-v", "ON_ERROR_STOP=1",
+      "-U", "postgres", "-d", "postgres", "-c",
+      `update public.profiles set first_name='[TEST]',last_name='Deadline',full_name='[TEST] Deadline',email='${email}',role='user' where user_id='${userId}'`],
+    { stdio: "pipe" },
+  );
 }
 
 async function login(page: Page) {

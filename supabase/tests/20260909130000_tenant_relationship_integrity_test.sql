@@ -1,7 +1,7 @@
 \set ON_ERROR_STOP on
 \pset format unaligned
 
-select '1..50';
+select '1..51';
 
 begin;
 
@@ -54,7 +54,8 @@ begin
   insert into auth.users(id,instance_id,aud,role,email,encrypted_password,email_confirmed_at,raw_app_meta_data,raw_user_meta_data,created_at,updated_at)
   values(v_user,'00000000-0000-0000-0000-000000000000','authenticated','authenticated','saas9b3-'||v_user||'@example.invalid','',now(),'{}','{}',now(),now());
   insert into public.profiles(user_id,role,full_name,email)
-  values(v_user,'user','[TEST][SAAS-9B-3] User','saas9b3-'||v_user||'@example.invalid');
+  values(v_user,'user','[TEST][SAAS-9B-3] User','saas9b3-'||v_user||'@example.invalid')
+  on conflict(user_id) do update set role=excluded.role,full_name=excluded.full_name,email=excluded.email;
 
   insert into public.shooting_lanes(id,tenant_id,name,type,is_active,max_shooters,booking_step_minutes,display_order,resource_kind,parent_lane_id,whole_lane_bookable,positions_bookable)
   values

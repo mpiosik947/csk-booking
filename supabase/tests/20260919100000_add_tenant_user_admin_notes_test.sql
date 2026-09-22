@@ -75,12 +75,6 @@ begin
   select actor.id,'00000000-0000-0000-0000-000000000000','authenticated','authenticated',actor.label||'-'||run_id||'@example.invalid','',pg_catalog.now(),'{}','{}',pg_catalog.now(),pg_catalog.now()
   from (values(admin_a,'admin-a'),(admin_b,'admin-b'),(shared_user,'shared'),(b_only,'b-only'),(unrelated,'unrelated'),(global_admin,'global-admin'),(pending_admin,'pending'),(suspended_admin,'suspended')) actor(id,label);
 
-  insert into public.profiles(user_id,role,first_name,last_name,full_name,email)
-  select actor.id,actor.legacy_role,'[TEST]',actor.label,
-         '[TEST][SAAS-9D-4B-1A] '||actor.label,
-         actor.label||'-'||run_id||'@example.invalid'
-  from (values(admin_a,'admin','Admin A'),(admin_b,'admin','Admin B'),(shared_user,'user','Shared'),(b_only,'user','B Only'),(unrelated,'user','Unrelated'),(global_admin,'admin','Global Admin'),(pending_admin,'admin','Pending'),(suspended_admin,'admin','Suspended')) actor(id,legacy_role,label);
-
   update public.profiles profile set role=actor.legacy_role,first_name='[TEST]',last_name=actor.label,full_name='[TEST][SAAS-9D-4B-1A] '||actor.label,email=actor.label||'-'||run_id||'@example.invalid'
   from (values(admin_a,'admin','Admin A'),(admin_b,'admin','Admin B'),(shared_user,'user','Shared'),(b_only,'user','B Only'),(unrelated,'user','Unrelated'),(global_admin,'admin','Global Admin'),(pending_admin,'admin','Pending'),(suspended_admin,'admin','Suspended')) actor(id,legacy_role,label)
   where profile.user_id=actor.id;

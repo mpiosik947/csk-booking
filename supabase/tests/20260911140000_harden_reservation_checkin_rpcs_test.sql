@@ -102,7 +102,10 @@ begin
     (v_user_a,'saas9d1-usera-'||v_run||'@example.invalid','0004','Test','User A','Test User A','user','verified'),
     (v_user_b,'saas9d1-userb-'||v_run||'@example.invalid','0005','Test','User B','Test User B','user','verified'),
     (v_pending,'saas9d1-pending-'||v_run||'@example.invalid','0006','Test','Pending Admin','Test Pending Admin','admin','verified'),
-    (v_suspended,'saas9d1-suspended-'||v_run||'@example.invalid','0007','Test','Suspended Admin','Test Suspended Admin','admin','verified');
+    (v_suspended,'saas9d1-suspended-'||v_run||'@example.invalid','0007','Test','Suspended Admin','Test Suspended Admin','admin','verified')
+  on conflict(user_id) do update set email=excluded.email,phone=excluded.phone,
+    first_name=excluded.first_name,last_name=excluded.last_name,full_name=excluded.full_name,
+    role=excluded.role,verification_status=excluded.verification_status;
 
   insert into public.tenant_memberships(tenant_id,user_id,role,status)
   values

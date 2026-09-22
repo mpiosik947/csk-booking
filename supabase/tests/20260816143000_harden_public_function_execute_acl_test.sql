@@ -264,7 +264,9 @@ begin
   values
     (v_admin,'admin','[TEST]','SEC-002 Admin','[TEST][SEC-002] Admin','test-sec002-admin@example.invalid'),
     (v_employee,'pracownik','[TEST]','SEC-002 Employee','[TEST][SEC-002] Employee','test-sec002-employee@example.invalid'),
-    (v_user,'user','[TEST]','SEC-002 User','[TEST][SEC-002] User','test-sec002-user@example.invalid');
+    (v_user,'user','[TEST]','SEC-002 User','[TEST][SEC-002] User','test-sec002-user@example.invalid')
+  on conflict(user_id) do update set role=excluded.role,first_name=excluded.first_name,
+    last_name=excluded.last_name,full_name=excluded.full_name,email=excluded.email;
 
   insert into public.tenant_memberships(tenant_id,user_id,role,status) values
     ('c5c00000-0000-4000-8000-000000000001',v_admin,'admin','active'),

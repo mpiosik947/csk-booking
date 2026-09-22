@@ -182,7 +182,9 @@ begin
   values
     (v_admin,'admin','[TEST]','SEC-002B Admin','[TEST][SEC-002B] Admin','test-sec002b-admin@example.invalid'),
     (v_user,'user','[TEST]','SEC-002B User','[TEST][SEC-002B] User','test-sec002b-user@example.invalid'),
-    (v_other,'user','[TEST]','SEC-002B Other','[TEST][SEC-002B] Other','test-sec002b-other@example.invalid');
+    (v_other,'user','[TEST]','SEC-002B Other','[TEST][SEC-002B] Other','test-sec002b-other@example.invalid')
+  on conflict(user_id) do update set role=excluded.role,first_name=excluded.first_name,
+    last_name=excluded.last_name,full_name=excluded.full_name,email=excluded.email;
 
   select id into strict v_tenant
   from public.tenants

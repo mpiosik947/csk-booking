@@ -62,19 +62,6 @@ begin
     (suspended_a,'suspended-a'),(global_admin,'global-admin'),(ordinary_user,'user-a')
   ) actor(id,label);
 
-  insert into public.profiles(user_id,role,first_name,last_name,full_name,email)
-  select actor.id,actor.legacy_role,'[TEST]',actor.label,
-         '[TEST][SAAS-9D-4A] '||actor.label,
-         actor.email
-  from (values
-    (admin_a,'admin','Admin A','admin-a-'||run_id||'@example.invalid'),
-    (employee_a,'pracownik','Employee A','employee-a-'||run_id||'@example.invalid'),
-    (pending_a,'admin','Pending A','pending-a-'||run_id||'@example.invalid'),
-    (suspended_a,'admin','Suspended A','suspended-a-'||run_id||'@example.invalid'),
-    (global_admin,'admin','Global Admin','global-admin-'||run_id||'@example.invalid'),
-    (ordinary_user,'user','User A','user-a-'||run_id||'@example.invalid')
-  ) actor(id,legacy_role,label,email);
-
   update public.profiles profile
   set role=actor.legacy_role,first_name='[TEST]',last_name=actor.label,
       full_name='[TEST][SAAS-9D-4A] '||actor.label,

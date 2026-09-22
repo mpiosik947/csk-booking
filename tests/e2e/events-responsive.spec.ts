@@ -163,26 +163,12 @@ async function createAdmin() {
   assertNoError(error, "create EVENTS-8C admin");
   if (!data.user) throw new Error("EVENTS-8C admin was not created.");
   adminUserId = data.user.id;
-  const { error: profileError } = await service
-    .from("profiles")
-    .upsert(
-      {
-        user_id: adminUserId,
-        first_name: "[TEST]",
-        last_name: "Events 8C",
-        full_name: "[TEST] Events 8C",
-        email,
-        role: "admin",
-      },
-      { onConflict: "user_id" },
-    );
-  assertNoError(profileError, "configure EVENTS-8C admin profile");
   execFileSync(
     "docker",
     [
       "exec", "supabase_db_csk-booking", "psql", "-X", "-v", "ON_ERROR_STOP=1",
       "-U", "postgres", "-d", "postgres", "-c",
-      `insert into public.tenant_memberships(tenant_id,user_id,role,status) values ('${CSK_ID}','${adminUserId}','admin','active') on conflict (tenant_id,user_id) do update set role=excluded.role,status=excluded.status`,
+      `update public.profiles set first_name='[TEST]',last_name='Events 8C',full_name='[TEST] Events 8C',email='${email}',role='admin' where user_id='${adminUserId}'; insert into public.tenant_memberships(tenant_id,user_id,role,status) values ('${CSK_ID}','${adminUserId}','admin','active') on conflict (tenant_id,user_id) do update set role=excluded.role,status=excluded.status`,
     ],
     { encoding: "utf8" },
   );

@@ -46,36 +46,12 @@ test.describe.serial("SAAS-9D-4B-1A admin user tenant notes", () => {
     adminUserId = await createUser(adminEmail);
     targetUserId = await createUser(targetEmail);
 
-    const { error: profileError } = await service.from("profiles").upsert(
-      [
-        {
-          user_id: adminUserId,
-          email: adminEmail,
-          first_name: "Test",
-          last_name: "Administrator 9D4B1A",
-          full_name: "[TEST] Administrator 9D4B1A",
-          role: "admin",
-          verification_status: "verified",
-        },
-        {
-          user_id: targetUserId,
-          email: targetEmail,
-          first_name: "Test",
-          last_name: "Użytkownik 9D4B1A",
-          full_name: "[TEST] Użytkownik 9D4B1A",
-          role: "user",
-          verification_status: "verified",
-        },
-      ],
-      { onConflict: "user_id" },
-    );
-    assertNoError(profileError, "configure profiles");
     const membershipSetup = spawnSync(
       "docker",
       ["exec", "-i", "supabase_db_csk-booking", "psql", "-v", "ON_ERROR_STOP=1", "-U", "postgres", "-d", "postgres", "-At"],
       {
         encoding: "utf8",
-        input: `insert into public.tenant_memberships(tenant_id,user_id,role,status) values ('${CSK_ID}','${adminUserId}','admin','active'),('${CSK_ID}','${targetUserId}','user','active') on conflict (tenant_id,user_id) do update set role=excluded.role,status=excluded.status;\nselect count(*) from public.tenant_memberships where tenant_id='${CSK_ID}' and user_id in ('${adminUserId}','${targetUserId}') and status='active';`,
+        input: `update public.profiles set email='${adminEmail}',first_name='Test',last_name='Administrator 9D4B1A',full_name='[TEST] Administrator 9D4B1A',role='admin',verification_status='verified' where user_id='${adminUserId}';\nupdate public.profiles set email='${targetEmail}',first_name='Test',last_name='Użytkownik 9D4B1A',full_name='[TEST] Użytkownik 9D4B1A',role='user',verification_status='verified' where user_id='${targetUserId}';\ninsert into public.tenant_memberships(tenant_id,user_id,role,status) values ('${CSK_ID}','${adminUserId}','admin','active'),('${CSK_ID}','${targetUserId}','user','active') on conflict (tenant_id,user_id) do update set role=excluded.role,status=excluded.status;\nselect count(*) from public.tenant_memberships where tenant_id='${CSK_ID}' and user_id in ('${adminUserId}','${targetUserId}') and status='active';`,
       },
     );
     if (membershipSetup.status !== 0 || membershipSetup.stdout.trim().split(/\r?\n/u).at(-1) !== "2") {

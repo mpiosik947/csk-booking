@@ -69,27 +69,16 @@ async function createLocalTestUser(email: string, role: "admin" | "user") {
   assertNoError(error, `create local ${role}`);
   if (!data.user) throw new Error(`Local ${role} was not created.`);
 
-  const { error: profileError } = await service.from("profiles").upsert(
-    {
-      user_id: data.user.id,
-      first_name: "[TEST]",
-      last_name: role === "admin" ? "Administrator E2E" : "Użytkownik E2E",
-      full_name:
-        role === "admin"
-          ? "[TEST] Administrator E2E"
-          : "[TEST] Użytkownik E2E",
-      email,
-      role,
-    },
-    { onConflict: "user_id" }
-  );
-  assertNoError(profileError, `create local ${role} profile`);
+  const profileLastName = role === "admin" ? "Administrator E2E" : "Użytkownik E2E";
+  const profileFullName = role === "admin"
+    ? "[TEST] Administrator E2E"
+    : "[TEST] Użytkownik E2E";
   execFileSync(
     "docker",
     [
       "exec", "supabase_db_csk-booking", "psql", "-X", "-v", "ON_ERROR_STOP=1",
       "-U", "postgres", "-d", "postgres", "-c",
-      `insert into public.tenant_memberships(tenant_id,user_id,role,status) values ('${CSK_ID}','${data.user.id}','${role}','active') on conflict (tenant_id,user_id) do update set role=excluded.role,status=excluded.status`,
+      `update public.profiles set first_name='[TEST]',last_name='${profileLastName}',full_name='${profileFullName}',email='${email}',role='${role}' where user_id='${data.user.id}'; insert into public.tenant_memberships(tenant_id,user_id,role,status) values ('${CSK_ID}','${data.user.id}','${role}','active') on conflict (tenant_id,user_id) do update set role=excluded.role,status=excluded.status`,
     ],
     { encoding: "utf8" },
   );

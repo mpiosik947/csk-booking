@@ -118,7 +118,9 @@ begin
     (v_admin,'admin','[TEST]','SEC-018 Admin','[TEST][SEC-018] Admin','sec018-admin@example.invalid'),
     (v_employee,'pracownik','[TEST]','SEC-018 Employee','[TEST][SEC-018] Employee','sec018-employee@example.invalid'),
     (v_instructor,'instruktor','[TEST]','SEC-018 Instructor','[TEST][SEC-018] Instructor','sec018-instructor@example.invalid'),
-    (v_user,'user','[TEST]','SEC-018 User','[TEST][SEC-018] User','sec018-user@example.invalid');
+    (v_user,'user','[TEST]','SEC-018 User','[TEST][SEC-018] User','sec018-user@example.invalid')
+  on conflict(user_id) do update set role=excluded.role,first_name=excluded.first_name,
+    last_name=excluded.last_name,full_name=excluded.full_name,email=excluded.email;
 
   select id into strict v_tenant
   from public.tenants

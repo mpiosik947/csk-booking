@@ -84,7 +84,9 @@ begin
     (v_owner,'user','[TEST]','SEC-003 Owner','[TEST][SEC-003] Owner',
       'test-sec003-owner@example.invalid','000000001'),
     (v_other,'user','[TEST]','SEC-003 Other','[TEST][SEC-003] Other',
-      'test-sec003-other@example.invalid','000000002');
+      'test-sec003-other@example.invalid','000000002')
+  on conflict(user_id) do update set role=excluded.role,first_name=excluded.first_name,
+    last_name=excluded.last_name,full_name=excluded.full_name,email=excluded.email,phone=excluded.phone;
 
   insert into public.tenant_memberships(tenant_id,user_id,role,status) values
     ('c5c00000-0000-4000-8000-000000000001',v_owner,'user','active'),

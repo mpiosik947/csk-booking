@@ -125,7 +125,8 @@ begin
     (v_admin,'saas9c-admin-' || v_run || '@example.invalid','user'),
     (v_employee,'saas9c-employee-' || v_run || '@example.invalid','user'),
     (v_instructor,'saas9c-instructor-' || v_run || '@example.invalid','user'),
-    (v_user,'saas9c-user-' || v_run || '@example.invalid','user');
+    (v_user,'saas9c-user-' || v_run || '@example.invalid','user')
+  on conflict(user_id) do update set email=excluded.email,role=excluded.role;
 
   perform pg_temp.ok(10, 'synthetic Auth users have one profile each',
     (select pg_catalog.count(*) = 4 from public.profiles where user_id in (v_admin, v_employee, v_instructor, v_user)),
@@ -296,7 +297,8 @@ begin
     pg_catalog.now(), pg_catalog.now(), pg_catalog.now() + interval '1 day'
   );
   insert into public.profiles(user_id,email,role)
-  values(v_banned,'saas9c-banned-' || v_run || '@example.invalid','user');
+  values(v_banned,'saas9c-banned-' || v_run || '@example.invalid','user')
+  on conflict(user_id) do update set email=excluded.email,role=excluded.role;
   perform pg_temp.ok(46, 'banned account profile creation does not imply membership',
     exists(select 1 from public.profiles where user_id=v_banned)
     and not exists(select 1 from public.tenant_memberships where tenant_id=v_csk and user_id=v_banned),

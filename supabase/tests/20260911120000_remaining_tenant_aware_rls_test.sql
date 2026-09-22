@@ -113,7 +113,9 @@ begin
     (v_unrelated,'9c2d-unrelated-'||v_run||'@example.invalid','user','[TEST]','Unrelated',v_marker||' Unrelated'),
     (v_global_admin,'9c2d-global-'||v_run||'@example.invalid','admin','[TEST]','Global',v_marker||' Global'),
     (v_pending,'9c2d-pending-'||v_run||'@example.invalid','admin','[TEST]','Pending',v_marker||' Pending'),
-    (v_suspended,'9c2d-suspended-'||v_run||'@example.invalid','admin','[TEST]','Suspended',v_marker||' Suspended');
+    (v_suspended,'9c2d-suspended-'||v_run||'@example.invalid','admin','[TEST]','Suspended',v_marker||' Suspended')
+  on conflict(user_id) do update set email=excluded.email,role=excluded.role,
+    first_name=excluded.first_name,last_name=excluded.last_name,full_name=excluded.full_name;
 
   insert into public.tenant_memberships(tenant_id,user_id,role,status)
   values
