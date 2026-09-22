@@ -61,6 +61,7 @@ declare
   v_employee uuid:=pg_catalog.gen_random_uuid();
   v_instructor uuid:=pg_catalog.gen_random_uuid();
   v_user uuid:=pg_catalog.gen_random_uuid();
+  v_tenant uuid;
   v_event uuid:=pg_catalog.gen_random_uuid();
   v_public jsonb;
   v_admin_result jsonb;
@@ -88,6 +89,13 @@ begin
   if (select pg_catalog.count(*) from public.profiles where user_id in(v_admin,v_employee,v_instructor,v_user))<>4 then
     raise exception 'EVENTS-8B fixture failed: expected four profiles.';
   end if;
+
+  select id into strict v_tenant from public.tenants where slug='csk' and status='active';
+  insert into public.tenant_memberships(tenant_id,user_id,role,status) values
+    (v_tenant,v_admin,'admin','active'),
+    (v_tenant,v_employee,'employee','active'),
+    (v_tenant,v_instructor,'instructor','active'),
+    (v_tenant,v_user,'user','active');
 
   insert into public.events(id,title,description,event_date,start_time,end_time,location,price,max_participants,is_active,created_at)
   select case when number=1 then v_event else pg_catalog.gen_random_uuid() end,

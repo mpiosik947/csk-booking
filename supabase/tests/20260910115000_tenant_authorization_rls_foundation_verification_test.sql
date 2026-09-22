@@ -109,15 +109,13 @@ begin
     and not pg_catalog.has_function_privilege('service_role','public.active_single_tenant_id_v1()','EXECUTE'),
     'Internal active-tenant helper grant expanded.');
 
-  perform pg_temp.ok(7,'CSK profile memberships are reconciled after reset/backfill',
+  perform pg_temp.ok(7,'existing CSK backfill memberships remain role-consistent',
     not exists(
-      select 1 from public.profiles profile
-      left join public.tenant_memberships membership
-        on membership.tenant_id=v_csk and membership.user_id=profile.user_id
-      where membership.user_id is null
-         or membership.status<>'active'
-         or membership.role is distinct from public.legacy_profile_role_to_tenant_role_v1(profile.role)
-    ), 'Existing profile/member reconciliation differs.');
+      select 1 from public.tenant_memberships membership
+      join public.profiles profile on profile.user_id=membership.user_id
+      where membership.tenant_id=v_csk
+        and membership.role is distinct from public.legacy_profile_role_to_tenant_role_v1(profile.role)
+    ), 'Historical CSK backfill membership mapping differs.');
 
   insert into auth.users(id,instance_id,aud,role,email,encrypted_password,email_confirmed_at,raw_app_meta_data,raw_user_meta_data,created_at,updated_at)
   values
@@ -127,9 +125,12 @@ begin
   insert into public.tenants(id,name,slug,status) values(v_other,'[TEST][SAAS-9C-2] B','saas9c2-'||pg_catalog.left(v_run,16),'dormant');
   insert into public.tenant_memberships(tenant_id,user_id,role,status) values(v_other,v_user,'admin','active');
 
-  perform pg_temp.ok(8,'new profile creates active CSK membership',
-    exists(select 1 from public.tenant_memberships where tenant_id=v_csk and user_id=v_user and role='user' and status='active'),
-    'CSK membership bridge failed.');
+  perform pg_temp.ok(8,'new global profile does not create a CSK membership',
+    not exists(select 1 from public.tenant_memberships where tenant_id=v_csk and user_id=v_user),
+    'Global profile creation inferred a tenant relationship.');
+
+  insert into public.tenant_memberships(tenant_id,user_id,role,status)
+  values(v_csk,v_user,'user','active');
   perform pg_temp.ok(9,'non-CSK membership does not rewrite legacy role',
     exists(select 1 from public.profiles where user_id=v_user and role='user'),
     'Non-CSK membership changed profiles.role.');

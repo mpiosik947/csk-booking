@@ -94,6 +94,7 @@ declare
   v_lane uuid := '6c02b000-0000-4000-8000-000000000010';
   v_price uuid := '6c02b000-0000-4000-8000-000000000011';
   v_reservation uuid := '6c02b000-0000-4000-8000-000000000012';
+  v_tenant uuid;
   v_count integer;
   v_denied boolean;
 begin
@@ -182,6 +183,16 @@ begin
     (v_admin,'admin','[TEST]','SEC-002B Admin','[TEST][SEC-002B] Admin','test-sec002b-admin@example.invalid'),
     (v_user,'user','[TEST]','SEC-002B User','[TEST][SEC-002B] User','test-sec002b-user@example.invalid'),
     (v_other,'user','[TEST]','SEC-002B Other','[TEST][SEC-002B] Other','test-sec002b-other@example.invalid');
+
+  select id into strict v_tenant
+  from public.tenants
+  where slug='csk' and status='active';
+
+  insert into public.tenant_memberships(tenant_id,user_id,role,status)
+  values
+    (v_tenant,v_admin,'admin','active'),
+    (v_tenant,v_user,'user','active'),
+    (v_tenant,v_other,'user','active');
 
   insert into public.shooting_lanes(id,name,type,is_active,max_shooters,booking_step_minutes,resource_kind,whole_lane_bookable,positions_bookable)
   values(v_lane,'[TEST][SEC-002B] Lane','shooting',false,1,60,'lane',true,false);

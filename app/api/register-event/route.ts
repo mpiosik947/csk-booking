@@ -5,6 +5,7 @@ import {
   verifyAuthUser,
 } from "@/lib/server/auth-user-verification";
 import { tenantResourceMatches } from "@/lib/server/tenant-resource-scope";
+import { selfOnboardTenantUser } from "@/lib/server/tenant-self-onboarding";
 
 type RegisterEventPayload = {
   eventId?: unknown;
@@ -229,9 +230,13 @@ export async function POST(request: Request) {
     }
 
     const tenantSlug = new URL(request.url).searchParams.get("tenant");
-    if (tenantSlug !== null &&
+    if (!tenantSlug ||
         !await tenantResourceMatches(supabase, tenantSlug, "events", eventId)) {
       return NextResponse.json({ error: "Nie znaleziono szkolenia w tej lokalizacji." }, { status: 404 });
+    }
+
+    if (!await selfOnboardTenantUser(supabase, tenantSlug, authResult.user.id)) {
+      return NextResponse.json({ error: "Brak dostępu do tej lokalizacji." }, { status: 403 });
     }
 
     const { data: rpcData, error: rpcError } = await supabase.rpc(

@@ -48,6 +48,17 @@ begin
   update public.profiles set first_name='Test',last_name='SAAS9D2A',full_name=marker,phone='000000000',verification_status='verified',
     role=case user_id when admin_a then 'admin' when employee_a then 'pracownik' when instructor_a then 'instruktor' when pending_admin then 'admin' when suspended_admin then 'admin' when no_member_admin then 'admin' else 'user' end
   where user_id in(admin_a,employee_a,instructor_a,user_a,user_b,user_register,user_promote,pending_admin,suspended_admin,no_member_admin);
+
+  insert into public.tenant_memberships(tenant_id,user_id,role,status) values
+    (csk,admin_a,'admin','active'),
+    (csk,employee_a,'employee','active'),
+    (csk,instructor_a,'instructor','active'),
+    (csk,user_a,'user','active'),
+    (csk,user_b,'user','active'),
+    (csk,user_register,'user','active'),
+    (csk,user_promote,'user','active'),
+    (csk,pending_admin,'admin','active'),
+    (csk,suspended_admin,'admin','active');
   if (select count(*) from public.profiles where user_id in(admin_a,employee_a,instructor_a,user_a,user_b,user_register,user_promote,pending_admin,suspended_admin,no_member_admin))<>10 then raise exception 'fixture profile count differs'; end if;
   delete from public.tenant_memberships where tenant_id=csk and user_id=no_member_admin;
   update public.tenant_memberships set status='pending' where tenant_id=csk and user_id=pending_admin;

@@ -86,14 +86,14 @@ begin
   ) actor(id,legacy_role,label)
   where profile.user_id=actor.id;
 
-  -- The approved CSK sync bridge creates the matching active membership when
-  -- the legacy profile role changes. Modify only membership status for the
-  -- negative cases, and remove the global-admin membership to prove that the
-  -- profile role is not report authority.
-  update public.tenant_memberships set status='pending'
-  where tenant_id=tenant_a and user_id=pending_a;
-  update public.tenant_memberships set status='suspended'
-  where tenant_id=tenant_a and user_id=suspended_a;
+  insert into public.tenant_memberships(tenant_id,user_id,role,status) values
+    (tenant_a,admin_a,'admin','active'),
+    (tenant_a,employee_a,'employee','active'),
+    (tenant_a,pending_a,'admin','pending'),
+    (tenant_a,suspended_a,'admin','suspended'),
+    (tenant_a,ordinary_user,'user','active')
+  on conflict (tenant_id,user_id) do update
+  set role=excluded.role,status=excluded.status;
   delete from public.tenant_memberships
   where tenant_id=tenant_a and user_id=global_admin;
 
@@ -161,8 +161,8 @@ begin
     select 1 from (values('public'::name),('anon'::name),('authenticated'::name),('service_role'::name)) role(name)
     where pg_catalog.has_function_privilege(role.name,'public._admin_reservation_report_rows_v2(date,date,uuid,text,text,text)','EXECUTE')),
     'old helper exposed');
-  perform pg_temp.ok(8,'SECURITY DEFINER count is 96 after Phase 2',
-    (select count(*) from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.prosecdef)=96,
+  perform pg_temp.ok(8,'SECURITY DEFINER count is 95 after Phase 2',
+    (select count(*) from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.prosecdef)=95,
     'definer count differs');
   perform pg_temp.ok(9,'compatibility defaults remain 7/7',
     (select count(*) from information_schema.columns where table_schema='public'

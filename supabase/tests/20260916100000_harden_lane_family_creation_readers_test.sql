@@ -76,9 +76,16 @@ begin
     raise exception 'SAAS-9D-3B fixture profile count differs.';
   end if;
 
+  insert into public.tenant_memberships(tenant_id,user_id,role,status) values
+    (csk,admin_a,'admin','active'),
+    (csk,employee_a,'employee','active'),
+    (csk,instructor_a,'instructor','active'),
+    (csk,user_a,'user','active'),
+    (csk,pending_a,'admin','pending'),
+    (csk,suspended_a,'admin','suspended')
+  on conflict (tenant_id,user_id) do update
+  set role=excluded.role,status=excluded.status;
   delete from public.tenant_memberships where tenant_id=csk and user_id in(admin_b,global_admin);
-  update public.tenant_memberships set status='pending' where tenant_id=csk and user_id=pending_a;
-  update public.tenant_memberships set status='suspended' where tenant_id=csk and user_id=suspended_a;
   insert into public.tenants(id,name,slug,status) values(tenant_b,marker||' Tenant B','saas9d3b-'||left(replace(tenant_b::text,'-',''),16),'dormant');
   insert into public.tenant_memberships(tenant_id,user_id,role,status) values(tenant_b,admin_b,'admin','active');
 
@@ -91,7 +98,7 @@ begin
   perform pg_temp.ok(2,'all targets remain postgres-owned SP1 definers with original volatility',(select count(*)=3 and bool_and(p.prosecdef) and bool_and(r.rolname='postgres') and bool_and(p.proconfig=array['search_path=pg_catalog, public, pg_temp']::text[]) and count(*) filter(where p.provolatile='v')=1 and count(*) filter(where p.provolatile='s')=2 from pg_proc p join pg_namespace n on n.oid=p.pronamespace join pg_roles r on r.oid=p.proowner where n.nspname='public' and p.proname in('admin_create_lane_booking_family_v1','admin_get_lane_booking_configuration_v1','admin_get_lane_booking_configuration_v2')),'Target metadata differs.');
   perform pg_temp.ok(3,'creator and V2 are authenticated-only while V1 is internal-only',has_function_privilege('authenticated','public.admin_create_lane_booking_family_v1(jsonb)','EXECUTE') and has_function_privilege('authenticated','public.admin_get_lane_booking_configuration_v2()','EXECUTE') and not has_function_privilege('authenticated','public.admin_get_lane_booking_configuration_v1()','EXECUTE') and not has_function_privilege('public','public.admin_create_lane_booking_family_v1(jsonb)','EXECUTE') and not has_function_privilege('anon','public.admin_get_lane_booking_configuration_v2()','EXECUTE') and not has_function_privilege('service_role','public.admin_get_lane_booking_configuration_v2()','EXECUTE'),'ACL differs.');
   perform pg_temp.ok(4,'all target bodies use membership and exact-active authority',(select count(*)=3 and bool_and(strpos(pg_get_functiondef(p.oid),'active_single_tenant_id_v1')>0) and bool_and(strpos(pg_get_functiondef(p.oid),'get_my_tenant_role_v1')>0) from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname in('admin_create_lane_booking_family_v1','admin_get_lane_booking_configuration_v1','admin_get_lane_booking_configuration_v2')),'Tenant authority missing.');
-  perform pg_temp.ok(5,'SECURITY DEFINER count is 96 after Phase 2',(select count(*)=96 from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.prosecdef),'Definer count drifted.');
+  perform pg_temp.ok(5,'SECURITY DEFINER count is 95 after Phase 2',(select count(*)=95 from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.prosecdef),'Definer count drifted.');
   perform pg_temp.ok(6,'seven compatibility defaults remain',(select count(*)=7 from information_schema.columns where table_schema='public' and table_name in('shooting_lanes','reservations','lane_blocks','events','event_lanes','event_registrations','email_deliveries') and column_name='tenant_id' and column_default='''c5c00000-0000-4000-8000-000000000001''::uuid'),'Defaults changed.');
 
   snapshot:=pg_temp.as_actor_json(admin_a,'select public.admin_get_lane_booking_configuration_v2()');
@@ -146,7 +153,7 @@ do $assert$ begin if exists(select 1 from test_results where not passed) then ra
 rollback;
 
 select case when
-  (select count(*) from pg_catalog.pg_proc procedure join pg_catalog.pg_namespace namespace on namespace.oid=procedure.pronamespace where namespace.nspname='public' and procedure.prosecdef)=96
+  (select count(*) from pg_catalog.pg_proc procedure join pg_catalog.pg_namespace namespace on namespace.oid=procedure.pronamespace where namespace.nspname='public' and procedure.prosecdef)=95
   and not exists(select 1 from public.profiles where full_name like '[TEST][SAAS-9D-3B][%')
   and not exists(select 1 from public.tenants where slug like 'saas9d3b-%')
 then 'ok 33 - rollback removed every SAAS-9D-3B fixture'

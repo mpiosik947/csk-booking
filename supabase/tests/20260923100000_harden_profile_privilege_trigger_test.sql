@@ -103,7 +103,7 @@ begin
     pg_catalog.to_regprocedure('public.prevent_non_admin_profile_privilege_changes()') is not null
     and (select pg_catalog.count(*)=1 from pg_catalog.pg_trigger trigger_record where trigger_record.tgrelid='public.profiles'::regclass and trigger_record.tgfoid='public.prevent_non_admin_profile_privilege_changes()'::regprocedure and not trigger_record.tgisinternal and trigger_record.tgname='prevent_non_admin_profile_privilege_changes_trigger'));
   perform pg_temp.ok(2,'target normalized fingerprint is exact',
-    pg_catalog.md5(pg_catalog.replace(pg_catalog.replace(pg_catalog.pg_get_functiondef('public.prevent_non_admin_profile_privilege_changes()'::regprocedure),E'\r\n',E'\n'),E'\r',E'\n'))='8a3cb4dc2d663cbf3c866fc3d9c8dac7');
+    pg_catalog.md5(pg_catalog.replace(pg_catalog.replace(pg_catalog.pg_get_functiondef('public.prevent_non_admin_profile_privilege_changes()'::regprocedure),E'\r\n',E'\n'),E'\r',E'\n'))='05fe62eb086d5bfe7a6f5bd5a1c2dcca');
   perform pg_temp.ok(3,'trigger remains closed postgres SECURITY DEFINER SP1',
     (select procedure_record.prosecdef and pg_catalog.pg_get_userbyid(procedure_record.proowner)='postgres' and procedure_record.proconfig=array['search_path=pg_catalog, public, pg_temp']::text[] from pg_catalog.pg_proc procedure_record where procedure_record.oid='public.prevent_non_admin_profile_privilege_changes()'::regprocedure)
     and not pg_catalog.has_function_privilege('public','public.prevent_non_admin_profile_privilege_changes()','EXECUTE')
@@ -115,7 +115,7 @@ begin
   perform pg_temp.ok(5,'tenant membership helper is the privileged authority',
     (select pg_catalog.strpos(procedure_record.prosrc,'get_my_tenant_role_v1')>0 and pg_catalog.strpos(procedure_record.prosrc,'tenant_memberships')>0 from pg_catalog.pg_proc procedure_record where procedure_record.oid='public.prevent_non_admin_profile_privilege_changes()'::regprocedure));
   perform pg_temp.ok(6,'SECURITY DEFINER count is 76 after 9E-C1',
-    (select pg_catalog.count(*)=96 from pg_catalog.pg_proc procedure_record join pg_catalog.pg_namespace namespace_record on namespace_record.oid=procedure_record.pronamespace where namespace_record.nspname='public' and procedure_record.prosecdef));
+    (select pg_catalog.count(*)=95 from pg_catalog.pg_proc procedure_record join pg_catalog.pg_namespace namespace_record on namespace_record.oid=procedure_record.pronamespace where namespace_record.nspname='public' and procedure_record.prosecdef));
   perform pg_temp.ok(7,'compatibility defaults remain 7/7',
     (select pg_catalog.count(*)=7 from information_schema.columns where table_schema='public' and table_name in('shooting_lanes','reservations','lane_blocks','events','event_lanes','event_registrations','email_deliveries') and column_name='tenant_id' and column_default='''c5c00000-0000-4000-8000-000000000001''::uuid'));
 
@@ -194,10 +194,10 @@ begin
   perform pg_temp.ok(19,'employee cannot mutate an admin profile',pg_temp.as_actor_raises(employee_a,pg_catalog.format('select public.update_profile_contact_details(%L,%L,null,null,null,null,null)',admin_a,'503003003'),'42501'));
 
   result:=pg_temp.as_actor_json(admin_a,pg_catalog.format('public.admin_set_user_role_v1(%L,%L)',owner_a,'instruktor'));
-  perform pg_temp.ok(20,'tenant role writer and CSK compatibility mirror remain compatible',
+  perform pg_temp.ok(20,'tenant role writer remains compatible while global profile role stays frozen',
     result->>'code'='updated'
     and (select role='instructor' from public.tenant_memberships where tenant_id=tenant_a and user_id=owner_a)
-    and (select role='instruktor' from public.profiles where user_id=owner_a));
+    and (select role='user' from public.profiles where user_id=owner_a));
   perform pg_temp.ok(21,'profile role is compatibility data rather than independent authority',
     (select role='admin' from public.profiles where user_id=global_admin)
     and not exists(select 1 from public.tenant_memberships where tenant_id=tenant_a and user_id=global_admin));
@@ -230,7 +230,7 @@ begin
   perform pg_temp.ok(30,'owner-operated postgres maintenance path remains available',
     (select verification_status='system-maintenance-test' from public.profiles where user_id=owner_a));
   perform pg_temp.ok(31,'system exception is explicitly limited to postgres without SET ROLE',
-    (select pg_catalog.strpos(procedure_record.prosrc,'session_user = ''postgres''')>0 and pg_catalog.strpos(procedure_record.prosrc,'current_setting(''role'', true)')>0 from pg_catalog.pg_proc procedure_record where procedure_record.oid='public.prevent_non_admin_profile_privilege_changes()'::regprocedure));
+    (select pg_catalog.strpos(procedure_record.prosrc,'session_user=''postgres''')>0 and pg_catalog.strpos(procedure_record.prosrc,'pg_catalog.current_setting(''role'',true)')>0 from pg_catalog.pg_proc procedure_record where procedure_record.oid='public.prevent_non_admin_profile_privilege_changes()'::regprocedure));
 
   select pg_catalog.count(*) into audit_before from public.audit_logs;
   perform pg_temp.direct_as_actor_raises(owner_a,pg_catalog.format('update public.profiles set role=%L where user_id=%L','admin',owner_a),'42501');

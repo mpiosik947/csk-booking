@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { execFileSync } from "node:child_process";
 import { createClient } from "@supabase/supabase-js";
 import { expect, test, type Page, type Route } from "@playwright/test";
 import { getLocalSupabaseTestEnvironment } from "./local-supabase";
@@ -11,6 +12,7 @@ const runMarker = String(Date.now()) + "-" + randomUUID().slice(0, 8);
 const email = "test-events-8c-" + runMarker + "@example.invalid";
 const password = "Local-Events-" + randomUUID() + "!Aa1";
 let adminUserId = "";
+const CSK_ID = "c5c00000-0000-4000-8000-000000000001";
 
 const EVENT_ID = "00000000-0000-4000-8000-000000000801";
 const SOLD_OUT_ID = "00000000-0000-4000-8000-000000000802";
@@ -175,6 +177,15 @@ async function createAdmin() {
       { onConflict: "user_id" },
     );
   assertNoError(profileError, "configure EVENTS-8C admin profile");
+  execFileSync(
+    "docker",
+    [
+      "exec", "supabase_db_csk-booking", "psql", "-X", "-v", "ON_ERROR_STOP=1",
+      "-U", "postgres", "-d", "postgres", "-c",
+      `insert into public.tenant_memberships(tenant_id,user_id,role,status) values ('${CSK_ID}','${adminUserId}','admin','active') on conflict (tenant_id,user_id) do update set role=excluded.role,status=excluded.status`,
+    ],
+    { encoding: "utf8" },
+  );
 }
 
 async function guardLocalRequests(page: Page) {

@@ -62,6 +62,7 @@ declare
   v_user uuid := pg_catalog.gen_random_uuid();
   v_other uuid := pg_catalog.gen_random_uuid();
   v_lifecycle uuid := pg_catalog.gen_random_uuid();
+  v_tenant uuid;
   v_run text := pg_catalog.replace(pg_catalog.gen_random_uuid()::text,'-','');
   v_result jsonb;
   v_before jsonb;
@@ -99,6 +100,19 @@ begin
     (v_other,'user','Other','clean005-other-'||v_run||'@example.invalid'),
     (v_lifecycle,'user','Lifecycle','clean005-lifecycle-'||v_run||'@example.invalid')
   ) fixture(user_id,role,label,email) where profile.user_id=fixture.user_id;
+
+  select id into strict v_tenant
+  from public.tenants
+  where slug='csk' and status='active';
+
+  insert into public.tenant_memberships(tenant_id,user_id,role,status)
+  values
+    (v_tenant,v_admin,'admin','active'),
+    (v_tenant,v_employee,'employee','active'),
+    (v_tenant,v_instructor,'instructor','active'),
+    (v_tenant,v_user,'user','active'),
+    (v_tenant,v_other,'user','active'),
+    (v_tenant,v_lifecycle,'user','active');
 
   update public.profiles set verification_status='verified',permissions_verified=true,
     permissions_verified_at=pg_catalog.now() where user_id=v_user;

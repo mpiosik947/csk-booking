@@ -142,6 +142,7 @@ declare
   v_denied boolean;
   v_checked_at timestamp with time zone;
   v_audit_count bigint;
+  v_tenant uuid;
 begin
   insert into auth.users(
     id,instance_id,aud,role,email,encrypted_password,email_confirmed_at,
@@ -161,6 +162,18 @@ begin
     (v_instructor,'instruktor','[TEST]','SEC-005 Instructor','[TEST][SEC-005] Instructor','test-sec005-instructor@example.invalid','000000003'),
     (v_user,'user','[TEST]','SEC-005 User','[TEST][SEC-005] User','test-sec005-user@example.invalid','000000004'),
     (v_owner,'user','[TEST]','SEC-005 Owner','[TEST][SEC-005] Owner','test-sec005-owner@example.invalid','000000005');
+
+  select id into strict v_tenant
+  from public.tenants
+  where slug='csk' and status='active';
+
+  insert into public.tenant_memberships(tenant_id,user_id,role,status)
+  values
+    (v_tenant,v_admin,'admin','active'),
+    (v_tenant,v_employee,'employee','active'),
+    (v_tenant,v_instructor,'instructor','active'),
+    (v_tenant,v_user,'user','active'),
+    (v_tenant,v_owner,'user','active');
 
   insert into public.shooting_lanes(
     id,name,type,is_active,max_shooters,booking_step_minutes,

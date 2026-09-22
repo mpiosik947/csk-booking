@@ -44,12 +44,12 @@ declare
   result jsonb; result_b jsonb; profile_row record; audit_count bigint;
 begin
   perform pg_temp.ok(1,'two approved public RPCs exist',pg_catalog.to_regprocedure('public.update_reservation_customer_verification_v1(uuid,text,text)') is not null and pg_catalog.to_regprocedure('public.get_my_active_tenant_verification_v1()') is not null);
-  perform pg_temp.ok(2,'SECURITY DEFINER count is 96 after Phase 2',(select count(*)=96 from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.prosecdef));
+  perform pg_temp.ok(2,'SECURITY DEFINER count is 95 after Phase 2',(select count(*)=95 from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.prosecdef));
   perform pg_temp.ok(3,'verification table remains RLS closed',(select relrowsecurity from pg_class where oid='public.tenant_user_verifications'::regclass) and (select count(*)=0 from pg_policy where polrelid='public.tenant_user_verifications'::regclass));
   perform pg_temp.ok(4,'runtime roles have no direct verification table access',not has_table_privilege('public','public.tenant_user_verifications','SELECT,INSERT,UPDATE,DELETE') and not has_table_privilege('anon','public.tenant_user_verifications','SELECT,INSERT,UPDATE,DELETE') and not has_table_privilege('authenticated','public.tenant_user_verifications','SELECT,INSERT,UPDATE,DELETE') and not has_table_privilege('service_role','public.tenant_user_verifications','SELECT,INSERT,UPDATE,DELETE'));
   perform pg_temp.ok(5,'new RPC ACL is authenticated only',has_function_privilege('authenticated','public.update_reservation_customer_verification_v1(uuid,text,text)','EXECUTE') and not has_function_privilege('anon','public.update_reservation_customer_verification_v1(uuid,text,text)','EXECUTE') and not has_function_privilege('service_role','public.update_reservation_customer_verification_v1(uuid,text,text)','EXECUTE'));
   perform pg_temp.ok(6,'internal helpers are closed',not has_function_privilege('authenticated','public._apply_tenant_user_verification_v1(uuid,uuid,text,text,text,uuid)','EXECUTE') and not has_function_privilege('service_role','public._tenant_verification_status_for_lane_v1(uuid,uuid)','EXECUTE'));
-  perform pg_temp.ok(7,'hardened trigger fingerprint unchanged',md5(replace(replace(pg_get_functiondef('public.prevent_non_admin_profile_privilege_changes()'::regprocedure),chr(13)||chr(10),chr(10)),chr(13),chr(10)))='8a3cb4dc2d663cbf3c866fc3d9c8dac7');
+  perform pg_temp.ok(7,'profile trigger matches tenant-aware onboarding cutover',md5(replace(replace(pg_get_functiondef('public.prevent_non_admin_profile_privilege_changes()'::regprocedure),chr(13)||chr(10),chr(10)),chr(13),chr(10)))='05fe62eb086d5bfe7a6f5bd5a1c2dcca');
   perform pg_temp.ok(8,'compatibility defaults remain 7/7',(select count(*)=7 from information_schema.columns where table_schema='public' and table_name in('shooting_lanes','reservations','lane_blocks','events','event_lanes','event_registrations','email_deliveries') and column_name='tenant_id' and column_default='''c5c00000-0000-4000-8000-000000000001''::uuid'));
 
   insert into public.tenants(id,name,slug,status) values(b,'[TEST][4B2B] B','test-4b2b-b','dormant');
@@ -69,11 +69,15 @@ begin
   update public.profiles set phone='000',first_name='Test',last_name='User',full_name='[TEST][4B2B]',verification_status='rejected',permissions_verified=false where user_id in(admin_a,employee_a,admin_b,global_admin,pending_admin,suspended_admin,user_x,unrelated);
   update public.profiles set role='admin' where user_id in(admin_a,admin_b,global_admin,pending_admin,suspended_admin);
   update public.profiles set role='pracownik' where user_id=employee_a;
-  -- The approved CSK sync bridge creates/updates CSK memberships from profiles.
-  -- Only status variants and Tenant B memberships need explicit fixture writes.
+  insert into public.tenant_memberships(tenant_id,user_id,role,status) values
+    (a,admin_a,'admin','active'),
+    (a,employee_a,'employee','active'),
+    (a,pending_admin,'admin','pending'),
+    (a,suspended_admin,'admin','suspended'),
+    (a,user_x,'user','active')
+  on conflict(tenant_id,user_id) do update
+  set role=excluded.role,status=excluded.status;
   delete from public.tenant_memberships where tenant_id=a and user_id in(admin_b,global_admin,unrelated);
-  update public.tenant_memberships set status='pending' where tenant_id=a and user_id=pending_admin;
-  update public.tenant_memberships set status='suspended' where tenant_id=a and user_id=suspended_admin;
   insert into public.tenant_memberships(tenant_id,user_id,role,status) values
     (b,admin_b,'admin','active'),(b,user_x,'user','active')
   on conflict(tenant_id,user_id) do update set role=excluded.role,status=excluded.status;

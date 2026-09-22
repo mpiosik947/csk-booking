@@ -33,16 +33,21 @@ begin
  where user_id in(admin_a,admin_b,global_admin,pending_admin,suspended_admin);
  update public.profiles set first_name='Fixture',last_name='Customer',full_name=marker
  where user_id in(customer_a,customer_b,unrelated);
+ insert into public.tenant_memberships(tenant_id,user_id,role,status) values
+  (a,admin_a,'admin','active'),
+  (a,customer_a,'user','active'),
+  (a,pending_admin,'admin','pending'),
+  (a,suspended_admin,'admin','suspended')
+ on conflict (tenant_id,user_id) do update
+ set role=excluded.role,status=excluded.status;
  delete from public.tenant_memberships where tenant_id=a and user_id in(admin_b,customer_b,unrelated,global_admin);
- update public.tenant_memberships set status='pending' where tenant_id=a and user_id=pending_admin;
- update public.tenant_memberships set status='suspended' where tenant_id=a and user_id=suspended_admin;
  insert into public.tenants(id,name,slug,status) values(b,marker||' B','saas9ec2d-'||left(replace(b::text,'-',''),16),'dormant');
  insert into public.tenant_memberships(tenant_id,user_id,role,status) values
   (b,admin_b,'admin','active'),(b,customer_b,'user','active');
  -- Ensure there are two admins in A for the last-admin test without touching a real account.
  insert into public.tenant_memberships(tenant_id,user_id,role,status) values(b,admin_a,'admin','active');
  perform pg_temp.ok(1,'six versioned signatures',(select count(*)=6 from pg_proc p where p.pronamespace='public'::regnamespace and p.proname in ('admin_list_users_v2','admin_set_user_role_v2','admin_set_user_note_v2','update_tenant_profile_verification_v2','update_tenant_profile_identity_v2','update_tenant_profile_contact_details_v2')),'inventory');
- perform pg_temp.ok(2,'96 DEFINER and seven defaults',(select count(*)=96 from pg_proc p where p.pronamespace='public'::regnamespace and p.prosecdef) and (select count(*)=7 from information_schema.columns where table_schema='public' and table_name in ('shooting_lanes','reservations','lane_blocks','events','event_lanes','event_registrations','email_deliveries') and column_name='tenant_id' and column_default='''c5c00000-0000-4000-8000-000000000001''::uuid'),'inventory');
+ perform pg_temp.ok(2,'95 DEFINER and seven defaults',(select count(*)=95 from pg_proc p where p.pronamespace='public'::regnamespace and p.prosecdef) and (select count(*)=7 from information_schema.columns where table_schema='public' and table_name in ('shooting_lanes','reservations','lane_blocks','events','event_lanes','event_registrations','email_deliveries') and column_name='tenant_id' and column_default='''c5c00000-0000-4000-8000-000000000001''::uuid'),'inventory');
  -- A principal executes list under authenticated, without service-role browser access.
  perform set_config('request.jwt.claim.sub',admin_a::text,true); execute 'set local role authenticated';
  select coalesce(jsonb_agg(to_jsonb(x)),'[]'::jsonb) into rows_a from public.admin_list_users_v2(a,50,0,null,null,null,'newest') x;

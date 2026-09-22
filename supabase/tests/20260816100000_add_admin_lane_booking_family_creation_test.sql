@@ -139,6 +139,13 @@ begin
     (v_user,'user','[TEST]','6C-3J','[TEST][6C-3J]',
       'test-6c3j-user@example.invalid');
 
+  -- SAAS-9D-5A: global profile roles no longer create tenant authority.
+  insert into public.tenant_memberships(tenant_id,user_id,role,status) values
+    ('c5c00000-0000-4000-8000-000000000001',v_admin,'admin','active'),
+    ('c5c00000-0000-4000-8000-000000000001',v_employee,'employee','active'),
+    ('c5c00000-0000-4000-8000-000000000001',v_instructor,'instructor','active'),
+    ('c5c00000-0000-4000-8000-000000000001',v_user,'user','active');
+
   perform pg_temp.record_result(1,'Creator security contract',
     (select procedure.prosecdef and procedure.provolatile='v'
        and procedure.proconfig=array['search_path=pg_catalog, public, pg_temp']::text[]

@@ -94,6 +94,7 @@ declare
   v_employee uuid := '7c018000-0000-4000-8000-000000000002';
   v_instructor uuid := '7c018000-0000-4000-8000-000000000003';
   v_user uuid := '7c018000-0000-4000-8000-000000000004';
+  v_tenant uuid;
   v_event uuid := '7c018000-0000-4000-8000-000000000010';
   v_payment_admin uuid := '7c018000-0000-4000-8000-000000000020';
   v_payment_employee uuid := '7c018000-0000-4000-8000-000000000021';
@@ -118,6 +119,17 @@ begin
     (v_employee,'pracownik','[TEST]','SEC-018 Employee','[TEST][SEC-018] Employee','sec018-employee@example.invalid'),
     (v_instructor,'instruktor','[TEST]','SEC-018 Instructor','[TEST][SEC-018] Instructor','sec018-instructor@example.invalid'),
     (v_user,'user','[TEST]','SEC-018 User','[TEST][SEC-018] User','sec018-user@example.invalid');
+
+  select id into strict v_tenant
+  from public.tenants
+  where slug='csk' and status='active';
+
+  insert into public.tenant_memberships(tenant_id,user_id,role,status)
+  values
+    (v_tenant,v_admin,'admin','active'),
+    (v_tenant,v_employee,'employee','active'),
+    (v_tenant,v_instructor,'instructor','active'),
+    (v_tenant,v_user,'user','active');
 
   insert into public.events(id,title,event_date,start_time,end_time,location,price,max_participants,is_active)
   values(v_event,'[TEST][SEC-018] Event',current_date+100,time '10:00',time '11:00','[TEST]',0,10,true);

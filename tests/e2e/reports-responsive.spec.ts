@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { execFileSync } from "node:child_process";
 import { createClient } from "@supabase/supabase-js";
 import { expect, test, type Page, type Route } from "@playwright/test";
 import { getLocalSupabaseTestEnvironment } from "./local-supabase";
@@ -12,6 +13,7 @@ const email = `test-reports-responsive-${runMarker}@example.invalid`;
 const password = `Local-Reports-${randomUUID()}!Aa1`;
 const resourceId = "00000000-0000-4000-8000-000000000601";
 let adminUserId = "";
+const CSK_ID = "c5c00000-0000-4000-8000-000000000001";
 
 function assertNoError(error: { message: string } | null, context: string) {
   if (error) throw new Error(`${context}: ${error.message}`);
@@ -132,6 +134,15 @@ async function createAdmin() {
       { onConflict: "user_id" },
     );
   assertNoError(profileError, "configure reports admin profile");
+  execFileSync(
+    "docker",
+    [
+      "exec", "supabase_db_csk-booking", "psql", "-X", "-v", "ON_ERROR_STOP=1",
+      "-U", "postgres", "-d", "postgres", "-c",
+      `insert into public.tenant_memberships(tenant_id,user_id,role,status) values ('${CSK_ID}','${adminUserId}','admin','active') on conflict (tenant_id,user_id) do update set role=excluded.role,status=excluded.status`,
+    ],
+    { encoding: "utf8" },
+  );
 }
 
 async function login(page: Page) {

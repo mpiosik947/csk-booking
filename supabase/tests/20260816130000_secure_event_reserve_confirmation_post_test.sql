@@ -86,6 +86,10 @@ begin
     (v_other,'user','[TEST]','SEC-003 Other','[TEST][SEC-003] Other',
       'test-sec003-other@example.invalid','000000002');
 
+  insert into public.tenant_memberships(tenant_id,user_id,role,status) values
+    ('c5c00000-0000-4000-8000-000000000001',v_owner,'user','active'),
+    ('c5c00000-0000-4000-8000-000000000001',v_other,'user','active');
+
   insert into public.events(
     id,title,event_date,start_time,end_time,location,price,max_participants,is_active
   ) values (

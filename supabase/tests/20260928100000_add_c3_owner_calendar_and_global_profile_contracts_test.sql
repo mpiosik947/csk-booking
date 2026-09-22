@@ -72,10 +72,10 @@ begin
       from pg_catalog.pg_proc p join pg_catalog.pg_namespace n on n.oid=p.pronamespace
       where n.nspname='public' and p.proname in
         ('get_my_reservation_calendar_v1','update_my_profile_v2')));
-  perform pg_temp.ok(5,'inventory 96 definers, 22 bridge, seven defaults',
-    (select count(*)=96 from pg_catalog.pg_proc p join pg_catalog.pg_namespace n on n.oid=p.pronamespace
+  perform pg_temp.ok(5,'inventory 95 definers, 21 bridge, seven defaults',
+    (select count(*)=95 from pg_catalog.pg_proc p join pg_catalog.pg_namespace n on n.oid=p.pronamespace
       where n.nspname='public' and p.prosecdef)
-    and (select count(*)=22 from pg_catalog.pg_proc p join pg_catalog.pg_namespace n on n.oid=p.pronamespace
+    and (select count(*)=21 from pg_catalog.pg_proc p join pg_catalog.pg_namespace n on n.oid=p.pronamespace
       where n.nspname='public' and p.prosrc like '%active_single_tenant_id_v1%')
     and (select count(*)=7 from information_schema.columns
       where table_schema='public' and column_name='tenant_id'

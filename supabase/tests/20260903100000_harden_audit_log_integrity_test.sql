@@ -106,6 +106,7 @@ declare
   v_audit public.audit_logs%rowtype;
   v_writer_count integer;
   v_untrusted_writer_count integer;
+  v_tenant uuid;
 begin
   insert into auth.users(id,instance_id,aud,role,email,encrypted_password,email_confirmed_at,raw_app_meta_data,raw_user_meta_data,created_at,updated_at)
   values
@@ -122,6 +123,18 @@ begin
     (v_instructor,'instruktor','[TEST]','SEC-007 Instructor','[TEST][SEC-007] Instructor','test-sec007-instructor@example.invalid'),
     (v_user,'user','[TEST]','SEC-007 User','[TEST][SEC-007] User','test-sec007-user@example.invalid'),
     (v_target,'user','[TEST]','SEC-007 Target','[TEST][SEC-007] Target','test-sec007-target@example.invalid');
+
+  select id into strict v_tenant
+  from public.tenants
+  where slug='csk' and status='active';
+
+  insert into public.tenant_memberships(tenant_id,user_id,role,status)
+  values
+    (v_tenant,v_admin,'admin','active'),
+    (v_tenant,v_employee,'employee','active'),
+    (v_tenant,v_instructor,'instructor','active'),
+    (v_tenant,v_user,'user','active'),
+    (v_tenant,v_target,'user','active');
 
   perform pg_temp.record_result(1,'audit_logs remains postgres-owned with RLS enabled',
     exists(
@@ -256,8 +269,8 @@ begin
     and pg_catalog.strpos(pg_catalog.lower(pg_catalog.pg_get_functiondef(procedure.oid)),'insert into')>0;
 
   perform pg_temp.record_result(17,'All current audit writers are trusted database functions',
-    v_writer_count=24 and v_untrusted_writer_count=0,
-    'Oczekiwano 24 zaufanych writerów: SECURITY DEFINER albo zamknięte nieklienckie cores/helpers, owner=postgres, auth.uid() i explicit search_path.');
+    v_writer_count=25 and v_untrusted_writer_count=0,
+    'Oczekiwano 25 zaufanych writerów, w tym audited tenant self-onboarding: SECURITY DEFINER albo zamknięte nieklienckie cores/helpers, owner=postgres, auth.uid() i explicit search_path.');
 
   perform pg_temp.record_result(18,'All fixture remains transaction-scoped',
     (select pg_catalog.count(*)=5 from public.profiles where user_id in (v_admin,v_employee,v_instructor,v_user,v_target))

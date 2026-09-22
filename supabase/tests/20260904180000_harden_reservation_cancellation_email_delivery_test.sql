@@ -84,6 +84,7 @@ declare
   v_employee uuid := pg_catalog.gen_random_uuid();
   v_admin uuid := pg_catalog.gen_random_uuid();
   v_instructor uuid := pg_catalog.gen_random_uuid();
+  v_tenant uuid;
   v_lane uuid := pg_catalog.gen_random_uuid();
   v_price uuid := pg_catalog.gen_random_uuid();
   v_owner_cancelled uuid := pg_catalog.gen_random_uuid();
@@ -116,6 +117,18 @@ begin
     (v_instructor,'instruktor','sec015-instructor-'||v_instructor||'@example.invalid')
   ) as fixture(user_id,role,email)
   where not exists(select 1 from public.profiles where user_id=fixture.user_id);
+
+  select id into strict v_tenant
+  from public.tenants
+  where slug='csk' and status='active';
+
+  insert into public.tenant_memberships(tenant_id,user_id,role,status)
+  values
+    (v_tenant,v_owner,'user','active'),
+    (v_tenant,v_other,'user','active'),
+    (v_tenant,v_employee,'employee','active'),
+    (v_tenant,v_admin,'admin','active'),
+    (v_tenant,v_instructor,'instructor','active');
 
   update public.profiles as profile
   set role=fixture.role,full_name='[TEST][SEC-015]',email=fixture.email

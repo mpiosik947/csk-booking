@@ -115,6 +115,15 @@ begin
     (v_pending,'9c2d-pending-'||v_run||'@example.invalid','admin','[TEST]','Pending',v_marker||' Pending'),
     (v_suspended,'9c2d-suspended-'||v_run||'@example.invalid','admin','[TEST]','Suspended',v_marker||' Suspended');
 
+  insert into public.tenant_memberships(tenant_id,user_id,role,status)
+  values
+    (v_csk,v_admin,'admin','active'),
+    (v_csk,v_employee,'employee','active'),
+    (v_csk,v_instructor,'instructor','active'),
+    (v_csk,v_user_a,'user','active'),
+    (v_csk,v_pending,'admin','active'),
+    (v_csk,v_suspended,'admin','active');
+
   delete from public.tenant_memberships where tenant_id=v_csk and user_id in(v_user_b,v_global_admin);
   update public.tenant_memberships set status='pending' where tenant_id=v_csk and user_id=v_pending;
   update public.tenant_memberships set status='suspended' where tenant_id=v_csk and user_id=v_suspended;
@@ -231,10 +240,10 @@ begin
   end if;
 
   insert into auth.users(id,instance_id,aud,role,email,encrypted_password,email_confirmed_at,raw_app_meta_data,raw_user_meta_data,created_at,updated_at)
-  values(v_registered,'00000000-0000-0000-0000-000000000000','authenticated','authenticated','9c2d-register-'||v_run||'@example.invalid','',pg_catalog.now(),'{}',pg_catalog.jsonb_build_object('first_name','[TEST]','last_name','Registered','full_name',v_marker||' Registered','phone','000'),pg_catalog.now(),pg_catalog.now());
+  values(v_registered,'00000000-0000-0000-0000-000000000000','authenticated','authenticated','9c2d-register-'||v_run||'@example.invalid','',pg_catalog.now(),'{}',pg_catalog.jsonb_build_object('first_name','[TEST]','last_name','Registered','full_name',v_marker||' Registered','phone','000','accepted_terms',true,'accepted_privacy',true),pg_catalog.now(),pg_catalog.now());
 
   perform pg_temp.ok(54,'registration trigger creates exactly one profile',(select pg_catalog.count(*)=1 from public.profiles where user_id=v_registered),'Registered profile missing or duplicated.');
-  perform pg_temp.ok(55,'registration creates active CSK membership',(select pg_catalog.count(*)=1 from public.tenant_memberships where tenant_id=v_csk and user_id=v_registered and role='user' and status='active'),'Registered membership differs.');
+  perform pg_temp.ok(55,'registration does not create an implicit tenant membership',not exists(select 1 from public.tenant_memberships where user_id=v_registered),'Global signup inferred a tenant relationship.');
   perform pg_temp.ok(56,'registration maps profile role correctly',exists(select 1 from public.profiles where user_id=v_registered and role='user' and first_name='[TEST]' and last_name='Registered'),'Registered role or metadata differs.');
 
   if v_created_test_trigger then

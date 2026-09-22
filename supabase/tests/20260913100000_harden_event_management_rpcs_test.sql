@@ -42,6 +42,13 @@ begin
   if (select count(*) from public.profiles where user_id in(admin_a,employee_a,instructor_a,user_a,pending_admin,suspended_admin,no_member_admin))<>7 then
     raise exception 'fixture profile count differs';
   end if;
+  insert into public.tenant_memberships(tenant_id,user_id,role,status) values
+    (csk,admin_a,'admin','active'),
+    (csk,employee_a,'employee','active'),
+    (csk,instructor_a,'instructor','active'),
+    (csk,user_a,'user','active'),
+    (csk,pending_admin,'admin','active'),
+    (csk,suspended_admin,'admin','active');
   delete from public.tenant_memberships where tenant_id=csk and user_id=no_member_admin;
   update public.tenant_memberships set status='pending' where tenant_id=csk and user_id=pending_admin;
   update public.tenant_memberships set status='suspended' where tenant_id=csk and user_id=suspended_admin;
@@ -132,7 +139,7 @@ begin
   result:=pg_temp.as_actor_json('anon',null,format('select public.get_public_event_list_v2(%L,''upcoming'',1,50)',marker));
   perform pg_temp.ok(30,'public events remain available and PII-free',result->>'code'='ok' and result::text !~* 'customer|user_id|registration_id|token|admin_note|phone|email','public event contract regressed');
   perform pg_temp.ok(31,'temporary event defaults remain',(select count(*)=2 from information_schema.columns where table_schema='public' and table_name in('events','event_lanes') and column_name='tenant_id' and column_default='''c5c00000-0000-4000-8000-000000000001''::uuid'),'temporary defaults changed');
-  perform pg_temp.ok(32,'SECURITY DEFINER inventory includes 9E-A resolver',(select count(*)=96 from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.prosecdef),'definer inventory drifted');
+  perform pg_temp.ok(32,'SECURITY DEFINER inventory reflects onboarding cutover',(select count(*)=95 from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.prosecdef),'definer inventory drifted');
 end;$tests$;
 
 select case when passed then 'ok ' else 'not ok ' end||test_order||' - '||test_name||case when passed then '' else E'\n# '||result end from test_results order by test_order;

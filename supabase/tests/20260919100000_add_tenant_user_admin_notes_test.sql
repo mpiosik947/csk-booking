@@ -85,12 +85,17 @@ begin
   from (values(admin_a,'admin','Admin A'),(admin_b,'admin','Admin B'),(shared_user,'user','Shared'),(b_only,'user','B Only'),(unrelated,'user','Unrelated'),(global_admin,'admin','Global Admin'),(pending_admin,'admin','Pending'),(suspended_admin,'admin','Suspended')) actor(id,legacy_role,label)
   where profile.user_id=actor.id;
 
+  insert into public.tenant_memberships(tenant_id,user_id,role,status) values
+    (tenant_a,admin_a,'admin','active'),
+    (tenant_a,shared_user,'user','active'),
+    (tenant_a,pending_admin,'admin','pending'),
+    (tenant_a,suspended_admin,'admin','suspended')
+  on conflict(tenant_id,user_id) do update
+  set role=excluded.role,status=excluded.status;
   delete from public.tenant_memberships where tenant_id=tenant_a and user_id in(admin_b,b_only,unrelated,global_admin);
   insert into public.tenant_memberships(tenant_id,user_id,role,status) values
     (tenant_b,admin_b,'admin','active'),(tenant_b,b_only,'user','active'),(tenant_b,shared_user,'user','active')
   on conflict(tenant_id,user_id) do update set role=excluded.role,status=excluded.status;
-  update public.tenant_memberships set status='pending' where tenant_id=tenant_a and user_id=pending_admin;
-  update public.tenant_memberships set status='suspended' where tenant_id=tenant_a and user_id=suspended_admin;
 
   update public.profiles set admin_note='LEGACY MUST STAY FROZEN '||run_id where user_id=shared_user;
   select admin_note into legacy_value from public.profiles where user_id=shared_user;
@@ -137,7 +142,7 @@ begin
   perform pg_temp.ok(29,'no legacy note source in active RPCs',(select prosrc not like '%profile.admin_note%' and prosrc like '%tenant_user_admin_notes%' from pg_catalog.pg_proc where oid='public.admin_list_users_v1(integer,integer,text,text,text,text)'::regprocedure) and (select prosrc not like '%set admin_note =%' and prosrc like '%tenant_user_admin_notes%' from pg_catalog.pg_proc where oid='public.admin_set_user_note_v1(uuid,text)'::regprocedure),'legacy source remains');
   perform pg_temp.ok(30,'operational relationship predicates present',(select prosrc like '%tenant_memberships%' and prosrc like '%reservations%' and prosrc like '%event_registrations%' from pg_catalog.pg_proc where oid='public.admin_list_users_v1(integer,integer,text,text,text,text)'::regprocedure) and (select prosrc like '%tenant_memberships%' and prosrc like '%reservations%' and prosrc like '%event_registrations%' from pg_catalog.pg_proc where oid='public.admin_set_user_note_v1(uuid,text)'::regprocedure),'relationship source missing');
   perform pg_temp.ok(31,'global profile role removed from authority',not exists(select 1 from pg_catalog.pg_proc where oid in('public.admin_list_users_v1(integer,integer,text,text,text,text)'::regprocedure,'public.admin_set_user_note_v1(uuid,text)'::regprocedure) and prosrc~'profile[.]role'),'global role remains');
-  perform pg_temp.ok(32,'SECURITY DEFINER count is 96 after Phase 2',(select pg_catalog.count(*) from pg_catalog.pg_proc procedure join pg_catalog.pg_namespace namespace on namespace.oid=procedure.pronamespace where namespace.nspname='public' and procedure.prosecdef)=96,'definer count differs');
+  perform pg_temp.ok(32,'SECURITY DEFINER count is 95 after Phase 2',(select pg_catalog.count(*) from pg_catalog.pg_proc procedure join pg_catalog.pg_namespace namespace on namespace.oid=procedure.pronamespace where namespace.nspname='public' and procedure.prosecdef)=95,'definer count differs');
   perform pg_temp.ok(33,'compatibility defaults remain 7/7',(select pg_catalog.count(*) from information_schema.columns where table_schema='public' and table_name in('shooting_lanes','reservations','lane_blocks','events','event_lanes','event_registrations','email_deliveries') and column_name='tenant_id' and column_default='''c5c00000-0000-4000-8000-000000000001''::uuid')=7,'defaults differ');
   perform pg_temp.ok(34,'account-wide lifecycle remains separate',pg_catalog.md5(pg_catalog.replace(pg_catalog.replace(pg_catalog.pg_get_functiondef('public.export_my_data_v1()'::regprocedure),E'\r\n',E'\n'),E'\r',E'\n'))='d159b7d0a14f7ffc9d6c3e5088d18dc5' and pg_catalog.md5(pg_catalog.replace(pg_catalog.replace(pg_catalog.pg_get_functiondef('public.anonymize_my_account_v1()'::regprocedure),E'\r\n',E'\n'),E'\r',E'\n'))='70b5f590399aa3f3a147935459b7f085','account lifecycle drifted');
   perform pg_temp.ok(35,'role identity contact and verification untouched',

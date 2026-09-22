@@ -48,12 +48,20 @@ begin
   from (values(admin_a,'admin','Admin A'),(admin_a2,'admin','Admin A2'),(admin_b,'admin','Admin B'),(user_a,'user','User A'),(user_b,'user','User B'),(unrelated,'user','Unrelated'),(employee_a,'pracownik','Employee A'),(instructor_a,'instruktor','Instructor A'),(global_admin,'admin','Global Admin'),(pending_admin,'admin','Pending'),(suspended_admin,'admin','Suspended')) x(id,legacy,label)
   where p.user_id=x.id;
 
+  insert into public.tenant_memberships(tenant_id,user_id,role,status) values
+    (tenant_a,admin_a,'admin','active'),
+    (tenant_a,admin_a2,'admin','active'),
+    (tenant_a,user_a,'user','active'),
+    (tenant_a,employee_a,'employee','active'),
+    (tenant_a,instructor_a,'instructor','active'),
+    (tenant_a,pending_admin,'admin','pending'),
+    (tenant_a,suspended_admin,'admin','suspended')
+  on conflict(tenant_id,user_id) do update
+  set role=excluded.role,status=excluded.status;
   delete from public.tenant_memberships where tenant_id=tenant_a and user_id in(admin_b,user_b,unrelated,global_admin);
   insert into public.tenant_memberships(tenant_id,user_id,role,status) values
     (tenant_b,admin_b,'admin','active'),(tenant_b,user_b,'user','active')
   on conflict(tenant_id,user_id) do update set role=excluded.role,status=excluded.status;
-  update public.tenant_memberships set status='pending' where tenant_id=tenant_a and user_id=pending_admin;
-  update public.tenant_memberships set status='suspended' where tenant_id=tenant_a and user_id=suspended_admin;
 
   perform pg_temp.ok(1,'pre-change scope has exact signatures',(select count(*)=5 from pg_proc where oid in('public.admin_set_user_role_v1(uuid,text)'::regprocedure,'public.update_profile_identity(uuid,text,text)'::regprocedure,'public.update_profile_contact_details(uuid,text,text,text,text,text,text)'::regprocedure,'public.set_audit_log_tenant_id()'::regprocedure,'public.admin_list_users_v1(integer,integer,text,text,text,text)'::regprocedure)),'signature drift');
   perform pg_temp.ok(2,'three writers are authenticated-only DEFINER SP1',not exists(select 1 from pg_proc p join pg_roles o on o.oid=p.proowner where p.oid in('public.admin_set_user_role_v1(uuid,text)'::regprocedure,'public.update_profile_identity(uuid,text,text)'::regprocedure,'public.update_profile_contact_details(uuid,text,text,text,text,text,text)'::regprocedure) and not(p.prosecdef and o.rolname='postgres' and p.proconfig=array['search_path=pg_catalog, public, pg_temp']::text[] and has_function_privilege('authenticated',p.oid,'EXECUTE') and not has_function_privilege('public',p.oid,'EXECUTE') and not has_function_privilege('anon',p.oid,'EXECUTE') and not has_function_privilege('service_role',p.oid,'EXECUTE'))),'metadata/ACL differs');
@@ -62,7 +70,7 @@ begin
 
   r:=pg_temp.role_call(admin_a,user_a,'pracownik');
   perform pg_temp.ok(5,'admin changes same-tenant membership role',r@>'{"ok":true,"changed":true,"code":"updated","role":"pracownik"}'::jsonb and (select role='employee' from public.tenant_memberships where tenant_id=tenant_a and user_id=user_a),'role update failed');
-  perform pg_temp.ok(6,'CSK bridge maps employee to pracownik',(select role='pracownik' from public.profiles where user_id=user_a),'reverse mapping failed');
+  perform pg_temp.ok(6,'membership role update leaves frozen global profile role unchanged',(select role='user' from public.profiles where user_id=user_a),'global profile role was mirrored');
   r:=pg_temp.role_call(admin_a,user_a,'instruktor');
   perform pg_temp.ok(7,'instructor mapping works',r->>'role'='instruktor' and (select role='instructor' from public.tenant_memberships where tenant_id=tenant_a and user_id=user_a),'instructor map failed');
   r:=pg_temp.role_call(admin_a,user_a,'user');
@@ -132,8 +140,8 @@ begin
   perform pg_temp.ok(40,'audit target allowlist exact',(select prosrc like '%tenant_user_role_updated%' and prosrc like '%tenant_user_identity_updated%' and prosrc like '%tenant_user_contact_updated%' from pg_proc where oid='public.set_audit_log_tenant_id()'::regprocedure),'audit target missing');
   perform pg_temp.ok(41,'account-wide functions frozen',md5(regexp_replace(pg_get_functiondef('public.export_my_data_v1()'::regprocedure),E'\r\n?',E'\n','g'))='d159b7d0a14f7ffc9d6c3e5088d18dc5' and md5(regexp_replace(pg_get_functiondef('public.anonymize_my_account_v1()'::regprocedure),E'\r\n?',E'\n','g'))='70b5f590399aa3f3a147935459b7f085','account lifecycle drift');
   perform pg_temp.ok(42,'verification function matches approved 4B-2C closure',md5(regexp_replace(pg_get_functiondef('public.update_profile_verification(uuid,text,text)'::regprocedure),E'\r\n?',E'\n','g'))='022baa5652409d2246cd5e66642e884e','verification drift');
-  perform pg_temp.ok(43,'profile privilege trigger hardened target',md5(regexp_replace(pg_get_functiondef('public.prevent_non_admin_profile_privilege_changes()'::regprocedure),E'\r\n?',E'\n','g'))='8a3cb4dc2d663cbf3c866fc3d9c8dac7','profile trigger drift');
-  perform pg_temp.ok(44,'SECURITY DEFINER count is 96 after Phase 2',(select count(*) from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.prosecdef)=96,'definer count differs');
+  perform pg_temp.ok(43,'profile privilege trigger matches tenant-aware onboarding cutover',md5(regexp_replace(pg_get_functiondef('public.prevent_non_admin_profile_privilege_changes()'::regprocedure),E'\r\n?',E'\n','g'))='05fe62eb086d5bfe7a6f5bd5a1c2dcca','profile trigger drift');
+  perform pg_temp.ok(44,'SECURITY DEFINER count is 95 after Phase 2',(select count(*) from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.prosecdef)=95,'definer count differs');
   perform pg_temp.ok(45,'compatibility defaults remain 7/7',(select count(*) from information_schema.columns where table_schema='public' and table_name in('shooting_lanes','reservations','lane_blocks','events','event_lanes','event_registrations','email_deliveries') and column_name='tenant_id' and column_default='''c5c00000-0000-4000-8000-000000000001''::uuid')=7,'defaults differ');
   perform pg_temp.ok(46,'direct profile updates remain denied',pg_temp.table_denied('authenticated','update public.profiles set role=''admin'' where false'),'direct update allowed');
   perform pg_temp.ok(47,'list tenant note contract remains active',(select prosrc like '%tenant_user_admin_notes%' and prosrc not like '%profile.admin_note%' from pg_proc where oid='public.admin_list_users_v1(integer,integer,text,text,text,text)'::regprocedure),'note/list regression');

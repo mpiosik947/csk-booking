@@ -167,7 +167,22 @@ begin
       'SEC009 ADMIN NOTE B', null, null, false, false),
     (v_user_failure, 'user', '[TEST][SEC-009] Failure', 'Gamma', '[TEST][SEC-009] Failure Gamma',
       'sec009-failure@example.invalid', '500000003', null, null, null,
-      'SEC009 FAILURE NOTE', null, null, false, false);
+      'SEC009 FAILURE NOTE', null, null, false, false)
+  on conflict (user_id) do update set
+    role=excluded.role,
+    first_name=excluded.first_name,
+    last_name=excluded.last_name,
+    full_name=excluded.full_name,
+    email=excluded.email,
+    phone=excluded.phone,
+    city=excluded.city,
+    street=excluded.street,
+    house_number=excluded.house_number,
+    admin_note=excluded.admin_note,
+    verification_note=excluded.verification_note,
+    permissions_verification_note=excluded.permissions_verification_note,
+    permission_sport=excluded.permission_sport,
+    qualification_instructor=excluded.qualification_instructor;
 
   insert into public.events(
     id, title, event_date, start_time, end_time, location, price,
@@ -361,7 +376,7 @@ begin
     exists(select 1 from public.audit_logs where action = 'fixture_action' and target_id = v_reservation_a
       and actor_user_id = v_pseudonym_id and actor_name like 'deleted-user-%'
       and details->>'safe_status' = 'confirmed'
-      and details->>'permissions_verified_by' = '[redacted]'
+      and details->>'permissions_verified_by' = 'deleted-user-' || pg_catalog.substr(v_pseudonym_hash, 1, 16)
       and details::text not like '%sec009-a@example.invalid%'
       and details::text not like '%500000001%'
       and details::text not like '%SEC009 ADMIN NOTE A%'),

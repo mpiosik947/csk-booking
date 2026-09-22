@@ -9,6 +9,7 @@ import {
 } from "@/lib/server/create-reservation-contract";
 import { verifyAuthUser } from "@/lib/server/auth-user-verification";
 import { tenantResourceMatches } from "@/lib/server/tenant-resource-scope";
+import { selfOnboardTenantUser } from "@/lib/server/tenant-self-onboarding";
 
 function getAuthenticatedSupabaseClient(accessToken: string) {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -89,9 +90,13 @@ export async function POST(request: Request) {
     }
 
     const tenantSlug = new URL(request.url).searchParams.get("tenant");
-    if (tenantSlug !== null &&
+    if (!tenantSlug ||
         !await tenantResourceMatches(supabase, tenantSlug, "shooting_lanes", body.laneId)) {
       return jsonError("invalid_request", 400);
+    }
+
+    if (!await selfOnboardTenantUser(supabase, tenantSlug, authResult.user.id)) {
+      return jsonError("unauthorized", 403);
     }
 
     const { data, error } = await supabase.rpc("create_reservation_v2", {

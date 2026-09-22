@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { execFileSync } from "node:child_process";
 import { createClient } from "@supabase/supabase-js";
 import { expect, test, type Page } from "@playwright/test";
 import { getWarsawDateISO } from "../../lib/admin/action-queues.js";
@@ -11,6 +12,7 @@ const service = createClient(environment.supabaseUrl, environment.serviceRoleKey
 const runId = `${Date.now()}-${randomUUID().slice(0, 8)}`;
 const email = `test-admin-queues-${runId}@example.invalid`;
 const password = `Local-Queues-${randomUUID()}!Aa1`;
+const CSK_ID = "c5c00000-0000-4000-8000-000000000001";
 let adminUserId = "";
 
 function assertNoError(error: { message: string } | null, context: string) {
@@ -51,6 +53,15 @@ test.describe.serial("V1.1-03 admin action queues", () => {
         { onConflict: "user_id" }
       );
     assertNoError(profileError, "configure queue admin profile");
+    execFileSync(
+      "docker",
+      [
+        "exec", "supabase_db_csk-booking", "psql", "-X", "-v", "ON_ERROR_STOP=1",
+        "-U", "postgres", "-d", "postgres", "-c",
+        `insert into public.tenant_memberships(tenant_id,user_id,role,status) values ('${CSK_ID}','${adminUserId}','admin','active') on conflict (tenant_id,user_id) do update set role=excluded.role,status=excluded.status`,
+      ],
+      { encoding: "utf8" },
+    );
   });
 
   test.afterAll(async () => {

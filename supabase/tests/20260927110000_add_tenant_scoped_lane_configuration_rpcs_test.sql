@@ -40,15 +40,20 @@ begin
   update public.profiles set role=case when user_id=employee then 'pracownik' else 'admin' end,
     first_name='Fixture',last_name='Lane',full_name=marker,phone='000',verification_status='verified'
     where user_id in(admin_a,admin_b,employee,global_admin,pending);
+  insert into public.tenant_memberships(tenant_id,user_id,role,status) values
+    (a,admin_a,'admin','active'),
+    (a,employee,'employee','active'),
+    (a,pending,'admin','pending')
+  on conflict (tenant_id,user_id) do update
+  set role=excluded.role,status=excluded.status;
   delete from public.tenant_memberships where tenant_id=a and user_id in(admin_b,global_admin);
-  update public.tenant_memberships set status='pending' where tenant_id=a and user_id=pending;
   insert into public.tenants(id,name,slug,status) values(b,marker||' B','saas9ec2b-'||left(replace(b::text,'-',''),16),'dormant');
   insert into public.tenant_memberships(tenant_id,user_id,role,status) values(b,admin_a,'admin','active'),(b,admin_b,'admin','active');
   insert into public.shooting_lanes(id,tenant_id,name,type,price_per_hour,is_active,max_shooters,booking_step_minutes,display_order,currency_code,resource_kind,parent_lane_id,whole_lane_bookable,positions_bookable)
   values(root_b,b,marker||' Foreign Root','test',0,false,2,60,9990,'PLN','lane',null,true,false);
 
   perform pg_temp.ok(1,'three selected public RPCs and closed cores',(select count(*)=3 from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname in('admin_get_lane_booking_configuration_v3','admin_create_lane_booking_family_v2','admin_set_lane_booking_family_configuration_v3')) and (select count(*)=3 from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname in('admin_get_lane_booking_configuration_v3__c2b_resource','admin_get_lane_booking_configuration_v3__saas9ec2b_core','admin_create_lane_booking_family_v2__saas9ec2b_core')),'inventory');
-  perform pg_temp.ok(2,'96 definers and seven defaults',(select count(*)=96 from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.prosecdef) and (select count(*)=7 from information_schema.columns where table_schema='public' and table_name in('shooting_lanes','reservations','lane_blocks','events','event_lanes','event_registrations','email_deliveries') and column_name='tenant_id' and column_default='''c5c00000-0000-4000-8000-000000000001''::uuid'),'baseline');
+  perform pg_temp.ok(2,'95 definers and seven defaults',(select count(*)=95 from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.prosecdef) and (select count(*)=7 from information_schema.columns where table_schema='public' and table_name in('shooting_lanes','reservations','lane_blocks','events','event_lanes','event_registrations','email_deliveries') and column_name='tenant_id' and column_default='''c5c00000-0000-4000-8000-000000000001''::uuid'),'baseline');
   snapshot:=pg_temp.actor(admin_a,format('select public.admin_get_lane_booking_configuration_v3(%L)',a));
   perform pg_temp.ok(3,'admin reads same family DTO',snapshot->>'contract_version'='2' and jsonb_typeof(snapshot->'families')='array','reader DTO');
   perform pg_temp.ok(4,'A reader excludes B family',strpos(snapshot::text,root_b::text)=0 and strpos(snapshot::text,marker||' Foreign Root')=0,'foreign family leakage');

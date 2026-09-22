@@ -24,8 +24,8 @@ test("tenant admin modules use scoped contracts and legacy URLs hand off to CSK"
     // service_role deliberately has no direct profile/membership DML. This is
     // a local fixture-only postgres operation; local-supabase.ts rejects remote hosts.
     const updateResult = execFileSync("docker", ["exec", "supabase_db_csk-booking", "psql", "-X", "-v", "ON_ERROR_STOP=1", "-U", "postgres", "-d", "postgres", "-c",
-      `insert into public.profiles(id,user_id,email,role,verification_status) select id,id,email,'user','verified' from auth.users u where u.id='${data.user.id}' and not exists(select 1 from public.profiles p where p.user_id=u.id); update public.profiles set role='admin' where user_id='${data.user.id}'; update public.tenant_memberships set role='admin', status='active' where tenant_id='${CSK_ID}' and user_id='${data.user.id}'`], { encoding: "utf8" });
-    if (!/UPDATE 1\b/.test(updateResult)) throw new Error("Local C2-A membership fixture not created");
+      `insert into public.profiles(id,user_id,email,role,verification_status) select id,id,email,'user','verified' from auth.users u where u.id='${data.user.id}' and not exists(select 1 from public.profiles p where p.user_id=u.id); update public.profiles set role='admin' where user_id='${data.user.id}'; insert into public.tenant_memberships(tenant_id,user_id,role,status) values ('${CSK_ID}','${data.user.id}','admin','active') on conflict (tenant_id,user_id) do update set role=excluded.role,status=excluded.status; select 'MEMBERSHIP_OK=' || count(*) from public.tenant_memberships where tenant_id='${CSK_ID}' and user_id='${data.user.id}' and role='admin' and status='active'`], { encoding: "utf8" });
+    if (!/MEMBERSHIP_OK=1\b/u.test(updateResult)) throw new Error("Local C2-A membership fixture not created");
 
     await page.goto("/login");
     await page.getByLabel("E-mail").fill(email);

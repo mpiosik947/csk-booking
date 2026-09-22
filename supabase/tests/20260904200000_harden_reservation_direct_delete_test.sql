@@ -81,6 +81,7 @@ declare
   v_instructor uuid := pg_catalog.gen_random_uuid();
   v_user uuid := pg_catalog.gen_random_uuid();
   v_lifecycle_user uuid := pg_catalog.gen_random_uuid();
+  v_tenant uuid;
   v_lane uuid := pg_catalog.gen_random_uuid();
   v_price uuid := pg_catalog.gen_random_uuid();
   v_user_reservation uuid := pg_catalog.gen_random_uuid();
@@ -131,6 +132,18 @@ begin
     (v_lifecycle_user, 'user', 'Lifecycle', 'clean004-lifecycle-' || v_run || '@example.invalid')
   ) as fixture(user_id, role, label, email)
   where profile.user_id = fixture.user_id;
+
+  select id into strict v_tenant
+  from public.tenants
+  where slug='csk' and status='active';
+
+  insert into public.tenant_memberships(tenant_id,user_id,role,status)
+  values
+    (v_tenant,v_admin,'admin','active'),
+    (v_tenant,v_employee,'employee','active'),
+    (v_tenant,v_instructor,'instructor','active'),
+    (v_tenant,v_user,'user','active'),
+    (v_tenant,v_lifecycle_user,'user','active');
 
   perform pg_temp.record_result(1, 'Synthetic role profiles are exact',
     (select pg_catalog.count(*) = 5 from public.profiles where user_id in (

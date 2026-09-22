@@ -13,6 +13,7 @@ const adminEmail = `test-9d4b1a-admin-${runMarker}@example.invalid`;
 const targetEmail = `test-9d4b1a-user-${runMarker}@example.invalid`;
 const password = `Local-9D4B1A-${randomUUID()}!Aa1`;
 const note = `[TEST][SAAS-9D-4B-1A][${runMarker}] tenant note`;
+const CSK_ID = "c5c00000-0000-4000-8000-000000000001";
 let adminUserId = "";
 let targetUserId = "";
 
@@ -69,6 +70,17 @@ test.describe.serial("SAAS-9D-4B-1A admin user tenant notes", () => {
       { onConflict: "user_id" },
     );
     assertNoError(profileError, "configure profiles");
+    const membershipSetup = spawnSync(
+      "docker",
+      ["exec", "-i", "supabase_db_csk-booking", "psql", "-v", "ON_ERROR_STOP=1", "-U", "postgres", "-d", "postgres", "-At"],
+      {
+        encoding: "utf8",
+        input: `insert into public.tenant_memberships(tenant_id,user_id,role,status) values ('${CSK_ID}','${adminUserId}','admin','active'),('${CSK_ID}','${targetUserId}','user','active') on conflict (tenant_id,user_id) do update set role=excluded.role,status=excluded.status;\nselect count(*) from public.tenant_memberships where tenant_id='${CSK_ID}' and user_id in ('${adminUserId}','${targetUserId}') and status='active';`,
+      },
+    );
+    if (membershipSetup.status !== 0 || membershipSetup.stdout.trim().split(/\r?\n/u).at(-1) !== "2") {
+      throw new Error(`Local membership fixture setup failed: ${membershipSetup.stderr || membershipSetup.stdout}`);
+    }
   });
 
   test.afterAll(async () => {

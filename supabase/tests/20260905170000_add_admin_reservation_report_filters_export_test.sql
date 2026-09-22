@@ -34,6 +34,7 @@ end $f$;
 do $tests$
 declare
   a uuid:=gen_random_uuid(); e uuid:=gen_random_uuid(); i uuid:=gen_random_uuid(); u uuid:=gen_random_uuid();
+  v_tenant uuid;
   root_id uuid:=gen_random_uuid(); child_id uuid:=gen_random_uuid(); sibling_id uuid:=gen_random_uuid(); standalone_id uuid:=gen_random_uuid();
   pr uuid:=gen_random_uuid(); pc uuid:=gen_random_uuid(); ps uuid:=gen_random_uuid(); pst uuid:=gen_random_uuid();
   run_id text:=replace(gen_random_uuid()::text,'-',''); r jsonb; x jsonb; p1 jsonb; p2 jsonb; v1_hash text;
@@ -51,6 +52,13 @@ begin
   update public.profiles p set role=v.role,first_name='[TEST]',last_name=v.label,full_name='[TEST][REPORTS-6B] '||v.label,email=v.email
   from (values(a,'admin','Admin','reports6b-admin-'||run_id||'@example.invalid'),(e,'pracownik','Employee','reports6b-employee-'||run_id||'@example.invalid'),(i,'instruktor','Instructor','reports6b-instructor-'||run_id||'@example.invalid'),(u,'user','User','reports6b-user-'||run_id||'@example.invalid')) v(uid,role,label,email)
   where p.user_id=v.uid;
+
+  select id into strict v_tenant from public.tenants where slug='csk' and status='active';
+  insert into public.tenant_memberships(tenant_id,user_id,role,status) values
+    (v_tenant,a,'admin','active'),
+    (v_tenant,e,'employee','active'),
+    (v_tenant,i,'instructor','active'),
+    (v_tenant,u,'user','active');
 
   insert into public.shooting_lanes(id,name,type,is_active,max_shooters,booking_step_minutes,display_order,resource_kind,parent_lane_id,whole_lane_bookable,positions_bookable) values
     (root_id,'[TEST][REPORTS-6B] Root','shooting',true,2,60,9800,'lane',null,true,true),

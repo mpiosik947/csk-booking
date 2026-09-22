@@ -79,7 +79,7 @@ begin
       cross join lateral pg_catalog.jsonb_object_keys(pg_catalog.to_jsonb(result)) key
       where key not in('tenant_id','tenant_slug','tenant_name','tenant_status')));
   perform pg_temp.ok(13,'SECURITY DEFINER inventory is exactly 76',
-    (select pg_catalog.count(*)=96 from pg_catalog.pg_proc p join pg_catalog.pg_namespace n on n.oid=p.pronamespace
+    (select pg_catalog.count(*)=95 from pg_catalog.pg_proc p join pg_catalog.pg_namespace n on n.oid=p.pronamespace
      where n.nspname='public' and p.prosecdef));
   perform pg_temp.ok(14,'seven CSK compatibility defaults remain',
     (select pg_catalog.count(*)=7 from information_schema.columns where table_schema='public'
@@ -104,9 +104,13 @@ begin
     select actor,actor,marker||'@example.invalid','user','verified'
     where not exists(select 1 from public.profiles where user_id=actor);
   update public.profiles set role='admin' where user_id=actor;
+  insert into public.tenant_memberships(tenant_id,user_id,role,status)
+  values(a,actor,'admin','active')
+  on conflict(tenant_id,user_id) do update
+  set role=excluded.role,status=excluded.status;
   if not exists(select 1 from public.tenant_memberships
       where tenant_id=a and user_id=actor and role='admin' and status='active') then
-    raise exception 'SAAS-9E-A synthetic CSK membership fixture not created';
+    raise exception 'SAAS-9E-A explicit synthetic CSK membership fixture not created';
   end if;
   perform pg_temp.ok(18,'global/CSK admin without B membership is denied in B',
     pg_temp.as_member_role(actor,b) is null and pg_temp.as_member_role(actor,a)='admin');

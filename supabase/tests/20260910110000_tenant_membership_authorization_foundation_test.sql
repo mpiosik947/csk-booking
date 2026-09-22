@@ -130,57 +130,60 @@ begin
   perform pg_temp.ok(10, 'synthetic Auth users have one profile each',
     (select pg_catalog.count(*) = 4 from public.profiles where user_id in (v_admin, v_employee, v_instructor, v_user)),
     'Synthetic fixture does not contain exactly four profiles.');
-  perform pg_temp.ok(11, 'new profiles receive active CSK memberships',
-    (select pg_catalog.count(*) = 4 from public.tenant_memberships where tenant_id = v_csk and user_id in (v_admin, v_employee, v_instructor, v_user) and role = 'user' and status = 'active'),
-    'Profile bridge did not create four active user memberships.');
+  perform pg_temp.ok(11, 'new global profiles do not receive implicit memberships',
+    not exists(select 1 from public.tenant_memberships where user_id in (v_admin, v_employee, v_instructor, v_user)),
+    'Global account/profile creation must not infer a tenant relationship.');
 
-  update public.profiles set role = 'admin' where user_id = v_admin;
-  update public.profiles set role = 'pracownik' where user_id = v_employee;
-  update public.profiles set role = 'instruktor' where user_id = v_instructor;
+  insert into public.tenant_memberships(tenant_id,user_id,role,status)
+  values
+    (v_csk,v_admin,'admin','active'),
+    (v_csk,v_employee,'employee','active'),
+    (v_csk,v_instructor,'instructor','active'),
+    (v_csk,v_user,'user','active');
 
-  perform pg_temp.ok(12, 'profile admin synchronizes membership admin',
+  perform pg_temp.ok(12, 'explicit admin membership is authoritative',
     exists(select 1 from public.tenant_memberships where tenant_id=v_csk and user_id=v_admin and role='admin'),
-    'Forward admin synchronization failed.');
-  perform pg_temp.ok(13, 'profile pracownik synchronizes membership employee',
+    'Explicit admin membership was not preserved.');
+  perform pg_temp.ok(13, 'explicit employee membership is authoritative',
     exists(select 1 from public.tenant_memberships where tenant_id=v_csk and user_id=v_employee and role='employee'),
-    'Forward employee synchronization failed.');
-  perform pg_temp.ok(14, 'profile instruktor synchronizes membership instructor',
+    'Explicit employee membership was not preserved.');
+  perform pg_temp.ok(14, 'explicit instructor membership is authoritative',
     exists(select 1 from public.tenant_memberships where tenant_id=v_csk and user_id=v_instructor and role='instructor'),
-    'Forward instructor synchronization failed.');
-  perform pg_temp.ok(15, 'profile user keeps membership user',
+    'Explicit instructor membership was not preserved.');
+  perform pg_temp.ok(15, 'explicit user membership is authoritative',
     exists(select 1 from public.tenant_memberships where tenant_id=v_csk and user_id=v_user and role='user'),
-    'Forward user synchronization failed.');
+    'Explicit user membership was not preserved.');
 
   update public.tenant_memberships set role = 'employee' where tenant_id=v_csk and user_id=v_user;
-  perform pg_temp.ok(16, 'membership employee synchronizes profile pracownik',
-    exists(select 1 from public.profiles where user_id=v_user and role='pracownik'),
-    'Reverse employee synchronization failed.');
-  update public.tenant_memberships set role = 'instructor' where tenant_id=v_csk and user_id=v_user;
-  perform pg_temp.ok(17, 'membership instructor synchronizes profile instruktor',
-    exists(select 1 from public.profiles where user_id=v_user and role='instruktor'),
-    'Reverse instructor synchronization failed.');
-  update public.tenant_memberships set role = 'user' where tenant_id=v_csk and user_id=v_user;
-  perform pg_temp.ok(18, 'membership user synchronizes profile user',
+  perform pg_temp.ok(16, 'membership employee does not rewrite frozen profile role',
     exists(select 1 from public.profiles where user_id=v_user and role='user'),
-    'Reverse user synchronization failed.');
+    'Tenant role leaked into the frozen global profile role.');
+  update public.tenant_memberships set role = 'instructor' where tenant_id=v_csk and user_id=v_user;
+  perform pg_temp.ok(17, 'membership instructor does not rewrite frozen profile role',
+    exists(select 1 from public.profiles where user_id=v_user and role='user'),
+    'Instructor tenant role leaked into the frozen global profile role.');
+  update public.tenant_memberships set role = 'user' where tenant_id=v_csk and user_id=v_user;
+  perform pg_temp.ok(18, 'membership user leaves frozen profile role unchanged',
+    exists(select 1 from public.profiles where user_id=v_user and role='user'),
+    'Membership update unexpectedly changed the global profile role.');
 
   update public.tenant_memberships set status='suspended' where tenant_id=v_csk and user_id=v_instructor;
-  update public.profiles set role='pracownik' where user_id=v_instructor;
-  perform pg_temp.ok(19, 'profile role sync preserves membership lifecycle status',
+  update public.tenant_memberships set role='employee' where tenant_id=v_csk and user_id=v_instructor;
+  perform pg_temp.ok(19, 'explicit role change preserves membership lifecycle status',
     exists(select 1 from public.tenant_memberships where tenant_id=v_csk and user_id=v_instructor and role='employee' and status='suspended'),
-    'Role bridge overwrote the membership lifecycle status.');
+    'Tenant role update overwrote the membership lifecycle status.');
 
   insert into public.tenants(id,name,slug,status)
   values(v_dormant,'[TEST][SAAS-9C] Dormant','saas9c-' || pg_catalog.left(v_run,16),'dormant');
   insert into public.tenant_memberships(tenant_id,user_id,role,status)
   values(v_dormant,v_user,'admin','active');
-  perform pg_temp.ok(20, 'non-CSK membership does not rewrite legacy global role',
+  perform pg_temp.ok(20, 'non-CSK membership does not rewrite frozen global role',
     exists(select 1 from public.profiles where user_id=v_user and role='user'),
-    'Bridge leaked a non-CSK membership into profiles.role.');
+    'A tenant relationship leaked into profiles.role.');
 
-  perform pg_temp.ok(21, 'unknown legacy role update fails closed',
-    pg_temp.raises(pg_catalog.format('update public.profiles set role=%L where user_id=%L','owner',v_user),'23514'),
-    'Unknown profile role bypassed the bridge.');
+  perform pg_temp.ok(21, 'client cannot mutate frozen legacy role',
+    pg_temp.as_role_raises('authenticated',v_user,pg_catalog.format('update public.profiles set role=%L where user_id=%L','owner',v_user),'42501'),
+    'Authenticated caller mutated the frozen profiles.role field.');
   perform pg_temp.ok(22, 'unknown membership role fails closed',
     pg_temp.raises(pg_catalog.format('update public.tenant_memberships set role=%L where tenant_id=%L and user_id=%L','owner',v_csk,v_user),'23514'),
     'Unknown membership role bypassed its CHECK.');
@@ -243,20 +246,19 @@ begin
      where namespace.nspname='public'
        and function_record.proname in ('is_tenant_member_v1','has_tenant_role_v1','get_my_tenant_role_v1')),
     'Tenant helper owner/search-path/security contract differs.');
-  perform pg_temp.ok(40, 'mapping and trigger functions have no client EXECUTE',
+  perform pg_temp.ok(40, 'mapping functions are closed and retired sync functions are absent',
     not exists(
       select 1
       from pg_catalog.pg_proc function_record
       join pg_catalog.pg_namespace namespace on namespace.oid=function_record.pronamespace
       cross join (values('anon'::name),('authenticated'::name),('service_role'::name)) client(role_name)
       where namespace.nspname='public'
-        and function_record.proname in (
-          'legacy_profile_role_to_tenant_role_v1','tenant_role_to_legacy_profile_role_v1',
-          'sync_profile_role_to_csk_membership','sync_csk_membership_role_to_profile'
-        )
+        and function_record.proname in ('legacy_profile_role_to_tenant_role_v1','tenant_role_to_legacy_profile_role_v1')
         and pg_catalog.has_function_privilege(client.role_name,function_record.oid,'EXECUTE')
-    ),
-    'Internal bridge function is client executable.');
+    )
+    and pg_catalog.to_regprocedure('public.sync_profile_role_to_csk_membership()') is null
+    and pg_catalog.to_regprocedure('public.sync_csk_membership_role_to_profile()') is null,
+    'Mapping helpers are client executable or an implicit sync function remains.');
   perform pg_temp.ok(41, 'membership policy is non-recursive and self-scoped',
     (select pg_catalog.count(*)=1
      from pg_catalog.pg_policies
@@ -293,16 +295,12 @@ begin
     'saas9c-banned-' || v_run || '@example.invalid', '', pg_catalog.now(), '{}', '{}',
     pg_catalog.now(), pg_catalog.now(), pg_catalog.now() + interval '1 day'
   );
-  perform pg_temp.ok(46, 'banned account cannot receive an active CSK membership',
-    pg_temp.raises(
-      pg_catalog.format(
-        'insert into public.profiles(user_id,email,role) values(%L,%L,%L)',
-        v_banned, 'saas9c-banned-' || v_run || '@example.invalid', 'user'
-      ),
-      '23514'
-    )
+  insert into public.profiles(user_id,email,role)
+  values(v_banned,'saas9c-banned-' || v_run || '@example.invalid','user');
+  perform pg_temp.ok(46, 'banned account profile creation does not imply membership',
+    exists(select 1 from public.profiles where user_id=v_banned)
     and not exists(select 1 from public.tenant_memberships where tenant_id=v_csk and user_id=v_banned),
-    'Bridge activated a currently banned Auth account.');
+    'Global profile creation activated a tenant relationship for a banned account.');
   perform pg_temp.ok(47, 'remaining tenant-aware RLS does not trust global role helpers',
     not exists(select 1 from pg_catalog.pg_policies where schemaname='public' and tablename in ('audit_logs','profiles','lane_booking_rules','lane_booking_durations','lane_pricing_rules') and (coalesce(qual,'')||coalesce(with_check,'')) ~ '\m(is_admin|is_employee|is_admin_or_employee|is_admin_or_staff|get_my_role)\M'),
     'A remaining tenant policy still trusts a global role helper.');

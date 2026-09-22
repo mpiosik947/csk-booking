@@ -104,6 +104,16 @@ begin
     (v_pending,'saas9d1-pending-'||v_run||'@example.invalid','0006','Test','Pending Admin','Test Pending Admin','admin','verified'),
     (v_suspended,'saas9d1-suspended-'||v_run||'@example.invalid','0007','Test','Suspended Admin','Test Suspended Admin','admin','verified');
 
+  insert into public.tenant_memberships(tenant_id,user_id,role,status)
+  values
+    (v_csk,v_admin,'admin','active'),
+    (v_csk,v_employee,'employee','active'),
+    (v_csk,v_instructor,'instructor','active'),
+    (v_csk,v_user_a,'user','active'),
+    (v_csk,v_user_b,'user','active'),
+    (v_csk,v_pending,'admin','active'),
+    (v_csk,v_suspended,'admin','active');
+
   update public.tenant_memberships set status='pending' where tenant_id=v_csk and user_id=v_pending;
   update public.tenant_memberships set status='suspended' where tenant_id=v_csk and user_id=v_suspended;
 

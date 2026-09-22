@@ -71,6 +71,7 @@ declare
   v_user_4 uuid := pg_catalog.gen_random_uuid();
   v_user_5 uuid := pg_catalog.gen_random_uuid();
   v_user_6 uuid := pg_catalog.gen_random_uuid();
+  v_tenant uuid;
   v_event_available uuid := pg_catalog.gen_random_uuid();
   v_event_reserve uuid := pg_catalog.gen_random_uuid();
   v_event_full uuid := pg_catalog.gen_random_uuid();
@@ -110,6 +111,14 @@ begin
   set first_name = '[TEST]', last_name = 'Availability',
       full_name = '[TEST] Availability', phone = '000000000'
   where user_id in (v_user_1, v_user_2, v_user_3, v_user_4, v_user_5, v_user_6);
+
+  select id into strict v_tenant
+  from public.tenants
+  where slug='csk' and status='active';
+
+  insert into public.tenant_memberships(tenant_id,user_id,role,status)
+  select v_tenant,user_id,'user','active'
+  from pg_catalog.unnest(array[v_user_1,v_user_2,v_user_3,v_user_4,v_user_5,v_user_6]) as fixture(user_id);
 
   if not found or (
     select pg_catalog.count(*)

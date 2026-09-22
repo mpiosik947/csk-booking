@@ -28,6 +28,11 @@ begin
   update public.profiles set role=case when user_id=employee then 'pracownik' else 'admin' end,full_name=marker,
     first_name='Fixture',last_name='Reports',phone='000',verification_status='verified'
     where user_id in(admin_a,employee,global_admin);
+  insert into public.tenant_memberships(tenant_id,user_id,role,status) values
+    (a,admin_a,'admin','active'),
+    (a,employee,'employee','active')
+  on conflict (tenant_id,user_id) do update
+  set role=excluded.role,status=excluded.status;
   delete from public.tenant_memberships where tenant_id=a and user_id=global_admin;
   insert into public.tenants(id,name,slug,status) values(b,marker||' B','saas9ec2c-'||left(replace(b::text,'-',''),16),'dormant');
   insert into public.tenant_memberships(tenant_id,user_id,role,status) values(b,admin_a,'admin','active');
@@ -45,7 +50,7 @@ begin
   report_a:=pg_temp.actor(admin_a,format('select public.admin_get_reservation_report_v3(%L,''2099-06-01'',''2099-06-01'',null,null,null,null,50,0)',a));
   export_a:=pg_temp.actor(admin_a,format('select public.admin_get_reservation_report_export_v2(%L,''2099-06-01'',''2099-06-01'',null,null,null,null)',a));
   perform pg_temp.ok(1,'two target signatures',to_regprocedure('public.admin_get_reservation_report_v3(uuid,date,date,uuid,text,text,text,integer,integer)') is not null and to_regprocedure('public.admin_get_reservation_report_export_v2(uuid,date,date,uuid,text,text,text)') is not null,'signatures');
-  perform pg_temp.ok(2,'96 definers',(select count(*)=96 from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.prosecdef),'DEFINER');
+  perform pg_temp.ok(2,'95 definers',(select count(*)=95 from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.prosecdef),'DEFINER');
   perform pg_temp.ok(3,'A report authorized',report_a->>'ok'='true',report_a::text);
   perform pg_temp.ok(4,'A report excludes B before details and KPI',(report_a->'pagination'->>'total')::integer=1 and (report_a->'summary'->>'planned_revenue')::numeric=100 and strpos(report_a::text,'B secret')=0 and not exists(select 1 from jsonb_array_elements(report_a->'filter_options'->'resources') option where option->>'id'=lane_b::text),'KPI/PII');
   perform pg_temp.ok(5,'A export authorized',export_a->>'ok'='true',export_a::text);

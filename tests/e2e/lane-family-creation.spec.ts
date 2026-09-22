@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { execFileSync } from "node:child_process";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { expect, test, type Locator, type Page } from "@playwright/test";
 import { getLocalSupabaseTestEnvironment } from "./local-supabase";
@@ -27,10 +28,12 @@ const invalidNames = [
   "[TEST] Atomowość rodziny osi",
   "[TEST] Security rodziny osi",
 ];
+const fixtureLaneNames = [standaloneName, hierarchyName, ...positionNames, ...invalidNames];
 const runMarker = `${Date.now()}-${randomUUID().slice(0, 8)}`;
 const adminEmail = `test-lane-family-admin-${runMarker}@example.invalid`;
 const userEmail = `test-lane-family-user-${runMarker}@example.invalid`;
 const password = `Local-E2E-${randomUUID()}!Aa1`;
+const CSK_ID = "c5c00000-0000-4000-8000-000000000001";
 
 let adminUserId = "";
 let regularUserId = "";
@@ -81,7 +84,32 @@ async function createLocalTestUser(email: string, role: "admin" | "user") {
     { onConflict: "user_id" }
   );
   assertNoError(profileError, `create local ${role} profile`);
+  execFileSync(
+    "docker",
+    [
+      "exec", "supabase_db_csk-booking", "psql", "-X", "-v", "ON_ERROR_STOP=1",
+      "-U", "postgres", "-d", "postgres", "-c",
+      `insert into public.tenant_memberships(tenant_id,user_id,role,status) values ('${CSK_ID}','${data.user.id}','${role}','active') on conflict (tenant_id,user_id) do update set role=excluded.role,status=excluded.status`,
+    ],
+    { encoding: "utf8" },
+  );
   return data.user.id;
+}
+
+function cleanupLaneFixtures() {
+  const names = fixtureLaneNames.map((name) => `'${name.replaceAll("'", "''")}'`).join(",");
+  const result = execFileSync(
+    "docker",
+    [
+      "exec", "supabase_db_csk-booking", "psql", "-X", "-v", "ON_ERROR_STOP=1",
+      "-U", "postgres", "-d", "postgres", "-At", "-c",
+      `begin; create temp table fixture_lane_ids on commit drop as select id from public.shooting_lanes where name in (${names}); delete from public.lane_booking_family_configuration_versions v using fixture_lane_ids f where v.root_lane_id=f.id; delete from public.lane_booking_rules r using fixture_lane_ids f where r.lane_id=f.id; delete from public.lane_booking_durations d using fixture_lane_ids f where d.lane_id=f.id; delete from public.lane_pricing_rules p using fixture_lane_ids f where p.lane_id=f.id; delete from public.shooting_lanes l using fixture_lane_ids f where l.id=f.id and l.parent_lane_id is not null; delete from public.shooting_lanes l using fixture_lane_ids f where l.id=f.id; commit; select count(*) from public.shooting_lanes where name in (${names});`,
+    ],
+    { encoding: "utf8" },
+  );
+  if (result.trim().split(/\r?\n/u).at(-1) !== "0") {
+    throw new Error(`Local lane-family fixture cleanup failed: ${result}`);
+  }
 }
 
 async function authenticatedClient(email: string) {
@@ -325,6 +353,7 @@ async function expectNoResource(name: string) {
 test.describe.serial("local admin lane-family creation", () => {
   test.beforeAll(async () => {
     await cleanupStaleTestUsers();
+    cleanupLaneFixtures();
     adminUserId = await createLocalTestUser(adminEmail, "admin");
     regularUserId = await createLocalTestUser(userEmail, "user");
     adminClient = await authenticatedClient(adminEmail);
@@ -332,6 +361,7 @@ test.describe.serial("local admin lane-family creation", () => {
   });
 
   test.afterAll(async () => {
+    cleanupLaneFixtures();
     if (adminUserId) await service.auth.admin.deleteUser(adminUserId);
     if (regularUserId) await service.auth.admin.deleteUser(regularUserId);
   });

@@ -47,9 +47,16 @@ begin
     when user_id=employee then 'pracownik' when user_id=instructor then 'instruktor' else 'user' end,
     first_name='Fixture',last_name='Events',full_name=marker,phone='000',verification_status='verified'
     where user_id in(admin_a,admin_b,employee,instructor,global_admin,pending,suspended,ordinary);
+  insert into public.tenant_memberships(tenant_id,user_id,role,status) values
+    (a,admin_a,'admin','active'),
+    (a,employee,'employee','active'),
+    (a,instructor,'instructor','active'),
+    (a,pending,'admin','pending'),
+    (a,suspended,'admin','suspended'),
+    (a,ordinary,'user','active')
+  on conflict (tenant_id,user_id) do update
+  set role=excluded.role,status=excluded.status;
   delete from public.tenant_memberships where tenant_id=a and user_id=global_admin;
-  update public.tenant_memberships set status='pending' where tenant_id=a and user_id=pending;
-  update public.tenant_memberships set status='suspended' where tenant_id=a and user_id=suspended;
   insert into public.tenants(id,name,slug,status) values(b,marker||' B','saas9ec2a-'||left(replace(b::text,'-',''),16),'dormant');
   insert into public.tenant_memberships(tenant_id,user_id,role,status) values
     (b,admin_a,'admin','active'),(b,admin_b,'admin','active');
@@ -66,7 +73,7 @@ begin
 
   perform pg_temp.ok(1,'eight client RPCs and closed core',(select count(*)=9 from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname in('admin_list_events_v2','admin_create_event_v3','admin_create_event_v3__saas9ec2a_core','admin_list_event_registrations_v2','admin_update_event_v3','admin_set_event_active_v3','approve_event_registration_v2','cancel_event_registration_v2','mark_event_registration_paid_v2')),'inventory');
   perform pg_temp.ok(2,'new client ACL authenticated only',(select count(*)=8 and bool_and(has_function_privilege('authenticated',p.oid,'EXECUTE') and not has_function_privilege('anon',p.oid,'EXECUTE') and not has_function_privilege('service_role',p.oid,'EXECUTE')) from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname in('admin_list_events_v2','admin_create_event_v3','admin_list_event_registrations_v2','admin_update_event_v3','admin_set_event_active_v3','approve_event_registration_v2','cancel_event_registration_v2','mark_event_registration_paid_v2')),'ACL');
-  perform pg_temp.ok(3,'96 definers, seven defaults',(select count(*)=96 from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.prosecdef) and (select count(*)=7 from information_schema.columns where table_schema='public' and table_name in('shooting_lanes','reservations','lane_blocks','events','event_lanes','event_registrations','email_deliveries') and column_name='tenant_id' and column_default='''c5c00000-0000-4000-8000-000000000001''::uuid'),'inventory drift');
+  perform pg_temp.ok(3,'95 definers, seven defaults',(select count(*)=95 from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.prosecdef) and (select count(*)=7 from information_schema.columns where table_schema='public' and table_name in('shooting_lanes','reservations','lane_blocks','events','event_lanes','event_registrations','email_deliveries') and column_name='tenant_id' and column_default='''c5c00000-0000-4000-8000-000000000001''::uuid'),'inventory drift');
   result:=pg_temp.actor(admin_a,format('select public.admin_list_events_v2(%L,%L,''all'',''nearest'',1,50)',a,marker));
   perform pg_temp.ok(4,'invoker list returns A',result->>'code'='ok' and exists(select 1 from jsonb_array_elements(result->'items') i where i->>'id'=event_a::text),result::text);
   perform pg_temp.ok(5,'list excludes B even dual-member actor',not exists(select 1 from jsonb_array_elements(result->'items') i where i->>'id'=event_b::text) and result->'pagination'->>'total'='1','cross-tenant aggregation');

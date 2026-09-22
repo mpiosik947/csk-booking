@@ -137,6 +137,16 @@ begin
     first_name='[TEST]',last_name='SAAS 9C-2C',full_name=v_marker,email=email
   where user_id in(v_admin,v_employee,v_instructor,v_user_a,v_user_b,v_no_membership,v_global_admin_no_membership,v_pending_admin,v_suspended_admin);
 
+  insert into public.tenant_memberships(tenant_id,user_id,role,status)
+  values
+    (v_csk,v_admin,'admin','active'),
+    (v_csk,v_employee,'employee','active'),
+    (v_csk,v_instructor,'instructor','active'),
+    (v_csk,v_user_a,'user','active'),
+    (v_csk,v_user_b,'user','active'),
+    (v_csk,v_pending_admin,'admin','active'),
+    (v_csk,v_suspended_admin,'admin','active');
+
   if (select pg_catalog.count(*) from public.profiles where user_id in(v_admin,v_employee,v_instructor,v_user_a,v_user_b,v_no_membership,v_global_admin_no_membership,v_pending_admin,v_suspended_admin)) <> 9 then
     raise exception 'SAAS-9C-2C fixture failed: expected nine profiles.';
   end if;

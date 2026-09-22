@@ -135,10 +135,11 @@ begin
   if (select pg_catalog.count(*) from public.profiles where user_id in(owner_a,owner_b,staff_a,admin_b,global_admin,instructor_a,pending_b,suspended_b))<>8 then
     raise exception 'SAAS-9D-2C-1 fixture profile count differs.';
   end if;
-  update public.tenant_memberships membership
-  set role=fixture.role,status='active'
+  insert into public.tenant_memberships(tenant_id,user_id,role,status)
+  select csk,fixture.user_id,fixture.role,'active'
   from (values(owner_a,'user'),(staff_a,'employee'),(global_admin,'admin'),(instructor_a,'instructor')) fixture(user_id,role)
-  where membership.tenant_id=csk and membership.user_id=fixture.user_id;
+  on conflict (tenant_id,user_id) do update
+  set role=excluded.role,status=excluded.status;
 
   insert into public.tenants(id,name,slug,status)
   values(tenant_b,marker||' Tenant B','saas9d2c1-'||pg_catalog.left(run_id,16),'dormant');
@@ -176,7 +177,7 @@ begin
   perform pg_temp.ok(4,'ACL is authenticated prepare and service-only complete/rate',pg_catalog.has_function_privilege('authenticated','public.prepare_confirmation_email(text,uuid)','EXECUTE') and not pg_catalog.has_function_privilege('service_role','public.prepare_confirmation_email(text,uuid)','EXECUTE') and pg_catalog.has_function_privilege('service_role','public.complete_confirmation_email(uuid,boolean,text,text)','EXECUTE') and not pg_catalog.has_function_privilege('authenticated','public.complete_confirmation_email(uuid,boolean,text,text)','EXECUTE') and pg_catalog.has_function_privilege('service_role','public.check_confirmation_email_rate_limit(uuid,text)','EXECUTE') and not pg_catalog.has_function_privilege('anon','public.check_confirmation_email_rate_limit(uuid,text)','EXECUTE') and not pg_catalog.has_function_privilege('public','public.check_confirmation_email_rate_limit(uuid,text)','EXECUTE'),'Shared ACL differs.');
   perform pg_temp.ok(5,'rate-limit normalized fingerprint is frozen',pg_catalog.md5(pg_catalog.replace(pg_catalog.replace(pg_catalog.pg_get_functiondef('public.check_confirmation_email_rate_limit(uuid,text)'::pg_catalog.regprocedure),E'\r\n',E'\n'),E'\r',E'\n'))='e693411c3fc7f24510313e60a1d8e2a5','Rate-limit body changed.');
   perform pg_temp.ok(6,'target normalized fingerprints and authorization body are exact',pg_catalog.md5(pg_catalog.replace(pg_catalog.replace(pg_catalog.pg_get_functiondef('public.prepare_confirmation_email(text,uuid)'::pg_catalog.regprocedure),E'\r\n',E'\n'),E'\r',E'\n'))='17d8b973c9e3df0839f692fd8d9efbde' and pg_catalog.md5(pg_catalog.replace(pg_catalog.replace(pg_catalog.pg_get_functiondef('public.complete_confirmation_email(uuid,boolean,text,text)'::pg_catalog.regprocedure),E'\r\n',E'\n'),E'\r',E'\n'))='c8450fe37a991fda41e8a30ce66732b3' and pg_catalog.strpos(pg_catalog.pg_get_functiondef('public.prepare_confirmation_email(text,uuid)'::pg_catalog.regprocedure),'insert into public.email_deliveries(tenant_id,message_type,record_id,recipient_user_id)')>0 and pg_catalog.strpos(pg_catalog.pg_get_functiondef('public.prepare_confirmation_email(text,uuid)'::pg_catalog.regprocedure),'profile.role')=0,'Target fingerprint, tenant binding or global-role removal differs.');
-  perform pg_temp.ok(7,'SECURITY DEFINER inventory includes 9E-A resolver',(select pg_catalog.count(*)=96 from pg_catalog.pg_proc p join pg_catalog.pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.prosecdef),'Definer inventory differs.');
+  perform pg_temp.ok(7,'SECURITY DEFINER inventory includes 9E-A resolver',(select pg_catalog.count(*)=95 from pg_catalog.pg_proc p join pg_catalog.pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.prosecdef),'Definer inventory differs.');
   perform pg_temp.ok(8,'all seven compatibility defaults remain',(select pg_catalog.count(*)=7 from information_schema.columns where table_schema='public' and table_name in('shooting_lanes','reservations','lane_blocks','events','event_lanes','event_registrations','email_deliveries') and column_name='tenant_id' and column_default='''c5c00000-0000-4000-8000-000000000001''::uuid'),'A compatibility default changed.');
 
   result:=pg_temp.as_prepare(owner_a,'reservation_confirmation',res_a_confirm); claim:=(result->>'claim_id')::uuid; delivery:=(result->>'delivery_id')::uuid;
