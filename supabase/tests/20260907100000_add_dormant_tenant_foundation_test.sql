@@ -261,17 +261,17 @@ begin
     'No application server contract needs these tables yet.');
 
   perform pg_temp.record_result(26, 'Only approved tenant authorization and self-onboarding contracts are SECURITY DEFINER',
-    (select pg_catalog.count(*)=7
+    (select pg_catalog.count(*)=6
      from pg_catalog.pg_proc procedure
      join pg_catalog.pg_namespace namespace on namespace.oid=procedure.pronamespace
      where namespace.nspname='public' and procedure.prosecdef
-       and procedure.proname in ('is_tenant_member_v1','has_tenant_role_v1','get_my_tenant_role_v1','active_single_tenant_id_v1','is_active_public_tenant_v1','get_my_active_tenant_verification_v1','self_onboard_tenant_v1'))
+       and procedure.proname in ('is_tenant_member_v1','has_tenant_role_v1','get_my_tenant_role_v1','is_active_public_tenant_v1','get_my_tenant_verification_v2','self_onboard_tenant_v1'))
     and not exists(
       select 1 from pg_catalog.pg_proc procedure
       join pg_catalog.pg_namespace namespace on namespace.oid=procedure.pronamespace
       where namespace.nspname='public' and procedure.prosecdef
         and procedure.proname like '%tenant%'
-        and procedure.proname not in ('is_tenant_member_v1','has_tenant_role_v1','get_my_tenant_role_v1','active_single_tenant_id_v1','is_active_public_tenant_v1','get_my_active_tenant_verification_v1','self_onboard_tenant_v1','resolve_active_tenant_by_slug_v1','get_my_tenant_verification_v2','update_tenant_profile_verification_v2','update_tenant_profile_identity_v2','update_tenant_profile_contact_details_v2')
+        and procedure.proname not in ('is_tenant_member_v1','has_tenant_role_v1','get_my_tenant_role_v1','is_active_public_tenant_v1','get_my_tenant_verification_v2','self_onboard_tenant_v1','resolve_active_tenant_by_slug_v1','get_my_tenant_verification_v2','update_tenant_profile_verification_v2','update_tenant_profile_identity_v2','update_tenant_profile_contact_details_v2')
     ),
     'Only the explicit authenticated self-onboarding writer may extend the approved tenant authorization surface.');
 
@@ -291,8 +291,8 @@ begin
 
   perform pg_temp.record_result(29, 'Existing critical runtime contracts remain present',
     pg_catalog.to_regprocedure('public.create_reservation_v2(uuid,date,time without time zone,integer,integer,uuid,text)') is not null
-    and pg_catalog.to_regprocedure('public.get_public_event_list_v2(text,text,integer,integer)') is not null
-    and pg_catalog.to_regprocedure('public.admin_get_reservation_report_v2(date,date,uuid,text,text,text,integer,integer)') is not null
+    and pg_catalog.to_regprocedure('public.get_public_event_list_v3(uuid,text,text,integer,integer)') is not null
+    and pg_catalog.to_regprocedure('public.admin_get_reservation_report_v3(uuid,date,date,uuid,text,text,text,integer,integer)') is not null
     and pg_catalog.to_regprocedure('public.get_check_in_reservation_v1(uuid)') is not null,
     'Booking, Events, Reports and Check-in contracts must not be replaced.');
 

@@ -19,7 +19,7 @@ create function pg_temp.report(p_uid uuid,p_resource uuid default null) returns 
 declare r jsonb;
 begin
   perform pg_temp.set_client('authenticated',p_uid);
-  select public.admin_get_reservation_report_v2(date '2099-06-01',date '2099-06-01',p_resource,null,null,null,50,0) into r;
+  select public.admin_get_reservation_report_v3('c5c00000-0000-4000-8000-000000000001'::uuid,date '2099-06-01',date '2099-06-01',p_resource,null,null,null,50,0) into r;
   reset role; return r;
 exception when others then reset role; raise;
 end $f$;
@@ -27,14 +27,14 @@ create function pg_temp.export_rows(p_uid uuid,p_resource uuid default null) ret
 declare r jsonb;
 begin
   perform pg_temp.set_client('authenticated',p_uid);
-  select public.admin_get_reservation_report_export_v1(date '2099-06-01',date '2099-06-01',p_resource,null,null,null) into r;
+  select public.admin_get_reservation_report_export_v2('c5c00000-0000-4000-8000-000000000001'::uuid,date '2099-06-01',date '2099-06-01',p_resource,null,null,null) into r;
   reset role; return r;
 exception when others then reset role; raise;
 end $f$;
 
 do $tests$
 declare
-  tenant_a uuid:=public.active_single_tenant_id_v1();
+  tenant_a uuid:='c5c00000-0000-4000-8000-000000000001'::uuid;
   tenant_b uuid:=gen_random_uuid();
   admin_a uuid:=gen_random_uuid();
   employee_a uuid:=gen_random_uuid();
@@ -112,22 +112,22 @@ begin
   export_a:=pg_temp.export_rows(admin_a);
 
   perform pg_temp.ok(1,'exact active signatures',
-    to_regprocedure('public.admin_get_reservation_report_v2(date,date,uuid,text,text,text,integer,integer)') is not null
-    and to_regprocedure('public.admin_get_reservation_report_export_v1(date,date,uuid,text,text,text)') is not null,
+    to_regprocedure('public.admin_get_reservation_report_v3(uuid,date,date,uuid,text,text,text,integer,integer)') is not null
+    and to_regprocedure('public.admin_get_reservation_report_export_v2(uuid,date,date,uuid,text,text,text)') is not null,
     'active signatures differ');
   perform pg_temp.ok(2,'active RPC metadata',not exists(
     select 1 from pg_proc p join pg_roles owner on owner.oid=p.proowner
     where p.oid in(
-      'public.admin_get_reservation_report_v2(date,date,uuid,text,text,text,integer,integer)'::regprocedure,
-      'public.admin_get_reservation_report_export_v1(date,date,uuid,text,text,text)'::regprocedure
+      'public.admin_get_reservation_report_v3(uuid,date,date,uuid,text,text,text,integer,integer)'::regprocedure,
+      'public.admin_get_reservation_report_export_v2(uuid,date,date,uuid,text,text,text)'::regprocedure
     ) and not(p.prosecdef and p.provolatile='s' and owner.rolname='postgres'
       and p.proconfig=array['search_path=pg_catalog, public, pg_temp']::text[])),
     'metadata differs');
   perform pg_temp.ok(3,'active RPC ACL minimal',
-    pg_catalog.has_function_privilege('authenticated','public.admin_get_reservation_report_v2(date,date,uuid,text,text,text,integer,integer)','EXECUTE')
-    and pg_catalog.has_function_privilege('authenticated','public.admin_get_reservation_report_export_v1(date,date,uuid,text,text,text)','EXECUTE')
-    and not pg_catalog.has_function_privilege('anon','public.admin_get_reservation_report_v2(date,date,uuid,text,text,text,integer,integer)','EXECUTE')
-    and not pg_catalog.has_function_privilege('service_role','public.admin_get_reservation_report_export_v1(date,date,uuid,text,text,text)','EXECUTE'),
+    pg_catalog.has_function_privilege('authenticated','public.admin_get_reservation_report_v3(uuid,date,date,uuid,text,text,text,integer,integer)','EXECUTE')
+    and pg_catalog.has_function_privilege('authenticated','public.admin_get_reservation_report_export_v2(uuid,date,date,uuid,text,text,text)','EXECUTE')
+    and not pg_catalog.has_function_privilege('anon','public.admin_get_reservation_report_v3(uuid,date,date,uuid,text,text,text,integer,integer)','EXECUTE')
+    and not pg_catalog.has_function_privilege('service_role','public.admin_get_reservation_report_export_v2(uuid,date,date,uuid,text,text,text)','EXECUTE'),
     'active RPC ACL differs');
   perform pg_temp.ok(4,'legacy v1 ACL closed',not exists(
     select 1 from (values('public'::name),('anon'::name),('authenticated'::name),('service_role'::name)) role(name)
@@ -148,13 +148,13 @@ begin
     select 1 from (values('public'::name),('anon'::name),('authenticated'::name),('service_role'::name)) role(name)
     where pg_catalog.has_function_privilege(role.name,'public._admin_reservation_report_rows_v2(date,date,uuid,text,text,text)','EXECUTE')),
     'old helper exposed');
-  perform pg_temp.ok(8,'SECURITY DEFINER count is 95 after Phase 2',
-    (select count(*) from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.prosecdef)=95,
+  perform pg_temp.ok(8,'SECURITY DEFINER count is  73 after Phase 2',
+    (select count(*) from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.prosecdef)=73,
     'definer count differs');
   perform pg_temp.ok(9,'compatibility defaults remain 7/7',
     (select count(*) from information_schema.columns where table_schema='public'
       and table_name in('shooting_lanes','reservations','lane_blocks','events','event_lanes','event_registrations','email_deliveries')
-      and column_name='tenant_id' and column_default='''c5c00000-0000-4000-8000-000000000001''::uuid')=7,
+      and column_name='tenant_id' and column_default is not null)=0,
     'compatibility defaults differ');
   perform pg_temp.ok(10,'active Tenant A admin allowed',report_a->>'code'='ok','Tenant A admin denied');
   perform pg_temp.ok(11,'global admin without membership denied',pg_temp.report(global_admin)->>'code'='not_allowed','global admin bypassed membership');
@@ -186,20 +186,20 @@ begin
   perform pg_temp.ok(25,'export foreign resource fails closed',pg_temp.export_rows(admin_a,lane_b)->>'code'='invalid_input','foreign export resource accepted');
   perform pg_temp.ok(26,'global role source removed from active report bodies',not exists(
     select 1 from pg_proc p where p.oid in(
-      'public.admin_get_reservation_report_v2(date,date,uuid,text,text,text,integer,integer)'::regprocedure,
-      'public.admin_get_reservation_report_export_v1(date,date,uuid,text,text,text)'::regprocedure
+      'public.admin_get_reservation_report_v3(uuid,date,date,uuid,text,text,text,integer,integer)'::regprocedure,
+      'public.admin_get_reservation_report_export_v2(uuid,date,date,uuid,text,text,text)'::regprocedure
     ) and p.prosrc~'profile[.]role'),
     'active report still reads profiles.role');
   perform pg_temp.ok(27,'membership helper present in both active bodies',
     (select count(*) from pg_proc p where p.oid in(
-      'public.admin_get_reservation_report_v2(date,date,uuid,text,text,text,integer,integer)'::regprocedure,
-      'public.admin_get_reservation_report_export_v1(date,date,uuid,text,text,text)'::regprocedure
+      'public.admin_get_reservation_report_v3(uuid,date,date,uuid,text,text,text,integer,integer)'::regprocedure,
+      'public.admin_get_reservation_report_export_v2(uuid,date,date,uuid,text,text,text)'::regprocedure
     ) and strpos(p.prosrc,'get_my_tenant_role_v1(v_tenant_id)')>0)=2,
     'membership authorization missing');
   perform pg_temp.ok(28,'active single tenant bridge exact',tenant_a is not null and (select count(*) from public.tenants where status='active')=1,'active-single bridge differs');
   perform pg_temp.ok(29,'profile administration follows approved 4B-2C closure',
-    exists(select 1 from pg_proc where oid='public.admin_list_users_v1(integer,integer,text,text,text,text)'::regprocedure and prosrc~'\mget_my_tenant_role_v1\M' and prosrc~'\mtenant_user_admin_notes\M' and prosrc!~'profile[.]admin_note')
-    and md5(replace(replace(pg_get_functiondef('public.update_profile_verification(uuid,text,text)'::regprocedure),E'\r\n',E'\n'),E'\r',E'\n'))='022baa5652409d2246cd5e66642e884e',
+    exists(select 1 from pg_proc where oid='public.admin_list_users_v2(uuid,integer,integer,text,text,text,text)'::regprocedure and prosrc~'\mget_my_tenant_role_v1\M' and prosrc~'\mtenant_user_admin_notes\M' and prosrc!~'profile[.]admin_note')
+    and md5(replace(replace(pg_get_functiondef('public.update_tenant_profile_verification_v2(uuid,uuid,text,text)'::regprocedure),E'\r\n',E'\n'),E'\r',E'\n'))='30f1028aa801afc1abd0df080a4fd17f',
     '4B-1A list or closed verification contract drifted.');
   perform pg_temp.ok(30,'account lifecycle contract untouched',
     md5(replace(replace(pg_get_functiondef('public.export_my_data_v1()'::regprocedure),E'\r\n',E'\n'),E'\r',E'\n'))='d159b7d0a14f7ffc9d6c3e5088d18dc5'

@@ -95,6 +95,7 @@ $function$;
 
 do $tests$
 declare
+  v_tenant constant uuid := 'c5c00000-0000-4000-8000-000000000001';
   v_user_a uuid := '9c009000-0000-4000-8000-000000000001';
   v_user_b uuid := '9c009000-0000-4000-8000-000000000002';
   v_user_failure uuid := '9c009000-0000-4000-8000-000000000003';
@@ -125,11 +126,11 @@ begin
   )::uuid;
 
   insert into public.shooting_lanes(
-    id, name, type, description, price_per_hour, is_active, max_shooters,
+    tenant_id, id, name, type, description, price_per_hour, is_active, max_shooters,
     booking_step_minutes, display_order, currency_code, resource_kind,
     parent_lane_id, whole_lane_bookable, positions_bookable
   ) values (
-    v_lane_id, '[TEST][SEC-009] Lane', 'test', '[TEST][SEC-009]', 10,
+    v_tenant, v_lane_id, '[TEST][SEC-009] Lane', 'test', '[TEST][SEC-009]', 10,
     false, 1, 60, 999, 'PLN', 'lane', null, false, false
   );
 
@@ -185,36 +186,36 @@ begin
     qualification_instructor=excluded.qualification_instructor;
 
   insert into public.events(
-    id, title, event_date, start_time, end_time, location, price,
+    tenant_id, id, title, event_date, start_time, end_time, location, price,
     max_participants, is_active
   ) values (
-    v_event, '[TEST][SEC-009] Event', date '2099-09-04', time '10:00',
+    v_tenant, v_event, '[TEST][SEC-009] Event', date '2099-09-04', time '10:00',
     time '11:00', '[TEST]', 0, 10, true
   );
 
   insert into public.reservations(
-    id, user_id, lane_id, customer_name, customer_email, customer_phone,
+    tenant_id, id, user_id, lane_id, customer_name, customer_email, customer_phone,
     reservation_date, start_time, end_time, duration_minutes, price,
     reservation_status, payment_status, attendance_status, admin_note,
     check_in_token, reservation_note, shooters_count, pricing_rule_id,
     pricing_day_group_snapshot, lane_name_snapshot, pricing_label_snapshot,
     price_per_hour_snapshot, total_price, currency_code, creation_request_id
   ) values
-    (v_reservation_a, v_user_a, v_lane_id, '[TEST][SEC-009] Alicja Alpha',
+    (v_tenant, v_reservation_a, v_user_a, v_lane_id, '[TEST][SEC-009] Alicja Alpha',
       'sec009-a@example.invalid', '500000001', date '2099-09-05', time '10:00',
       time '11:00', 60, 10, 'confirmed', 'pay_on_site', 'planned',
       'SEC009 RESERVATION ADMIN NOTE A', pg_catalog.gen_random_uuid(),
       'SEC009 RESERVATION NOTE A', 1, v_pricing_rule_id, 'mon_thu',
       '[TEST] Lane snapshot', '[TEST] Price snapshot', 10, 10, 'PLN',
       pg_catalog.gen_random_uuid()),
-    (v_reservation_b, v_user_b, v_lane_id, '[TEST][SEC-009] Barbara Beta',
+    (v_tenant, v_reservation_b, v_user_b, v_lane_id, '[TEST][SEC-009] Barbara Beta',
       'sec009-b@example.invalid', '500000002', date '2099-09-06', time '10:00',
       time '11:00', 60, 20, 'confirmed', 'pay_on_site', 'planned',
       'SEC009 RESERVATION ADMIN NOTE B', pg_catalog.gen_random_uuid(),
       'SEC009 RESERVATION NOTE B', 1, v_pricing_rule_id, 'mon_thu',
       '[TEST] Lane snapshot', '[TEST] Price snapshot', 20, 20, 'PLN',
       pg_catalog.gen_random_uuid()),
-    (v_reservation_failure, v_user_failure, v_lane_id, '[TEST][SEC-009] Failure Gamma',
+    (v_tenant, v_reservation_failure, v_user_failure, v_lane_id, '[TEST][SEC-009] Failure Gamma',
       'sec009-failure@example.invalid', '500000003', date '2099-09-07', time '10:00',
       time '11:00', 60, 30, 'confirmed', 'pay_on_site', 'planned',
       'SEC009 FAILURE ADMIN NOTE', pg_catalog.gen_random_uuid(),
@@ -223,22 +224,22 @@ begin
       pg_catalog.gen_random_uuid());
 
   insert into public.event_registrations(
-    id, event_id, user_id, customer_name, customer_email, customer_phone,
+    tenant_id, id, event_id, user_id, customer_name, customer_email, customer_phone,
     registration_status, payment_status, promotion_token,
     promotion_token_expires_at, promotion_email_sent_at, promotion_confirmed_at
   ) values
-    (v_registration_a, v_event, v_user_a, '[TEST][SEC-009] Alicja Alpha',
+    (v_tenant, v_registration_a, v_event, v_user_a, '[TEST][SEC-009] Alicja Alpha',
       'sec009-a@example.invalid', '500000001', 'approved', 'paid_on_site',
       'sec009-token-a', now() + interval '1 day', now(), now()),
-    (v_registration_b, v_event, v_user_b, '[TEST][SEC-009] Barbara Beta',
+    (v_tenant, v_registration_b, v_event, v_user_b, '[TEST][SEC-009] Barbara Beta',
       'sec009-b@example.invalid', '500000002', 'registered', 'pay_on_site',
       'sec009-token-b', now() + interval '1 day', now(), null);
 
   insert into public.email_deliveries(
-    message_type, record_id, recipient_user_id, sent_at, provider_message_id
+    tenant_id, message_type, record_id, recipient_user_id, sent_at, provider_message_id
   ) values
-    ('reservation_confirmation', v_reservation_a, v_user_a, now(), 'sec009-provider-a'),
-    ('reservation_confirmation', v_reservation_b, v_user_b, now(), 'sec009-provider-b');
+    (v_tenant, 'reservation_confirmation', v_reservation_a, v_user_a, now(), 'sec009-provider-a'),
+    (v_tenant, 'reservation_confirmation', v_reservation_b, v_user_b, now(), 'sec009-provider-b');
 
   insert into public.confirmation_email_rate_limits(
     scope_type, scope_key, request_timestamps
@@ -265,11 +266,11 @@ begin
       pg_catalog.jsonb_build_object('safe_status', 'confirmed'));
 
   select count(*) into v_before_reservations from public.reservations
-  where id in (v_reservation_a, v_reservation_b, v_reservation_failure);
+  where id in (v_tenant, v_reservation_a, v_reservation_b, v_reservation_failure);
   select count(*) into v_before_registrations from public.event_registrations
-  where id in (v_registration_a, v_registration_b);
+  where id in (v_tenant, v_registration_a, v_registration_b);
   select count(*) into v_before_audits from public.audit_logs
-  where action = 'fixture_action' and target_id in (v_reservation_a, v_reservation_b);
+  where action = 'fixture_action' and target_id in (v_tenant, v_reservation_a, v_reservation_b);
 
   perform pg_temp.record_result(1, 'Lifecycle function signatures are exact',
     pg_catalog.to_regprocedure('public.export_my_data_v1()') is not null
@@ -405,8 +406,8 @@ begin
     'Operacja owner-scoped nie może zmienić danych innego użytkownika.');
 
   perform pg_temp.record_result(19, 'Operational record counts do not change',
-    (select count(*) from public.reservations where id in (v_reservation_a, v_reservation_b, v_reservation_failure)) = v_before_reservations
-    and (select count(*) from public.event_registrations where id in (v_registration_a, v_registration_b)) = v_before_registrations,
+    (select count(*) from public.reservations where id in (v_tenant, v_reservation_a, v_reservation_b, v_reservation_failure)) = v_before_reservations
+    and (select count(*) from public.event_registrations where id in (v_tenant, v_registration_a, v_registration_b)) = v_before_registrations,
     'Rezerwacje i registrations mają zostać zachowane historycznie.');
 
   perform pg_temp.record_result(20, 'Auth identity remains until the server-side final step',

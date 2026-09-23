@@ -97,23 +97,23 @@ begin
     (v_tenant,v_instructor,'instructor','active'),
     (v_tenant,v_user,'user','active');
 
-  insert into public.events(id,title,description,event_date,start_time,end_time,location,price,max_participants,is_active,created_at)
-  select case when number=1 then v_event else pg_catalog.gen_random_uuid() end,
+  insert into public.events(tenant_id,id,title,description,event_date,start_time,end_time,location,price,max_participants,is_active,created_at)
+  select v_tenant,case when number=1 then v_event else pg_catalog.gen_random_uuid() end,
     v_marker||' Event '||pg_catalog.lpad(number::text,4,'0'),'Opis',
     case when number=499 then current_date-10 else current_date+number end,
     time '10:00',time '11:00','[TEST]',100,6000,number<>500,
     pg_catalog.now()+(number||' milliseconds')::interval
   from pg_catalog.generate_series(1,500) number;
 
-  insert into public.event_registrations(event_id,user_id,customer_name,customer_email,customer_phone,registration_status,payment_status,created_at)
-  select v_event,null,v_marker||' Person '||number,'events8b-'||v_run||'-'||number||'@example.invalid','000',
+  insert into public.event_registrations(tenant_id,event_id,user_id,customer_name,customer_email,customer_phone,registration_status,payment_status,created_at)
+  select v_tenant,v_event,null,v_marker||' Person '||number,'events8b-'||v_run||'-'||number||'@example.invalid','000',
     case when number%10=0 then 'reserve' when number%10=1 then 'cancelled' else 'registered' end,
     case when number%2=0 then 'paid_on_site' else 'pay_on_site' end,
     pg_catalog.now()+(number||' milliseconds')::interval
   from pg_catalog.generate_series(1,5000) number;
 
-  insert into public.event_registrations(event_id,user_id,customer_name,customer_email,customer_phone,registration_status,payment_status,created_at)
-  select event_record.id,v_user,v_marker||' Owner','events8b-user-'||v_run||'@example.invalid','000',
+  insert into public.event_registrations(tenant_id,event_id,user_id,customer_name,customer_email,customer_phone,registration_status,payment_status,created_at)
+  select v_tenant,event_record.id,v_user,v_marker||' Owner','events8b-user-'||v_run||'@example.invalid','000',
     case when row_number() over(order by event_record.event_date)%6=0 then 'cancelled' else 'registered' end,
     'pay_on_site',pg_catalog.now()
   from public.events event_record
@@ -123,52 +123,53 @@ begin
   order by event_record.event_date,event_record.id limit 60;
 
   perform pg_temp.record_result(1,'Four exact RPC signatures exist',
-    pg_catalog.to_regprocedure('public.get_public_event_list_v2(text,text,integer,integer)') is not null
-    and pg_catalog.to_regprocedure('public.admin_list_events_v1(text,text,text,integer,integer)') is not null
+    pg_catalog.to_regprocedure('public.get_public_event_list_v3(uuid,text,text,integer,integer)') is not null
+    and pg_catalog.to_regprocedure('public.admin_list_events_v2(uuid,text,text,text,integer,integer)') is not null
     and pg_catalog.to_regprocedure('public.admin_list_event_registrations_v1(uuid,text,text,integer,integer)') is not null
     and pg_catalog.to_regprocedure('public.get_my_event_registrations_v1(text,text,integer,integer)') is not null,
     'Every versioned read contract must exist.');
 
-  perform pg_temp.record_result(2,'RPCs are STABLE SECURITY DEFINER with safe ownership and search_path',
+  perform pg_temp.record_result(2,'RPCs are STABLE with three definers, one closed invoker, safe ownership and search_path',
     (select pg_catalog.count(*)=4 from pg_catalog.pg_proc procedure join pg_catalog.pg_namespace namespace on namespace.oid=procedure.pronamespace join pg_catalog.pg_roles owner_role on owner_role.oid=procedure.proowner
-      where namespace.nspname='public' and procedure.proname in('get_public_event_list_v2','admin_list_events_v1','admin_list_event_registrations_v1','get_my_event_registrations_v1')
-      and procedure.prosecdef and procedure.provolatile='s' and owner_role.rolname='postgres' and procedure.proconfig=array['search_path=pg_catalog, public, pg_temp']::text[]),
+      where namespace.nspname='public' and procedure.proname in('get_public_event_list_v3','admin_list_events_v2','admin_list_event_registrations_v1','get_my_event_registrations_v1')
+      and procedure.provolatile='s' and owner_role.rolname='postgres' and procedure.proconfig=array['search_path=pg_catalog, public, pg_temp']::text[]
+      and ((procedure.proname='admin_list_events_v2' and not procedure.prosecdef) or (procedure.proname<>'admin_list_events_v2' and procedure.prosecdef))),
     'All readers must use the hardened function contract.');
 
   perform pg_temp.record_result(3,'Public RPC ACL is anon and authenticated only',
-    pg_catalog.has_function_privilege('anon','public.get_public_event_list_v2(text,text,integer,integer)','EXECUTE')
-    and pg_catalog.has_function_privilege('authenticated','public.get_public_event_list_v2(text,text,integer,integer)','EXECUTE')
-    and not pg_catalog.has_function_privilege('service_role','public.get_public_event_list_v2(text,text,integer,integer)','EXECUTE')
-    and not exists(select 1 from pg_catalog.pg_proc procedure cross join lateral pg_catalog.aclexplode(coalesce(procedure.proacl,pg_catalog.acldefault('f',procedure.proowner))) acl where procedure.oid='public.get_public_event_list_v2(text,text,integer,integer)'::regprocedure and acl.grantee=0),
+    pg_catalog.has_function_privilege('anon','public.get_public_event_list_v3(uuid,text,text,integer,integer)','EXECUTE')
+    and pg_catalog.has_function_privilege('authenticated','public.get_public_event_list_v3(uuid,text,text,integer,integer)','EXECUTE')
+    and not pg_catalog.has_function_privilege('service_role','public.get_public_event_list_v3(uuid,text,text,integer,integer)','EXECUTE')
+    and not exists(select 1 from pg_catalog.pg_proc procedure cross join lateral pg_catalog.aclexplode(coalesce(procedure.proacl,pg_catalog.acldefault('f',procedure.proowner))) acl where procedure.oid='public.get_public_event_list_v3(uuid,text,text,integer,integer)'::regprocedure and acl.grantee=0),
     'The public contract needs no generic PUBLIC or service role grant.');
 
   perform pg_temp.record_result(4,'Private RPC ACL is authenticated only',
     (select pg_catalog.bool_and(pg_catalog.has_function_privilege('authenticated',procedure.oid,'EXECUTE') and not pg_catalog.has_function_privilege('anon',procedure.oid,'EXECUTE') and not pg_catalog.has_function_privilege('service_role',procedure.oid,'EXECUTE'))
-     from pg_catalog.pg_proc procedure join pg_catalog.pg_namespace namespace on namespace.oid=procedure.pronamespace where namespace.nspname='public' and procedure.proname in('admin_list_events_v1','admin_list_event_registrations_v1','get_my_event_registrations_v1')),
+     from pg_catalog.pg_proc procedure join pg_catalog.pg_namespace namespace on namespace.oid=procedure.pronamespace where namespace.nspname='public' and procedure.proname in('admin_list_events_v2','admin_list_event_registrations_v1','get_my_event_registrations_v1')),
     'Private contracts expose only the authenticated entry point.');
 
-  v_public:=pg_temp.call_json('anon',null,pg_catalog.format('select public.get_public_event_list_v2(%L,%L,1,20)',v_marker,'upcoming'));
+  v_public:=pg_temp.call_json('anon',null,pg_catalog.format('select public.get_public_event_list_v3(%L,%L,%L,1,20)',v_tenant,v_marker,'upcoming'));
   perform pg_temp.record_result(5,'Public upcoming list is bounded',v_public#>>'{pagination,total}'='498' and pg_catalog.jsonb_array_length(v_public->'items')=20,'498 active future rows must produce a 20-row first page.');
   perform pg_temp.record_result(6,'Public search runs on the backend',v_public#>>'{filters,search}'=v_marker and (v_public#>>'{pagination,total}')::integer=498,'Unique marker search must isolate fixture rows.');
   perform pg_temp.record_result(7,'Public response is strictly PII-free',v_public::text !~* 'example\.invalid|customer|user_id|registration_id|token|admin_note|phone|email','No participant or internal fields may leave the public contract.');
   perform pg_temp.record_result(8,'Public availability remains authoritative',v_public->'items'->0 @> '{"registered_count":4001,"reserve_count":500,"available_spots":1999,"sold_out":false}'::jsonb,'Status counts must match canonical availability semantics, including the owner fixture row.');
-  v_repeat:=pg_temp.call_json('anon',null,pg_catalog.format('select public.get_public_event_list_v2(%L,%L,1,20)',v_marker,'upcoming'));
+  v_repeat:=pg_temp.call_json('anon',null,pg_catalog.format('select public.get_public_event_list_v3(%L,%L,%L,1,20)',v_tenant,v_marker,'upcoming'));
   perform pg_temp.record_result(9,'Public sorting is stable',v_repeat->'items'=v_public->'items','Repeated reads must preserve date/time/id order.');
-  v_repeat:=pg_temp.call_json('authenticated',v_user,pg_catalog.format('select public.get_public_event_list_v2(%L,%L,1,20)',v_marker,'upcoming'));
+  v_repeat:=pg_temp.call_json('authenticated',v_user,pg_catalog.format('select public.get_public_event_list_v3(%L,%L,%L,1,20)',v_tenant,v_marker,'upcoming'));
   perform pg_temp.record_result(10,'Anon and user receive identical public data',v_repeat=v_public,'Identity and owner-scoped RLS must not change availability.');
-  v_repeat:=pg_temp.call_json('anon',null,pg_catalog.format('select public.get_public_event_list_v2(%L,%L,25,20)',v_marker,'upcoming'));
+  v_repeat:=pg_temp.call_json('anon',null,pg_catalog.format('select public.get_public_event_list_v3(%L,%L,%L,25,20)',v_tenant,v_marker,'upcoming'));
   perform pg_temp.record_result(11,'Public 500-row fixture remains paginated',pg_catalog.jsonb_array_length(v_repeat->'items')=18 and v_repeat#>>'{pagination,total}'='498','Last page must be bounded without fetch-all.');
 
-  v_admin_result:=pg_temp.call_json('authenticated',v_admin,pg_catalog.format('select public.admin_list_events_v1(%L,%L,%L,1,20)',v_marker,'all','nearest'));
+  v_admin_result:=pg_temp.call_json('authenticated',v_admin,pg_catalog.format('select public.admin_list_events_v2(%L,%L,%L,%L,1,20)',v_tenant,v_marker,'all','nearest'));
   perform pg_temp.record_result(12,'Admin list returns a bounded 500-row scope',v_admin_result#>>'{pagination,total}'='500' and pg_catalog.jsonb_array_length(v_admin_result->'items')=20,'Admin pagination must be backend-owned.');
-  v_repeat:=pg_temp.call_json('authenticated',v_admin,pg_catalog.format('select public.admin_list_events_v1(%L,%L,%L,1,20)',v_marker,'past','latest'));
+  v_repeat:=pg_temp.call_json('authenticated',v_admin,pg_catalog.format('select public.admin_list_events_v2(%L,%L,%L,%L,1,20)',v_tenant,v_marker,'past','latest'));
   perform pg_temp.record_result(13,'Admin past filter is backend authoritative',v_repeat#>>'{pagination,total}'='1','Exactly one fixture event is past.');
-  v_repeat:=pg_temp.call_json('authenticated',v_admin,pg_catalog.format('select public.admin_list_events_v1(%L,%L,%L,1,20)',v_marker,'inactive','nearest'));
+  v_repeat:=pg_temp.call_json('authenticated',v_admin,pg_catalog.format('select public.admin_list_events_v2(%L,%L,%L,%L,1,20)',v_tenant,v_marker,'inactive','nearest'));
   perform pg_temp.record_result(14,'Admin inactive filter is backend authoritative',v_repeat#>>'{pagination,total}'='1','Exactly one fixture event is inactive.');
-  perform pg_temp.record_result(15,'Admin list denies ordinary user',(pg_temp.call_json('authenticated',v_user,pg_catalog.format('select public.admin_list_events_v1(%L,%L,%L,1,20)',v_marker,'all','nearest')))->>'code'='not_allowed','Role check must fail closed.');
+  perform pg_temp.record_result(15,'Admin list denies ordinary user',(pg_temp.call_json('authenticated',v_user,pg_catalog.format('select public.admin_list_events_v2(%L,%L,%L,%L,1,20)',v_tenant,v_marker,'all','nearest')))->>'code'='not_allowed','Role check must fail closed.');
   perform pg_temp.record_result(16,'Existing employee and instructor event access is unchanged',
-    (pg_temp.call_json('authenticated',v_employee,pg_catalog.format('select public.admin_list_events_v1(%L,%L,%L,1,20)',v_marker,'all','nearest')))->>'code'='ok'
-    and (pg_temp.call_json('authenticated',v_instructor,pg_catalog.format('select public.admin_list_events_v1(%L,%L,%L,1,20)',v_marker,'all','nearest')))->>'code'='ok',
+    (pg_temp.call_json('authenticated',v_employee,pg_catalog.format('select public.admin_list_events_v2(%L,%L,%L,%L,1,20)',v_tenant,v_marker,'all','nearest')))->>'code'='ok'
+    and (pg_temp.call_json('authenticated',v_instructor,pg_catalog.format('select public.admin_list_events_v2(%L,%L,%L,%L,1,20)',v_tenant,v_marker,'all','nearest')))->>'code'='ok',
     'EVENTS-8B must not silently alter the established /admin/events route matrix.');
 
   v_participants:=pg_temp.call_json('authenticated',v_admin,pg_catalog.format('select public.admin_list_event_registrations_v1(%L,%L,%L,1,50)',v_event,null,null));
@@ -191,8 +192,8 @@ begin
   perform pg_temp.record_result(25,'My events contains no foreign registration',not (v_my->'items') @> pg_catalog.jsonb_build_array(pg_catalog.jsonb_build_object('id',(select id from public.event_registrations where event_id=v_event and user_id is null limit 1))),'No foreign row may enter the owner contract.');
   perform pg_temp.record_result(26,'Anonymous private calls are denied by ACL',pg_temp.call_denied('anon','select public.get_my_event_registrations_v1(''upcoming'',null,1,20)') and pg_temp.call_denied('anon',pg_catalog.format('select public.admin_list_event_registrations_v1(%L,null,null,1,50)',v_event)),'Anon receives public events only.');
   perform pg_temp.record_result(27,'Invalid filters fail safely',
-    (pg_temp.call_json('anon',null,'select public.get_public_event_list_v2(null,''invalid'',1,20)')->>'code')='invalid_input'
-    and (pg_temp.call_json('authenticated',v_admin,pg_catalog.format('select public.admin_list_events_v1(%L,''all'',''nearest'',0,20)',v_marker))->>'code')='invalid_input',
+    (pg_temp.call_json('anon',null,pg_catalog.format('select public.get_public_event_list_v3(%L,null,''invalid'',1,20)',v_tenant))->>'code')='invalid_input'
+    and (pg_temp.call_json('authenticated',v_admin,pg_catalog.format('select public.admin_list_events_v2(%L,%L,''all'',''nearest'',0,20)',v_tenant,v_marker))->>'code')='invalid_input',
     'Invalid URL-derived values must not broaden a query.');
   perform pg_temp.record_result(28,'Performance indexes exist and fixture is transaction-scoped',
     pg_catalog.to_regclass('public.events_active_date_time_id_idx') is not null

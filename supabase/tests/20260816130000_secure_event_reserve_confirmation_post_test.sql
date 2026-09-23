@@ -59,6 +59,7 @@ $function$;
 
 do $tests$
 declare
+  v_tenant constant uuid := 'c5c00000-0000-4000-8000-000000000001';
   v_owner uuid := '6c030000-0000-4000-8000-000000000001';
   v_other uuid := '6c030000-0000-4000-8000-000000000002';
   v_event uuid := '6c030000-0000-4000-8000-000000000010';
@@ -93,20 +94,20 @@ begin
     ('c5c00000-0000-4000-8000-000000000001',v_other,'user','active');
 
   insert into public.events(
-    id,title,event_date,start_time,end_time,location,price,max_participants,is_active
+    tenant_id,id,title,event_date,start_time,end_time,location,price,max_participants,is_active
   ) values (
-    v_event,'[TEST][SEC-003] POST confirmation',current_date + 30,
+    v_tenant,v_event,'[TEST][SEC-003] POST confirmation',current_date + 30,
     time '10:00',time '11:00','[TEST]',0,2,true
   );
 
   insert into public.event_registrations(
-    id,event_id,user_id,customer_name,customer_email,customer_phone,
+    tenant_id,id,event_id,user_id,customer_name,customer_email,customer_phone,
     registration_status,payment_status,created_at,promotion_token,
     promotion_token_expires_at,promotion_email_sent_at,
     promotion_claim_id,promotion_claim_expires_at,promotion_attempt_count,
     promotion_last_attempt_at
   ) values (
-    v_registration,v_event,v_owner,'[TEST] Owner',
+    v_tenant,v_registration,v_event,v_owner,'[TEST] Owner',
     'test-sec003-owner@example.invalid','000000001','reserve','pending',
     pg_catalog.transaction_timestamp(),v_token,
     pg_catalog.transaction_timestamp() + interval '24 hours',

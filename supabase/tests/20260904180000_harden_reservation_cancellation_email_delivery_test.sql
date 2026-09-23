@@ -146,28 +146,28 @@ begin
   end if;
 
   insert into public.shooting_lanes(
-    id,name,type,price_per_hour,is_active,max_shooters,booking_step_minutes,
+    tenant_id,id,name,type,price_per_hour,is_active,max_shooters,booking_step_minutes,
     display_order,currency_code,resource_kind,parent_lane_id,
     whole_lane_bookable,positions_bookable
-  ) values(v_lane,'[TEST][SEC-015] Lane','test',10,true,1,60,999,'PLN','lane',null,true,false);
+  ) values(v_tenant,v_lane,'[TEST][SEC-015] Lane','test',10,true,1,60,999,'PLN','lane',null,true,false);
 
   insert into public.lane_pricing_rules(
     id,lane_id,day_group,min_shooters,max_shooters,label,hourly_price
   ) values(v_price,v_lane,'mon_thu',1,1,'[TEST][SEC-015]',10);
 
   insert into public.reservations(
-    id,user_id,lane_id,customer_name,customer_email,customer_phone,
+    tenant_id,id,user_id,lane_id,customer_name,customer_email,customer_phone,
     reservation_date,start_time,end_time,duration_minutes,price,
     reservation_status,payment_status,attendance_status,shooters_count,
     pricing_rule_id,pricing_day_group_snapshot,lane_name_snapshot,
     pricing_label_snapshot,price_per_hour_snapshot,total_price,currency_code,
     creation_request_id
   ) values
-    (v_owner_cancelled,v_owner,v_lane,'[TEST][SEC-015] Owner','sec015-owner@example.invalid','000',current_date+100,time '08:00',time '09:00',60,10,'cancelled_by_user','pay_on_site','planned',1,v_price,'mon_thu','[TEST][SEC-015] Lane','[TEST]',10,10,'PLN',pg_catalog.gen_random_uuid()),
-    (v_employee_cancelled,v_owner,v_lane,'[TEST][SEC-015] Owner','sec015-owner@example.invalid','000',current_date+101,time '08:00',time '09:00',60,10,'cancelled_by_admin','pay_on_site','planned',1,v_price,'mon_thu','[TEST][SEC-015] Lane','[TEST]',10,10,'PLN',pg_catalog.gen_random_uuid()),
-    (v_admin_cancelled,v_owner,v_lane,'[TEST][SEC-015] Owner','sec015-owner@example.invalid','000',current_date+102,time '08:00',time '09:00',60,10,'canceled','pay_on_site','planned',1,v_price,'mon_thu','[TEST][SEC-015] Lane','[TEST]',10,10,'PLN',pg_catalog.gen_random_uuid()),
-    (v_attempt_cancelled,v_owner,v_lane,'[TEST][SEC-015] Owner','sec015-owner@example.invalid','000',current_date+103,time '08:00',time '09:00',60,10,'cancelled','pay_on_site','planned',1,v_price,'mon_thu','[TEST][SEC-015] Lane','[TEST]',10,10,'PLN',pg_catalog.gen_random_uuid()),
-    (v_confirmed,v_owner,v_lane,'[TEST][SEC-015] Owner','sec015-owner@example.invalid','000',current_date+104,time '08:00',time '09:00',60,10,'confirmed','pay_on_site','planned',1,v_price,'mon_thu','[TEST][SEC-015] Lane','[TEST]',10,10,'PLN',pg_catalog.gen_random_uuid());
+    (v_tenant,v_owner_cancelled,v_owner,v_lane,'[TEST][SEC-015] Owner','sec015-owner@example.invalid','000',current_date+100,time '08:00',time '09:00',60,10,'cancelled_by_user','pay_on_site','planned',1,v_price,'mon_thu','[TEST][SEC-015] Lane','[TEST]',10,10,'PLN',pg_catalog.gen_random_uuid()),
+    (v_tenant,v_employee_cancelled,v_owner,v_lane,'[TEST][SEC-015] Owner','sec015-owner@example.invalid','000',current_date+101,time '08:00',time '09:00',60,10,'cancelled_by_admin','pay_on_site','planned',1,v_price,'mon_thu','[TEST][SEC-015] Lane','[TEST]',10,10,'PLN',pg_catalog.gen_random_uuid()),
+    (v_tenant,v_admin_cancelled,v_owner,v_lane,'[TEST][SEC-015] Owner','sec015-owner@example.invalid','000',current_date+102,time '08:00',time '09:00',60,10,'canceled','pay_on_site','planned',1,v_price,'mon_thu','[TEST][SEC-015] Lane','[TEST]',10,10,'PLN',pg_catalog.gen_random_uuid()),
+    (v_tenant,v_attempt_cancelled,v_owner,v_lane,'[TEST][SEC-015] Owner','sec015-owner@example.invalid','000',current_date+103,time '08:00',time '09:00',60,10,'cancelled','pay_on_site','planned',1,v_price,'mon_thu','[TEST][SEC-015] Lane','[TEST]',10,10,'PLN',pg_catalog.gen_random_uuid()),
+    (v_tenant,v_confirmed,v_owner,v_lane,'[TEST][SEC-015] Owner','sec015-owner@example.invalid','000',current_date+104,time '08:00',time '09:00',60,10,'confirmed','pay_on_site','planned',1,v_price,'mon_thu','[TEST][SEC-015] Lane','[TEST]',10,10,'PLN',pg_catalog.gen_random_uuid());
 
   perform pg_temp.record_result(1,'Message type constraint includes exactly three types',
     (select pg_catalog.regexp_replace(pg_catalog.pg_get_constraintdef(c.oid),'\s','','g')=
@@ -229,7 +229,7 @@ begin
   end loop;
   perform pg_temp.record_result(20,'Three failed provider attempts are bounded',(select attempt_count=3 and sent_at is null and claim_id is null and last_error_code='email_send_failed' from public.email_deliveries where message_type='reservation_cancellation' and record_id=v_attempt_cancelled),'Failure completion clears lease without marking sent.');
   perform pg_temp.record_result(21,'Fourth attempt is denied',pg_temp.prepare_as(v_owner,'reservation_cancellation',v_attempt_cancelled)@>'{"ok":false,"changed":false,"code":"attempt_limit_reached"}'::jsonb,'24-hour attempt limit is enforced.');
-  perform pg_temp.record_result(22,'No cancellation email audit is created',not exists(select 1 from public.audit_logs where action ilike '%email%' and (target_id in(v_owner_cancelled,v_employee_cancelled,v_admin_cancelled,v_attempt_cancelled) or details::text like '%[TEST][SEC-015]%')),'Delivery repeats must not duplicate the trusted cancellation business audit.');
+  perform pg_temp.record_result(22,'No cancellation email audit is created',not exists(select 1 from public.audit_logs where action ilike '%email%' and (target_id in(v_tenant,v_owner_cancelled,v_employee_cancelled,v_admin_cancelled,v_attempt_cancelled) or details::text like '%[TEST][SEC-015]%')),'Delivery repeats must not duplicate the trusted cancellation business audit.');
   perform pg_temp.record_result(23,'Delivery rows contain no email content or token columns',not exists(select 1 from information_schema.columns where table_schema='public' and table_name='email_deliveries' and column_name in('email','recipient_email','html','text','body','token','jwt')),'Technical delivery state must not store message PII or secrets.');
   perform pg_temp.record_result(24,'Legacy confirmation branches remain present',pg_catalog.pg_get_functiondef('public.prepare_confirmation_email(text,uuid)'::regprocedure) like '%event_registration_confirmation%' and pg_catalog.pg_get_functiondef('public.prepare_confirmation_email(text,uuid)'::regprocedure) like '%reservation_confirmation%','Existing confirmation contracts remain supported.');
 end;

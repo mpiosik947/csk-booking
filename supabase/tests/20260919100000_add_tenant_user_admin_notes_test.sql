@@ -15,25 +15,25 @@ begin
   perform pg_catalog.set_config('request.jwt.claim.sub',coalesce(p_uid::text,''),true);
   execute pg_catalog.format('set local role %I',p_role);
 end;$f$;
-create function pg_temp.note_call(p_uid uuid,p_target uuid,p_note text) returns jsonb language plpgsql as $f$
+create function pg_temp.note_call(p_uid uuid,p_tenant uuid,p_target uuid,p_note text) returns jsonb language plpgsql as $f$
 declare r jsonb;
 begin
   perform pg_temp.set_client('authenticated',p_uid);
-  select public.admin_set_user_note_v1(p_target,p_note) into r;
+  select public.admin_set_user_note_v2(p_tenant,p_target,p_note) into r;
   reset role; return r;
 exception when others then reset role; raise;
 end;$f$;
-create function pg_temp.list_call(p_uid uuid) returns jsonb language plpgsql as $f$
+create function pg_temp.list_call(p_uid uuid,p_tenant uuid) returns jsonb language plpgsql as $f$
 declare r jsonb;
 begin
   perform pg_temp.set_client('authenticated',p_uid);
   select coalesce(jsonb_agg(to_jsonb(item) order by item.user_id),'[]'::jsonb)
-  into r from public.admin_list_users_v1(100,0,null,null,null,'newest') item;
+  into r from public.admin_list_users_v2(p_tenant,100,0,null,null,null,'newest') item;
   reset role; return r;
 exception when others then reset role; raise;
 end;$f$;
-create function pg_temp.list_denied(p_uid uuid) returns boolean language plpgsql as $f$
-begin perform pg_temp.list_call(p_uid); return false;
+create function pg_temp.list_denied(p_uid uuid,p_tenant uuid) returns boolean language plpgsql as $f$
+begin perform pg_temp.list_call(p_uid,p_tenant); return false;
 exception when insufficient_privilege then return true; end;$f$;
 create function pg_temp.table_denied(p_role text,p_sql text) returns boolean language plpgsql as $f$
 begin execute pg_catalog.format('set local role %I',p_role); execute p_sql; reset role; return false;
@@ -47,15 +47,15 @@ select procedure.oid,procedure.prosrc,procedure.prosecdef,procedure.proowner,
        procedure.proconfig,procedure.proacl
 from pg_catalog.pg_proc procedure
 where procedure.oid in(
-  'public.admin_set_user_role_v1(uuid,text)'::regprocedure,
-  'public.update_profile_identity(uuid,text,text)'::regprocedure,
-  'public.update_profile_contact_details(uuid,text,text,text,text,text,text)'::regprocedure,
-  'public.update_profile_verification(uuid,text,text)'::regprocedure
+  'public.admin_set_user_role_v2(uuid,uuid,text)'::regprocedure,
+  'public.update_tenant_profile_identity_v2(uuid,uuid,text,text)'::regprocedure,
+  'public.update_tenant_profile_contact_details_v2(uuid,uuid,text,text,text,text,text,text)'::regprocedure,
+  'public.update_tenant_profile_verification_v2(uuid,uuid,text,text)'::regprocedure
 );
 
 do $tests$
 declare
-  tenant_a uuid:=public.active_single_tenant_id_v1();
+  tenant_a constant uuid:='c5c00000-0000-4000-8000-000000000001'::uuid;
   tenant_b uuid:=pg_catalog.gen_random_uuid();
   admin_a uuid:=pg_catalog.gen_random_uuid(); admin_b uuid:=pg_catalog.gen_random_uuid();
   shared_user uuid:=pg_catalog.gen_random_uuid(); b_only uuid:=pg_catalog.gen_random_uuid();
@@ -96,7 +96,7 @@ begin
   insert into public.tenant_user_admin_notes(tenant_id,user_id,admin_note,updated_by) values
     (tenant_a,shared_user,'A NOTE',admin_a),(tenant_b,shared_user,'B NOTE',admin_b);
 
-  list_a:=pg_temp.list_call(admin_a);
+  list_a:=pg_temp.list_call(admin_a,tenant_a);
   perform pg_temp.ok(6,'Admin A list allowed',pg_catalog.jsonb_array_length(list_a)>0,'A list denied/empty');
   perform pg_temp.ok(7,'Admin A reads only Tenant A note',exists(select 1 from pg_catalog.jsonb_array_elements(list_a) row where row->>'user_id'=shared_user::text and row->>'admin_note'='A NOTE') and list_a::text not like '%B NOTE%','A note scope differs');
   perform pg_temp.ok(8,'Tenant B-only user excluded from A',not exists(select 1 from pg_catalog.jsonb_array_elements(list_a) row where row->>'user_id'=b_only::text),'B-only user leaked');
@@ -104,40 +104,40 @@ begin
   perform pg_temp.ok(10,'legacy note fallback removed',list_a::text not like '%LEGACY MUST STAY FROZEN%','legacy note leaked');
 
   select pg_catalog.count(*) into audit_before from public.audit_logs where action='tenant_user_admin_note_updated' and target_id=shared_user;
-  result:=pg_temp.note_call(admin_a,shared_user,'A UPDATED');
+  result:=pg_temp.note_call(admin_a,tenant_a,shared_user,'A UPDATED');
   perform pg_temp.ok(11,'Admin A writes Tenant A note',result@>'{"ok":true,"changed":true,"code":"updated"}'::jsonb and (select admin_note='A UPDATED' from public.tenant_user_admin_notes where tenant_id=tenant_a and user_id=shared_user),'A write failed');
   perform pg_temp.ok(12,'Tenant B note unchanged',(select admin_note='B NOTE' from public.tenant_user_admin_notes where tenant_id=tenant_b and user_id=shared_user),'B note changed');
   perform pg_temp.ok(13,'profiles.admin_note frozen',(select admin_note=legacy_value from public.profiles where user_id=shared_user),'legacy field changed');
   perform pg_temp.ok(14,'tenant-bound PII-free audit',exists(select 1 from public.audit_logs where action='tenant_user_admin_note_updated' and target_type='tenant_user_admin_note' and target_id=shared_user and tenant_id=tenant_a and actor_user_id=admin_a and details::text not like '%A UPDATED%' and actor_name='Tenant administrator' and target_name='Tenant user') and (select pg_catalog.count(*)=audit_before+1 from public.audit_logs where action='tenant_user_admin_note_updated' and target_id=shared_user),'audit differs');
-  result:=pg_temp.note_call(admin_a,shared_user,'A UPDATED');
+  result:=pg_temp.note_call(admin_a,tenant_a,shared_user,'A UPDATED');
   perform pg_temp.ok(15,'note retry is idempotent',result->>'code'='no_change' and (select pg_catalog.count(*)=audit_before+1 from public.audit_logs where action='tenant_user_admin_note_updated' and target_id=shared_user),'retry created effect');
-  perform pg_temp.ok(16,'Admin A cannot write B-only user',pg_temp.note_call(admin_a,b_only,'CROSS')->>'code'='not_allowed' and not exists(select 1 from public.tenant_user_admin_notes where tenant_id=tenant_a and user_id=b_only),'B-only write allowed');
-  perform pg_temp.ok(17,'Admin A cannot write unrelated user',pg_temp.note_call(admin_a,unrelated,'CROSS')->>'code'='not_allowed','unrelated write allowed');
-  perform pg_temp.ok(18,'global role without membership denied',pg_temp.note_call(global_admin,shared_user,'CROSS')->>'code'='not_allowed' and pg_temp.list_denied(global_admin),'global role bypass remains');
-  perform pg_temp.ok(19,'pending membership denied',pg_temp.note_call(pending_admin,shared_user,'CROSS')->>'code'='not_allowed' and pg_temp.list_denied(pending_admin),'pending actor allowed');
-  perform pg_temp.ok(20,'suspended membership denied',pg_temp.note_call(suspended_admin,shared_user,'CROSS')->>'code'='not_allowed' and pg_temp.list_denied(suspended_admin),'suspended actor allowed');
+  perform pg_temp.ok(16,'Admin A cannot write B-only user',pg_temp.note_call(admin_a,tenant_a,b_only,'CROSS')->>'code'='not_allowed' and not exists(select 1 from public.tenant_user_admin_notes where tenant_id=tenant_a and user_id=b_only),'B-only write allowed');
+  perform pg_temp.ok(17,'Admin A cannot write unrelated user',pg_temp.note_call(admin_a,tenant_a,unrelated,'CROSS')->>'code'='not_allowed','unrelated write allowed');
+  perform pg_temp.ok(18,'global role without membership denied',pg_temp.note_call(global_admin,tenant_a,shared_user,'CROSS')->>'code'='not_allowed' and pg_temp.list_denied(global_admin,tenant_a),'global role bypass remains');
+  perform pg_temp.ok(19,'pending membership denied',pg_temp.note_call(pending_admin,tenant_a,shared_user,'CROSS')->>'code'='not_allowed' and pg_temp.list_denied(pending_admin,tenant_a),'pending actor allowed');
+  perform pg_temp.ok(20,'suspended membership denied',pg_temp.note_call(suspended_admin,tenant_a,shared_user,'CROSS')->>'code'='not_allowed' and pg_temp.list_denied(suspended_admin,tenant_a),'suspended actor allowed');
 
   update public.tenants set status='dormant' where id=tenant_a;
   update public.tenants set status='active' where id=tenant_b;
-  list_b:=pg_temp.list_call(admin_b);
+  list_b:=pg_temp.list_call(admin_b,tenant_b);
   perform pg_temp.ok(21,'Admin B reads only Tenant B note',exists(select 1 from pg_catalog.jsonb_array_elements(list_b) row where row->>'user_id'=shared_user::text and row->>'admin_note'='B NOTE') and list_b::text not like '%A UPDATED%','B note scope differs');
-  result:=pg_temp.note_call(admin_b,shared_user,'B UPDATED');
+  result:=pg_temp.note_call(admin_b,tenant_b,shared_user,'B UPDATED');
   perform pg_temp.ok(22,'Admin B write remains isolated',result->>'code'='updated' and (select admin_note='B UPDATED' from public.tenant_user_admin_notes where tenant_id=tenant_b and user_id=shared_user) and (select admin_note='A UPDATED' from public.tenant_user_admin_notes where tenant_id=tenant_a and user_id=shared_user),'B write contaminated A');
-  perform pg_temp.ok(23,'Admin B cannot write A-only user',pg_temp.note_call(admin_b,admin_a,'CROSS')->>'code'='not_allowed','A-only target allowed');
+  perform pg_temp.ok(23,'Admin B cannot write A-only user',pg_temp.note_call(admin_b,tenant_b,admin_a,'CROSS')->>'code'='not_allowed','A-only target allowed');
 
   update public.tenants set status='dormant' where id=tenant_b;
-  perform pg_temp.ok(24,'zero active tenants fail closed',public.active_single_tenant_id_v1() is null and pg_temp.note_call(admin_a,shared_user,'ZERO')->>'code'='not_allowed' and pg_temp.list_denied(admin_a),'zero-active allowed');
+  perform pg_temp.ok(24,'inactive tenant fails closed without an exact-single bridge',pg_catalog.to_regprocedure('public.active_single_tenant_id_v1()') is null and pg_temp.note_call(admin_a,tenant_a,shared_user,'ZERO')->>'code'='not_allowed' and pg_temp.list_denied(admin_a,tenant_a),'inactive tenant allowed');
   update public.tenants set status='active' where id=tenant_a;
-  perform pg_temp.ok(25,'exactly one active tenant resolves',public.active_single_tenant_id_v1()=tenant_a,'one-active bridge differs');
+  perform pg_temp.ok(25,'explicit tenant-scoped contracts remain authoritative',pg_catalog.to_regprocedure('public.admin_list_users_v2(uuid,integer,integer,text,text,text,text)') is not null and pg_catalog.to_regprocedure('public.admin_set_user_note_v2(uuid,uuid,text)') is not null,'tenant-scoped contract missing');
   perform pg_temp.ok(26,'second active tenant blocked',pg_temp.second_active_denied(tenant_b),'second active tenant accepted');
 
-  perform pg_temp.ok(27,'RPC metadata and ACL minimal',not exists(select 1 from pg_catalog.pg_proc procedure join pg_catalog.pg_roles owner on owner.oid=procedure.proowner where procedure.oid in('public.admin_list_users_v1(integer,integer,text,text,text,text)'::regprocedure,'public.admin_set_user_note_v1(uuid,text)'::regprocedure) and not(procedure.prosecdef and owner.rolname='postgres' and procedure.proconfig=array['search_path=pg_catalog, public, pg_temp']::text[] and pg_catalog.has_function_privilege('authenticated',procedure.oid,'EXECUTE') and not pg_catalog.has_function_privilege('anon',procedure.oid,'EXECUTE') and not pg_catalog.has_function_privilege('service_role',procedure.oid,'EXECUTE'))),'RPC metadata/ACL differs');
-  perform pg_temp.ok(28,'list DTO signature unchanged',pg_catalog.pg_get_function_result('public.admin_list_users_v1(integer,integer,text,text,text,text)'::regprocedure) like 'TABLE(user_id uuid, email text, first_name text, last_name text, full_name text, phone text, role text, verification_status text, admin_note text,%','DTO changed');
-  perform pg_temp.ok(29,'no legacy note source in active RPCs',(select prosrc not like '%profile.admin_note%' and prosrc like '%tenant_user_admin_notes%' from pg_catalog.pg_proc where oid='public.admin_list_users_v1(integer,integer,text,text,text,text)'::regprocedure) and (select prosrc not like '%set admin_note =%' and prosrc like '%tenant_user_admin_notes%' from pg_catalog.pg_proc where oid='public.admin_set_user_note_v1(uuid,text)'::regprocedure),'legacy source remains');
-  perform pg_temp.ok(30,'operational relationship predicates present',(select prosrc like '%tenant_memberships%' and prosrc like '%reservations%' and prosrc like '%event_registrations%' from pg_catalog.pg_proc where oid='public.admin_list_users_v1(integer,integer,text,text,text,text)'::regprocedure) and (select prosrc like '%tenant_memberships%' and prosrc like '%reservations%' and prosrc like '%event_registrations%' from pg_catalog.pg_proc where oid='public.admin_set_user_note_v1(uuid,text)'::regprocedure),'relationship source missing');
-  perform pg_temp.ok(31,'global profile role removed from authority',not exists(select 1 from pg_catalog.pg_proc where oid in('public.admin_list_users_v1(integer,integer,text,text,text,text)'::regprocedure,'public.admin_set_user_note_v1(uuid,text)'::regprocedure) and prosrc~'profile[.]role'),'global role remains');
-  perform pg_temp.ok(32,'SECURITY DEFINER count is 95 after Phase 2',(select pg_catalog.count(*) from pg_catalog.pg_proc procedure join pg_catalog.pg_namespace namespace on namespace.oid=procedure.pronamespace where namespace.nspname='public' and procedure.prosecdef)=95,'definer count differs');
-  perform pg_temp.ok(33,'compatibility defaults remain 7/7',(select pg_catalog.count(*) from information_schema.columns where table_schema='public' and table_name in('shooting_lanes','reservations','lane_blocks','events','event_lanes','event_registrations','email_deliveries') and column_name='tenant_id' and column_default='''c5c00000-0000-4000-8000-000000000001''::uuid')=7,'defaults differ');
+  perform pg_temp.ok(27,'RPC metadata and ACL minimal',not exists(select 1 from pg_catalog.pg_proc procedure join pg_catalog.pg_roles owner on owner.oid=procedure.proowner where procedure.oid in('public.admin_list_users_v2(uuid,integer,integer,text,text,text,text)'::regprocedure,'public.admin_set_user_note_v2(uuid,uuid,text)'::regprocedure) and not(procedure.prosecdef and owner.rolname='postgres' and procedure.proconfig=array['search_path=pg_catalog, public, pg_temp']::text[] and pg_catalog.has_function_privilege('authenticated',procedure.oid,'EXECUTE') and not pg_catalog.has_function_privilege('anon',procedure.oid,'EXECUTE') and not pg_catalog.has_function_privilege('service_role',procedure.oid,'EXECUTE'))),'RPC metadata/ACL differs');
+  perform pg_temp.ok(28,'list DTO signature unchanged',pg_catalog.pg_get_function_result('public.admin_list_users_v2(uuid,integer,integer,text,text,text,text)'::regprocedure) like 'TABLE(user_id uuid, email text, first_name text, last_name text, full_name text, phone text, role text, verification_status text, admin_note text,%','DTO changed');
+  perform pg_temp.ok(29,'no legacy note source in active RPCs',(select prosrc not like '%profile.admin_note%' and prosrc like '%tenant_user_admin_notes%' from pg_catalog.pg_proc where oid='public.admin_list_users_v2(uuid,integer,integer,text,text,text,text)'::regprocedure) and (select prosrc not like '%set admin_note =%' and prosrc like '%tenant_user_admin_notes%' from pg_catalog.pg_proc where oid='public.admin_set_user_note_v2(uuid,uuid,text)'::regprocedure),'legacy source remains');
+  perform pg_temp.ok(30,'operational relationship predicates present',(select prosrc like '%tenant_memberships%' and prosrc like '%reservations%' and prosrc like '%event_registrations%' from pg_catalog.pg_proc where oid='public.admin_list_users_v2(uuid,integer,integer,text,text,text,text)'::regprocedure) and (select prosrc like '%tenant_memberships%' and prosrc like '%reservations%' and prosrc like '%event_registrations%' from pg_catalog.pg_proc where oid='public.admin_set_user_note_v2(uuid,uuid,text)'::regprocedure),'relationship source missing');
+  perform pg_temp.ok(31,'global profile role removed from authority',not exists(select 1 from pg_catalog.pg_proc where oid in('public.admin_list_users_v2(uuid,integer,integer,text,text,text,text)'::regprocedure,'public.admin_set_user_note_v2(uuid,uuid,text)'::regprocedure) and prosrc~'profile[.]role'),'global role remains');
+  perform pg_temp.ok(32,'SECURITY DEFINER count is  73 after Phase 2',(select pg_catalog.count(*) from pg_catalog.pg_proc procedure join pg_catalog.pg_namespace namespace on namespace.oid=procedure.pronamespace where namespace.nspname='public' and procedure.prosecdef)=73,'definer count differs');
+  perform pg_temp.ok(33,'compatibility defaults remain 7/7',(select pg_catalog.count(*) from information_schema.columns where table_schema='public' and table_name in('shooting_lanes','reservations','lane_blocks','events','event_lanes','event_registrations','email_deliveries') and column_name='tenant_id' and column_default='''c5c00000-0000-4000-8000-000000000001''::uuid')=0,'defaults differ');
   perform pg_temp.ok(34,'account-wide lifecycle remains separate',pg_catalog.md5(pg_catalog.replace(pg_catalog.replace(pg_catalog.pg_get_functiondef('public.export_my_data_v1()'::regprocedure),E'\r\n',E'\n'),E'\r',E'\n'))='d159b7d0a14f7ffc9d6c3e5088d18dc5' and pg_catalog.md5(pg_catalog.replace(pg_catalog.replace(pg_catalog.pg_get_functiondef('public.anonymize_my_account_v1()'::regprocedure),E'\r\n',E'\n'),E'\r',E'\n'))='70b5f590399aa3f3a147935459b7f085','account lifecycle drifted');
   perform pg_temp.ok(35,'role identity contact and verification untouched',
     not exists(

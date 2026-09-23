@@ -15,6 +15,7 @@ const activeStatuses = new Set(["confirmed"]);
 const service = createClient(environment.supabaseUrl, environment.serviceRoleKey, {
   auth: { autoRefreshToken: false, persistSession: false },
 });
+const tenantId = "c5c00000-0000-4000-8000-000000000001";
 
 function integerSetting(name, fallback, minimum = 0, maximum = Number.MAX_SAFE_INTEGER) {
   const raw = process.env[name];
@@ -369,7 +370,10 @@ async function setupFixtures() {
       },
       positions,
     };
-    const { data, error } = await adminClient.rpc("admin_create_lane_booking_family_v1", { p_family: payload });
+    const { data, error } = await adminClient.rpc("admin_create_lane_booking_family_v2", {
+      p_tenant_id: tenantId,
+      p_family: payload,
+    });
     assertNoError(error, `create load-test family ${familyLabel}`);
     if (!data?.ok || data.code !== "created" || data.created_resource_count !== positions.length + 1) {
       throw new Error(`Family ${familyLabel} was not created atomically.`);

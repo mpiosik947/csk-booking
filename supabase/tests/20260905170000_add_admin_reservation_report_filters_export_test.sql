@@ -18,7 +18,7 @@ create function pg_temp.report(p_uid uuid,p_from date,p_to date,p_resource uuid 
 declare r jsonb;
 begin
   perform pg_temp.set_client('authenticated',p_uid);
-  select public.admin_get_reservation_report_v2(p_from,p_to,p_resource,p_status,p_payment,p_type,p_limit,p_offset) into r;
+  select public.admin_get_reservation_report_v3('c5c00000-0000-4000-8000-000000000001'::uuid,p_from,p_to,p_resource,p_status,p_payment,p_type,p_limit,p_offset) into r;
   reset role; return r;
 exception when others then reset role; raise;
 end $f$;
@@ -26,7 +26,7 @@ create function pg_temp.export_rows(p_uid uuid,p_from date,p_to date,p_resource 
 declare r jsonb;
 begin
   perform pg_temp.set_client('authenticated',p_uid);
-  select public.admin_get_reservation_report_export_v1(p_from,p_to,p_resource,p_status,p_payment,p_type) into r;
+  select public.admin_get_reservation_report_export_v2('c5c00000-0000-4000-8000-000000000001'::uuid,p_from,p_to,p_resource,p_status,p_payment,p_type) into r;
   reset role; return r;
 exception when others then reset role; raise;
 end $f$;
@@ -60,25 +60,25 @@ begin
     (v_tenant,i,'instructor','active'),
     (v_tenant,u,'user','active');
 
-  insert into public.shooting_lanes(id,name,type,is_active,max_shooters,booking_step_minutes,display_order,resource_kind,parent_lane_id,whole_lane_bookable,positions_bookable) values
-    (root_id,'[TEST][REPORTS-6B] Root','shooting',true,2,60,9800,'lane',null,true,true),
-    (child_id,'=SUM(A1:A2); "Pozycja"','shooting',true,1,60,9801,'position',root_id,false,false),
-    (sibling_id,'[TEST][REPORTS-6B] Sibling','shooting',true,1,60,9802,'position',root_id,false,false),
-    (standalone_id,'[TEST][REPORTS-6B] Standalone','shooting',true,1,60,9803,'lane',null,true,false);
+  insert into public.shooting_lanes(tenant_id,id,name,type,is_active,max_shooters,booking_step_minutes,display_order,resource_kind,parent_lane_id,whole_lane_bookable,positions_bookable) values
+    (v_tenant,root_id,'[TEST][REPORTS-6B] Root','shooting',true,2,60,9800,'lane',null,true,true),
+    (v_tenant,child_id,'=SUM(A1:A2); "Pozycja"','shooting',true,1,60,9801,'position',root_id,false,false),
+    (v_tenant,sibling_id,'[TEST][REPORTS-6B] Sibling','shooting',true,1,60,9802,'position',root_id,false,false),
+    (v_tenant,standalone_id,'[TEST][REPORTS-6B] Standalone','shooting',true,1,60,9803,'lane',null,true,false);
   insert into public.lane_booking_rules(lane_id,online_bookable,max_people_online) values(root_id,true,2),(child_id,true,1),(sibling_id,true,1),(standalone_id,true,1);
   insert into public.lane_pricing_rules(id,lane_id,day_group,min_shooters,max_shooters,label,hourly_price) values
     (pr,root_id,'mon_thu',1,2,'Root',100),(pc,child_id,'mon_thu',1,1,'Child',50),(ps,sibling_id,'mon_thu',1,1,'Sibling',70),(pst,standalone_id,'mon_thu',1,1,'Standalone',40);
 
-  insert into public.reservations(id,user_id,lane_id,customer_name,customer_email,customer_phone,reservation_date,start_time,end_time,duration_minutes,price,reservation_status,payment_status,attendance_status,checked_in_at,completed_at,shooters_count,pricing_rule_id,pricing_day_group_snapshot,lane_name_snapshot,pricing_label_snapshot,price_per_hour_snapshot,total_price,currency_code,creation_request_id) values
-    (gen_random_uuid(),u,root_id,'[TEST] Root','root-'||run_id||'@example.invalid','1',date '2099-03-29',time '08:00',time '10:00',120,100,'confirmed','paid','planned',null,null,2,pr,'mon_thu','[TEST][REPORTS-6B] Root','Root',50,100,'PLN',gen_random_uuid()),
-    (gen_random_uuid(),u,child_id,'[TEST] Child','child-'||run_id||'@example.invalid','2',date '2099-03-29',time '09:00',time '10:00',60,50,'confirmed','unpaid','planned',null,null,1,pc,'mon_thu','=SUM(A1:A2); "Pozycja"','Child',50,50,'PLN',gen_random_uuid()),
-    (gen_random_uuid(),u,sibling_id,'[TEST] Sibling','sibling-'||run_id||'@example.invalid','3',date '2099-03-29',time '10:00',time '11:00',60,70,'completed','paid_on_site','completed',now(),now(),1,ps,'mon_thu','[TEST][REPORTS-6B] Sibling','Sibling',70,70,'PLN',gen_random_uuid()),
-    (gen_random_uuid(),u,standalone_id,'[TEST] Cancelled','cancelled-'||run_id||'@example.invalid','4',date '2099-03-29',time '11:00',time '12:00',60,0,'cancelled_by_user','free','planned',null,null,1,pst,'mon_thu','[TEST][REPORTS-6B] Standalone','Free',0,0,'PLN',gen_random_uuid()),
-    (gen_random_uuid(),u,child_id,'[TEST] No show','noshow-'||run_id||'@example.invalid','5',date '2099-03-29',time '12:00',time '13:00',60,80,'no_show','voucher','no_show',null,null,1,pc,'mon_thu','=SUM(A1:A2); "Pozycja"','Voucher',80,80,'PLN',gen_random_uuid());
+  insert into public.reservations(tenant_id,id,user_id,lane_id,customer_name,customer_email,customer_phone,reservation_date,start_time,end_time,duration_minutes,price,reservation_status,payment_status,attendance_status,checked_in_at,completed_at,shooters_count,pricing_rule_id,pricing_day_group_snapshot,lane_name_snapshot,pricing_label_snapshot,price_per_hour_snapshot,total_price,currency_code,creation_request_id) values
+    (v_tenant,gen_random_uuid(),u,root_id,'[TEST] Root','root-'||run_id||'@example.invalid','1',date '2099-03-29',time '08:00',time '10:00',120,100,'confirmed','paid','planned',null,null,2,pr,'mon_thu','[TEST][REPORTS-6B] Root','Root',50,100,'PLN',gen_random_uuid()),
+    (v_tenant,gen_random_uuid(),u,child_id,'[TEST] Child','child-'||run_id||'@example.invalid','2',date '2099-03-29',time '09:00',time '10:00',60,50,'confirmed','unpaid','planned',null,null,1,pc,'mon_thu','=SUM(A1:A2); "Pozycja"','Child',50,50,'PLN',gen_random_uuid()),
+    (v_tenant,gen_random_uuid(),u,sibling_id,'[TEST] Sibling','sibling-'||run_id||'@example.invalid','3',date '2099-03-29',time '10:00',time '11:00',60,70,'completed','paid_on_site','completed',now(),now(),1,ps,'mon_thu','[TEST][REPORTS-6B] Sibling','Sibling',70,70,'PLN',gen_random_uuid()),
+    (v_tenant,gen_random_uuid(),u,standalone_id,'[TEST] Cancelled','cancelled-'||run_id||'@example.invalid','4',date '2099-03-29',time '11:00',time '12:00',60,0,'cancelled_by_user','free','planned',null,null,1,pst,'mon_thu','[TEST][REPORTS-6B] Standalone','Free',0,0,'PLN',gen_random_uuid()),
+    (v_tenant,gen_random_uuid(),u,child_id,'[TEST] No show','noshow-'||run_id||'@example.invalid','5',date '2099-03-29',time '12:00',time '13:00',60,80,'no_show','voucher','no_show',null,null,1,pc,'mon_thu','=SUM(A1:A2); "Pozycja"','Voucher',80,80,'PLN',gen_random_uuid());
 
-  perform pg_temp.ok(1,'exact signatures',to_regprocedure('public.admin_get_reservation_report_v2(date,date,uuid,text,text,text,integer,integer)') is not null and to_regprocedure('public.admin_get_reservation_report_export_v1(date,date,uuid,text,text,text)') is not null,'v2 and export must exist');
-  perform pg_temp.ok(2,'security properties',not exists(select 1 from pg_proc p join pg_roles o on o.oid=p.proowner where p.oid in('public.admin_get_reservation_report_v2(date,date,uuid,text,text,text,integer,integer)'::regprocedure,'public.admin_get_reservation_report_export_v1(date,date,uuid,text,text,text)'::regprocedure) and not(p.prosecdef and p.provolatile='s' and p.proconfig=array['search_path=pg_catalog, public, pg_temp']::text[] and o.rolname='postgres')),'security properties differ');
-  perform pg_temp.ok(3,'least privilege ACL',pg_catalog.has_function_privilege('authenticated','public.admin_get_reservation_report_v2(date,date,uuid,text,text,text,integer,integer)','EXECUTE') and pg_catalog.has_function_privilege('authenticated','public.admin_get_reservation_report_export_v1(date,date,uuid,text,text,text)','EXECUTE') and not pg_catalog.has_function_privilege('anon','public.admin_get_reservation_report_v2(date,date,uuid,text,text,text,integer,integer)','EXECUTE') and not pg_catalog.has_function_privilege('service_role','public.admin_get_reservation_report_export_v1(date,date,uuid,text,text,text)','EXECUTE'),'ACL differs');
+  perform pg_temp.ok(1,'exact signatures',to_regprocedure('public.admin_get_reservation_report_v3(uuid,date,date,uuid,text,text,text,integer,integer)') is not null and to_regprocedure('public.admin_get_reservation_report_export_v2(uuid,date,date,uuid,text,text,text)') is not null,'v2 and export must exist');
+  perform pg_temp.ok(2,'security properties',not exists(select 1 from pg_proc p join pg_roles o on o.oid=p.proowner where p.oid in('public.admin_get_reservation_report_v3(uuid,date,date,uuid,text,text,text,integer,integer)'::regprocedure,'public.admin_get_reservation_report_export_v2(uuid,date,date,uuid,text,text,text)'::regprocedure) and not(p.prosecdef and p.provolatile='s' and p.proconfig=array['search_path=pg_catalog, public, pg_temp']::text[] and o.rolname='postgres')),'security properties differ');
+  perform pg_temp.ok(3,'least privilege ACL',pg_catalog.has_function_privilege('authenticated','public.admin_get_reservation_report_v3(uuid,date,date,uuid,text,text,text,integer,integer)','EXECUTE') and pg_catalog.has_function_privilege('authenticated','public.admin_get_reservation_report_export_v2(uuid,date,date,uuid,text,text,text)','EXECUTE') and not pg_catalog.has_function_privilege('anon','public.admin_get_reservation_report_v3(uuid,date,date,uuid,text,text,text,integer,integer)','EXECUTE') and not pg_catalog.has_function_privilege('service_role','public.admin_get_reservation_report_export_v2(uuid,date,date,uuid,text,text,text)','EXECUTE'),'ACL differs');
   perform pg_temp.ok(4,'private helper not executable',not pg_catalog.has_function_privilege('authenticated','public._admin_reservation_report_rows_v2(date,date,uuid,text,text,text)','EXECUTE') and not pg_catalog.has_function_privilege('anon','public._admin_reservation_report_rows_v2(date,date,uuid,text,text,text)','EXECUTE') and not pg_catalog.has_function_privilege('service_role','public._admin_reservation_report_rows_v2(date,date,uuid,text,text,text)','EXECUTE'),'helper exposed');
   perform pg_temp.ok(5,'admin allowed',pg_temp.report(a,date '2099-03-29',date '2099-03-29')->>'code'='ok','admin denied');
   perform pg_temp.ok(6,'employee denied',pg_temp.report(e,date '2099-03-29',date '2099-03-29')->>'code'='not_allowed','employee allowed');
@@ -113,16 +113,16 @@ begin
   perform pg_temp.ok(27,'export empty result',(pg_temp.export_rows(a,date '2099-04-01',date '2099-04-01')->>'total')::integer=0,'empty export differs');
   perform pg_temp.ok(28,'export roles denied',pg_temp.export_rows(e,date '2099-03-29',date '2099-03-29')->>'code'='not_allowed' and pg_temp.export_rows(i,date '2099-03-29',date '2099-03-29')->>'code'='not_allowed' and pg_temp.export_rows(u,date '2099-03-29',date '2099-03-29')->>'code'='not_allowed','export role allowed');
 
-  insert into public.reservations(id,user_id,lane_id,customer_name,customer_email,customer_phone,reservation_date,start_time,end_time,duration_minutes,price,reservation_status,payment_status,attendance_status,shooters_count,pricing_rule_id,pricing_day_group_snapshot,lane_name_snapshot,pricing_label_snapshot,price_per_hour_snapshot,total_price,currency_code,creation_request_id)
-  select gen_random_uuid(),u,standalone_id,'[TEST] Bulk','bulk-'||g||'-'||run_id||'@example.invalid','9',date '2099-05-01',time '14:00',time '15:00',60,0,'cancelled','free','planned',1,pst,'mon_thu','[TEST][REPORTS-6B] Standalone','Bulk',0,0,'PLN',gen_random_uuid() from generate_series(1,500) g;
+  insert into public.reservations(tenant_id,id,user_id,lane_id,customer_name,customer_email,customer_phone,reservation_date,start_time,end_time,duration_minutes,price,reservation_status,payment_status,attendance_status,shooters_count,pricing_rule_id,pricing_day_group_snapshot,lane_name_snapshot,pricing_label_snapshot,price_per_hour_snapshot,total_price,currency_code,creation_request_id)
+  select v_tenant,gen_random_uuid(),u,standalone_id,'[TEST] Bulk','bulk-'||g||'-'||run_id||'@example.invalid','9',date '2099-05-01',time '14:00',time '15:00',60,0,'cancelled','free','planned',1,pst,'mon_thu','[TEST][REPORTS-6B] Standalone','Bulk',0,0,'PLN',gen_random_uuid() from generate_series(1,500) g;
   x:=pg_temp.export_rows(a,date '2099-05-01',date '2099-05-01');
   perform pg_temp.ok(29,'500 row export succeeds',x->>'code'='ok' and (x->>'total')::integer=500 and jsonb_array_length(x->'rows')=500,'500 row export differs');
-  insert into public.reservations(id,user_id,lane_id,customer_name,customer_email,customer_phone,reservation_date,start_time,end_time,duration_minutes,price,reservation_status,payment_status,attendance_status,shooters_count,pricing_rule_id,pricing_day_group_snapshot,lane_name_snapshot,pricing_label_snapshot,price_per_hour_snapshot,total_price,currency_code,creation_request_id)
-  select gen_random_uuid(),u,standalone_id,'[TEST] Bulk','bulk-'||g||'-'||run_id||'@example.invalid','9',date '2099-05-01',time '14:00',time '15:00',60,0,'cancelled','free','planned',1,pst,'mon_thu','[TEST][REPORTS-6B] Standalone','Bulk',0,0,'PLN',gen_random_uuid() from generate_series(501,5000) g;
+  insert into public.reservations(tenant_id,id,user_id,lane_id,customer_name,customer_email,customer_phone,reservation_date,start_time,end_time,duration_minutes,price,reservation_status,payment_status,attendance_status,shooters_count,pricing_rule_id,pricing_day_group_snapshot,lane_name_snapshot,pricing_label_snapshot,price_per_hour_snapshot,total_price,currency_code,creation_request_id)
+  select v_tenant,gen_random_uuid(),u,standalone_id,'[TEST] Bulk','bulk-'||g||'-'||run_id||'@example.invalid','9',date '2099-05-01',time '14:00',time '15:00',60,0,'cancelled','free','planned',1,pst,'mon_thu','[TEST][REPORTS-6B] Standalone','Bulk',0,0,'PLN',gen_random_uuid() from generate_series(501,5000) g;
   x:=pg_temp.export_rows(a,date '2099-05-01',date '2099-05-01');
   perform pg_temp.ok(30,'5000 row export succeeds',x->>'code'='ok' and (x->>'total')::integer=5000 and jsonb_array_length(x->'rows')=5000,'5000 row export differs');
-  insert into public.reservations(id,user_id,lane_id,customer_name,customer_email,customer_phone,reservation_date,start_time,end_time,duration_minutes,price,reservation_status,payment_status,attendance_status,shooters_count,pricing_rule_id,pricing_day_group_snapshot,lane_name_snapshot,pricing_label_snapshot,price_per_hour_snapshot,total_price,currency_code,creation_request_id)
-  values(gen_random_uuid(),u,standalone_id,'[TEST] Bulk','bulk-5001-'||run_id||'@example.invalid','9',date '2099-05-01',time '14:00',time '15:00',60,0,'cancelled','free','planned',1,pst,'mon_thu','[TEST][REPORTS-6B] Standalone','Bulk',0,0,'PLN',gen_random_uuid());
+  insert into public.reservations(tenant_id,id,user_id,lane_id,customer_name,customer_email,customer_phone,reservation_date,start_time,end_time,duration_minutes,price,reservation_status,payment_status,attendance_status,shooters_count,pricing_rule_id,pricing_day_group_snapshot,lane_name_snapshot,pricing_label_snapshot,price_per_hour_snapshot,total_price,currency_code,creation_request_id)
+  values(v_tenant,gen_random_uuid(),u,standalone_id,'[TEST] Bulk','bulk-5001-'||run_id||'@example.invalid','9',date '2099-05-01',time '14:00',time '15:00',60,0,'cancelled','free','planned',1,pst,'mon_thu','[TEST][REPORTS-6B] Standalone','Bulk',0,0,'PLN',gen_random_uuid());
   x:=pg_temp.export_rows(a,date '2099-05-01',date '2099-05-01');
   perform pg_temp.ok(31,'export above 5000 fails closed',x->>'code'='export_too_large' and (x->>'total')::integer=5001 and (x->>'max_rows')::integer=5000 and not(x?'rows'),'large export not bounded');
   p1:=pg_temp.report(a,date '2099-05-01',date '2099-05-01',null,null,null,null,50,0);

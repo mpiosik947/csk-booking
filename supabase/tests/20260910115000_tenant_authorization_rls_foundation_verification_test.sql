@@ -64,26 +64,26 @@ declare
   v_other uuid := pg_catalog.gen_random_uuid();
   v_run text := pg_catalog.replace(pg_catalog.gen_random_uuid()::text,'-','');
 begin
-  perform pg_temp.ok(1,'all four 9C-1 helpers exist',
+  perform pg_temp.ok(1,'three tenant authorization helpers remain and exact-single helper is retired',
     pg_catalog.to_regprocedure('public.is_tenant_member_v1(uuid)') is not null
     and pg_catalog.to_regprocedure('public.has_tenant_role_v1(uuid,text[])') is not null
     and pg_catalog.to_regprocedure('public.get_my_tenant_role_v1(uuid)') is not null
-    and pg_catalog.to_regprocedure('public.active_single_tenant_id_v1()') is not null,
+    and pg_catalog.to_regprocedure('public.active_single_tenant_id_v1()') is null,
     '9C-1 helper inventory differs.');
 
   perform pg_temp.ok(2,'9C-1 helpers are SECURITY DEFINER owned by postgres',
-    (select pg_catalog.count(*)=4
+    (select pg_catalog.count(*)=3
      from pg_catalog.pg_proc p join pg_catalog.pg_namespace n on n.oid=p.pronamespace
      where n.nspname='public'
-       and p.proname in ('is_tenant_member_v1','has_tenant_role_v1','get_my_tenant_role_v1','active_single_tenant_id_v1')
+       and p.proname in ('is_tenant_member_v1','has_tenant_role_v1','get_my_tenant_role_v1')
        and p.prosecdef and pg_catalog.pg_get_userbyid(p.proowner)='postgres'),
     'Helper owner/SECURITY DEFINER contract differs.');
 
   perform pg_temp.ok(3,'9C-1 helper search_path is hardened',
-    (select pg_catalog.count(*)=4
+    (select pg_catalog.count(*)=3
      from pg_catalog.pg_proc p join pg_catalog.pg_namespace n on n.oid=p.pronamespace
      where n.nspname='public'
-       and p.proname in ('is_tenant_member_v1','has_tenant_role_v1','get_my_tenant_role_v1','active_single_tenant_id_v1')
+       and p.proname in ('is_tenant_member_v1','has_tenant_role_v1','get_my_tenant_role_v1')
        and p.proconfig @> array['search_path=pg_catalog, public, pg_temp']),
     'Helper search_path differs.');
 
@@ -102,12 +102,9 @@ begin
     and not pg_catalog.has_function_privilege('service_role','public.get_my_tenant_role_v1(uuid)','EXECUTE'),
     'Role lookup grants expanded.');
 
-  perform pg_temp.ok(6,'active tenant id helper remains internal',
-    not pg_catalog.has_function_privilege('public','public.active_single_tenant_id_v1()','EXECUTE')
-    and not pg_catalog.has_function_privilege('anon','public.active_single_tenant_id_v1()','EXECUTE')
-    and not pg_catalog.has_function_privilege('authenticated','public.active_single_tenant_id_v1()','EXECUTE')
-    and not pg_catalog.has_function_privilege('service_role','public.active_single_tenant_id_v1()','EXECUTE'),
-    'Internal active-tenant helper grant expanded.');
+  perform pg_temp.ok(6,'active tenant id compatibility helper is absent',
+    pg_catalog.to_regprocedure('public.active_single_tenant_id_v1()') is null,
+    'Exact-single tenant authority survived retirement.');
 
   perform pg_temp.ok(7,'existing CSK backfill memberships remain role-consistent',
     not exists(

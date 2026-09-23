@@ -170,3 +170,212 @@ Production deployment and post-deploy verification:
 - Second production tenant: NO-GO.
 - SEC-004: OPEN until SAAS-9H.
 - `AGENTS.md`, `supabase/drafts/*` and the pre-existing C3-only plan diff remain unrelated/excluded.
+
+## SAAS-9D-5 NORMAL COMPATIBILITY RETIREMENT — LOCAL BLOCKER REVIEW
+
+The post-A2 read-only inventory confirms **22 exact-single bridge definitions**
+(the resolver plus 21 function bodies that call it), **zero active app/API
+callers**, **zero policy dependencies** and **zero trigger dependencies**.
+Three closed internal chains remain entirely inside that retirement set:
+event create wrapper/core, event list wrapper/core and lane-configuration v2/v1.
+The catalog also contains three owner-only, zero-caller legacy event writers
+(`admin_create_event`, `admin_update_event`, `admin_set_event_active`) already
+closed by ACL in 9D-2. The only repository references outside SQL regression
+tests are two local harnesses: the load test and the old optional branch of the
+4B-1B concurrency script.
+
+All active production insert paths for the seven tenant-owned tables either
+supply `tenant_id` explicitly or derive it from a trusted resource (the email
+delivery trigger). The only insert paths still relying on the fixed CSK default
+are functions inside the proposed retirement set. All seven columns are `NOT
+NULL`; local clean replay found zero null tenant rows. A forward-only candidate
+`20261001100000_retire_single_tenant_compatibility.sql` therefore removes the
+22 bridge definitions, the three closed legacy event writers and all seven
+defaults. Its fail-closed fingerprints matched the clean chain, replay passed,
+and its focused test passed **21/21**. Expected SECURITY DEFINER is **95 -> 73**.
+
+The full DB gate then stopped before any production preflight or write. The
+historical regression architecture has two wider dependencies which were not
+represented in the initial 9D-5 object inventory:
+
+- 36 historical SQL files contain direct fixture inserts into tables that used
+  the CSK default; the first full run failed those fixtures after default
+  removal unless their setup is made explicitly tenant-bound;
+- 30 historical SQL files still assert or execute one or more retired bridge
+  contracts. Replacing them is not a count/fingerprint-only change because
+  many old signatures lack a tenant argument and their current replacements
+  enforce membership/resource-bound authorization.
+
+The focused migration evidence is PASS, but the full suite is FAIL and no
+production preflight/deploy is permitted. Silencing or bulk-skipping those
+assertions would violate the semantic-regression rule. A reviewed historical
+test-retirement/cutover strategy is required before continuing implementation.
+
+- SAAS-9D-5 LOCAL: **BLOCKED — FULL DB SEMANTIC TEST CUTOVER REQUIRED**
+- production write: **0**
+- bridge/default production state: **22 / 7**
+- second tenant: **NO-GO**
+- SEC-004: **OPEN**
+
+## SAAS-9D-5T SEMANTIC TEST CUTOVER — FINAL LOCAL EVIDENCE
+
+The historical suite has been moved to the explicit tenant architecture without
+reintroducing a CSK default, exact-single-tenant resolver, global
+`profiles.role` authority, or compatibility RPC. The applied A2 migration
+`20260930110000_retire_implicit_csk_onboarding.sql` remains byte-for-byte
+unchanged (filesystem/deployed SHA-256
+`D30EF8779A7B1F0FD09B30E60DB2758E40564FA94E74D5C611AD2ACF299B4F299`).
+All normal 9D-5 schema work is isolated in the new forward-only migration
+`20261001100000_retire_single_tenant_compatibility.sql`.
+
+### Authoritative failure classification
+
+The initial replay had 66 failing historical cases. No case was classified as
+UNKNOWN or as a product regression. The fixture ledger below accounts for all
+36 implicit-CSK failures; each was rewritten to declare the tenant,
+membership, or trusted resource relationship used by the behavior under test.
+
+| IDs | Test file(s) | Test case / old assumption | New invariant | Action | Replacement coverage | Security impact |
+|---|---|---|---|---|---|---|
+| F01-F03 | `20260816100000`, `20260816130000`, `20260816143000` | fixture rows inherited CSK and ACL inventory included compatibility objects | explicit CSK fixture only where the scenario is CSK-specific; exact final ACL inventory | A / B | family creation, reserve confirmation, 128-function ACL matrix | stronger; no implicit authority |
+| F04-F07 | `20260902120000`, `20260902160000`, `20260903100000`, `20260903160000` | ACL/check-in/audit/event DML fixtures omitted tenant ownership | fixture tenant and membership are explicit | A | ACL, token privacy, 19 trusted audit writers, direct-DML denial | preserved |
+| F08-F11 | `20260904120000`, `20260904180000`, `20260904200000`, `20260905100000` | account/email/reservation/profile fixtures depended on defaults or legacy verification | resource-bound tenant plus tenant verification source of truth | A / B | lifecycle, idempotency, delete denial, re-verification | stronger |
+| F12-F15 | `20260905120000`, `20260905150000`, `20260905170000`, `20260905190000` | availability/report/event-list fixture ownership was implicit | explicit tenant selectors and tenant-owned rows | A / B | public counts, reports, filters/export, scalable readers | preserved |
+| F16-F19 | `20260907100000`, `20260909110000`, `20260909130000`, `20260910110000` | foundation/backfill fixtures assumed compatibility defaults | explicit ownership/backfill end state | A / B | foundation, ownership, FK integrity, membership auth | preserved |
+| F20-F23 | `20260910115000`, `20260910120000`, `20260911100000`, `20260911120000` | RLS fixtures and phased inventories referenced bridge-era boundaries | explicit tenant A/B fixtures and final boundaries | A / B | cross-tenant RLS, recursion, profile/lane isolation | stronger |
+| F24-F27 | `20260912100000`, `20260913100000`, `20260913150000`, `20260914100000` | event/email RPC fixtures selected the sole active tenant | explicit event/resource tenant; inactive selector fails closed | A / B | event ownership, public PII-free DTO, email claims | stronger |
+| F28-F31 | `20260914150000`, `20260915100000`, `20260916100000`, `20260917100000` | promotion/lane fixtures inherited CSK | explicit tenant and hierarchy binding | A | promotion replay, lane/block/family isolation and concurrency | preserved |
+| F32-F34 | `20260918100000`, `20260919100000`, `20260919150000` | reports/admin-user helpers injected CSK internally | helper receives explicit tenant; A/B state tested independently | A / B | report isolation, notes, role/identity/contact isolation | stronger |
+| F35-F36 | `20260920100000`, `20260920150000` | verification fixtures used implicit foundation rows/legacy argument shape | explicit foundation state and tenant selector | A / B | verification ownership, source of truth, negative membership states | stronger |
+
+The RPC ledger accounts for all 30 compatibility-call/assertion failures.
+`A`/`B` below correspond to REWRITE FIXTURE / REWRITE ASSERTION; `C` means the
+behavior was moved to the current contract plus explicit retirement coverage.
+No test was silently deleted.
+
+| IDs | Test file / contract family | Old assumption | New invariant | Action | Replacement coverage | Security impact |
+|---|---|---|---|---|---|---|
+| R01-R04 | `20260816100000`, `20260816143000` — lane family V1/admin config inventory | V1 creator/readers remain callable | V2/V3 explicit tenant contracts; retired signatures absent | C | focused 9D-5 assertions plus Playwright scenarios 1-5 | preserved |
+| R05-R08 | `20260905120000`, `20260905190000` — public/admin event readers | bridge selects CSK | V3/V2 explicit tenant; stable bounded DTO | B / C | availability/list pagination and PII checks | stronger |
+| R09-R12 | `20260911100000`, `20260912100000` — event management/registration | legacy writer inventory is authoritative | current V3/V2 writers and closed retained compatibility surface | B / C | tenant A/B IDOR, role and ownership matrix | preserved |
+| R13-R16 | `20260913100000`, `20260913150000` — event writer/public wrappers | exact-single behavior yields empty result | selected active tenant is authoritative; inactive is controlled not-found/deny | B / C | two-active explicit-isolation transaction | stronger |
+| R17-R20 | `20260915100000`, `20260916100000`, `20260917100000` — lane block/family chains | bridge-era cores/helpers remain current | current entry points plus closed invoker cores; obsolete chains absent | B / C | hierarchy, membership state, concurrency | preserved |
+| R21-R24 | `20260918100000`, `20260919100000`, `20260919150000` — reports/admin users | helpers/callers omit tenant | exact tenant argument and operational relationship | A / C | cross-tenant report/PII/note/role isolation | stronger |
+| R25-R27 | `20260920150000`, `20260921100000`, `20260924100000` — verification/public booking | legacy arg names/fallback and exact-single public selection | tenant verification only; explicit active public selector | B / C | fallback absence, inactive fail-closed, A/B isolation | stronger |
+| R28-R30 | `20260926100000`, `20260928100000`, `current_remote_baseline_contracts_test.sql` | 95 definers, 21 bridge references, seven defaults and V2 event writers | actual final inventory 73/0/0 and current V3 writers | B / C | exact inventory and final remote-baseline contract | preserved |
+
+Allowed-action accounting: A (fixture rewrite) 36; B/C (assertion or current
+contract replacement) 30; D (silent obsolete-test deletion) 0; E (real product
+regression) 0; UNKNOWN 0. Unique coverage remains for authentication,
+tenant isolation, role and membership status, last-admin, PII, event and
+reservation ownership, lane hierarchy, onboarding, and account/profile
+protection.
+
+### Retirement and dependency accounting
+
+- 22 bridge definitions: production dependency 0, application/API caller 0,
+  trigger dependency 0, policy dependency 0; target state absent. Historical
+  test references were rewritten to current tenant-scoped contracts.
+- Seven `tenant_id` defaults (`shooting_lanes`, `reservations`, `lane_blocks`,
+  `events`, `event_lanes`, `event_registrations`, `email_deliveries`): active
+  writers explicitly provide or derive tenant ownership; target state no
+  default.
+- Two closed legacy event writers covered by the frozen retirement inventory:
+  runtime callers 0 and client ACL 0; they are retired, while current V3 writer
+  behavior remains covered.
+- Final local inventory: bridge definitions 0; compatibility defaults 0;
+  SECURITY DEFINER 73; unexpected definer 0; implicit CSK authority 0;
+  exact-single tenant authority 0; `profiles.role` tenant authority 0.
+
+### Validation after cutover
+
+- Clean replay: PASS, canonical chain through `20261001100000`, ghost
+  migrations 0, unexpected filesystem-only migrations 0.
+- Focused 9D-5: 21/21 PASS.
+- Full DB: 54 files, 1600/1600 PASS; ignored/xfail/blanket skip 0.
+- Node: 782/782 PASS. TypeScript: PASS. Production build: PASS.
+- Playwright: 38/38 PASS after replacing the final V1 lane-family test caller
+  with V2 plus explicit tenant.
+- Concurrency: last-admin and profile races PASS; deadlocks 0, contamination 0,
+  lost updates 0; cleanup 0.
+- ESLint: existing baseline 6 errors / 5 warnings; no new error in the 9D-5
+  application/test scope.
+- `npm audit --omit=dev`: one existing moderate
+  `baseline-browser-mapping` advisory; not introduced by 9D-5.
+
+### Before / after accounting
+
+- HISTORICAL FAILURES BEFORE: **66**
+- FIXTURE TESTS REWRITTEN: **36**
+- RPC TESTS REPLACED: **30**
+- OBSOLETE TESTS RETIRED: **0** (obsolete behavior replaced, not silently removed)
+- NEW RETIREMENT TESTS: **21 assertions**
+- NEW TENANT-AWARE TESTS: **66 rewritten cases plus current two-tenant suites**
+- REAL PRODUCT REGRESSIONS: **0**
+- FULL DB AFTER: **1600/1600 PASS**
+- SECURITY COVERAGE LOST: **0**
+- APPLIED MIGRATION DRIFT: **0**
+- SEMANTIC TEST CUTOVER: **PASS**
+- READY FOR NORMAL SAAS-9D-5 PRODUCTION PREFLIGHT: **YES**
+
+## SAAS-9D-5 NORMAL COMPATIBILITY RETIREMENT — PRODUCTION CLOSEOUT
+
+Production preflight and deployment were completed on 23 September 2026
+against linked project `yuyxfodozzpzrdzkmolu`. The frozen forward-only
+migration was `20261001100000_retire_single_tenant_compatibility.sql`, SHA-256
+`878F1F65603FDF82926F4BFCAF5224486FC57BD9B6E066079276BEE5229DAE4C`.
+
+### Final production preflight
+
+- Migration history was LOCAL=REMOTE through `20260930110000`; the only
+  local-only migration was `20261001100000`.
+- `supabase db push --linked --dry-run` listed exactly the 9D-5 migration.
+- Fresh production catalog/data evidence: active tenants 1, SECURITY DEFINER
+  95, bridge definitions 22, compatibility defaults 7/7, target objects 25/25,
+  null tenant ownership rows 0 and checked tenant/resource integrity anomalies
+  0.
+- Trigger dependencies 0, policy dependencies 0, external catalog function
+  dependencies 0 and active application/API callers 0.
+- The production schema dump independently matched the exact 22-object bridge
+  inventory. The migration's normalized fingerprints and transactional
+  fail-closed preflight matched all 25 retirement targets before any DDL ran.
+
+### Deployment and post-deploy verification
+
+- Production deployment: **PASS**. Supabase applied only
+  `20261001100000_retire_single_tenant_compatibility.sql`.
+- Migration history after deployment: LOCAL=REMOTE through `20261001100000`.
+  Final dry-run: **Remote database is up to date**.
+- Rollback-only focused production matrix: **21/21 PASS**. Final `ROLLBACK`
+  executed; the transaction-created result table was absent afterward.
+- Final catalog state: bridge definitions 0, compatibility defaults 0,
+  retired target objects remaining 0, SECURITY DEFINER 73, unexpected drift 0.
+- Tenant ownership columns remain NOT NULL; null tenant rows 0; one active
+  tenant remains. Replacement tenant-scoped event, lane-family, reporting,
+  admin-user, verification, booking and account contracts remain present.
+- Runtime HTTP smoke returned 200 for `/`, `/booking`, `/events`, `/login`,
+  `/account`, `/admin`, `/admin/calendar`, `/admin/reports`,
+  `/admin/reservations`, `/admin/events` and `/admin/check-in`.
+- Authenticated browser smoke loaded the admin dashboard, users, check-in,
+  reports and calendar with live data, plus account, booking and events, with
+  no 5xx or removed-RPC runtime regression.
+- Fixture cleanup: **0 persisted production fixtures**. The production test
+  created no business fixture and all temporary test objects were rolled back.
+
+### Final 9D-5 verdict
+
+- SEMANTIC TEST CUTOVER: **PASS**
+- HISTORICAL TESTS DEPENDING ON IMPLICIT CSK: **0**
+- HISTORICAL TESTS REQUIRING RETIRED RPC: **0**
+- SECURITY COVERAGE LOST: **0**
+- FULL DB: **1600/1600 PASS**
+- APPLIED MIGRATION DRIFT: **0**
+- SAAS-9D-5 PRODUCTION DEPLOY: **PASS**
+- SAAS-9D-5 POST-DEPLOY: **PASS**
+- BRIDGE DEFINITIONS: **0**
+- COMPATIBILITY DEFAULTS: **0**
+- SECURITY DEFINER COUNT: **73**
+- FIXTURE CLEANUP: **PASS**
+- RUNTIME SMOKE: **PASS**
+- SECOND TENANT: **NO-GO**
+- SEC-004: **OPEN**

@@ -59,9 +59,9 @@ begin
     exists(select 1 from information_schema.columns where table_schema='public' and table_name='audit_logs' and column_name='tenant_id' and is_nullable='YES'),
     'Mixed audit ownership must remain nullable.');
 
-  perform pg_temp.ok(6, 'temporary CSK defaults exist only on approved core tables',
-    (select pg_catalog.count(*) = 7 from information_schema.columns where table_schema='public' and column_name='tenant_id' and table_name in ('shooting_lanes','reservations','lane_blocks','events','event_lanes','event_registrations','email_deliveries') and column_default = '''c5c00000-0000-4000-8000-000000000001''::uuid'),
-    'Approved temporary defaults differ.');
+  perform pg_temp.ok(6, 'temporary CSK defaults are fully retired',
+    not exists(select 1 from information_schema.columns where table_schema='public' and column_name='tenant_id' and table_name in ('shooting_lanes','reservations','lane_blocks','events','event_lanes','event_registrations','email_deliveries') and column_default is not null),
+    'A compatibility tenant default remains.');
 
   perform pg_temp.ok(7, 'audit has no tenant default',
     exists(select 1 from information_schema.columns where table_schema='public' and table_name='audit_logs' and column_name='tenant_id' and column_default is null),
@@ -139,17 +139,17 @@ begin
     not exists(select 1 from public.audit_logs where target_type in ('profile','account') and tenant_id is not null),
     'Global audit was incorrectly assigned to CSK.');
 
-  insert into public.shooting_lanes(id,name,type,is_active,max_shooters,booking_step_minutes,display_order,resource_kind,parent_lane_id,whole_lane_bookable,positions_bookable)
-  values(v_root,'[TEST][SAAS-9B-2] Default root','shooting',false,1,60,9990,'lane',null,false,false);
-  perform pg_temp.ok(21, 'legacy lane insert receives CSK default',
+  insert into public.shooting_lanes(tenant_id,id,name,type,is_active,max_shooters,booking_step_minutes,display_order,resource_kind,parent_lane_id,whole_lane_bookable,positions_bookable)
+  values(v_csk,v_root,'[TEST][SAAS-9B-2] Explicit root','shooting',false,1,60,9990,'lane',null,false,false);
+  perform pg_temp.ok(21, 'lane insert preserves explicit CSK ownership',
     (select tenant_id=v_csk from public.shooting_lanes where id=v_root),
-    'Legacy lane default did not apply.');
+    'Explicit lane ownership differs.');
 
-  insert into public.events(id,title,event_date,start_time,end_time,location,price,max_participants,is_active)
-  values(v_event,'[TEST][SAAS-9B-2] Default event',date '2099-12-01',time '10:00',time '11:00','[TEST]',0,1,false);
-  perform pg_temp.ok(22, 'legacy event insert receives CSK default',
+  insert into public.events(tenant_id,id,title,event_date,start_time,end_time,location,price,max_participants,is_active)
+  values(v_csk,v_event,'[TEST][SAAS-9B-2] Explicit event',date '2099-12-01',time '10:00',time '11:00','[TEST]',0,1,false);
+  perform pg_temp.ok(22, 'event insert preserves explicit CSK ownership',
     (select tenant_id=v_csk from public.events where id=v_event),
-    'Legacy event default did not apply.');
+    'Explicit event ownership differs.');
 
   insert into public.audit_logs(id,actor_name,actor_role,action,target_type,target_id,target_name)
   values(v_audit,'[TEST]','user','profile_identity_updated','profile',pg_catalog.gen_random_uuid(),'[TEST]');

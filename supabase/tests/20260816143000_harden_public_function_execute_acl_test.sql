@@ -37,6 +37,8 @@ insert into expected_function_acl values
   ('public.admin_list_event_registrations_v2(uuid,uuid,text,text,integer,integer)','C',false,true,false),
   ('public.admin_update_event_v3(uuid,uuid,text,text,date,time without time zone,time without time zone,text,numeric,integer,uuid[])','C',false,true,false),
   ('public.admin_set_event_active_v3(uuid,uuid,boolean)','C',false,true,false),
+  ('public.admin_set_event_active_v2(uuid,boolean)','C',false,true,false),
+  ('public.admin_update_event_v2(uuid,text,text,date,time without time zone,time without time zone,text,numeric,integer,uuid[])','C',false,true,false),
   ('public.approve_event_registration_v2(uuid,uuid)','C',false,true,false),
   ('public.cancel_event_registration_v2(uuid,uuid)','B',false,true,false),
   ('public.mark_event_registration_paid_v2(uuid,uuid)','C',false,true,false),
@@ -54,35 +56,18 @@ insert into expected_function_acl values
   ('public.update_tenant_profile_verification_v2(uuid,uuid,text,text)','C',false,true,false),
   ('public.update_tenant_profile_identity_v2(uuid,uuid,text,text)','C',false,true,false),
   ('public.update_tenant_profile_contact_details_v2(uuid,uuid,text,text,text,text,text,text)','C',false,true,false),
-  ('public._backfill_csk_tenant_user_verifications_v1()','A',false,false,false),
   ('public._apply_tenant_user_verification_v1(uuid,uuid,text,text,text,uuid)','A',false,false,false),
   ('public._tenant_verification_status_for_lane_v1(uuid,uuid)','A',false,false,false),
-  ('public.admin_create_event_v2(text,text,date,time without time zone,time without time zone,text,numeric,integer,uuid[])','C',false,true,false),
-  ('public.admin_create_event(text,text,date,time without time zone,time without time zone,text,numeric,integer,uuid[])','A',false,false,false),
   ('public.admin_create_lane_block(uuid,date,time without time zone,time without time zone,text)','C',false,true,false),
-  ('public.admin_create_lane_booking_family_v1(jsonb)','C',false,true,false),
-  ('public.admin_get_lane_booking_configuration_v1()','A',false,false,false),
-  ('public.admin_get_lane_booking_configuration_v2()','C',false,true,false),
   ('public._admin_reservation_report_rows_v2(date,date,uuid,text,text,text)','A',false,false,false),
-  ('public.admin_get_reservation_report_export_v1(date,date,uuid,text,text,text)','C',false,true,false),
   ('public.admin_get_reservation_report_v1(date,date,integer,integer)','A',false,false,false),
-  ('public.admin_get_reservation_report_v2(date,date,uuid,text,text,text,integer,integer)','C',false,true,false),
   ('public._admin_reservation_report_rows_v2__saas9d4a_core(uuid,date,date,uuid,text,text,text)','A',false,false,false),
   ('public.admin_list_event_registrations_v1(uuid,text,text,integer,integer)','C',false,true,false),
-  ('public.admin_list_events_v1(text,text,text,integer,integer)','C',false,true,false),
-  ('public.admin_list_users_v1(integer,integer,text,text,text,text)','C',false,true,false),
-  ('public.admin_set_event_active_v2(uuid,boolean)','C',false,true,false),
-  ('public.admin_set_event_active(uuid,boolean)','A',false,false,false),
   ('public.admin_set_lane_block_active(uuid,boolean)','C',false,true,false),
   ('public.admin_set_lane_booking_configuration(uuid,boolean,boolean,boolean,integer,boolean,integer,integer[],jsonb)','A',false,false,false),
   ('public.admin_set_lane_booking_family_configuration_v2(uuid,bigint,jsonb,boolean)','C',false,true,false),
   ('public.admin_set_lane_booking_family_configuration_v2__saas9d3c_core(uuid,bigint,jsonb,boolean)','A',false,false,false),
-  ('public.admin_set_user_note_v1(uuid,text)','C',false,true,false),
-  ('public.admin_set_user_role_v1(uuid,text)','C',false,true,false),
-  ('public.admin_update_event_v2(uuid,text,text,date,time without time zone,time without time zone,text,numeric,integer,uuid[])','C',false,true,false),
-  ('public.admin_update_event(uuid,text,text,date,time without time zone,time without time zone,text,numeric,integer,uuid[])','A',false,false,false),
   ('public.admin_update_lane_block(uuid,uuid,date,time without time zone,time without time zone,text,boolean)','C',false,true,false),
-  ('public.active_single_tenant_id_v1()','A',false,false,false),
   ('public.anonymize_my_account_v1()','B',false,true,false),
   ('public.approve_event_registration(uuid)','C',false,true,false),
   ('public.cancel_event_registration(uuid)','B',false,true,false),
@@ -102,17 +87,13 @@ insert into expected_function_acl values
   ('public.get_my_event_registrations_v1(text,text,integer,integer)','B',false,true,false),
   ('public.get_my_event_registrations_v2(uuid,text,text,integer,integer)','B',false,true,false),
   ('public.get_my_role()','A',false,false,false),
-  ('public.get_my_active_tenant_verification_v1()','B',false,true,false),
   ('public.get_my_tenant_verification_v2(uuid)','B',false,true,false),
   ('public.get_my_tenant_role_v1(uuid)','B',false,true,false),
   ('public.get_check_in_reservation_v1(uuid)','C',false,true,false),
-  ('public.get_public_booking_configuration_v1()','B',true,true,false),
   ('public.get_public_booking_configuration_v2(uuid)','B',true,true,false),
   ('public.get_public_booking_configuration_v1__saas9d4e_core(uuid)','A',false,false,false),
-  ('public.get_public_event_availability_v1()','B',true,true,false),
   ('public.get_public_event_availability_v2(uuid)','B',true,true,false),
   ('public.get_public_event_availability_v1__saas9d2b2_core(uuid)','A',false,false,false),
-  ('public.get_public_event_list_v2(text,text,integer,integer)','B',true,true,false),
   ('public.get_public_event_list_v3(uuid,text,text,integer,integer)','B',true,true,false),
   ('public.get_public_event_list_v2__saas9d2b2_core(uuid,text,text,integer,integer)','A',false,false,false),
   ('public.get_public_check_in_status_v1(uuid)','B',true,false,false),
@@ -145,10 +126,6 @@ insert into expected_function_acl values
   ('public.set_audit_log_tenant_id()','E',false,false,false),
   ('public.set_updated_at()','E',false,false,false),
   ('public.tenant_role_to_legacy_profile_role_v1(text)','A',false,false,false),
-  ('public.update_profile_contact_details(uuid,text,text,text,text,text,text)','C',false,true,false),
-  ('public.update_profile_identity(uuid,text,text)','C',false,true,false),
-  ('public.update_my_profile_v1(text,text,text,text,text,text,boolean,boolean,boolean,boolean,boolean,boolean,boolean,boolean,boolean,boolean)','B',false,true,false),
-  ('public.update_profile_verification(uuid,text,text)','C',false,true,false),
   ('public.update_reservation_customer_verification_v1(uuid,text,text)','C',false,true,false),
   ('public.update_reservation_admin_note(uuid,text)','C',false,true,false),
   ('public.update_reservation_attendance(uuid,text)','C',false,true,false),
@@ -157,8 +134,6 @@ insert into expected_function_acl values
   ('public.validate_shooting_lane_capacity_change()','E',false,false,false),
   ('public.validate_shooting_lane_hierarchy()','E',false,false,false),
   ('public.cancel_reservation__saas9d1_core(uuid)','A',false,false,false),
-  ('public.admin_create_event_v2__saas9d2b1_core(text,text,date,time without time zone,time without time zone,text,numeric,integer,uuid[])','A',false,false,false),
-  ('public.admin_list_events_v1__saas9d2b1_core(text,text,text,integer,integer)','A',false,false,false),
   ('public.admin_set_event_active_v2__saas9d2b1_core(uuid,boolean)','A',false,false,false),
   ('public.admin_update_event_v2__saas9d2b1_core(uuid,text,text,date,time without time zone,time without time zone,text,numeric,integer,uuid[])','A',false,false,false),
   ('public.create_reservation_v2__saas9d1_core(uuid,date,time without time zone,integer,integer,uuid,text)','A',false,false,false),
@@ -198,7 +173,7 @@ begin
   );
   perform pg_catalog.set_config('request.jwt.claim.sub',p_user_id::text,true);
   execute 'set local role authenticated';
-  select public.admin_get_lane_booking_configuration_v2() into v_result;
+  select public.admin_get_lane_booking_configuration_v3('c5c00000-0000-4000-8000-000000000001'::uuid) into v_result;
   execute 'reset role';
   return v_result;
 exception when others then
@@ -280,8 +255,8 @@ begin
     and procedure.proname<>'csk_sec002_default_acl_probe';
 
   perform pg_temp.record_result(1,'Complete public function inventory',
-    (select pg_catalog.count(*)=153 from pg_temp.expected_function_acl)
-    and v_actual_count=153
+    (select pg_catalog.count(*)=128 from pg_temp.expected_function_acl)
+    and v_actual_count=128
     and not exists(
       select 1 from pg_temp.expected_function_acl expected
       where pg_catalog.to_regprocedure(expected.signature) is null
@@ -297,7 +272,7 @@ begin
           where pg_catalog.to_regprocedure(expected.signature)=procedure.oid
         )
     ),
-    'The exact 153-function inventory has no missing or unexpected signature.');
+    'The exact 128-function post-retirement inventory has no missing or unexpected signature.');
 
   perform pg_temp.record_result(2,'PUBLIC executes no public function',
     not exists(
@@ -318,8 +293,8 @@ begin
       where pg_catalog.has_function_privilege('anon',expected.signature,'EXECUTE')
         is distinct from expected.anon_execute
     )
-    and (select pg_catalog.count(*)=9 from pg_temp.expected_function_acl where anon_execute),
-    'anon can execute only the nine intended non-PII public readers/policy helpers.');
+    and (select pg_catalog.count(*)=6 from pg_temp.expected_function_acl where anon_execute),
+    'anon can execute only the six intended non-PII public readers/policy helpers.');
 
   perform pg_temp.record_result(4,'Exact authenticated ACL matrix',
     not exists(
@@ -327,8 +302,8 @@ begin
       where pg_catalog.has_function_privilege('authenticated',expected.signature,'EXECUTE')
         is distinct from expected.authenticated_execute
     )
-    and (select pg_catalog.count(*)=78 from pg_temp.expected_function_acl where authenticated_execute),
-    'authenticated has exactly the 78 active user and internally authorized RPC grants.');
+    and (select pg_catalog.count(*)=61 from pg_temp.expected_function_acl where authenticated_execute),
+    'authenticated has exactly the 61 current tenant-aware and compatibility RPC grants.');
 
   perform pg_temp.record_result(5,'Exact service_role ACL matrix',
     not exists(
@@ -385,14 +360,14 @@ begin
     'Future functions created by postgres receive no client or PUBLIC EXECUTE.');
 
   perform pg_temp.record_result(8,'Application function creator scope is exact',
-    (select pg_catalog.count(*)=153
+    (select pg_catalog.count(*)=128
       from pg_catalog.pg_proc procedure
       join pg_catalog.pg_namespace namespace on namespace.oid=procedure.pronamespace
       join pg_catalog.pg_roles owner_role on owner_role.oid=procedure.proowner
       where namespace.nspname='public' and procedure.prokind='f'
         and procedure.proname<>'csk_sec002_default_acl_probe'
         and owner_role.rolname='postgres'),
-    'All 153 application functions are owned by postgres, whose public-schema defaults are hardened.');
+    'All 128 application functions are owned by postgres, whose public-schema defaults are hardened.');
 
   perform pg_temp.record_result(9,'New function inherits owner-only execution',
     not pg_catalog.has_function_privilege('anon','public.csk_sec002_default_acl_probe()','EXECUTE')
@@ -452,7 +427,7 @@ begin
   v_denied:=false;
   begin
     execute 'set local role anon';
-    perform 1 from public.get_public_booking_configuration_v1() limit 1;
+    perform 1 from public.get_public_booking_configuration_v2('c5c00000-0000-4000-8000-000000000001'::uuid) limit 1;
     execute 'reset role';
   exception when others then
     execute 'reset role';
@@ -465,7 +440,7 @@ begin
   v_denied:=false;
   begin
     execute 'set local role anon';
-    perform public.admin_get_lane_booking_configuration_v2();
+    perform public.admin_get_lane_booking_configuration_v3('c5c00000-0000-4000-8000-000000000001'::uuid);
     execute 'reset role';
   exception when insufficient_privilege then
     execute 'reset role';

@@ -196,17 +196,17 @@ begin
     (v_tenant,v_user,'user','active'),
     (v_tenant,v_other,'user','active');
 
-  insert into public.shooting_lanes(id,name,type,is_active,max_shooters,booking_step_minutes,resource_kind,whole_lane_bookable,positions_bookable)
-  values(v_lane,'[TEST][SEC-002B] Lane','shooting',false,1,60,'lane',true,false);
+  insert into public.shooting_lanes(tenant_id,id,name,type,is_active,max_shooters,booking_step_minutes,resource_kind,whole_lane_bookable,positions_bookable)
+  values(v_tenant,v_lane,'[TEST][SEC-002B] Lane','shooting',false,1,60,'lane',true,false);
   insert into public.lane_pricing_rules(id,lane_id,day_group,min_shooters,max_shooters,label,hourly_price)
   values(v_price,v_lane,'mon_thu',1,1,'[TEST][SEC-002B]',10);
   insert into public.reservations(
-    id,user_id,lane_id,customer_name,customer_email,customer_phone,reservation_date,start_time,end_time,
+    tenant_id,id,user_id,lane_id,customer_name,customer_email,customer_phone,reservation_date,start_time,end_time,
     duration_minutes,price,reservation_status,payment_status,shooters_count,pricing_rule_id,
     pricing_day_group_snapshot,lane_name_snapshot,pricing_label_snapshot,price_per_hour_snapshot,total_price,
     currency_code,creation_request_id
   ) values(
-    v_reservation,v_user,v_lane,'[TEST] User','test-sec002b-user@example.invalid','000000000',date '2099-01-05',time '10:00',time '11:00',
+    v_tenant,v_reservation,v_user,v_lane,'[TEST] User','test-sec002b-user@example.invalid','000000000',date '2099-01-05',time '10:00',time '11:00',
     60,10,'confirmed','pay_on_site',1,v_price,'mon_thu','[TEST][SEC-002B] Lane','[TEST][SEC-002B]',10,10,'PLN','6c02b000-0000-4000-8000-000000000013'
   );
 
@@ -335,7 +335,7 @@ begin
 
   begin
     perform pg_temp.set_client('anon',null);
-    perform count(*) from public.get_public_booking_configuration_v1();
+    perform count(*) from public.get_public_booking_configuration_v2(v_tenant);
     execute 'reset role';
     v_denied:=false;
   exception when others then v_denied:=true;

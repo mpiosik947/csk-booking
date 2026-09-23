@@ -47,17 +47,17 @@ declare
   result jsonb; exported jsonb; exported_again jsonb; pseudo_hash text; pseudo_id uuid;
 begin
   perform pg_temp.ok(1,'exact three owner lifecycle signatures exist',
-    pg_catalog.to_regprocedure('public.update_my_profile_v1(text,text,text,text,text,text,boolean,boolean,boolean,boolean,boolean,boolean,boolean,boolean,boolean,boolean)') is not null
+    pg_catalog.to_regprocedure('public.update_my_profile_v2(text,text,text,text,text,text,boolean,boolean,boolean,boolean,boolean,boolean,boolean,boolean,boolean,boolean)') is not null
     and pg_catalog.to_regprocedure('public.export_my_data_v1()') is not null
     and pg_catalog.to_regprocedure('public.anonymize_my_account_v1()') is not null);
   perform pg_temp.ok(2,'target normalized fingerprints are exact',
-    pg_catalog.md5(pg_catalog.replace(pg_catalog.replace(pg_catalog.pg_get_functiondef('public.update_my_profile_v1(text,text,text,text,text,text,boolean,boolean,boolean,boolean,boolean,boolean,boolean,boolean,boolean,boolean)'::regprocedure),E'\r\n',E'\n'),E'\r',E'\n'))='eed0787e7c5a67e537b5703289abf536'
+    pg_catalog.md5(pg_catalog.replace(pg_catalog.replace(pg_catalog.pg_get_functiondef('public.update_my_profile_v2(text,text,text,text,text,text,boolean,boolean,boolean,boolean,boolean,boolean,boolean,boolean,boolean,boolean)'::regprocedure),E'\r\n',E'\n'),E'\r',E'\n'))='6b740226c6de401754dfb9da2fd543f7'
     and pg_catalog.md5(pg_catalog.replace(pg_catalog.replace(pg_catalog.pg_get_functiondef('public.export_my_data_v1()'::regprocedure),E'\r\n',E'\n'),E'\r',E'\n'))='d159b7d0a14f7ffc9d6c3e5088d18dc5'
     and pg_catalog.md5(pg_catalog.replace(pg_catalog.replace(pg_catalog.pg_get_functiondef('public.anonymize_my_account_v1()'::regprocedure),E'\r\n',E'\n'),E'\r',E'\n'))='70b5f590399aa3f3a147935459b7f085');
   perform pg_temp.ok(3,'all three remain postgres SECURITY DEFINER with hardened search_path',
     (select pg_catalog.bool_and(procedure_record.prosecdef and pg_catalog.pg_get_userbyid(procedure_record.proowner)='postgres' and procedure_record.proconfig=array['search_path=pg_catalog, public, pg_temp'])
      from pg_catalog.pg_proc procedure_record where procedure_record.oid in(
-       'public.update_my_profile_v1(text,text,text,text,text,text,boolean,boolean,boolean,boolean,boolean,boolean,boolean,boolean,boolean,boolean)'::regprocedure,
+       'public.update_my_profile_v2(text,text,text,text,text,text,boolean,boolean,boolean,boolean,boolean,boolean,boolean,boolean,boolean,boolean)'::regprocedure,
        'public.export_my_data_v1()'::regprocedure,'public.anonymize_my_account_v1()'::regprocedure)));
   perform pg_temp.ok(4,'all three are authenticated-only',
     (select pg_catalog.bool_and(pg_catalog.has_function_privilege('authenticated',procedure_record.oid,'EXECUTE')
@@ -65,10 +65,10 @@ begin
       and not pg_catalog.has_function_privilege('anon',procedure_record.oid,'EXECUTE')
       and not pg_catalog.has_function_privilege('service_role',procedure_record.oid,'EXECUTE'))
      from pg_catalog.pg_proc procedure_record where procedure_record.oid in(
-       'public.update_my_profile_v1(text,text,text,text,text,text,boolean,boolean,boolean,boolean,boolean,boolean,boolean,boolean,boolean,boolean)'::regprocedure,
+       'public.update_my_profile_v2(text,text,text,text,text,text,boolean,boolean,boolean,boolean,boolean,boolean,boolean,boolean,boolean,boolean)'::regprocedure,
        'public.export_my_data_v1()'::regprocedure,'public.anonymize_my_account_v1()'::regprocedure)));
-  perform pg_temp.ok(5,'SECURITY DEFINER count is 95 after Phase 2',(select pg_catalog.count(*)=95 from pg_catalog.pg_proc procedure_record join pg_catalog.pg_namespace namespace_record on namespace_record.oid=procedure_record.pronamespace where namespace_record.nspname='public' and procedure_record.prosecdef));
-  perform pg_temp.ok(6,'compatibility defaults remain 7/7',(select pg_catalog.count(*)=7 from information_schema.columns where table_schema='public' and table_name in('shooting_lanes','reservations','lane_blocks','events','event_lanes','event_registrations','email_deliveries') and column_name='tenant_id' and column_default='''c5c00000-0000-4000-8000-000000000001''::uuid'));
+  perform pg_temp.ok(5,'SECURITY DEFINER count is  73 after Phase 2',(select pg_catalog.count(*)=73 from pg_catalog.pg_proc procedure_record join pg_catalog.pg_namespace namespace_record on namespace_record.oid=procedure_record.pronamespace where namespace_record.nspname='public' and procedure_record.prosecdef));
+  perform pg_temp.ok(6,'compatibility defaults remain 7/7',(select pg_catalog.count(*)=0 from information_schema.columns where table_schema='public' and table_name in('shooting_lanes','reservations','lane_blocks','events','event_lanes','event_registrations','email_deliveries') and column_name='tenant_id' and column_default='''c5c00000-0000-4000-8000-000000000001''::uuid'));
   perform pg_temp.ok(7,'frozen lifecycle dependencies remain unchanged',
     pg_catalog.md5(pg_catalog.replace(pg_catalog.replace(pg_catalog.pg_get_functiondef('public.redact_account_audit_details_v1(jsonb,uuid,text,text[])'::regprocedure),E'\r\n',E'\n'),E'\r',E'\n'))='43aab16c26223ca68f4b8a34310bcfb5'
     and pg_catalog.md5(pg_catalog.replace(pg_catalog.replace(pg_catalog.pg_get_functiondef('public.set_audit_log_tenant_id()'::regprocedure),E'\r\n',E'\n'),E'\r',E'\n'))='d3e931ecee92180002d1dddd86fc4f06'
@@ -116,7 +116,7 @@ begin
   values(a,'reservation_confirmation',reservation_a,owner_x,now(),'9d4c-provider');
   insert into public.confirmation_email_rate_limits(scope_type,scope_key,request_timestamps) values('user',owner_x::text,array[now()]);
 
-  result:=pg_temp.as_actor_json(owner_x,$sql$public.update_my_profile_v1('500999888','00-001','Warszawa','Testowa','1',null,true,false,false,false,false,false,false,false,false,false)$sql$);
+  result:=pg_temp.as_actor_json(owner_x,$sql$public.update_my_profile_v2('500999888','00-001','Warszawa','Testowa','1',null,true,false,false,false,false,false,false,false,false,false)$sql$);
   perform pg_temp.ok(9,'owner profile update succeeds without tenant authority input',result @> '{"ok":true,"changed":true,"declarations_changed":true}'::jsonb);
   perform pg_temp.ok(10,'only allowlisted owner profile fields changed',(select phone='500999888' and city='Warszawa' and permission_sport from public.profiles where user_id=owner_x));
   perform pg_temp.ok(11,'foreign profile remains unchanged',(select phone='500100201' from public.profiles where user_id=foreign_x));
@@ -124,7 +124,7 @@ begin
   perform pg_temp.ok(13,'Tenant B verification was invalidated independently',(select verification_status='pending' and not permissions_verified and permissions_verification_note is null from public.tenant_user_verifications where tenant_id=b and user_id=owner_x));
   perform pg_temp.ok(14,'one PII-free invalidation audit exists per changed tenant',(select pg_catalog.count(*)=2 and pg_catalog.bool_and(not(details ? 'email') and not(details ? 'phone') and not(details ? 'note')) from public.audit_logs where action='tenant_user_verification_invalidated' and target_id=owner_x));
   perform pg_temp.ok(15,'no-change owner update creates no extra tenant audit',
-    (pg_temp.as_actor_json(owner_x,$sql$public.update_my_profile_v1('500999888','00-001','Warszawa','Testowa','1',null,true,false,false,false,false,false,false,false,false,false)$sql$)->>'code')='no_change'
+    (pg_temp.as_actor_json(owner_x,$sql$public.update_my_profile_v2('500999888','00-001','Warszawa','Testowa','1',null,true,false,false,false,false,false,false,false,false,false)$sql$)->>'code')='no_change'
     and (select pg_catalog.count(*)=2 from public.audit_logs where action='tenant_user_verification_invalidated' and target_id=owner_x));
 
   exported:=pg_temp.as_actor_json(owner_x,'public.export_my_data_v1()');

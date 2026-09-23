@@ -88,13 +88,13 @@ select case when not exists (
 else 'not ok 6 - anon has a direct lane configuration write' end;
 
 select case when pg_catalog.to_regprocedure(
-  'public.admin_get_lane_booking_configuration_v2()'
+  'public.admin_get_lane_booking_configuration_v3(uuid)'
 ) is not null
 and pg_catalog.has_function_privilege(
-  'authenticated','public.admin_get_lane_booking_configuration_v2()','EXECUTE'
+  'authenticated','public.admin_get_lane_booking_configuration_v3(uuid)','EXECUTE'
 )
 and not pg_catalog.has_function_privilege(
-  'anon','public.admin_get_lane_booking_configuration_v2()','EXECUTE'
+  'anon','public.admin_get_lane_booking_configuration_v3(uuid)','EXECUTE'
 )
 then 'ok 7 - current admin configuration reader contract exists'
 else 'not ok 7 - admin configuration reader contract differs' end;
@@ -116,10 +116,10 @@ then 'ok 8 - current family writer V2 contract exists'
 else 'not ok 8 - family writer V2 contract differs' end;
 
 select case when pg_catalog.to_regprocedure(
-  'public.get_public_booking_configuration_v1()'
+  'public.get_public_booking_configuration_v2(uuid)'
 ) is not null
 and pg_catalog.has_function_privilege(
-  'anon','public.get_public_booking_configuration_v1()','EXECUTE'
+  'anon','public.get_public_booking_configuration_v2(uuid)','EXECUTE'
 )
 then 'ok 9 - public booking configuration reader exists'
 else 'not ok 9 - public booking configuration reader differs' end;
@@ -170,10 +170,10 @@ select case when (
   join pg_catalog.pg_namespace as namespace on namespace.oid = procedure.pronamespace
   where namespace.nspname = 'public'
     and procedure.proname in (
-      'admin_create_event_v2','admin_update_event_v2','admin_set_event_active_v2'
+      'admin_create_event_v3','admin_update_event_v3','admin_set_event_active_v3'
     )
     and procedure.prosecdef
-) then 'ok 13 - all three current Event V2 writers exist'
+) then 'ok 13 - all three current Event V3 writers exist'
 else 'not ok 13 - Event V2 writer contract differs' end;
 
 select case when not exists (

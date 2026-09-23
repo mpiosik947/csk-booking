@@ -50,6 +50,19 @@ exception when insufficient_privilege then
 end;
 $function$;
 
+create function pg_temp.fails_closed(p_role text,p_sql text)
+returns boolean language plpgsql as $function$
+begin
+  execute pg_catalog.format('set local role %I',p_role);
+  execute p_sql;
+  reset role;
+  return false;
+exception when others then
+  reset role;
+  return true;
+end;
+$function$;
+
 create function pg_temp.raises_fk(p_sql text)
 returns boolean language plpgsql as $function$
 begin
@@ -120,19 +133,19 @@ begin
     (pg_catalog.gen_random_uuid(),tenant_b,event_b,null,marker||' B registered','b-'||run_id||'@example.invalid','000','registered','pay_on_site');
 
   perform pg_temp.ok(1,'exact public signatures remain',
-    pg_catalog.to_regprocedure('public.get_public_event_availability_v1()') is not null
-    and pg_catalog.to_regprocedure('public.get_public_event_list_v2(text,text,integer,integer)') is not null
-    and (select pg_catalog.count(*)=2 from pg_catalog.pg_proc procedure join pg_catalog.pg_namespace namespace on namespace.oid=procedure.pronamespace where namespace.nspname='public' and procedure.proname in('get_public_event_availability_v1','get_public_event_list_v2')),
+    pg_catalog.to_regprocedure('public.get_public_event_availability_v2(uuid)') is not null
+    and pg_catalog.to_regprocedure('public.get_public_event_list_v3(uuid,text,text,integer,integer)') is not null
+    and (select pg_catalog.count(*)=2 from pg_catalog.pg_proc procedure join pg_catalog.pg_namespace namespace on namespace.oid=procedure.pronamespace where namespace.nspname='public' and procedure.proname in('get_public_event_availability_v2','get_public_event_list_v3')),
     'Public signature inventory differs.');
   perform pg_temp.ok(2,'public wrappers are postgres-owned stable SP1 definers',
     (select pg_catalog.count(*)=2 and pg_catalog.bool_and(procedure.prosecdef) and pg_catalog.bool_and(procedure.provolatile='s') and pg_catalog.bool_and(owner_role.rolname='postgres') and pg_catalog.bool_and(procedure.proconfig=array['search_path=pg_catalog, public, pg_temp']::text[])
      from pg_catalog.pg_proc procedure join pg_catalog.pg_namespace namespace on namespace.oid=procedure.pronamespace join pg_catalog.pg_roles owner_role on owner_role.oid=procedure.proowner
-     where namespace.nspname='public' and procedure.proname in('get_public_event_availability_v1','get_public_event_list_v2')),
+     where namespace.nspname='public' and procedure.proname in('get_public_event_availability_v2','get_public_event_list_v3')),
     'Wrapper metadata differs.');
   perform pg_temp.ok(3,'public wrapper ACL is anon and authenticated only',
     (select pg_catalog.count(*)=2 and pg_catalog.bool_and(pg_catalog.has_function_privilege('anon',procedure.oid,'EXECUTE')) and pg_catalog.bool_and(pg_catalog.has_function_privilege('authenticated',procedure.oid,'EXECUTE')) and pg_catalog.bool_and(not pg_catalog.has_function_privilege('service_role',procedure.oid,'EXECUTE')) and pg_catalog.bool_and(not pg_catalog.has_function_privilege('public',procedure.oid,'EXECUTE'))
      from pg_catalog.pg_proc procedure join pg_catalog.pg_namespace namespace on namespace.oid=procedure.pronamespace
-     where namespace.nspname='public' and procedure.proname in('get_public_event_availability_v1','get_public_event_list_v2')),
+     where namespace.nspname='public' and procedure.proname in('get_public_event_availability_v2','get_public_event_list_v3')),
     'Public wrapper grants differ.');
   perform pg_temp.ok(4,'two exact private core signatures exist',
     pg_catalog.to_regprocedure('public.get_public_event_availability_v1__saas9d2b2_core(uuid)') is not null
@@ -151,11 +164,11 @@ begin
   perform pg_temp.ok(7,'anon cannot invoke availability core directly',pg_temp.denied('anon','select public.get_public_event_availability_v1__saas9d2b2_core(null)'),'Anon core execution was allowed.');
   perform pg_temp.ok(8,'authenticated cannot invoke list core directly',pg_temp.denied('authenticated','select public.get_public_event_list_v2__saas9d2b2_core(null,null,''all'',1,20)'),'Authenticated core execution was allowed.');
   perform pg_temp.ok(9,'wrapper and core fingerprints are exact',
-    pg_catalog.md5(pg_catalog.replace(pg_catalog.replace(pg_catalog.pg_get_functiondef('public.get_public_event_availability_v1()'::pg_catalog.regprocedure),E'\r\n',E'\n'),E'\r',E'\n'))='665b9ac71f99b3de3421d1534b24f088'
-    and pg_catalog.md5(pg_catalog.replace(pg_catalog.replace(pg_catalog.pg_get_functiondef('public.get_public_event_list_v2(text,text,integer,integer)'::pg_catalog.regprocedure),E'\r\n',E'\n'),E'\r',E'\n'))='642b84c0d78066e2071a0f0df1ce97ff'
+    pg_catalog.md5(pg_catalog.replace(pg_catalog.replace(pg_catalog.pg_get_functiondef('public.get_public_event_availability_v2(uuid)'::pg_catalog.regprocedure),E'\r\n',E'\n'),E'\r',E'\n'))='783e1dc37ea222888be7ecb54fb6fa04'
+    and pg_catalog.md5(pg_catalog.replace(pg_catalog.replace(pg_catalog.pg_get_functiondef('public.get_public_event_list_v3(uuid,text,text,integer,integer)'::pg_catalog.regprocedure),E'\r\n',E'\n'),E'\r',E'\n'))='5c455312be9f3b6a2e9bd26fc15ded0a'
     and pg_catalog.md5(pg_catalog.replace(pg_catalog.replace(pg_catalog.pg_get_functiondef('public.get_public_event_availability_v1__saas9d2b2_core(uuid)'::pg_catalog.regprocedure),E'\r\n',E'\n'),E'\r',E'\n'))='bac4afc5c5a26fc63d019304b7903f4b'
     and pg_catalog.md5(pg_catalog.replace(pg_catalog.replace(pg_catalog.pg_get_functiondef('public.get_public_event_list_v2__saas9d2b2_core(uuid,text,text,integer,integer)'::pg_catalog.regprocedure),E'\r\n',E'\n'),E'\r',E'\n'))='abe6f9d8e77655b1b5987825caee4c68'
-    and pg_catalog.md5(pg_catalog.replace(pg_catalog.replace(pg_catalog.pg_get_functiondef('public.active_single_tenant_id_v1()'::pg_catalog.regprocedure),E'\r\n',E'\n'),E'\r',E'\n'))='6017112df961a334320d98dd0645e570',
+    and pg_catalog.to_regprocedure('public.active_single_tenant_id_v1()') is null,
     'Definition drift detected.');
   perform pg_temp.ok(10,'core bodies explicitly filter events and registrations by tenant',
     pg_catalog.strpos(pg_catalog.pg_get_functiondef('public.get_public_event_availability_v1__saas9d2b2_core(uuid)'::pg_catalog.regprocedure),'event_record.tenant_id=p_tenant_id')>0
@@ -164,60 +177,59 @@ begin
     and pg_catalog.strpos(pg_catalog.pg_get_functiondef('public.get_public_event_list_v2__saas9d2b2_core(uuid,text,text,integer,integer)'::pg_catalog.regprocedure),'registration.tenant_id=p_tenant_id')>0,
     'Tenant predicates are absent.');
 
-  list_a:=pg_temp.as_json('anon',null,pg_catalog.format('select public.get_public_event_list_v2(%L,''upcoming'',1,50)',marker));
-  availability_a:=pg_temp.as_json('anon',null,'select coalesce(jsonb_agg(to_jsonb(row_record) order by row_record.event_date,row_record.start_time,row_record.event_id),''[]''::jsonb) from public.get_public_event_availability_v1() row_record');
+  list_a:=pg_temp.as_json('anon',null,pg_catalog.format('select public.get_public_event_list_v3(%L,%L,''upcoming'',1,50)',csk,marker));
+  availability_a:=pg_temp.as_json('anon',null,pg_catalog.format('select coalesce(jsonb_agg(to_jsonb(row_record) order by row_record.event_date,row_record.start_time,row_record.event_id),''[]''::jsonb) from public.get_public_event_availability_v2(%L) row_record',csk));
   total_a:=(list_a#>>'{pagination,total}')::integer;
   perform pg_temp.ok(11,'one active Tenant A returns only Tenant A list rows',list_a->>'code'='ok' and total_a=53 and not exists(select 1 from pg_catalog.jsonb_array_elements(list_a->'items') item where item->>'event_id'=event_b::text),'Tenant B leaked into Tenant A list.');
   perform pg_temp.ok(12,'one active Tenant A returns only Tenant A availability',availability_a @> pg_catalog.jsonb_build_array(pg_catalog.jsonb_build_object('event_id',event_a)) and not availability_a @> pg_catalog.jsonb_build_array(pg_catalog.jsonb_build_object('event_id',event_b)),'Tenant B leaked into Tenant A availability.');
   select item into event_a_row from pg_catalog.jsonb_array_elements(list_a->'items') item where item->>'event_id'=event_a::text;
   perform pg_temp.ok(13,'availability counts canonical statuses only',event_a_row @> '{"registered_count":2,"reserve_count":1,"available_spots":8,"sold_out":false}'::jsonb,'registered/approved/reserve/cancelled semantics differ.');
   perform pg_temp.ok(14,'availability reader matches list aggregate',(select item @> '{"registered_count":2,"reserve_count":1,"available_spots":8,"sold_out":false}'::jsonb from pg_catalog.jsonb_array_elements(availability_a) item where item->>'event_id'=event_a::text),'Reader aggregates disagree.');
-  perform pg_temp.ok(15,'authenticated and anon list contracts are identical',pg_temp.as_json('authenticated',user_a,pg_catalog.format('select public.get_public_event_list_v2(%L,''upcoming'',1,50)',marker))=list_a,'Membership or identity changed public list.');
-  perform pg_temp.ok(16,'authenticated and anon availability contracts are identical',pg_temp.as_json('authenticated',user_a,'select coalesce(jsonb_agg(to_jsonb(row_record) order by row_record.event_date,row_record.start_time,row_record.event_id),''[]''::jsonb) from public.get_public_event_availability_v1() row_record')=availability_a,'Membership or identity changed public availability.');
+  perform pg_temp.ok(15,'authenticated and anon list contracts are identical',pg_temp.as_json('authenticated',user_a,pg_catalog.format('select public.get_public_event_list_v3(%L,%L,''upcoming'',1,50)',csk,marker))=list_a,'Membership or identity changed public list.');
+  perform pg_temp.ok(16,'authenticated and anon availability contracts are identical',pg_temp.as_json('authenticated',user_a,pg_catalog.format('select coalesce(jsonb_agg(to_jsonb(row_record) order by row_record.event_date,row_record.start_time,row_record.event_id),''[]''::jsonb) from public.get_public_event_availability_v2(%L) row_record',csk))=availability_a,'Membership or identity changed public availability.');
   perform pg_temp.ok(17,'public list DTO is unchanged',not exists(select 1 from pg_catalog.jsonb_array_elements(list_a->'items') item cross join lateral pg_catalog.jsonb_object_keys(item) key_name where key_name not in('event_id','title','description','event_date','start_time','end_time','location','price','max_participants','registered_count','reserve_count','available_spots','sold_out')),'Unexpected public list field exists.');
   perform pg_temp.ok(18,'public availability DTO is unchanged',not exists(select 1 from pg_catalog.jsonb_array_elements(availability_a) item cross join lateral pg_catalog.jsonb_object_keys(item) key_name where key_name not in('event_id','title','description','event_date','start_time','end_time','location','price','max_participants','registered_count','reserve_count','available_spots','sold_out')),'Unexpected availability field exists.');
   perform pg_temp.ok(19,'public payload exposes no identity or internal metadata',(list_a||availability_a)::text !~* 'customer|user_id|registration_id|tenant_id|membership|admin_note|audit|phone|token|saas9d2b2-[a-z0-9]+@example\.invalid','PII or internal metadata leaked.');
   perform pg_temp.ok(20,'public description remains product data, not registration PII',event_a_row->>'description'='<script>pii@example.invalid</script>','Reader altered the established event DTO.');
   perform pg_temp.ok(21,'pagination page one is bounded to 50',pg_catalog.jsonb_array_length(list_a->'items')=50 and list_a#>>'{pagination,page_size}'='50','Page size contract regressed.');
-  result:=pg_temp.as_json('anon',null,pg_catalog.format('select public.get_public_event_list_v2(%L,''upcoming'',2,50)',marker));
+  result:=pg_temp.as_json('anon',null,pg_catalog.format('select public.get_public_event_list_v3(%L,%L,''upcoming'',2,50)',csk,marker));
   perform pg_temp.ok(22,'pagination page two returns remaining rows',pg_catalog.jsonb_array_length(result->'items')=3 and result#>>'{pagination,total}'='53','Second page contract regressed.');
   perform pg_temp.ok(23,'pages contain no duplicates',not exists(select 1 from pg_catalog.jsonb_array_elements(list_a->'items') first_item join pg_catalog.jsonb_array_elements(result->'items') second_item on first_item->>'event_id'=second_item->>'event_id'),'Pagination duplicated rows.');
-  list_repeat:=pg_temp.as_json('anon',null,pg_catalog.format('select public.get_public_event_list_v2(%L,''upcoming'',1,50)',marker));
+  list_repeat:=pg_temp.as_json('anon',null,pg_catalog.format('select public.get_public_event_list_v3(%L,%L,''upcoming'',1,50)',csk,marker));
   perform pg_temp.ok(24,'date/time/id ordering is stable',list_repeat->'items'=list_a->'items','Repeated ordering differs.');
-  result:=pg_temp.as_json('anon',null,pg_catalog.format('select public.get_public_event_list_v2(%L,''all'',1,50)',marker));
+  result:=pg_temp.as_json('anon',null,pg_catalog.format('select public.get_public_event_list_v3(%L,%L,''all'',1,50)',csk,marker));
   perform pg_temp.ok(25,'all scope includes past active event and excludes inactive event',result#>>'{pagination,total}'='54' and result->'items' @> pg_catalog.jsonb_build_array(pg_catalog.jsonb_build_object('event_id',event_a_past)) and not result->'items' @> pg_catalog.jsonb_build_array(pg_catalog.jsonb_build_object('event_id',event_a_inactive)),'Scope/is_active behavior changed.');
-  perform pg_temp.ok(26,'invalid filters and oversized pages fail safely',(pg_temp.as_json('anon',null,'select public.get_public_event_list_v2(null,''invalid'',1,20)')->>'code')='invalid_input' and (pg_temp.as_json('anon',null,'select public.get_public_event_list_v2(null,''all'',1,51)')->>'code')='invalid_input','Invalid input broadened the query.');
+  perform pg_temp.ok(26,'invalid filters and oversized pages fail safely',(pg_temp.as_json('anon',null,pg_catalog.format('select public.get_public_event_list_v3(%L,null,''invalid'',1,20)',csk))->>'code')='invalid_input' and (pg_temp.as_json('anon',null,pg_catalog.format('select public.get_public_event_list_v3(%L,null,''all'',1,51)',csk))->>'code')='invalid_input','Invalid input broadened the query.');
 
   update public.tenants set status='dormant' where id=csk;
   update public.tenants set status='active' where id=tenant_b;
-  result:=pg_temp.as_json('anon',null,pg_catalog.format('select public.get_public_event_list_v2(%L,''upcoming'',1,50)',marker));
-  availability_b:=pg_temp.as_json('anon',null,'select coalesce(jsonb_agg(to_jsonb(row_record) order by row_record.event_date,row_record.start_time,row_record.event_id),''[]''::jsonb) from public.get_public_event_availability_v1() row_record');
+  result:=pg_temp.as_json('anon',null,pg_catalog.format('select public.get_public_event_list_v3(%L,%L,''upcoming'',1,50)',tenant_b,marker));
+  availability_b:=pg_temp.as_json('anon',null,pg_catalog.format('select coalesce(jsonb_agg(to_jsonb(row_record) order by row_record.event_date,row_record.start_time,row_record.event_id),''[]''::jsonb) from public.get_public_event_availability_v2(%L) row_record',tenant_b));
   perform pg_temp.ok(27,'one active Tenant B returns only Tenant B list rows',result#>>'{pagination,total}'='1' and result->'items' @> pg_catalog.jsonb_build_array(pg_catalog.jsonb_build_object('event_id',event_b)) and not result->'items' @> pg_catalog.jsonb_build_array(pg_catalog.jsonb_build_object('event_id',event_a)),'Tenant A leaked into Tenant B list.');
   perform pg_temp.ok(28,'one active Tenant B returns only Tenant B availability',availability_b @> pg_catalog.jsonb_build_array(pg_catalog.jsonb_build_object('event_id',event_b,'registered_count',1)) and not availability_b @> pg_catalog.jsonb_build_array(pg_catalog.jsonb_build_object('event_id',event_a)),'Tenant A leaked into Tenant B availability.');
 
   update public.tenants set status='dormant' where id=tenant_b;
-  result:=pg_temp.as_json('anon',null,pg_catalog.format('select public.get_public_event_list_v2(%L,''upcoming'',1,50)',marker));
-  perform pg_temp.ok(29,'zero active tenants returns safe empty list',result->>'code'='ok' and result#>>'{pagination,total}'='0' and result->'items'='[]'::jsonb,'Zero-active list did not fail closed.');
-  result:=pg_temp.as_json('anon',null,'select coalesce(jsonb_agg(to_jsonb(row_record)),''[]''::jsonb) from public.get_public_event_availability_v1() row_record');
-  perform pg_temp.ok(30,'zero active tenants returns safe empty availability',result='[]'::jsonb,'Zero-active availability did not fail closed.');
+  result:=pg_temp.as_json('anon',null,pg_catalog.format('select public.get_public_event_list_v3(%L,%L,''upcoming'',1,50)',csk,marker));
+  perform pg_temp.ok(29,'zero active tenants returns controlled not_found for public list selector',result @> '{"ok":false,"code":"not_found"}'::jsonb,'Zero-active list did not fail closed.');
+  perform pg_temp.ok(30,'zero active tenants rejects public availability selector',pg_temp.fails_closed('anon',pg_catalog.format('select * from public.get_public_event_availability_v2(%L)',csk)),'Zero-active availability did not fail closed.');
 
   update public.tenants set status='active' where id=csk;
   drop index public.tenants_single_active_runtime_guard;
   update public.tenants set status='active' where id=tenant_b;
-  result:=pg_temp.as_json('anon',null,pg_catalog.format('select public.get_public_event_list_v2(%L,''upcoming'',1,50)',marker));
-  perform pg_temp.ok(31,'two active tenants returns safe empty list',result->>'code'='ok' and result#>>'{pagination,total}'='0' and result->'items'='[]'::jsonb,'Multi-active list selected a tenant.');
-  result:=pg_temp.as_json('anon',null,'select coalesce(jsonb_agg(to_jsonb(row_record)),''[]''::jsonb) from public.get_public_event_availability_v1() row_record');
-  perform pg_temp.ok(32,'two active tenants returns safe empty availability',result='[]'::jsonb,'Multi-active availability selected a tenant.');
+  result:=pg_temp.as_json('anon',null,pg_catalog.format('select public.get_public_event_list_v3(%L,%L,''upcoming'',1,50)',csk,marker));
+  perform pg_temp.ok(31,'two active tenants preserve explicit list isolation',result->>'code'='ok' and (result#>>'{pagination,total}')::integer>0 and not result->'items' @> pg_catalog.jsonb_build_array(pg_catalog.jsonb_build_object('event_id',event_b)),'Explicit Tenant A list leaked Tenant B.');
+  result:=pg_temp.as_json('anon',null,pg_catalog.format('select coalesce(jsonb_agg(to_jsonb(row_record)),''[]''::jsonb) from public.get_public_event_availability_v2(%L) row_record',csk));
+  perform pg_temp.ok(32,'two active tenants preserve explicit availability isolation',not result @> pg_catalog.jsonb_build_array(pg_catalog.jsonb_build_object('event_id',event_b)) and result @> pg_catalog.jsonb_build_array(pg_catalog.jsonb_build_object('event_id',event_a)),'Explicit Tenant A availability leaked Tenant B.');
   update public.tenants set status='dormant' where id=tenant_b;
   create unique index tenants_single_active_runtime_guard on public.tenants ((true)) where status='active';
 
   perform pg_temp.ok(33,'Event A plus Registration B is rejected by tenant FK',pg_temp.raises_fk(pg_catalog.format('insert into public.event_registrations(id,tenant_id,event_id,customer_name,customer_email,customer_phone,registration_status,payment_status) values(%L,%L,%L,%L,%L,%L,%L,%L)',pg_catalog.gen_random_uuid(),tenant_b,event_a,marker||' Invalid','invalid-'||run_id||'@example.invalid','000','registered','pay_on_site')),'Cross-tenant registration was accepted.');
-  perform pg_temp.ok(34,'Tenant B registrations do not affect Event A availability',(select item @> '{"registered_count":2,"reserve_count":1,"available_spots":8}'::jsonb from pg_catalog.jsonb_array_elements(pg_temp.as_json('anon',null,'select coalesce(jsonb_agg(to_jsonb(row_record)),''[]''::jsonb) from public.get_public_event_availability_v1() row_record')) item where item->>'event_id'=event_a::text),'Tenant B registration changed Event A count.');
+  perform pg_temp.ok(34,'Tenant B registrations do not affect Event A availability',(select item @> '{"registered_count":2,"reserve_count":1,"available_spots":8}'::jsonb from pg_catalog.jsonb_array_elements(pg_temp.as_json('anon',null,pg_catalog.format('select coalesce(jsonb_agg(to_jsonb(row_record)),''[]''::jsonb) from public.get_public_event_availability_v2(%L) row_record',csk))) item where item->>'event_id'=event_a::text),'Tenant B registration changed Event A count.');
   perform pg_temp.ok(35,'Event A plus Lane B is rejected by tenant FK',pg_temp.raises_fk(pg_catalog.format('insert into public.event_lanes(tenant_id,event_id,lane_id) values(%L,%L,%L)',csk,event_a,lane_b)),'Cross-tenant lane relation was accepted.');
   perform pg_temp.ok(36,'existing event-lane relations remain tenant-consistent',not exists(select 1 from public.event_lanes relation join public.events event_record on event_record.id=relation.event_id join public.shooting_lanes lane on lane.id=relation.lane_id where relation.tenant_id<>event_record.tenant_id or relation.tenant_id<>lane.tenant_id),'A cross-tenant relation exists.');
   perform pg_temp.ok(37,'registration composite FK remains validated',exists(select 1 from pg_catalog.pg_constraint constraint_record where constraint_record.conrelid='public.event_registrations'::pg_catalog.regclass and constraint_record.conname='event_registrations_event_id_fkey' and constraint_record.contype='f' and constraint_record.convalidated),'Registration tenant FK differs.');
   perform pg_temp.ok(38,'event-lane composite FKs remain validated',(select pg_catalog.count(*)=2 from pg_catalog.pg_constraint constraint_record where constraint_record.conrelid='public.event_lanes'::pg_catalog.regclass and constraint_record.conname in('event_lanes_event_id_fkey','event_lanes_lane_id_fkey') and constraint_record.contype='f' and constraint_record.convalidated),'Event-lane tenant FKs differ.');
-  perform pg_temp.ok(39,'SECURITY DEFINER inventory includes 9E-A resolver',(select pg_catalog.count(*)=95 from pg_catalog.pg_proc procedure join pg_catalog.pg_namespace namespace on namespace.oid=procedure.pronamespace where namespace.nspname='public' and procedure.prosecdef),'Unexpected definer drift exists.');
+  perform pg_temp.ok(39,'SECURITY DEFINER inventory includes 9E-A resolver',(select pg_catalog.count(*)=73 from pg_catalog.pg_proc procedure join pg_catalog.pg_namespace namespace on namespace.oid=procedure.pronamespace where namespace.nspname='public' and procedure.prosecdef),'Unexpected definer drift exists.');
   perform pg_temp.ok(40,'fixture is transaction scoped',(select pg_catalog.count(*)=1 from public.tenants where id=tenant_b) and (select pg_catalog.count(*)=56 from public.events where title like marker||'%') and (select pg_catalog.count(*)=5 from public.event_registrations where customer_name like marker||'%'),'Fixture count differs before rollback.');
 end;
 $tests$;

@@ -265,11 +265,11 @@ begin
     v_rpc_result->>'code'='not_allowed' and exists(select 1 from public.lane_blocks where id=v_block_b_active and is_active=true),
     'Lane-block global-role or cross-tenant bypass remains.');
 
-  perform pg_temp.ok(57,'public booking configuration RPC remains executable by anon',pg_catalog.has_function_privilege('anon','public.get_public_booking_configuration_v1()','EXECUTE'),'Public booking RPC ACL regressed.');
+  perform pg_temp.ok(57,'public booking configuration RPC remains executable by anon',pg_catalog.has_function_privilege('anon','public.get_public_booking_configuration_v2(uuid)','EXECUTE'),'Public booking RPC ACL regressed.');
   perform pg_temp.ok(58,'busy-range RPC remains executable by authenticated',pg_catalog.has_function_privilege('authenticated','public.get_lane_booking_busy_ranges_v3(uuid,date)','EXECUTE'),'Busy-range RPC ACL regressed.');
   perform pg_temp.ok(59,'temporary CSK defaults remain unchanged',
-    (select pg_catalog.count(*)=3 from information_schema.columns where table_schema='public' and table_name in ('shooting_lanes','reservations','lane_blocks') and column_name='tenant_id' and column_default='''c5c00000-0000-4000-8000-000000000001''::uuid'),
-    '9C-2 changed a compatibility default.');
+    (select pg_catalog.count(*)=0 from information_schema.columns where table_schema='public' and table_name in ('shooting_lanes','reservations','lane_blocks') and column_name='tenant_id' and column_default is not null),
+    '9D-5 compatibility default retirement regressed.');
   perform pg_temp.ok(60,'second-active-tenant guard remains present',
     exists(select 1 from pg_catalog.pg_indexes where schemaname='public' and tablename='tenants' and indexname='tenants_single_active_runtime_guard'),
     'Second-active-tenant guard is missing.');

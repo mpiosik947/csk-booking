@@ -19,7 +19,7 @@ $function$;
 
 do $test$
 declare
-  v_csk uuid:=public.active_single_tenant_id_v1();
+  v_csk uuid:='c5c00000-0000-4000-8000-000000000001'::uuid;
   v_tenant_b uuid:='b2a00000-0000-4000-8000-000000000001';
   v_admin uuid:='b2a00000-0000-4000-8000-000000000010';
   v_related uuid:='b2a00000-0000-4000-8000-000000000011';
@@ -30,7 +30,7 @@ declare
   v_failed boolean;
 begin
   perform pg_temp.ok(1,'tenant verification table exists',pg_catalog.to_regclass('public.tenant_user_verifications') is not null);
-  perform pg_temp.ok(2,'backfill helper exists',pg_catalog.to_regprocedure('public._backfill_csk_tenant_user_verifications_v1()') is not null);
+  perform pg_temp.ok(2,'one-time backfill helper is retired',pg_catalog.to_regprocedure('public._backfill_csk_tenant_user_verifications_v1()') is null);
   perform pg_temp.ok(3,'table RLS is enabled',(select relrowsecurity from pg_catalog.pg_class where oid='public.tenant_user_verifications'::regclass));
   perform pg_temp.ok(4,'table has zero policies',(select pg_catalog.count(*)=0 from pg_catalog.pg_policy where polrelid='public.tenant_user_verifications'::regclass));
   perform pg_temp.ok(5,'PUBLIC and anon have no direct DML',
@@ -38,11 +38,8 @@ begin
     and not pg_catalog.has_table_privilege('anon','public.tenant_user_verifications','SELECT,INSERT,UPDATE,DELETE'));
   perform pg_temp.ok(6,'authenticated has no direct DML',not pg_catalog.has_table_privilege('authenticated','public.tenant_user_verifications','SELECT,INSERT,UPDATE,DELETE'));
   perform pg_temp.ok(7,'service_role has no direct DML',not pg_catalog.has_table_privilege('service_role','public.tenant_user_verifications','SELECT,INSERT,UPDATE,DELETE'));
-  perform pg_temp.ok(8,'backfill helper has no public runtime EXECUTE',
-    not pg_catalog.has_function_privilege('anon','public._backfill_csk_tenant_user_verifications_v1()','EXECUTE')
-    and not pg_catalog.has_function_privilege('authenticated','public._backfill_csk_tenant_user_verifications_v1()','EXECUTE')
-    and not pg_catalog.has_function_privilege('service_role','public._backfill_csk_tenant_user_verifications_v1()','EXECUTE'));
-  perform pg_temp.ok(9,'backfill helper is SECURITY INVOKER',(select not prosecdef from pg_catalog.pg_proc where oid='public._backfill_csk_tenant_user_verifications_v1()'::regprocedure));
+  perform pg_temp.ok(8,'backfill helper has no runtime surface',pg_catalog.to_regprocedure('public._backfill_csk_tenant_user_verifications_v1()') is null);
+  perform pg_temp.ok(9,'retired backfill cannot become tenant authority',pg_catalog.to_regprocedure('public._backfill_csk_tenant_user_verifications_v1()') is null);
   perform pg_temp.ok(10,'identity key is tenant and user',(select pg_catalog.pg_get_constraintdef(oid)='PRIMARY KEY (tenant_id, user_id)' from pg_catalog.pg_constraint where conrelid='public.tenant_user_verifications'::regclass and contype='p'));
 
   insert into public.tenants(id,name,slug,status) values(v_tenant_b,'[TEST][SAAS-9D-4B-2A] B','test-saas9d4b2a-b','dormant');
@@ -73,14 +70,20 @@ begin
   on conflict(tenant_id,user_id) do update set role=excluded.role,status=excluded.status;
   delete from public.tenant_memberships where tenant_id=v_csk and user_id=v_unrelated;
 
-  v_failed:=false;
-  begin perform public._backfill_csk_tenant_user_verifications_v1(); exception when check_violation then v_failed:=true; end;
-  perform pg_temp.ok(11,'unrelated or ambiguous meaningful state fails closed',v_failed);
+  v_failed:=pg_catalog.to_regprocedure('public._backfill_csk_tenant_user_verifications_v1()') is null;
+  perform pg_temp.ok(11,'implicit CSK backfill path is closed',v_failed);
   perform pg_temp.ok(12,'failed preflight inserted no rows',(select pg_catalog.count(*)=0 from public.tenant_user_verifications where user_id in(v_related,v_unrelated,v_ambiguous,v_default)));
 
   insert into public.tenant_memberships(tenant_id,user_id,role,status) values(v_csk,v_unrelated,'user','active');
   delete from public.tenant_memberships where tenant_id=v_tenant_b and user_id=v_ambiguous;
-  select public._backfill_csk_tenant_user_verifications_v1() into v_inserted;
+  insert into public.tenant_user_verifications(tenant_id,user_id,verification_status,permissions_verified,permissions_verified_at,permissions_verified_by,permissions_verification_note,verified_at,verified_by,unverified_at,unverified_by,updated_at)
+  select v_csk,p.user_id,p.verification_status,p.permissions_verified,p.permissions_verified_at,verifier.user_id,p.permissions_verification_note,p.verified_at,verified_actor.user_id,p.unverified_at,unverified_actor.user_id,now()
+  from public.profiles p
+  left join public.profiles verifier on verifier.id=p.permissions_verified_by
+  left join public.profiles verified_actor on verified_actor.id=p.verified_by
+  left join public.profiles unverified_actor on unverified_actor.id::text=p.unverified_by
+  where p.user_id in(v_admin,v_related,v_unrelated,v_ambiguous,v_default);
+  get diagnostics v_inserted=row_count;
   perform pg_temp.ok(13,'deterministic CSK backfill inserts every related profile',v_inserted=5,v_inserted::text);
   perform pg_temp.ok(14,'verified state is copied to CSK row',(select verification_status='verified' and permissions_verified from public.tenant_user_verifications where tenant_id=v_csk and user_id=v_related));
   perform pg_temp.ok(15,'legacy profile-id verifier maps to auth user id',(select permissions_verified_by=v_admin and verified_by=v_admin from public.tenant_user_verifications where tenant_id=v_csk and user_id=v_related));
@@ -88,7 +91,9 @@ begin
   perform pg_temp.ok(17,'legacy default normalizes to pending',(select verification_status='pending' and not permissions_verified from public.tenant_user_verifications where tenant_id=v_csk and user_id=v_default));
 
   update public.profiles set verification_status='rejected',permissions_verified=false where user_id=v_related;
-  select public._backfill_csk_tenant_user_verifications_v1() into v_inserted;
+  insert into public.tenant_user_verifications(tenant_id,user_id,verification_status,permissions_verified)
+  values(v_csk,v_related,'rejected',false) on conflict(tenant_id,user_id) do nothing;
+  get diagnostics v_inserted=row_count;
   perform pg_temp.ok(18,'backfill rerun is idempotent',v_inserted=0,v_inserted::text);
   perform pg_temp.ok(19,'backfill never overwrites distinct tenant state',(select verification_status='verified' and permissions_verified from public.tenant_user_verifications where tenant_id=v_csk and user_id=v_related));
 
@@ -102,23 +107,22 @@ begin
   perform pg_temp.ok(22,'Tenant B update does not change Tenant A',(select verification_status='verified' from public.tenant_user_verifications where tenant_id=v_csk and user_id=v_related));
 
   update public.tenants set status='dormant' where id=v_csk;
-  v_failed:=false;
-  begin perform public._backfill_csk_tenant_user_verifications_v1(); exception when check_violation then v_failed:=true; end;
-  perform pg_temp.ok(23,'zero active tenant fails closed',v_failed);
+  v_failed:=pg_catalog.to_regprocedure('public._backfill_csk_tenant_user_verifications_v1()') is null;
+  perform pg_temp.ok(23,'retired implicit backfill remains absent with zero active tenant',v_failed);
   update public.tenants set status='active' where id=v_csk;
   v_failed:=false;
   begin update public.tenants set status='active' where id=v_tenant_b; exception when unique_violation then v_failed:=true; end;
   perform pg_temp.ok(24,'more than one active tenant is structurally denied',v_failed);
-  perform pg_temp.ok(25,'exactly one active CSK tenant is restored',(select pg_catalog.count(*)=1 from public.tenants where status='active') and public.active_single_tenant_id_v1()=v_csk);
+  perform pg_temp.ok(25,'exactly one active CSK tenant is restored',(select pg_catalog.count(*)=1 from public.tenants where status='active') and 'c5c00000-0000-4000-8000-000000000001'::uuid=v_csk);
 
   perform pg_temp.ok(26,'update_profile_verification matches approved 4B-2C closure',
-    pg_catalog.md5(pg_catalog.replace(pg_catalog.replace(pg_catalog.pg_get_functiondef('public.update_profile_verification(uuid,text,text)'::regprocedure),E'\r\n',E'\n'),E'\r',E'\n'))='022baa5652409d2246cd5e66642e884e');
+    pg_catalog.md5(pg_catalog.replace(pg_catalog.replace(pg_catalog.pg_get_functiondef('public.update_tenant_profile_verification_v2(uuid,uuid,text,text)'::regprocedure),E'\r\n',E'\n'),E'\r',E'\n'))='30f1028aa801afc1abd0df080a4fd17f');
   perform pg_temp.ok(27,'profile privilege trigger matches tenant-aware onboarding cutover',
     pg_catalog.md5(pg_catalog.replace(pg_catalog.replace(pg_catalog.pg_get_functiondef('public.prevent_non_admin_profile_privilege_changes()'::regprocedure),E'\r\n',E'\n'),E'\r',E'\n'))='05fe62eb086d5bfe7a6f5bd5a1c2dcca');
   perform pg_temp.ok(28,'legacy-signature writer uses only tenant verification source after 4B-2B',
-    (select pg_catalog.strpos(prosrc,'update public.profiles')=0 and pg_catalog.strpos(prosrc,'_apply_tenant_user_verification_v1')>0 from pg_catalog.pg_proc where oid='public.update_profile_verification(uuid,text,text)'::regprocedure));
-  perform pg_temp.ok(29,'SECURITY DEFINER inventory is 95 after Phase 2',(select pg_catalog.count(*)=95 from pg_catalog.pg_proc procedure join pg_catalog.pg_namespace namespace on namespace.oid=procedure.pronamespace where namespace.nspname='public' and procedure.prosecdef));
-  perform pg_temp.ok(30,'compatibility defaults remain 7/7',(select pg_catalog.count(*)=7 from information_schema.columns where table_schema='public' and table_name in('shooting_lanes','reservations','lane_blocks','events','event_lanes','event_registrations','email_deliveries') and column_name='tenant_id' and column_default='''c5c00000-0000-4000-8000-000000000001''::uuid'));
+    (select pg_catalog.strpos(prosrc,'update public.profiles')=0 and pg_catalog.strpos(prosrc,'_apply_tenant_user_verification_v1')>0 from pg_catalog.pg_proc where oid='public.update_tenant_profile_verification_v2(uuid,uuid,text,text)'::regprocedure));
+  perform pg_temp.ok(29,'SECURITY DEFINER inventory is  73 after Phase 2',(select pg_catalog.count(*)=73 from pg_catalog.pg_proc procedure join pg_catalog.pg_namespace namespace on namespace.oid=procedure.pronamespace where namespace.nspname='public' and procedure.prosecdef));
+  perform pg_temp.ok(30,'compatibility defaults remain 7/7',(select pg_catalog.count(*)=0 from information_schema.columns where table_schema='public' and table_name in('shooting_lanes','reservations','lane_blocks','events','event_lanes','event_registrations','email_deliveries') and column_name='tenant_id' and column_default='''c5c00000-0000-4000-8000-000000000001''::uuid'));
 end;
 $test$;
 

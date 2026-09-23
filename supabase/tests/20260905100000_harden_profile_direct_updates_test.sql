@@ -44,7 +44,7 @@ returns jsonb language plpgsql as $function$
 declare v_result jsonb;
 begin
   perform pg_temp.set_client('authenticated',p_user);
-  select public.update_my_profile_v1(
+  select public.update_my_profile_v2(
     '500600700','00-001','Warszawa','Testowa','1',null,
     p_permission_sport,false,false,false,false,false,false,false,false,false
   ) into v_result;
@@ -114,8 +114,9 @@ begin
     (v_tenant,v_other,'user','active'),
     (v_tenant,v_lifecycle,'user','active');
 
-  update public.profiles set verification_status='verified',permissions_verified=true,
-    permissions_verified_at=pg_catalog.now() where user_id=v_user;
+  insert into public.tenant_user_verifications(
+    tenant_id,user_id,verification_status,permissions_verified,permissions_verified_at
+  ) values(v_tenant,v_user,'verified',true,pg_catalog.now());
 
   perform pg_temp.record_result(1,'Profiles RLS and owner unchanged',exists(
     select 1 from pg_catalog.pg_class relation join pg_catalog.pg_roles owner_role on owner_role.oid=relation.relowner
@@ -137,21 +138,21 @@ begin
     'Service role keeps its managed baseline.');
   perform pg_temp.record_result(6,'Self profile RPC is hardened',exists(
     select 1 from pg_catalog.pg_proc procedure join pg_catalog.pg_roles owner_role on owner_role.oid=procedure.proowner
-    where procedure.oid='public.update_my_profile_v1(text,text,text,text,text,text,boolean,boolean,boolean,boolean,boolean,boolean,boolean,boolean,boolean,boolean)'::regprocedure
+    where procedure.oid='public.update_my_profile_v2(text,text,text,text,text,text,boolean,boolean,boolean,boolean,boolean,boolean,boolean,boolean,boolean,boolean)'::regprocedure
       and procedure.prosecdef and procedure.provolatile='v' and procedure.prorettype='jsonb'::regtype
       and procedure.proconfig=array['search_path=pg_catalog, public, pg_temp']::text[] and owner_role.rolname='postgres'
   ),'Self writer must be postgres-owned SECURITY DEFINER with safe search_path.');
   perform pg_temp.record_result(7,'Self profile RPC ACL is authenticated only',
-    pg_catalog.has_function_privilege('authenticated','public.update_my_profile_v1(text,text,text,text,text,text,boolean,boolean,boolean,boolean,boolean,boolean,boolean,boolean,boolean,boolean)','EXECUTE')
-    and not pg_catalog.has_function_privilege('anon','public.update_my_profile_v1(text,text,text,text,text,text,boolean,boolean,boolean,boolean,boolean,boolean,boolean,boolean,boolean,boolean)','EXECUTE')
-    and not pg_catalog.has_function_privilege('service_role','public.update_my_profile_v1(text,text,text,text,text,text,boolean,boolean,boolean,boolean,boolean,boolean,boolean,boolean,boolean,boolean)','EXECUTE'),
+    pg_catalog.has_function_privilege('authenticated','public.update_my_profile_v2(text,text,text,text,text,text,boolean,boolean,boolean,boolean,boolean,boolean,boolean,boolean,boolean,boolean)','EXECUTE')
+    and not pg_catalog.has_function_privilege('anon','public.update_my_profile_v2(text,text,text,text,text,text,boolean,boolean,boolean,boolean,boolean,boolean,boolean,boolean,boolean,boolean)','EXECUTE')
+    and not pg_catalog.has_function_privilege('service_role','public.update_my_profile_v2(text,text,text,text,text,text,boolean,boolean,boolean,boolean,boolean,boolean,boolean,boolean,boolean,boolean)','EXECUTE'),
     'Only authenticated may execute the auth.uid-scoped writer.');
   perform pg_temp.record_result(8,'Existing controlled writers remain available',
-    pg_catalog.has_function_privilege('authenticated','public.admin_set_user_role_v1(uuid,text)','EXECUTE')
-    and pg_catalog.has_function_privilege('authenticated','public.admin_set_user_note_v1(uuid,text)','EXECUTE')
-    and pg_catalog.has_function_privilege('authenticated','public.update_profile_verification(uuid,text,text)','EXECUTE')
-    and pg_catalog.has_function_privilege('authenticated','public.update_profile_identity(uuid,text,text)','EXECUTE')
-    and pg_catalog.has_function_privilege('authenticated','public.update_profile_contact_details(uuid,text,text,text,text,text,text)','EXECUTE'),
+    pg_catalog.has_function_privilege('authenticated','public.admin_set_user_role_v2(uuid,uuid,text)','EXECUTE')
+    and pg_catalog.has_function_privilege('authenticated','public.admin_set_user_note_v2(uuid,uuid,text)','EXECUTE')
+    and pg_catalog.has_function_privilege('authenticated','public.update_tenant_profile_verification_v2(uuid,uuid,text,text)','EXECUTE')
+    and pg_catalog.has_function_privilege('authenticated','public.update_tenant_profile_identity_v2(uuid,uuid,text,text)','EXECUTE')
+    and pg_catalog.has_function_privilege('authenticated','public.update_tenant_profile_contact_details_v2(uuid,uuid,text,text,text,text,text,text)','EXECUTE'),
     'Admin and employee flows must retain their RPC surface.');
 
   select pg_catalog.to_jsonb(profile) into v_before from public.profiles profile where user_id=v_other;
@@ -175,10 +176,9 @@ begin
     and exists(select 1 from public.profiles where user_id=v_user and phone='500600700' and city='Warszawa' and permission_sport),
     'Owner contact and declarations must update through the RPC.');
   perform pg_temp.record_result(22,'Declaration change resets tenant verification',
-    v_result->>'verification_status'='pending'
-    and coalesce((v_result->>'permissions_verified')::boolean,false)=false
-    and not exists(select 1 from public.tenant_user_verifications where tenant_id=public.active_single_tenant_id_v1() and user_id=v_user and (verification_status<>'pending' or permissions_verified)),
-    'Re-verification semantics must use the tenant-scoped source of truth, including the implicit pending default.');
+    v_result @> '{"ok":true,"changed":true,"code":"updated","declarations_changed":true}'::jsonb
+    and exists(select 1 from public.tenant_user_verifications where tenant_id=v_tenant and user_id=v_user and verification_status='pending' and not permissions_verified and permissions_verified_at is null),
+    'Re-verification semantics must reset the existing tenant-scoped source of truth.');
   perform pg_temp.record_result(23,'Self RPC cannot mutate privileged fields',exists(
     select 1 from public.profiles where user_id=v_user and role='user' and email='clean005-user-'||v_run||'@example.invalid'
       and first_name='[TEST]' and created_at is not null
@@ -187,33 +187,33 @@ begin
   perform pg_temp.record_result(24,'Self RPC no-change is idempotent',v_result @> '{"ok":true,"changed":false,"code":"no_change"}'::jsonb,'Repeat must not write.');
 
   perform pg_temp.set_client('authenticated',v_admin);
-  select public.admin_set_user_role_v1(v_other,'instruktor') into v_result;
+  select public.admin_set_user_role_v2(v_tenant,v_other,'instruktor') into v_result;
   execute 'reset role';
   perform pg_temp.record_result(25,'Admin role RPC remains controlled and audited',
     v_result @> '{"ok":true,"changed":true,"code":"updated","role":"instruktor"}'::jsonb
-    and (select pg_catalog.count(*)=1 from public.audit_logs where action='tenant_user_role_updated' and target_type='tenant_user_role' and target_id=v_other and actor_user_id=v_admin and tenant_id=public.active_single_tenant_id_v1()),
+    and (select pg_catalog.count(*)=1 from public.audit_logs where action='tenant_user_role_updated' and target_type='tenant_user_role' and target_id=v_other and actor_user_id=v_admin and tenant_id='c5c00000-0000-4000-8000-000000000001'::uuid),
     'Role writer changes role only and records trusted actor.');
 
   perform pg_temp.set_client('authenticated',v_admin);
-  select public.update_profile_verification(v_other,'verify','[TEST][CLEAN-005] verified') into v_result;
+  select public.update_tenant_profile_verification_v2(v_tenant,v_other,'verify','[TEST][CLEAN-005] verified') into v_result;
   execute 'reset role';
   perform pg_temp.record_result(26,'Admin verification RPC remains controlled and audited',
     v_result->>'verification_status'='verified'
-    and (select pg_catalog.count(*)=1 from public.audit_logs where action='tenant_user_verification_verified' and target_type='tenant_user_verification' and target_id=v_other and actor_user_id=v_admin and tenant_id=public.active_single_tenant_id_v1()),
+    and (select pg_catalog.count(*)=1 from public.audit_logs where action='tenant_user_verification_verified' and target_type='tenant_user_verification' and target_id=v_other and actor_user_id=v_admin and tenant_id='c5c00000-0000-4000-8000-000000000001'::uuid),
     'Verification writer remains available.');
 
   perform pg_temp.set_client('authenticated',v_admin);
-  select public.admin_set_user_note_v1(v_other,'[TEST][CLEAN-005] note') into v_result;
+  select public.admin_set_user_note_v2(v_tenant,v_other,'[TEST][CLEAN-005] note') into v_result;
   execute 'reset role';
   perform pg_temp.record_result(27,'Admin note RPC remains controlled and audited',
     v_result @> '{"ok":true,"changed":true,"code":"updated"}'::jsonb
-    and (select pg_catalog.count(*)=1 from public.audit_logs where action='tenant_user_admin_note_updated' and target_type='tenant_user_admin_note' and target_id=v_other and actor_user_id=v_admin and tenant_id=public.active_single_tenant_id_v1())
-    and (select admin_note='[TEST][CLEAN-005] note' from public.tenant_user_admin_notes where tenant_id=public.active_single_tenant_id_v1() and user_id=v_other),
+    and (select pg_catalog.count(*)=1 from public.audit_logs where action='tenant_user_admin_note_updated' and target_type='tenant_user_admin_note' and target_id=v_other and actor_user_id=v_admin and tenant_id='c5c00000-0000-4000-8000-000000000001'::uuid)
+    and (select admin_note='[TEST][CLEAN-005] note' from public.tenant_user_admin_notes where tenant_id='c5c00000-0000-4000-8000-000000000001'::uuid and user_id=v_other),
     'Admin note writer changes the note through its dedicated contract.');
 
   select pg_catalog.count(*) into v_audit_count from public.audit_logs where action='tenant_user_admin_note_updated' and target_id=v_other;
   perform pg_temp.set_client('authenticated',v_admin);
-  select public.admin_set_user_note_v1(v_other,'[TEST][CLEAN-005] note') into v_result;
+  select public.admin_set_user_note_v2(v_tenant,v_other,'[TEST][CLEAN-005] note') into v_result;
   execute 'reset role';
   perform pg_temp.record_result(28,'Admin no-change creates no duplicate audit',
     v_result @> '{"ok":true,"changed":false,"code":"no_change"}'::jsonb

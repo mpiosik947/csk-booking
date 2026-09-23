@@ -290,10 +290,9 @@ begin
   perform pg_temp.ok(59,'remaining critical event writers retain expected SECURITY DEFINER mode',
     not exists(
       select 1 from pg_catalog.unnest(array[
-        'admin_list_events_v1',
         'admin_list_event_registrations_v1','get_my_event_registrations_v1','register_for_event',
         'cancel_event_registration','confirm_event_reserve_promotion',
-        'mark_event_registration_paid','admin_create_event_v2',
+        'mark_event_registration_paid',
         'admin_update_event_v2','admin_set_event_active_v2'
       ]::text[]) expected(name)
       where not exists(select 1 from pg_catalog.pg_proc procedure join pg_catalog.pg_namespace namespace on namespace.oid=procedure.pronamespace where namespace.nspname='public' and procedure.proname=expected.name and procedure.prosecdef)
@@ -303,12 +302,12 @@ begin
     not exists(
       select 1 from pg_catalog.pg_proc procedure join pg_catalog.pg_namespace namespace on namespace.oid=procedure.pronamespace
       where namespace.nspname='public'
-        and procedure.proname in('get_public_event_list_v2','get_public_event_availability_v1','prepare_event_reserve_promotions','complete_event_reserve_promotion')
+        and procedure.proname in('get_public_event_list_v3','get_public_event_availability_v2','prepare_event_reserve_promotions','complete_event_reserve_promotion')
         and procedure.prosrc ~ '\m(is_tenant_member_v1|has_tenant_role_v1|get_my_tenant_role_v1)\M'
-    ) and (select pg_catalog.count(*)=4 from pg_catalog.pg_proc procedure join pg_catalog.pg_namespace namespace on namespace.oid=procedure.pronamespace where namespace.nspname='public' and procedure.proname in('admin_list_events_v1','admin_create_event_v2','admin_update_event_v2','admin_set_event_active_v2') and procedure.prosrc ~ '\m(get_my_tenant_role_v1)\M'),
+    ) and (select pg_catalog.count(*)=4 from pg_catalog.pg_proc procedure join pg_catalog.pg_namespace namespace on namespace.oid=procedure.pronamespace where namespace.nspname='public' and procedure.proname in('admin_list_events_v2','admin_create_event_v3','admin_update_event_v3','admin_set_event_active_v3') and procedure.prosrc ~ '\m(get_my_tenant_role_v1)\M'),
     'Deferred or hardened event RPC boundaries differ.');
 
-  v_rpc := pg_temp.as_actor_json('anon',null,pg_catalog.format('select public.get_public_event_list_v2(%L,''upcoming'',1,50)',v_marker));
+  v_rpc := pg_temp.as_actor_json('anon',null,pg_catalog.format('select public.get_public_event_list_v3(%L,%L,''upcoming'',1,50)',v_csk,v_marker));
   perform pg_temp.ok(61,'public event list RPC remains executable and PII-free',
     v_rpc->>'code'='ok'
     and v_rpc::text !~* 'customer|user_id|registration_id|token|admin_note|phone|email',
@@ -319,12 +318,12 @@ begin
     and not v_rpc->'items' @> pg_catalog.jsonb_build_array(pg_catalog.jsonb_build_object('event_id',v_event_b_active)),
     'Public reader did not resolve the one active tenant exactly.');
 
-  v_rpc := pg_temp.as_actor_json('authenticated',v_global_admin_no_membership,pg_catalog.format('select public.admin_list_events_v1(%L,''all'',''nearest'',1,50)',v_marker));
+  v_rpc := pg_temp.as_actor_json('authenticated',v_global_admin_no_membership,pg_catalog.format('select public.admin_list_events_v2(%L,%L,''all'',''nearest'',1,50)',v_csk,v_marker));
   perform pg_temp.ok(63,'global admin without active membership is denied by SAAS-9D-2B-1',
     v_rpc->>'code'='not_allowed',
     'Global profile role still bypasses tenant membership.');
   perform pg_temp.ok(64,'temporary defaults and second-tenant guard remain unchanged',
-    (select pg_catalog.count(*)=3 from information_schema.columns where table_schema='public' and table_name in('events','event_lanes','event_registrations') and column_name='tenant_id' and column_default='''c5c00000-0000-4000-8000-000000000001''::uuid')
+    (select pg_catalog.count(*)=0 from information_schema.columns where table_schema='public' and table_name in('events','event_lanes','event_registrations') and column_name='tenant_id' and column_default is not null)
     and pg_catalog.to_regclass('public.tenants_single_active_runtime_guard') is not null,
     'Compatibility defaults or active-tenant guard changed.');
 end;

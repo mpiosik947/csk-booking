@@ -284,9 +284,9 @@ begin
         and coalesce(qual,'') || coalesce(with_check,'') ~ '(is_tenant_member_v1|has_tenant_role_v1|get_my_tenant_role_v1|is_active_public_tenant_v1)'
     ),
     'Tenant-aware RLS leaked outside the approved SAAS-9C tables.');
-  perform pg_temp.ok(45, 'active-single-tenant helper returns only CSK',
-    public.active_single_tenant_id_v1()=v_csk,
-    'Internal single-active bridge did not resolve canonical CSK.');
+  perform pg_temp.ok(45, 'active-single-tenant compatibility helper is retired',
+    pg_catalog.to_regprocedure('public.active_single_tenant_id_v1()') is null,
+    'Obsolete exact-single tenant authority remains callable.');
 
   insert into auth.users (
     id, instance_id, aud, role, email, encrypted_password, email_confirmed_at,

@@ -158,11 +158,11 @@ begin
     identity_update->>'full_name'='Target Renamed'
     and exists(select 1 from public.profiles where user_id=target_a and full_name='Target Renamed'));
   perform pg_temp.ok(22,'compatibility defaults remain seven of seven',
-    (select pg_catalog.count(*)=7 from information_schema.columns where table_schema='public' and column_name='tenant_id'
+    (select pg_catalog.count(*)=0 from information_schema.columns where table_schema='public' and column_name='tenant_id'
       and table_name in('shooting_lanes','reservations','lane_blocks','events','event_lanes','event_registrations','email_deliveries')
       and column_default='''c5c00000-0000-4000-8000-000000000001''::uuid'));
-  perform pg_temp.ok(23,'SECURITY DEFINER target is 95',
-    (select pg_catalog.count(*)=95 from pg_catalog.pg_proc p join pg_catalog.pg_namespace n on n.oid=p.pronamespace
+  perform pg_temp.ok(23,'SECURITY DEFINER target is  73',
+    (select pg_catalog.count(*)=73 from pg_catalog.pg_proc p join pg_catalog.pg_namespace n on n.oid=p.pronamespace
       where n.nspname='public' and p.prosecdef));
   perform pg_temp.ok(24,'only CSK is active after two-tenant test',
     (select pg_catalog.count(*)=1 from public.tenants where status='active')

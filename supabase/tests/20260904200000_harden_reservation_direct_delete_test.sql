@@ -151,10 +151,10 @@ begin
     )), 'Każdy syntetyczny Auth user musi mieć dokładnie jeden profil.');
 
   insert into public.shooting_lanes(
-    id, name, type, is_active, max_shooters, booking_step_minutes,
+    tenant_id, id, name, type, is_active, max_shooters, booking_step_minutes,
     resource_kind, whole_lane_bookable, positions_bookable
   ) values (
-    v_lane, '[TEST][CLEAN-004] Lane', 'shooting', false, 1, 60, 'lane', true, false
+    v_tenant, v_lane, '[TEST][CLEAN-004] Lane', 'shooting', false, 1, 60, 'lane', true, false
   );
 
   insert into public.lane_pricing_rules(
@@ -164,18 +164,18 @@ begin
   );
 
   insert into public.reservations(
-    id, user_id, lane_id, customer_name, customer_email, customer_phone,
+    tenant_id, id, user_id, lane_id, customer_name, customer_email, customer_phone,
     reservation_date, start_time, end_time, duration_minutes, price,
     reservation_status, payment_status, attendance_status, shooters_count,
     pricing_rule_id, pricing_day_group_snapshot, lane_name_snapshot,
     pricing_label_snapshot, price_per_hour_snapshot, total_price, currency_code,
     creation_request_id
   ) values
-    (v_user_reservation, v_user, v_lane, '[TEST] User', 'clean004-user-' || v_run || '@example.invalid', '000', current_date + 30, time '10:00', time '11:00', 60, 10, 'confirmed', 'pay_on_site', 'planned', 1, v_price, 'mon_thu', '[TEST][CLEAN-004] Lane', '[TEST][CLEAN-004]', 10, 10, 'PLN', pg_catalog.gen_random_uuid()),
-    (v_admin_reservation, v_user, v_lane, '[TEST] User', 'clean004-user-' || v_run || '@example.invalid', '000', current_date + 31, time '10:00', time '11:00', 60, 10, 'confirmed', 'paid', 'planned', 1, v_price, 'mon_thu', '[TEST][CLEAN-004] Lane', '[TEST][CLEAN-004]', 10, 10, 'PLN', pg_catalog.gen_random_uuid()),
-    (v_employee_reservation, v_user, v_lane, '[TEST] User', 'clean004-user-' || v_run || '@example.invalid', '000', current_date + 32, time '10:00', time '11:00', 60, 10, 'confirmed', 'pay_on_site', 'planned', 1, v_price, 'mon_thu', '[TEST][CLEAN-004] Lane', '[TEST][CLEAN-004]', 10, 10, 'PLN', pg_catalog.gen_random_uuid()),
-    (v_lifecycle_reservation, v_lifecycle_user, v_lane, '[TEST] Lifecycle', 'clean004-lifecycle-' || v_run || '@example.invalid', '000', current_date + 33, time '10:00', time '11:00', 60, 10, 'confirmed', 'pay_on_site', 'planned', 1, v_price, 'mon_thu', '[TEST][CLEAN-004] Lane', '[TEST][CLEAN-004]', 10, 10, 'PLN', pg_catalog.gen_random_uuid()),
-    (v_admin_checked_in_reservation, v_user, v_lane, '[TEST] User', 'clean004-user-' || v_run || '@example.invalid', '000', current_date + 34, time '10:00', time '11:00', 60, 10, 'confirmed', 'paid_on_site', 'planned', 1, v_price, 'mon_thu', '[TEST][CLEAN-004] Lane', '[TEST][CLEAN-004]', 10, 10, 'PLN', pg_catalog.gen_random_uuid());
+    (v_tenant, v_user_reservation, v_user, v_lane, '[TEST] User', 'clean004-user-' || v_run || '@example.invalid', '000', current_date + 30, time '10:00', time '11:00', 60, 10, 'confirmed', 'pay_on_site', 'planned', 1, v_price, 'mon_thu', '[TEST][CLEAN-004] Lane', '[TEST][CLEAN-004]', 10, 10, 'PLN', pg_catalog.gen_random_uuid()),
+    (v_tenant, v_admin_reservation, v_user, v_lane, '[TEST] User', 'clean004-user-' || v_run || '@example.invalid', '000', current_date + 31, time '10:00', time '11:00', 60, 10, 'confirmed', 'paid', 'planned', 1, v_price, 'mon_thu', '[TEST][CLEAN-004] Lane', '[TEST][CLEAN-004]', 10, 10, 'PLN', pg_catalog.gen_random_uuid()),
+    (v_tenant, v_employee_reservation, v_user, v_lane, '[TEST] User', 'clean004-user-' || v_run || '@example.invalid', '000', current_date + 32, time '10:00', time '11:00', 60, 10, 'confirmed', 'pay_on_site', 'planned', 1, v_price, 'mon_thu', '[TEST][CLEAN-004] Lane', '[TEST][CLEAN-004]', 10, 10, 'PLN', pg_catalog.gen_random_uuid()),
+    (v_tenant, v_lifecycle_reservation, v_lifecycle_user, v_lane, '[TEST] Lifecycle', 'clean004-lifecycle-' || v_run || '@example.invalid', '000', current_date + 33, time '10:00', time '11:00', 60, 10, 'confirmed', 'pay_on_site', 'planned', 1, v_price, 'mon_thu', '[TEST][CLEAN-004] Lane', '[TEST][CLEAN-004]', 10, 10, 'PLN', pg_catalog.gen_random_uuid()),
+    (v_tenant, v_admin_checked_in_reservation, v_user, v_lane, '[TEST] User', 'clean004-user-' || v_run || '@example.invalid', '000', current_date + 34, time '10:00', time '11:00', 60, 10, 'confirmed', 'paid_on_site', 'planned', 1, v_price, 'mon_thu', '[TEST][CLEAN-004] Lane', '[TEST][CLEAN-004]', 10, 10, 'PLN', pg_catalog.gen_random_uuid());
 
   update public.reservations
   set attendance_status = 'present',

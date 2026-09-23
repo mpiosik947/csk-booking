@@ -608,8 +608,9 @@ test.describe.serial("local admin lane-family creation", () => {
         : rule
     );
     const { data, error } = await adminClient.rpc(
-      "admin_create_lane_booking_family_v1",
+      "admin_create_lane_booking_family_v2",
       {
+        p_tenant_id: CSK_ID,
         p_family: {
           root: {
             ...validWriteResource(invalidNames[8], 4),
@@ -641,8 +642,8 @@ test.describe.serial("local admin lane-family creation", () => {
       positions: [],
     };
     const { data: userResult, error: userError } = await regularUserClient.rpc(
-      "admin_create_lane_booking_family_v1",
-      { p_family: payload }
+      "admin_create_lane_booking_family_v2",
+      { p_tenant_id: CSK_ID, p_family: payload }
     );
     assertNoError(userError, "regular user creator RPC");
     expect(userResult).toMatchObject({ ok: false, changed: false, code: "not_allowed" });
@@ -651,8 +652,8 @@ test.describe.serial("local admin lane-family creation", () => {
       auth: { autoRefreshToken: false, persistSession: false },
     });
     const { error: anonRpcError } = await anonClient.rpc(
-      "admin_create_lane_booking_family_v1",
-      { p_family: payload }
+      "admin_create_lane_booking_family_v2",
+      { p_tenant_id: CSK_ID, p_family: payload }
     );
     expect(anonRpcError).not.toBeNull();
     await expectNoResource(invalidNames[9]);

@@ -178,12 +178,12 @@ begin
     (v_tenant,v_owner,'user','active');
 
   insert into public.shooting_lanes(
-    id,name,type,is_active,max_shooters,booking_step_minutes,
+    tenant_id,id,name,type,is_active,max_shooters,booking_step_minutes,
     display_order,currency_code,resource_kind,parent_lane_id,
     whole_lane_bookable,positions_bookable
   )
   select
-    v_lanes[index],
+    v_tenant,v_lanes[index],
     '[TEST][SEC-005] Lane ' || index,
     'test',true,1,60,900 + index,'PLN','lane',null,true,false
   from pg_catalog.generate_series(1,4) as index;
@@ -198,7 +198,7 @@ begin
   from pg_catalog.generate_series(1,4) as index;
 
   insert into public.reservations(
-    id,user_id,lane_id,customer_name,customer_email,customer_phone,
+    tenant_id,id,user_id,lane_id,customer_name,customer_email,customer_phone,
     reservation_date,start_time,end_time,duration_minutes,price,
     reservation_status,payment_status,attendance_status,checked_in_at,
     completed_at,check_in_token,reservation_note,shooters_count,
@@ -206,10 +206,10 @@ begin
     pricing_label_snapshot,price_per_hour_snapshot,total_price,
     currency_code,creation_request_id
   ) values
-    (v_valid,v_owner,v_lanes[1],'[TEST] Owner','test-sec005-owner@example.invalid','000000005',v_today,time '00:01',time '23:59',1438,10,'confirmed','pay_on_site','planned',null,null,v_tokens[1],null,1,v_prices[1],'mon_thu','[TEST] Lane 1','[TEST] Price',10,10,'PLN','6d050000-0000-4000-8000-000000000051'),
-    (v_used,v_owner,v_lanes[2],'[TEST] Used','test-sec005-used@example.invalid','000000006',v_today,time '00:01',time '23:59',1438,10,'confirmed','pay_on_site','present',pg_catalog.transaction_timestamp(),null,v_tokens[2],null,1,v_prices[2],'mon_thu','[TEST] Lane 2','[TEST] Price',10,10,'PLN','6d050000-0000-4000-8000-000000000052'),
-    (v_cancelled,v_owner,v_lanes[3],'[TEST] Cancelled','test-sec005-cancelled@example.invalid','000000007',v_today,time '00:01',time '23:59',1438,10,'cancelled','pay_on_site','planned',null,null,v_tokens[3],null,1,v_prices[3],'mon_thu','[TEST] Lane 3','[TEST] Price',10,10,'PLN','6d050000-0000-4000-8000-000000000053'),
-    (v_expired,v_owner,v_lanes[4],'[TEST] Expired','test-sec005-expired@example.invalid','000000008',v_today-3,time '00:01',time '01:00',59,10,'confirmed','pay_on_site','planned',null,null,v_tokens[4],null,1,v_prices[4],'mon_thu','[TEST] Lane 4','[TEST] Price',10,10,'PLN','6d050000-0000-4000-8000-000000000054');
+    (v_tenant,v_valid,v_owner,v_lanes[1],'[TEST] Owner','test-sec005-owner@example.invalid','000000005',v_today,time '00:01',time '23:59',1438,10,'confirmed','pay_on_site','planned',null,null,v_tokens[1],null,1,v_prices[1],'mon_thu','[TEST] Lane 1','[TEST] Price',10,10,'PLN','6d050000-0000-4000-8000-000000000051'),
+    (v_tenant,v_used,v_owner,v_lanes[2],'[TEST] Used','test-sec005-used@example.invalid','000000006',v_today,time '00:01',time '23:59',1438,10,'confirmed','pay_on_site','present',pg_catalog.transaction_timestamp(),null,v_tokens[2],null,1,v_prices[2],'mon_thu','[TEST] Lane 2','[TEST] Price',10,10,'PLN','6d050000-0000-4000-8000-000000000052'),
+    (v_tenant,v_cancelled,v_owner,v_lanes[3],'[TEST] Cancelled','test-sec005-cancelled@example.invalid','000000007',v_today,time '00:01',time '23:59',1438,10,'cancelled','pay_on_site','planned',null,null,v_tokens[3],null,1,v_prices[3],'mon_thu','[TEST] Lane 3','[TEST] Price',10,10,'PLN','6d050000-0000-4000-8000-000000000053'),
+    (v_tenant,v_expired,v_owner,v_lanes[4],'[TEST] Expired','test-sec005-expired@example.invalid','000000008',v_today-3,time '00:01',time '01:00',59,10,'confirmed','pay_on_site','planned',null,null,v_tokens[4],null,1,v_prices[4],'mon_thu','[TEST] Lane 4','[TEST] Price',10,10,'PLN','6d050000-0000-4000-8000-000000000054');
 
   perform pg_temp.record_result(1,'Function signatures and security contract',
     pg_catalog.to_regprocedure('public.is_reservation_check_in_token_usable_v1(date,time without time zone,time without time zone,text,timestamp with time zone)') is not null

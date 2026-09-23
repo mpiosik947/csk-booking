@@ -59,6 +59,7 @@ $function$;
 
 do $tests$
 declare
+  v_tenant constant uuid := 'c5c00000-0000-4000-8000-000000000001';
   v_admin uuid := pg_catalog.gen_random_uuid();
   v_employee uuid := pg_catalog.gen_random_uuid();
   v_instructor uuid := pg_catalog.gen_random_uuid();
@@ -113,14 +114,14 @@ begin
   where profile.user_id = fixture.user_id;
 
   insert into public.shooting_lanes(
-    id, name, type, is_active, max_shooters, booking_step_minutes,
+    tenant_id, id, name, type, is_active, max_shooters, booking_step_minutes,
     display_order, resource_kind, parent_lane_id,
     whole_lane_bookable, positions_bookable
   ) values
-    (v_root, '[TEST][REPORTS-6A] Root', 'shooting', true, 2, 60, 9900, 'lane', null, true, true),
-    (v_position_1, '[TEST][REPORTS-6A] Position 1', 'shooting', true, 1, 60, 9901, 'position', v_root, false, false),
-    (v_position_2, '[TEST][REPORTS-6A] Position 2', 'shooting', true, 1, 60, 9902, 'position', v_root, false, false),
-    (v_historical_lane, '[TEST][REPORTS-6A] Current renamed lane', 'shooting', false, 1, 60, 9903, 'lane', null, true, false);
+    (v_tenant, v_root, '[TEST][REPORTS-6A] Root', 'shooting', true, 2, 60, 9900, 'lane', null, true, true),
+    (v_tenant, v_position_1, '[TEST][REPORTS-6A] Position 1', 'shooting', true, 1, 60, 9901, 'position', v_root, false, false),
+    (v_tenant, v_position_2, '[TEST][REPORTS-6A] Position 2', 'shooting', true, 1, 60, 9902, 'position', v_root, false, false),
+    (v_tenant, v_historical_lane, '[TEST][REPORTS-6A] Current renamed lane', 'shooting', false, 1, 60, 9903, 'lane', null, true, false);
 
   insert into public.lane_booking_rules(lane_id, online_bookable, max_people_online)
   values
@@ -138,18 +139,18 @@ begin
     (v_price_historical, v_historical_lane, 'mon_thu', 1, 1, '[TEST][REPORTS-6A] Historical', 25);
 
   insert into public.reservations(
-    id, user_id, lane_id, customer_name, customer_email, customer_phone,
+    tenant_id, id, user_id, lane_id, customer_name, customer_email, customer_phone,
     reservation_date, start_time, end_time, duration_minutes, price,
     reservation_status, payment_status, attendance_status, checked_in_at,
     completed_at, shooters_count, pricing_rule_id,
     pricing_day_group_snapshot, lane_name_snapshot, pricing_label_snapshot,
     price_per_hour_snapshot, total_price, currency_code, creation_request_id
   ) values
-    (pg_catalog.gen_random_uuid(), v_user, v_root, '[TEST] Root customer', 'reports6a-root-' || v_run || '@example.invalid', '000001', date '2026-03-29', time '08:00', time '10:00', 120, 100, 'confirmed', 'paid', 'planned', null, null, 2, v_price_root, 'mon_thu', '[TEST][REPORTS-6A] Root snapshot', '[TEST] Root price', 50, 100, 'PLN', pg_catalog.gen_random_uuid()),
-    (pg_catalog.gen_random_uuid(), v_user, v_position_1, '[TEST] Position customer', 'reports6a-position-' || v_run || '@example.invalid', '000002', date '2026-03-29', time '09:00', time '11:00', 120, 50, 'completed', 'pay_on_site', 'completed', pg_catalog.transaction_timestamp(), pg_catalog.transaction_timestamp(), 1, v_price_1, 'mon_thu', '[TEST][REPORTS-6A] Position 1 snapshot', '[TEST] Position price', 25, 50, 'PLN', pg_catalog.gen_random_uuid()),
-    (pg_catalog.gen_random_uuid(), v_user, v_position_2, '[TEST] Cancelled', 'reports6a-cancelled-' || v_run || '@example.invalid', '000003', date '2026-03-29', time '11:00', time '12:00', 60, 70, 'cancelled_by_user', 'paid', 'planned', null, null, 1, v_price_2, 'mon_thu', '[TEST][REPORTS-6A] Position 2 snapshot', '[TEST] Cancelled price', 70, 70, 'PLN', pg_catalog.gen_random_uuid()),
-    (pg_catalog.gen_random_uuid(), v_user, v_position_2, '[TEST] No show', 'reports6a-noshow-' || v_run || '@example.invalid', '000004', date '2026-03-29', time '12:00', time '13:00', 60, 80, 'no_show', 'paid', 'no_show', null, null, 1, v_price_2, 'mon_thu', '[TEST][REPORTS-6A] Position 2 snapshot', '[TEST] No show price', 80, 80, 'PLN', pg_catalog.gen_random_uuid()),
-    (pg_catalog.gen_random_uuid(), v_user, v_historical_lane, '[TEST] Historical', 'reports6a-history-' || v_run || '@example.invalid', '000005', date '2026-03-29', time '13:00', time '14:00', 60, 25, 'cancelled', 'free', 'planned', null, null, 1, v_price_historical, 'mon_thu', '[TEST][REPORTS-6A] Historical snapshot', '[TEST] Historical price', 25, 25, 'PLN', pg_catalog.gen_random_uuid());
+    (v_tenant, pg_catalog.gen_random_uuid(), v_user, v_root, '[TEST] Root customer', 'reports6a-root-' || v_run || '@example.invalid', '000001', date '2026-03-29', time '08:00', time '10:00', 120, 100, 'confirmed', 'paid', 'planned', null, null, 2, v_price_root, 'mon_thu', '[TEST][REPORTS-6A] Root snapshot', '[TEST] Root price', 50, 100, 'PLN', pg_catalog.gen_random_uuid()),
+    (v_tenant, pg_catalog.gen_random_uuid(), v_user, v_position_1, '[TEST] Position customer', 'reports6a-position-' || v_run || '@example.invalid', '000002', date '2026-03-29', time '09:00', time '11:00', 120, 50, 'completed', 'pay_on_site', 'completed', pg_catalog.transaction_timestamp(), pg_catalog.transaction_timestamp(), 1, v_price_1, 'mon_thu', '[TEST][REPORTS-6A] Position 1 snapshot', '[TEST] Position price', 25, 50, 'PLN', pg_catalog.gen_random_uuid()),
+    (v_tenant, pg_catalog.gen_random_uuid(), v_user, v_position_2, '[TEST] Cancelled', 'reports6a-cancelled-' || v_run || '@example.invalid', '000003', date '2026-03-29', time '11:00', time '12:00', 60, 70, 'cancelled_by_user', 'paid', 'planned', null, null, 1, v_price_2, 'mon_thu', '[TEST][REPORTS-6A] Position 2 snapshot', '[TEST] Cancelled price', 70, 70, 'PLN', pg_catalog.gen_random_uuid()),
+    (v_tenant, pg_catalog.gen_random_uuid(), v_user, v_position_2, '[TEST] No show', 'reports6a-noshow-' || v_run || '@example.invalid', '000004', date '2026-03-29', time '12:00', time '13:00', 60, 80, 'no_show', 'paid', 'no_show', null, null, 1, v_price_2, 'mon_thu', '[TEST][REPORTS-6A] Position 2 snapshot', '[TEST] No show price', 80, 80, 'PLN', pg_catalog.gen_random_uuid()),
+    (v_tenant, pg_catalog.gen_random_uuid(), v_user, v_historical_lane, '[TEST] Historical', 'reports6a-history-' || v_run || '@example.invalid', '000005', date '2026-03-29', time '13:00', time '14:00', 60, 25, 'cancelled', 'free', 'planned', null, null, 1, v_price_historical, 'mon_thu', '[TEST][REPORTS-6A] Historical snapshot', '[TEST] Historical price', 25, 25, 'PLN', pg_catalog.gen_random_uuid());
 
   perform pg_temp.record_result(1, 'Exact RPC signature and no overloads',
     pg_catalog.to_regprocedure('public.admin_get_reservation_report_v1(date,date,integer,integer)') is not null

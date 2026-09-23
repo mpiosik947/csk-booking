@@ -90,7 +90,7 @@ begin
   );
   perform pg_catalog.set_config('request.jwt.claim.sub',coalesce(p_user::text,''),true);
   execute 'set local role authenticated';
-  select public.admin_create_lane_booking_family_v1(p_payload) into v_result;
+  select public.admin_create_lane_booking_family_v2('c5c00000-0000-4000-8000-000000000001'::uuid,p_payload) into v_result;
   execute 'reset role';
   return v_result;
 exception
@@ -153,19 +153,19 @@ begin
        and procedure.proconfig=array['search_path=pg_catalog, public, pg_temp']::text[]
        and procedure.proowner=(select role.oid from pg_catalog.pg_roles role where role.rolname='postgres')
      from pg_catalog.pg_proc procedure
-     where procedure.oid='public.admin_create_lane_booking_family_v1(jsonb)'::pg_catalog.regprocedure)
+     where procedure.oid='public.admin_create_lane_booking_family_v2(uuid,jsonb)'::pg_catalog.regprocedure)
     and pg_catalog.has_function_privilege('authenticated',
-      'public.admin_create_lane_booking_family_v1(jsonb)','EXECUTE')
+      'public.admin_create_lane_booking_family_v2(uuid,jsonb)','EXECUTE')
     and not pg_catalog.has_function_privilege('anon',
-      'public.admin_create_lane_booking_family_v1(jsonb)','EXECUTE')
+      'public.admin_create_lane_booking_family_v2(uuid,jsonb)','EXECUTE')
     and not pg_catalog.has_function_privilege('service_role',
-      'public.admin_create_lane_booking_family_v1(jsonb)','EXECUTE')
+      'public.admin_create_lane_booking_family_v2(uuid,jsonb)','EXECUTE')
     and not exists(
       select 1 from pg_catalog.pg_proc procedure
       cross join lateral pg_catalog.aclexplode(coalesce(
         procedure.proacl,pg_catalog.acldefault('f',procedure.proowner)
       )) acl
-      where procedure.oid='public.admin_create_lane_booking_family_v1(jsonb)'::pg_catalog.regprocedure
+      where procedure.oid='public.admin_create_lane_booking_family_v2(uuid,jsonb)'::pg_catalog.regprocedure
         and acl.grantee=0 and acl.privilege_type='EXECUTE'
     ),
     'SECURITY DEFINER, owner, search_path and ACL are exact.');
@@ -337,7 +337,7 @@ begin
     exists(
       select 1
       from pg_catalog.jsonb_array_elements(
-        public.admin_get_lane_booking_configuration_v2()->'families'
+        public.admin_get_lane_booking_configuration_v3('c5c00000-0000-4000-8000-000000000001'::uuid)->'families'
       ) as family(value)
       where family.value->>'root_lane_id'=v_root::text
         and (family.value->>'configuration_version')::integer=1
@@ -345,7 +345,7 @@ begin
     and exists(
       select 1
       from pg_catalog.jsonb_array_elements(
-        public.admin_get_lane_booking_configuration_v2()->'families'
+        public.admin_get_lane_booking_configuration_v3('c5c00000-0000-4000-8000-000000000001'::uuid)->'families'
       ) as family(value)
       where family.value->>'root_lane_id'=v_hierarchy_root::text
         and pg_catalog.jsonb_array_length(family.value->'resources')=3
@@ -400,7 +400,7 @@ $assertions$;
 rollback;
 
 select case when
-  pg_catalog.to_regprocedure('public.admin_create_lane_booking_family_v1(jsonb)') is not null
+  pg_catalog.to_regprocedure('public.admin_create_lane_booking_family_v2(uuid,jsonb)') is not null
   and not exists(select 1 from public.shooting_lanes where name like '[TEST][6C-3J]%')
   and not exists(select 1 from auth.users where email like 'test-6c3j-%@example.invalid')
 then 'ok 22 - Rollback restored the current baseline contract'

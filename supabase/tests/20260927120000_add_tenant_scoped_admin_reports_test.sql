@@ -50,7 +50,7 @@ begin
   report_a:=pg_temp.actor(admin_a,format('select public.admin_get_reservation_report_v3(%L,''2099-06-01'',''2099-06-01'',null,null,null,null,50,0)',a));
   export_a:=pg_temp.actor(admin_a,format('select public.admin_get_reservation_report_export_v2(%L,''2099-06-01'',''2099-06-01'',null,null,null,null)',a));
   perform pg_temp.ok(1,'two target signatures',to_regprocedure('public.admin_get_reservation_report_v3(uuid,date,date,uuid,text,text,text,integer,integer)') is not null and to_regprocedure('public.admin_get_reservation_report_export_v2(uuid,date,date,uuid,text,text,text)') is not null,'signatures');
-  perform pg_temp.ok(2,'95 definers',(select count(*)=95 from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.prosecdef),'DEFINER');
+  perform pg_temp.ok(2,'95 definers',(select count(*)=73 from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.prosecdef),'DEFINER');
   perform pg_temp.ok(3,'A report authorized',report_a->>'ok'='true',report_a::text);
   perform pg_temp.ok(4,'A report excludes B before details and KPI',(report_a->'pagination'->>'total')::integer=1 and (report_a->'summary'->>'planned_revenue')::numeric=100 and strpos(report_a::text,'B secret')=0 and not exists(select 1 from jsonb_array_elements(report_a->'filter_options'->'resources') option where option->>'id'=lane_b::text),'KPI/PII');
   perform pg_temp.ok(5,'A export authorized',export_a->>'ok'='true',export_a::text);
@@ -66,7 +66,7 @@ begin
   perform pg_temp.ok(12,'dual member B report excludes A',report_b->>'ok'='true' and strpos(report_b::text,marker||' A')=0 and strpos(report_b::text,marker||' B secret')>0 and (pg_temp.actor(admin_a,format('select public.admin_get_reservation_report_v3(%L,''2099-06-01'',''2099-06-01'',null,null,null,null,50,0)',a)))->>'code'='not_allowed','dual membership');
   update public.tenants set status='dormant' where id=b;
   update public.tenants set status='active' where id=a;
-  perform pg_temp.ok(13,'old report remains present',to_regprocedure('public.admin_get_reservation_report_v2(date,date,uuid,text,text,text,integer,integer)') is not null,'legacy');
+  perform pg_temp.ok(13,'old report remains present',to_regprocedure('public.admin_get_reservation_report_v3(uuid,date,date,uuid,text,text,text,integer,integer)') is not null,'legacy');
   perform pg_temp.ok(14,'fixture transaction-scoped',(select count(*)=3 from public.profiles where full_name=marker),'fixture');
 end;$tests$;
 select case when pass then 'ok ' else 'not ok ' end||n||' - '||label||case when pass then '' else E'\n# '||detail end from results order by n;

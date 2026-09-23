@@ -193,7 +193,7 @@ begin
     'Żadna próba z caller-controlled actor_user_id nie może pozostawić rekordu.');
 
   perform pg_temp.set_client('authenticated',v_admin);
-  select public.admin_set_user_note_v1(v_target,'[TEST][SEC-007] controlled note') into v_first_result;
+  select public.admin_set_user_note_v2(v_tenant,v_target,'[TEST][SEC-007] controlled note') into v_first_result;
   execute 'reset role';
 
   select id into v_audit_id
@@ -218,7 +218,7 @@ begin
     'TRUNCATE admina i pracownika musi zwrócić 42501.');
 
   perform pg_temp.set_client('authenticated',v_admin);
-  select public.admin_set_user_note_v1(v_target,'[TEST][SEC-007] controlled note') into v_repeat_result;
+  select public.admin_set_user_note_v2(v_tenant,v_target,'[TEST][SEC-007] controlled note') into v_repeat_result;
   execute 'reset role';
 
   perform pg_temp.record_result(15,'Trusted flow writes exactly one idempotent audit',
@@ -271,8 +271,8 @@ begin
     and pg_catalog.strpos(pg_catalog.lower(pg_catalog.pg_get_functiondef(procedure.oid)),'insert into')>0;
 
   perform pg_temp.record_result(17,'All current audit writers are trusted database functions',
-    v_writer_count=25 and v_untrusted_writer_count=0,
-    'Oczekiwano 25 zaufanych writerów, w tym audited tenant self-onboarding: SECURITY DEFINER albo zamknięte nieklienckie cores/helpers, owner=postgres, auth.uid() i explicit search_path.');
+    v_writer_count=19 and v_untrusted_writer_count=0,
+    'Oczekiwano 19 zaufanych writerów po wycofaniu legacy compatibility: SECURITY DEFINER albo zamknięte nieklienckie cores/helpers, owner=postgres, auth.uid() i explicit search_path.');
 
   perform pg_temp.record_result(18,'All fixture remains transaction-scoped',
     (select pg_catalog.count(*)=5 from public.profiles where user_id in (v_admin,v_employee,v_instructor,v_user,v_target))

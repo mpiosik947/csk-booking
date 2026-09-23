@@ -179,7 +179,7 @@ incomplete_online_configuration as (
 ),
 reader_exposes_incomplete_configuration as (
   select count(*)::bigint as violations
-  from public.get_public_booking_configuration_v1() as configuration
+  from public.get_public_booking_configuration_v2('c5c00000-0000-4000-8000-000000000001'::uuid) as configuration
   left join public.lane_booking_rules as rule
     on rule.lane_id = configuration.lane_id
   where rule.lane_id is null

@@ -35,10 +35,10 @@ begin
   perform pg_temp.set_client(p_role,p_user_id);
   if p_operation='insert' then
     insert into public.event_registrations(
-      id,event_id,user_id,customer_name,customer_email,customer_phone,
+      tenant_id,id,event_id,user_id,customer_name,customer_email,customer_phone,
       registration_status,payment_status,created_at,promotion_token
     ) values(
-      pg_catalog.gen_random_uuid(),p_event_id,p_user_id,'[TEST] forged',
+      (select tenant_id from public.events where id=p_event_id),pg_catalog.gen_random_uuid(),p_event_id,p_user_id,'[TEST] forged',
       'sec018-forged@example.invalid','000','approved','paid_on_site',
       timestamptz '2000-01-01 00:00:00+00','forged-secret-token'
     );
@@ -133,18 +133,18 @@ begin
     (v_tenant,v_instructor,'instructor','active'),
     (v_tenant,v_user,'user','active');
 
-  insert into public.events(id,title,event_date,start_time,end_time,location,price,max_participants,is_active)
-  values(v_event,'[TEST][SEC-018] Event',current_date+100,time '10:00',time '11:00','[TEST]',0,10,true);
+  insert into public.events(tenant_id,id,title,event_date,start_time,end_time,location,price,max_participants,is_active)
+  values(v_tenant,v_event,'[TEST][SEC-018] Event',current_date+100,time '10:00',time '11:00','[TEST]',0,10,true);
 
   insert into public.event_registrations(
-    id,event_id,user_id,customer_name,customer_email,customer_phone,
+    tenant_id,id,event_id,user_id,customer_name,customer_email,customer_phone,
     registration_status,payment_status
   ) values
-    (v_payment_admin,v_event,null,'[TEST] User','sec018-user@example.invalid','000','registered','pay_on_site'),
-    (v_payment_employee,v_event,null,'[TEST] User','sec018-user@example.invalid','000','reserve','pending'),
-    (v_approve,v_event,null,'[TEST] User','sec018-user@example.invalid','000','registered','pay_on_site'),
-    (v_cancel,v_event,null,'[TEST] User','sec018-user@example.invalid','000','registered','pay_on_site'),
-    (v_without_event,null,null,'[TEST] Orphan','sec018-orphan@example.invalid','000','registered','pay_on_site');
+    (v_tenant,v_payment_admin,v_event,null,'[TEST] User','sec018-user@example.invalid','000','registered','pay_on_site'),
+    (v_tenant,v_payment_employee,v_event,null,'[TEST] User','sec018-user@example.invalid','000','reserve','pending'),
+    (v_tenant,v_approve,v_event,null,'[TEST] User','sec018-user@example.invalid','000','registered','pay_on_site'),
+    (v_tenant,v_cancel,v_event,null,'[TEST] User','sec018-user@example.invalid','000','registered','pay_on_site'),
+    (v_tenant,v_without_event,null,null,'[TEST] Orphan','sec018-orphan@example.invalid','000','registered','pay_on_site');
 
   perform pg_temp.record_result(1,'event_registrations RLS and owner contract',
     exists(select 1 from pg_catalog.pg_class c join pg_catalog.pg_roles r on r.oid=c.relowner

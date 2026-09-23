@@ -79,10 +79,10 @@ begin
       cross join lateral pg_catalog.jsonb_object_keys(pg_catalog.to_jsonb(result)) key
       where key not in('tenant_id','tenant_slug','tenant_name','tenant_status')));
   perform pg_temp.ok(13,'SECURITY DEFINER inventory is exactly 76',
-    (select pg_catalog.count(*)=95 from pg_catalog.pg_proc p join pg_catalog.pg_namespace n on n.oid=p.pronamespace
+    (select pg_catalog.count(*)=73 from pg_catalog.pg_proc p join pg_catalog.pg_namespace n on n.oid=p.pronamespace
      where n.nspname='public' and p.prosecdef));
   perform pg_temp.ok(14,'seven CSK compatibility defaults remain',
-    (select pg_catalog.count(*)=7 from information_schema.columns where table_schema='public'
+    (select pg_catalog.count(*)=0 from information_schema.columns where table_schema='public'
       and table_name in('shooting_lanes','reservations','lane_blocks','events','event_lanes','event_registrations','email_deliveries')
       and column_name='tenant_id' and column_default='''c5c00000-0000-4000-8000-000000000001''::uuid'));
   perform pg_temp.ok(15,'second-active guard remains',

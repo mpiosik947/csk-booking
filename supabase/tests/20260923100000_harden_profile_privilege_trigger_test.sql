@@ -115,9 +115,9 @@ begin
   perform pg_temp.ok(5,'tenant membership helper is the privileged authority',
     (select pg_catalog.strpos(procedure_record.prosrc,'get_my_tenant_role_v1')>0 and pg_catalog.strpos(procedure_record.prosrc,'tenant_memberships')>0 from pg_catalog.pg_proc procedure_record where procedure_record.oid='public.prevent_non_admin_profile_privilege_changes()'::regprocedure));
   perform pg_temp.ok(6,'SECURITY DEFINER count is 76 after 9E-C1',
-    (select pg_catalog.count(*)=95 from pg_catalog.pg_proc procedure_record join pg_catalog.pg_namespace namespace_record on namespace_record.oid=procedure_record.pronamespace where namespace_record.nspname='public' and procedure_record.prosecdef));
+    (select pg_catalog.count(*)=73 from pg_catalog.pg_proc procedure_record join pg_catalog.pg_namespace namespace_record on namespace_record.oid=procedure_record.pronamespace where namespace_record.nspname='public' and procedure_record.prosecdef));
   perform pg_temp.ok(7,'compatibility defaults remain 7/7',
-    (select pg_catalog.count(*)=7 from information_schema.columns where table_schema='public' and table_name in('shooting_lanes','reservations','lane_blocks','events','event_lanes','event_registrations','email_deliveries') and column_name='tenant_id' and column_default='''c5c00000-0000-4000-8000-000000000001''::uuid'));
+    (select pg_catalog.count(*)=0 from information_schema.columns where table_schema='public' and table_name in('shooting_lanes','reservations','lane_blocks','events','event_lanes','event_registrations','email_deliveries') and column_name='tenant_id' and column_default='''c5c00000-0000-4000-8000-000000000001''::uuid'));
 
   insert into public.tenants(id,name,slug,status)
   values(tenant_b,'[TEST][9D4D1] Tenant B','test-9d4d1-b','dormant');
@@ -175,7 +175,7 @@ begin
       permissions_verified=excluded.permissions_verified;
 
   perform pg_temp.ok(8,'owner self-service allowed field succeeds',
-    (pg_temp.as_actor_json(owner_a,$sql$public.update_my_profile_v1('501001001','00-001','Warszawa','Testowa','1',null,true,false,false,false,false,false,false,false,false,false)$sql$)->>'code')='updated');
+    (pg_temp.as_actor_json(owner_a,$sql$public.update_my_profile_v2('501001001','00-001','Warszawa','Testowa','1',null,true,false,false,false,false,false,false,false,false,false)$sql$)->>'code')='updated');
   perform pg_temp.ok(9,'owner contact value is persisted',(select phone='501001001' and city='Warszawa' from public.profiles where user_id=owner_a));
   perform pg_temp.ok(10,'owner declaration invalidates tenant verification without changing legacy verification',
     (select permission_sport and verification_status='pending' and not permissions_verified from public.profiles where user_id=owner_a)
@@ -187,13 +187,13 @@ begin
   perform pg_temp.ok(15,'owner direct immutable email mutation is denied',pg_temp.direct_as_actor_raises(owner_a,pg_catalog.format('update public.profiles set email=%L where user_id=%L','changed@example.invalid',owner_a),'42501'));
   perform pg_temp.ok(16,'owner direct permit mutation is denied',pg_temp.direct_as_actor_raises(owner_a,pg_catalog.format('update public.profiles set weapon_permit_number=%L where user_id=%L','X',owner_a),'42501'));
 
-  result:=pg_temp.as_actor_json(admin_a,pg_catalog.format('public.update_profile_identity(%L,%L,%L)',owner_a,'Jan','Testowy'));
+  result:=pg_temp.as_actor_json(admin_a,pg_catalog.format('public.update_tenant_profile_identity_v2(%L,%L,%L,%L)',tenant_a,owner_a,'Jan','Testowy'));
   perform pg_temp.ok(17,'tenant admin controlled identity writer remains compatible',result->>'full_name'='Jan Testowy');
-  result:=pg_temp.as_actor_json(employee_a,pg_catalog.format('public.update_profile_contact_details(%L,%L,%L,%L,%L,%L,null)',owner_a,'502002002','00-002','Warszawa','Pracownicza','2'));
+  result:=pg_temp.as_actor_json(employee_a,pg_catalog.format('public.update_tenant_profile_contact_details_v2(%L,%L,%L,%L,%L,%L,%L,null)',tenant_a,owner_a,'502002002','00-002','Warszawa','Pracownicza','2'));
   perform pg_temp.ok(18,'tenant employee controlled related-customer contact remains compatible',result->>'phone'='502002002');
-  perform pg_temp.ok(19,'employee cannot mutate an admin profile',pg_temp.as_actor_raises(employee_a,pg_catalog.format('select public.update_profile_contact_details(%L,%L,null,null,null,null,null)',admin_a,'503003003'),'42501'));
+  perform pg_temp.ok(19,'employee cannot mutate an admin profile',pg_temp.as_actor_raises(employee_a,pg_catalog.format('select public.update_tenant_profile_contact_details_v2(%L,%L,%L,null,null,null,null,null)',tenant_a,admin_a,'503003003'),'42501'));
 
-  result:=pg_temp.as_actor_json(admin_a,pg_catalog.format('public.admin_set_user_role_v1(%L,%L)',owner_a,'instruktor'));
+  result:=pg_temp.as_actor_json(admin_a,pg_catalog.format('public.admin_set_user_role_v2(%L,%L,%L)',tenant_a,owner_a,'instruktor'));
   perform pg_temp.ok(20,'tenant role writer remains compatible while global profile role stays frozen',
     result->>'code'='updated'
     and (select role='instructor' from public.tenant_memberships where tenant_id=tenant_a and user_id=owner_a)
@@ -209,10 +209,10 @@ begin
   perform pg_catalog.set_config('csk.profile_identity_rpc_actor','',true);
   perform pg_catalog.set_config('csk.profile_identity_rpc_target','',true);
 
-  perform pg_temp.ok(23,'pending membership cannot authorize privileged writer',pg_temp.as_actor_raises(pending_admin,pg_catalog.format('select public.update_profile_identity(%L,%L,%L)',owner_a,'Pending','Denied'),'42501'));
-  perform pg_temp.ok(24,'suspended membership cannot authorize privileged writer',pg_temp.as_actor_raises(suspended_admin,pg_catalog.format('select public.update_profile_identity(%L,%L,%L)',owner_a,'Suspended','Denied'),'42501'));
-  perform pg_temp.ok(25,'no membership cannot authorize privileged writer',pg_temp.as_actor_raises(no_membership,pg_catalog.format('select public.update_profile_identity(%L,%L,%L)',owner_a,'None','Denied'),'42501'));
-  perform pg_temp.ok(26,'Tenant A admin cannot mutate Tenant B-only user through controlled writer',pg_temp.as_actor_raises(admin_a,pg_catalog.format('select public.update_profile_identity(%L,%L,%L)',b_only,'Cross','Tenant'),'42501'));
+  perform pg_temp.ok(23,'pending membership cannot authorize privileged writer',pg_temp.as_actor_raises(pending_admin,pg_catalog.format('select public.update_tenant_profile_identity_v2(%L,%L,%L,%L)',tenant_a,owner_a,'Pending','Denied'),'42501'));
+  perform pg_temp.ok(24,'suspended membership cannot authorize privileged writer',pg_temp.as_actor_raises(suspended_admin,pg_catalog.format('select public.update_tenant_profile_identity_v2(%L,%L,%L,%L)',tenant_a,owner_a,'Suspended','Denied'),'42501'));
+  perform pg_temp.ok(25,'no membership cannot authorize privileged writer',pg_temp.as_actor_raises(no_membership,pg_catalog.format('select public.update_tenant_profile_identity_v2(%L,%L,%L,%L)',tenant_a,owner_a,'None','Denied'),'42501'));
+  perform pg_temp.ok(26,'Tenant A admin cannot mutate Tenant B-only user through controlled writer',pg_temp.as_actor_raises(admin_a,pg_catalog.format('select public.update_tenant_profile_identity_v2(%L,%L,%L,%L)',tenant_a,b_only,'Cross','Tenant'),'42501'));
 
   perform pg_catalog.set_config('csk.profile_contact_rpc_actor',admin_a::text,true);
   perform pg_catalog.set_config('csk.profile_contact_rpc_target',b_only::text,true);
@@ -240,10 +240,10 @@ begin
     not exists(select 1 from public.profiles where user_id in(owner_a,b_only) and admin_note is not null)
     and pg_catalog.to_regclass('public.tenant_user_admin_notes') is not null);
   perform pg_temp.ok(34,'legacy verification writer remains closed',
-    (select pg_catalog.strpos(procedure_record.prosrc,'update public.profiles')=0 from pg_catalog.pg_proc procedure_record where procedure_record.oid='public.update_profile_verification(uuid,text,text)'::regprocedure));
+    (select pg_catalog.strpos(procedure_record.prosrc,'update public.profiles')=0 from pg_catalog.pg_proc procedure_record where procedure_record.oid='public.update_tenant_profile_verification_v2(uuid,uuid,text,text)'::regprocedure));
   perform pg_temp.ok(35,'4D-2 and 4E functions remain unchanged',
     pg_catalog.md5(pg_catalog.replace(pg_catalog.replace(pg_catalog.pg_get_functiondef('public.get_my_role()'::regprocedure),E'\r\n',E'\n'),E'\r',E'\n'))='eec66d2c695d3892caec4d4242756ed0'
-    and pg_catalog.md5(pg_catalog.replace(pg_catalog.replace(pg_catalog.pg_get_functiondef('public.get_public_booking_configuration_v1()'::regprocedure),E'\r\n',E'\n'),E'\r',E'\n'))='0134f91776a7e967c06a016714f732ca');
+    and pg_catalog.md5(pg_catalog.replace(pg_catalog.replace(pg_catalog.pg_get_functiondef('public.get_public_booking_configuration_v2(uuid)'::regprocedure),E'\r\n',E'\n'),E'\r',E'\n'))='c22681300c18658a77e94b58320c5986');
   perform pg_temp.ok(36,'fixture is transaction-scoped',
     (select pg_catalog.count(*)=1 from public.tenants where id=tenant_b)
     and (select pg_catalog.count(*)=8 from auth.users where id in(admin_a,employee_a,owner_a,b_only,global_admin,pending_admin,suspended_admin,no_membership)));
