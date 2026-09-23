@@ -47,7 +47,7 @@ test("two active local tenants stay isolated across selector, public, and staff 
 
   try {
     localSql(`
-      drop index public.tenants_single_active_runtime_guard;
+      drop index if exists public.tenants_single_active_runtime_guard;
       insert into public.tenants(id,name,slug,status)
       values ('${tenantB}','[TEST][SAAS-9G] Tenant B','${slugB}','active');
       insert into public.tenant_memberships(tenant_id,user_id,role,status) values
@@ -98,8 +98,6 @@ test("two active local tenants stay isolated across selector, public, and staff 
         delete from public.tenant_memberships where tenant_id='${tenantB}'
           or user_id in ('${shared.id}','${adminA.id}','${adminB.id}');
         delete from public.tenants where id='${tenantB}';
-        create unique index if not exists tenants_single_active_runtime_guard
-          on public.tenants ((true)) where status='active';
       `);
     } finally {
       for (const account of accounts) {
@@ -111,9 +109,10 @@ test("two active local tenants stay isolated across selector, public, and staff 
       select
         (select count(*) from public.tenants where id='${tenantB}') as tenants,
         (select count(*) from public.tenant_memberships where tenant_id='${tenantB}') as memberships,
-        (select count(*) from auth.users where id in ('${shared.id}','${adminA.id}','${adminB.id}')) as users;
+        (select count(*) from auth.users where id in ('${shared.id}','${adminA.id}','${adminB.id}')) as users,
+        (select count(*) from pg_catalog.pg_indexes where schemaname='public' and indexname='tenants_single_active_runtime_guard') as guards;
     `);
-    if (!/\b0\s*\|\s*0\s*\|\s*0\b/u.test(cleanup)) {
+    if (!/\b0\s*\|\s*0\s*\|\s*0\s*\|\s*0\b/u.test(cleanup)) {
       throw new Error(`SAAS-9G fixture cleanup failed: ${cleanup}`);
     }
   }

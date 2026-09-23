@@ -138,9 +138,9 @@ begin
   perform pg_temp.ok(29,'zero active tenants fail reader closed',pg_temp.reader_denied(admin_a,'select public.admin_get_lane_booking_configuration_v3(''c5c00000-0000-4000-8000-000000000001''::uuid)'),'Zero-active reader did not fail closed.');
   update public.tenants set status='active' where id=csk;
 
-  -- The production guard prevents this state. Dropping it only inside this
-  -- rollback-only local transaction proves the bridge itself also fails closed.
-  drop index public.tenants_single_active_runtime_guard;
+  -- Two active tenants are supported after SAAS-9H; the explicit writer must
+  -- remain bound to its selected tenant.
+  drop index if exists public.tenants_single_active_runtime_guard;
   update public.tenants set status='active' where id=tenant_b;
   perform pg_temp.ok(30,'explicit tenant creator is not redirected by unrelated active tenant',(pg_temp.as_actor_json(admin_a,format('select public.admin_create_lane_booking_family_v2(''c5c00000-0000-4000-8000-000000000001''::uuid,%L::jsonb)',pg_temp.family_payload(marker||' Two'))))->>'code'='created','Explicit tenant creator was redirected.');
   perform pg_temp.ok(31,'explicit tenant reader is stable with unrelated active tenant',not pg_temp.reader_denied(admin_a,'select public.admin_get_lane_booking_configuration_v3(''c5c00000-0000-4000-8000-000000000001''::uuid)'),'Explicit tenant reader was redirected.');

@@ -102,26 +102,25 @@ begin
     ),
     'Name must be trimmed and non-empty.');
 
-  perform pg_temp.record_result(9, 'Second active tenant insert is technically blocked',
-    pg_temp.statement_raises(
-      'insert into public.tenants(name,slug,status) values (''Second active'',''second-active'',''active'')',
-      '23505'
-    ),
-    'Partial unique guard must prevent another active runtime tenant.');
-
   insert into public.tenants(id, name, slug, status)
-  values (v_second_tenant, 'Dormant test tenant', 'dormant-' || pg_catalog.left(v_run, 16), 'dormant');
+  values (v_second_tenant, 'Dormant test tenant', 'dormant-' || pg_catalog.left(v_run, 16), 'active');
+
+  perform pg_temp.record_result(9, 'Second active tenant insert is supported after the readiness cutover',
+    (select pg_catalog.count(*) = 2 from public.tenants where status = 'active')
+    and exists(select 1 from public.tenants where id = v_second_tenant and status = 'active'),
+    'A second active tenant could not be represented after removal of the rollout guard.');
+
+  update public.tenants set status = 'dormant' where id = v_second_tenant;
 
   perform pg_temp.record_result(10, 'Dormant tenant preparation remains possible',
     exists (select 1 from public.tenants where id = v_second_tenant and status = 'dormant'),
     'Foundation may represent a non-running tenant for later controlled work.');
 
-  perform pg_temp.record_result(11, 'Second tenant activation is technically blocked',
-    pg_temp.statement_raises(
-      pg_catalog.format('update public.tenants set status=''active'' where id=%L::uuid', v_second_tenant),
-      '23505'
-    ),
-    'The guard must apply to UPDATE as well as INSERT.');
+  update public.tenants set status = 'active' where id = v_second_tenant;
+  perform pg_temp.record_result(11, 'Second tenant activation is supported after the readiness cutover',
+    (select pg_catalog.count(*) = 2 from public.tenants where status = 'active')
+    and exists(select 1 from public.tenants where id = v_second_tenant and status = 'active'),
+    'A prepared tenant could not be activated alongside CSK.');
 
   insert into auth.users (
     id, instance_id, aud, role, email, encrypted_password, email_confirmed_at,

@@ -85,8 +85,8 @@ begin
     (select pg_catalog.count(*)=0 from information_schema.columns where table_schema='public'
       and table_name in('shooting_lanes','reservations','lane_blocks','events','event_lanes','event_registrations','email_deliveries')
       and column_name='tenant_id' and column_default='''c5c00000-0000-4000-8000-000000000001''::uuid'));
-  perform pg_temp.ok(15,'second-active guard remains',
-    exists(select 1 from pg_catalog.pg_indexes where schemaname='public' and indexname='tenants_single_active_runtime_guard'));
+  perform pg_temp.ok(15,'second-active rollout guard is retired',
+    not exists(select 1 from pg_catalog.pg_indexes where schemaname='public' and indexname='tenants_single_active_runtime_guard'));
 
   insert into public.tenants(id,name,slug,status) values(b,'[TEST][9E-A] B','test-9e-a-b','dormant');
   insert into public.shooting_lanes(id,name,type,price_per_hour,is_active,max_shooters,booking_step_minutes,display_order,currency_code,resource_kind,parent_lane_id,whole_lane_bookable,positions_bookable,tenant_id)

@@ -33,6 +33,7 @@ declare
   v_root uuid := pg_catalog.gen_random_uuid();
   v_event uuid := pg_catalog.gen_random_uuid();
   v_audit uuid := pg_catalog.gen_random_uuid();
+  v_second_active uuid := pg_catalog.gen_random_uuid();
 begin
   perform pg_temp.ok(1, 'canonical CSK tenant remains sole active tenant',
     (select pg_catalog.count(*) = 1 from public.tenants)
@@ -164,9 +165,13 @@ begin
     ), '23503'),
     'Unknown tenant reference was accepted.');
 
-  perform pg_temp.ok(25, 'second active tenant remains denied',
-    pg_temp.statement_raises('insert into public.tenants(name,slug,status) values (''[TEST]'',''saas9b2-second-active'',''active'')','23505'),
-    'Single-active guard regressed.');
+  insert into public.tenants(id,name,slug,status)
+  values(v_second_active,'[TEST]','saas9b2-'||pg_catalog.replace(v_second_active::text,'-',''),'active');
+  perform pg_temp.ok(25, 'second active tenant is supported after the readiness cutover',
+    exists(select 1 from public.tenants where id=v_second_active and status='active')
+    and (select pg_catalog.count(*)=2 from public.tenants where status='active'),
+    'Second active tenant readiness regressed.');
+  delete from public.tenants where id=v_second_active;
 
   perform pg_temp.ok(26, 'profiles role remains the legacy source',
     exists(select 1 from information_schema.columns where table_schema='public' and table_name='profiles' and column_name='role')

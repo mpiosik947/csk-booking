@@ -38,9 +38,14 @@ exception when insufficient_privilege then return true; end;$f$;
 create function pg_temp.table_denied(p_role text,p_sql text) returns boolean language plpgsql as $f$
 begin execute pg_catalog.format('set local role %I',p_role); execute p_sql; reset role; return false;
 exception when insufficient_privilege then reset role; return true; end;$f$;
-create function pg_temp.second_active_denied(p_tenant uuid) returns boolean language plpgsql as $f$
-begin update public.tenants set status='active' where id=p_tenant; return false;
-exception when unique_violation then return true; end;$f$;
+create function pg_temp.second_active_supported(p_tenant uuid) returns boolean language plpgsql as $f$
+declare supported boolean;
+begin
+  update public.tenants set status='active' where id=p_tenant;
+  select pg_catalog.count(*)=2 into supported from public.tenants where status='active';
+  update public.tenants set status='dormant' where id=p_tenant;
+  return supported;
+end;$f$;
 
 create temporary table untouched_profile_rpc_snapshot on commit drop as
 select procedure.oid,procedure.prosrc,procedure.prosecdef,procedure.proowner,
@@ -129,7 +134,7 @@ begin
   perform pg_temp.ok(24,'inactive tenant fails closed without an exact-single bridge',pg_catalog.to_regprocedure('public.active_single_tenant_id_v1()') is null and pg_temp.note_call(admin_a,tenant_a,shared_user,'ZERO')->>'code'='not_allowed' and pg_temp.list_denied(admin_a,tenant_a),'inactive tenant allowed');
   update public.tenants set status='active' where id=tenant_a;
   perform pg_temp.ok(25,'explicit tenant-scoped contracts remain authoritative',pg_catalog.to_regprocedure('public.admin_list_users_v2(uuid,integer,integer,text,text,text,text)') is not null and pg_catalog.to_regprocedure('public.admin_set_user_note_v2(uuid,uuid,text)') is not null,'tenant-scoped contract missing');
-  perform pg_temp.ok(26,'second active tenant blocked',pg_temp.second_active_denied(tenant_b),'second active tenant accepted');
+  perform pg_temp.ok(26,'second active tenant supported after readiness cutover',pg_temp.second_active_supported(tenant_b),'second active tenant readiness regressed');
 
   perform pg_temp.ok(27,'RPC metadata and ACL minimal',not exists(select 1 from pg_catalog.pg_proc procedure join pg_catalog.pg_roles owner on owner.oid=procedure.proowner where procedure.oid in('public.admin_list_users_v2(uuid,integer,integer,text,text,text,text)'::regprocedure,'public.admin_set_user_note_v2(uuid,uuid,text)'::regprocedure) and not(procedure.prosecdef and owner.rolname='postgres' and procedure.proconfig=array['search_path=pg_catalog, public, pg_temp']::text[] and pg_catalog.has_function_privilege('authenticated',procedure.oid,'EXECUTE') and not pg_catalog.has_function_privilege('anon',procedure.oid,'EXECUTE') and not pg_catalog.has_function_privilege('service_role',procedure.oid,'EXECUTE'))),'RPC metadata/ACL differs');
   perform pg_temp.ok(28,'list DTO signature unchanged',pg_catalog.pg_get_function_result('public.admin_list_users_v2(uuid,integer,integer,text,text,text,text)'::regprocedure) like 'TABLE(user_id uuid, email text, first_name text, last_name text, full_name text, phone text, role text, verification_status text, admin_note text,%','DTO changed');

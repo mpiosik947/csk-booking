@@ -60,12 +60,10 @@ begin
   update public.tenants set status='dormant' where id=tenant_b;
   update public.tenants set status='active' where id=tenant_a;
 
-  perform pg_temp.ok(21,'normal runtime blocks a second active tenant',exists(select 1 from pg_indexes where schemaname='public' and indexname='tenants_single_active_runtime_guard' and indexdef like 'CREATE UNIQUE INDEX%'));
-  execute 'drop index public.tenants_single_active_runtime_guard';
+  perform pg_temp.ok(21,'rollout-only second-active guard is retired',not exists(select 1 from pg_indexes where schemaname='public' and indexname='tenants_single_active_runtime_guard'));
   update public.tenants set status='active' where id=tenant_b;
   perform pg_temp.ok(22,'explicit selectors remain isolated without exact-single authority',(select count(*) from public.get_public_booking_configuration_v2(tenant_a))=a_count and (select count(*) from public.get_public_booking_configuration_v2(tenant_b))=1 and not exists(select 1 from public.get_public_booking_configuration_v2(tenant_a) where lane_id=lane_b));
   update public.tenants set status='dormant' where id=tenant_b;
-  execute 'create unique index tenants_single_active_runtime_guard on public.tenants ((true)) where status=''active''';
 
   perform pg_temp.ok(23,'mixed parent hierarchy is blocked by validated tenant FK',exists(select 1 from pg_constraint where conname='shooting_lanes_parent_lane_id_fkey' and convalidated and pg_get_constraintdef(oid) like 'FOREIGN KEY (tenant_id, parent_lane_id)%'));
   perform pg_temp.ok(24,'configuration records inherit tenant through validated lane FKs',(select count(*)=3 from pg_constraint where conname in('lane_booking_rules_lane_id_fkey','lane_booking_durations_lane_id_fkey','lane_pricing_rules_lane_id_fkey') and convalidated));

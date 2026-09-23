@@ -214,14 +214,13 @@ begin
   perform pg_temp.ok(30,'zero active tenants rejects public availability selector',pg_temp.fails_closed('anon',pg_catalog.format('select * from public.get_public_event_availability_v2(%L)',csk)),'Zero-active availability did not fail closed.');
 
   update public.tenants set status='active' where id=csk;
-  drop index public.tenants_single_active_runtime_guard;
+  drop index if exists public.tenants_single_active_runtime_guard;
   update public.tenants set status='active' where id=tenant_b;
   result:=pg_temp.as_json('anon',null,pg_catalog.format('select public.get_public_event_list_v3(%L,%L,''upcoming'',1,50)',csk,marker));
   perform pg_temp.ok(31,'two active tenants preserve explicit list isolation',result->>'code'='ok' and (result#>>'{pagination,total}')::integer>0 and not result->'items' @> pg_catalog.jsonb_build_array(pg_catalog.jsonb_build_object('event_id',event_b)),'Explicit Tenant A list leaked Tenant B.');
   result:=pg_temp.as_json('anon',null,pg_catalog.format('select coalesce(jsonb_agg(to_jsonb(row_record)),''[]''::jsonb) from public.get_public_event_availability_v2(%L) row_record',csk));
   perform pg_temp.ok(32,'two active tenants preserve explicit availability isolation',not result @> pg_catalog.jsonb_build_array(pg_catalog.jsonb_build_object('event_id',event_b)) and result @> pg_catalog.jsonb_build_array(pg_catalog.jsonb_build_object('event_id',event_a)),'Explicit Tenant A availability leaked Tenant B.');
   update public.tenants set status='dormant' where id=tenant_b;
-  create unique index tenants_single_active_runtime_guard on public.tenants ((true)) where status='active';
 
   perform pg_temp.ok(33,'Event A plus Registration B is rejected by tenant FK',pg_temp.raises_fk(pg_catalog.format('insert into public.event_registrations(id,tenant_id,event_id,customer_name,customer_email,customer_phone,registration_status,payment_status) values(%L,%L,%L,%L,%L,%L,%L,%L)',pg_catalog.gen_random_uuid(),tenant_b,event_a,marker||' Invalid','invalid-'||run_id||'@example.invalid','000','registered','pay_on_site')),'Cross-tenant registration was accepted.');
   perform pg_temp.ok(34,'Tenant B registrations do not affect Event A availability',(select item @> '{"registered_count":2,"reserve_count":1,"available_spots":8}'::jsonb from pg_catalog.jsonb_array_elements(pg_temp.as_json('anon',null,pg_catalog.format('select coalesce(jsonb_agg(to_jsonb(row_record)),''[]''::jsonb) from public.get_public_event_availability_v2(%L) row_record',csk))) item where item->>'event_id'=event_a::text),'Tenant B registration changed Event A count.');

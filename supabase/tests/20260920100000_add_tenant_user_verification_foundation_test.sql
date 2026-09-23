@@ -110,10 +110,10 @@ begin
   v_failed:=pg_catalog.to_regprocedure('public._backfill_csk_tenant_user_verifications_v1()') is null;
   perform pg_temp.ok(23,'retired implicit backfill remains absent with zero active tenant',v_failed);
   update public.tenants set status='active' where id=v_csk;
-  v_failed:=false;
-  begin update public.tenants set status='active' where id=v_tenant_b; exception when unique_violation then v_failed:=true; end;
-  perform pg_temp.ok(24,'more than one active tenant is structurally denied',v_failed);
-  perform pg_temp.ok(25,'exactly one active CSK tenant is restored',(select pg_catalog.count(*)=1 from public.tenants where status='active') and 'c5c00000-0000-4000-8000-000000000001'::uuid=v_csk);
+  update public.tenants set status='active' where id=v_tenant_b;
+  perform pg_temp.ok(24,'more than one active tenant is structurally supported',(select pg_catalog.count(*)=2 from public.tenants where status='active') and exists(select 1 from public.tenants where id=v_tenant_b and status='active'));
+  update public.tenants set status='dormant' where id=v_tenant_b;
+  perform pg_temp.ok(25,'single active CSK baseline can be restored',(select pg_catalog.count(*)=1 from public.tenants where status='active') and exists(select 1 from public.tenants where id=v_csk and status='active'));
 
   perform pg_temp.ok(26,'update_profile_verification matches approved 4B-2C closure',
     pg_catalog.md5(pg_catalog.replace(pg_catalog.replace(pg_catalog.pg_get_functiondef('public.update_tenant_profile_verification_v2(uuid,uuid,text,text)'::regprocedure),E'\r\n',E'\n'),E'\r',E'\n'))='30f1028aa801afc1abd0df080a4fd17f');

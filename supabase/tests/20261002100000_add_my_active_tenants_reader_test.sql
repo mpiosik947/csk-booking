@@ -43,7 +43,7 @@ begin
     (user_ab,'saas9f-ab@example.invalid'),
     (user_b,'saas9f-b@example.invalid');
 
-  drop index public.tenants_single_active_runtime_guard;
+  drop index if exists public.tenants_single_active_runtime_guard;
   insert into public.tenants(id,name,slug,status) values
     (tenant_a,'[TEST][SAAS-9F] Tenant A','saas9f-a','active'),
     (tenant_b,'[TEST][SAAS-9F] Tenant B','saas9f-b','active');

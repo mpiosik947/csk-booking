@@ -270,9 +270,9 @@ begin
   perform pg_temp.ok(59,'temporary CSK defaults remain unchanged',
     (select pg_catalog.count(*)=0 from information_schema.columns where table_schema='public' and table_name in ('shooting_lanes','reservations','lane_blocks') and column_name='tenant_id' and column_default is not null),
     '9D-5 compatibility default retirement regressed.');
-  perform pg_temp.ok(60,'second-active-tenant guard remains present',
-    exists(select 1 from pg_catalog.pg_indexes where schemaname='public' and tablename='tenants' and indexname='tenants_single_active_runtime_guard'),
-    'Second-active-tenant guard is missing.');
+  perform pg_temp.ok(60,'rollout-only second-active-tenant guard is retired',
+    not exists(select 1 from pg_catalog.pg_indexes where schemaname='public' and tablename='tenants' and indexname='tenants_single_active_runtime_guard'),
+    'Second-active-tenant guard remains.');
 end;
 $tests$;
 

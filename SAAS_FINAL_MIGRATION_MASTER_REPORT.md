@@ -219,6 +219,77 @@ test-retirement/cutover strategy is required before continuing implementation.
 - second tenant: **NO-GO**
 - SEC-004: **OPEN**
 
+## SAAS-9F / 9G / 9H FINAL CUTOVER
+
+### SAAS-9F
+
+The final module audit found and closed a minimal operational scope: a
+membership-backed global tenant selector, slug-preserving navigation, and
+tenant-required owner cancellation paths. Production migration
+`20261002100000_add_my_active_tenants_reader.sql` and application commit
+`05cde069aaedac465a98b6d0f57e17e12296d2ad` passed production verification.
+Final checkpoint `ace379f0bb79a5027566e95d26493e605826381b` is on `origin/main`.
+
+SAAS-9F: **CLOSED / PROD PASS**
+
+### SAAS-9G
+
+Two active tenants were exercised locally across the selector, public booking
+and events, owner contracts, staff/admin routes, reporting, user/PII flows,
+verification, notes, check-in, email/promotion and concurrency matrices.
+Cross-tenant effects, PII leaks and deadlocks were all zero. Final checkpoint
+`7662c0032168aed855e7dd3f55b2483e14b98e34` is on `origin/main`.
+
+SAAS-9G: **CLOSED / LOCAL PASS**
+
+### SAAS-9H local final audit
+
+The final audit found no remaining operational bridge, compatibility default,
+implicit CSK authority, global role authority, caller-controlled tenant
+authority or cross-tenant PII path. The only technical readiness blocker was
+the rollout-only `tenants_single_active_runtime_guard`. Forward migration
+`20261003100000_remove_single_active_tenant_guard.sql` removes only that guard
+under fail-closed catalog/data preconditions and does not activate a second
+production tenant.
+
+- focused 9H: **10/10 PASS**
+- full DB: **1618/1618 PASS**
+- Node: **789/789 PASS**
+- Playwright: **39/39 PASS**
+- SECURITY DEFINER: **74**
+- bridge definitions: **0**
+- compatibility defaults: **0**
+- local active tenants after cleanup: **1**
+- local single-active guard: **absent**
+- new CRITICAL/HIGH: **0 / 0**
+
+Production preflight confirmed LOCAL=REMOTE through `20261002100000`, exactly
+one pending migration and an exact-one dry-run. Migration
+`20261003100000_remove_single_active_tenant_guard.sql` (deployment-input
+SHA-256 `BCCB00461D8379E15862F150013ED1947EBE6BCEA1B30C92F9D08B1B6D27F0C2`;
+canonical checkpoint SHA-256 after terminal-blank normalization
+`D145E3F19920DF07E9487EE45E251D8EC9CFDAFC854B51BCAF0AA2376A2911D9`)
+was deployed successfully. Post-deploy history is LOCAL=REMOTE through
+`20261003100000`; the final dry-run reports `Remote database is up to date`.
+The migration changed no business row, function, ACL, RLS policy or application
+code, and its postcondition retained exactly one active production tenant and
+SECURITY DEFINER count 74.
+
+Authoritative Vercel smoke returned 200 for public/owner entry routes and
+controlled 307 for unauthenticated admin routes, with no 5xx.
+
+SAAS-9H: **CLOSED / PROD PASS**
+
+SEC-004: **CLOSED**
+
+SECOND TENANT READINESS: **READY**
+
+TECHNICAL SAAS READINESS: **YES**
+
+SECOND PRODUCTION TENANT: **NOT CREATED / NOT ACTIVATED**
+
+LEGAL/GDPR PUBLIC-LAUNCH GATE: **INCOMPLETE**
+
 ## SAAS-9D-5T SEMANTIC TEST CUTOVER — FINAL LOCAL EVIDENCE
 
 The historical suite has been moved to the explicit tenant architecture without

@@ -128,12 +128,11 @@ begin
   result:=pg_temp.as_actor_json('authenticated',admin_a,format('select public.admin_create_event_v3(%L,%L,%L,date ''2099-11-07'',time ''10:00'',time ''11:00'',%L,100,10,array[]::uuid[])',csk,marker||' Zero active','A','Test'));
   perform pg_temp.ok(27,'explicit inactive tenant fails closed',result->>'code'='not_allowed','inactive tenant accepted');
   update public.tenants set status='active' where id=csk;
-  drop index public.tenants_single_active_runtime_guard;
+  drop index if exists public.tenants_single_active_runtime_guard;
   update public.tenants set status='active' where id=tenant_b;
   result:=pg_temp.as_actor_json('authenticated',admin_a,format('select public.admin_create_event_v3(%L,%L,%L,date ''2099-11-08'',time ''10:00'',time ''11:00'',%L,100,10,array[]::uuid[])',csk,marker||' Two active','A','Test'));
   perform pg_temp.ok(28,'explicit tenant writer remains bound with unrelated active tenant',result->>'code'='created','explicit tenant writer failed or was redirected');
   update public.tenants set status='dormant' where id=tenant_b;
-  create unique index tenants_single_active_runtime_guard on public.tenants ((true)) where status='active';
 
   perform pg_temp.ok(29,'public reader fingerprints match approved 2B-2 wrappers',md5(replace(replace(pg_get_functiondef('public.get_public_event_availability_v2(uuid)'::regprocedure),E'\r\n',E'\n'),E'\r',E'\n'))='783e1dc37ea222888be7ecb54fb6fa04' and md5(replace(replace(pg_get_functiondef('public.get_public_event_list_v3(uuid,text,text,integer,integer)'::regprocedure),E'\r\n',E'\n'),E'\r',E'\n'))='5c455312be9f3b6a2e9bd26fc15ded0a','2B-2 wrapper fingerprint changed');
   result:=pg_temp.as_actor_json('anon',null,format('select public.get_public_event_list_v3(%L,%L,''upcoming'',1,50)',csk,marker));

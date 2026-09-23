@@ -322,9 +322,9 @@ begin
   perform pg_temp.ok(63,'global admin without active membership is denied by SAAS-9D-2B-1',
     v_rpc->>'code'='not_allowed',
     'Global profile role still bypasses tenant membership.');
-  perform pg_temp.ok(64,'temporary defaults and second-tenant guard remain unchanged',
+  perform pg_temp.ok(64,'temporary defaults and rollout-only second-tenant guard are retired',
     (select pg_catalog.count(*)=0 from information_schema.columns where table_schema='public' and table_name in('events','event_lanes','event_registrations') and column_name='tenant_id' and column_default is not null)
-    and pg_catalog.to_regclass('public.tenants_single_active_runtime_guard') is not null,
+    and pg_catalog.to_regclass('public.tenants_single_active_runtime_guard') is null,
     'Compatibility defaults or active-tenant guard changed.');
 end;
 $tests$;
