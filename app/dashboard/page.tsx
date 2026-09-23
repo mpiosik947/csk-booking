@@ -20,6 +20,22 @@ type ProfileData = {
   house_number: string | null;
 };
 
+type TenantAccess = {
+  tenant_id: string;
+  tenant_slug: string;
+  tenant_name: string;
+  tenant_role: "admin" | "employee" | "instructor" | "user";
+};
+
+function isTenantAccess(value: unknown): value is TenantAccess {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const item = value as Partial<TenantAccess>;
+  return typeof item.tenant_id === "string" &&
+    typeof item.tenant_slug === "string" && /^[a-z0-9-]+$/.test(item.tenant_slug) &&
+    typeof item.tenant_name === "string" &&
+    ["admin", "employee", "instructor", "user"].includes(item.tenant_role ?? "");
+}
+
 function hasValue(value: string | null | undefined) {
   return Boolean(value && value.trim().length > 0);
 }
@@ -32,6 +48,8 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [emailConfirmed, setEmailConfirmed] = useState(false);
+  const [tenants, setTenants] = useState<TenantAccess[]>([]);
+  const [tenantLoadFailed, setTenantLoadFailed] = useState(false);
 
   useEffect(() => {
     async function loadUser() {
@@ -88,6 +106,18 @@ export default function DashboardPage() {
             hasValue(profileData.street) &&
             hasValue(profileData.house_number)
         );
+      }
+
+
+      const { data: tenantRows, error: tenantError } = await supabase.rpc(
+        "get_my_active_tenants_v1"
+      );
+      if (tenantError || !Array.isArray(tenantRows) || !tenantRows.every(isTenantAccess)) {
+        setTenantLoadFailed(true);
+        setTenants([]);
+      } else {
+        setTenantLoadFailed(false);
+        setTenants(tenantRows);
       }
 
       setLoading(false);
@@ -222,54 +252,40 @@ export default function DashboardPage() {
           </div>
         )}
 
-        <section aria-labelledby="main-actions-heading" className="mt-8">
+        <section aria-labelledby="locations-heading" className="mt-8">
           <h2
-            id="main-actions-heading"
+            id="locations-heading"
             className="text-xl font-semibold text-[#f2efe4]"
           >
-            Główne akcje
+            Twoje lokalizacje
           </h2>
 
-          <div className="mt-4 grid gap-4 md:grid-cols-2">
-            <Link
-              href="/t/csk/booking"
-              className="group min-h-40 rounded-2xl border border-[#536143] bg-[#20251d] p-6 transition hover:border-[#78865f] hover:bg-[#293026] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d7c895] focus-visible:ring-offset-2 focus-visible:ring-offset-[#141814]"
-            >
-              <div className="flex items-start justify-between gap-4">
-                <div>
-                  <h3 className="text-2xl font-bold text-[#f2efe4]">
-                    Zarezerwuj oś
-                  </h3>
-                  <p className="mt-3 leading-7 text-[#a9ada4]">
-                    Wybierz datę, oś, godzinę oraz czas rezerwacji. Płatność na
-                    miejscu.
-                  </p>
+          {tenantLoadFailed && (
+            <p role="alert" className="mt-4 rounded-2xl border border-[#744545] bg-[#2a1b1b] p-4 text-[#e0a0a0]">
+              Nie udało się pobrać listy lokalizacji. Odśwież stronę i spróbuj ponownie.
+            </p>
+          )}
+          {!tenantLoadFailed && tenants.length === 0 && (
+            <p className="mt-4 rounded-2xl border border-[#806a32] bg-[#2b2618] p-4 text-[#e1c477]">
+              Nie masz jeszcze aktywnego dostępu do żadnej lokalizacji.
+            </p>
+          )}
+          <div className="mt-4 grid gap-4">
+            {tenants.map((tenant) => (
+              <article key={tenant.tenant_id} className="rounded-2xl border border-[#536143] bg-[#20251d] p-5 sm:p-6">
+                <h3 className="text-2xl font-bold text-[#f2efe4]">{tenant.tenant_name}</h3>
+                <p className="mt-2 text-sm text-[#a9ada4]">Wybierz operację w tej lokalizacji.</p>
+                <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+                  <Link href={`/t/${tenant.tenant_slug}/booking`} className="min-h-11 rounded-xl bg-[#536143] px-4 py-3 text-center text-sm font-semibold">Zarezerwuj oś</Link>
+                  <Link href={`/t/${tenant.tenant_slug}/events`} className="min-h-11 rounded-xl border border-[#6f5a2e] px-4 py-3 text-center text-sm font-semibold text-[#d7c895]">Eventy</Link>
+                  <Link href={`/t/${tenant.tenant_slug}/my-reservations`} className="min-h-11 rounded-xl border border-[#30372c] px-4 py-3 text-center text-sm font-semibold">Moje rezerwacje</Link>
+                  <Link href={`/t/${tenant.tenant_slug}/my-events`} className="min-h-11 rounded-xl border border-[#30372c] px-4 py-3 text-center text-sm font-semibold">Moje szkolenia</Link>
+                  {tenant.tenant_role !== "user" && (
+                    <Link href={`/t/${tenant.tenant_slug}/admin`} className="min-h-11 rounded-xl border border-[#806a32] px-4 py-3 text-center text-sm font-semibold text-[#e1c477]">Panel obsługi</Link>
+                  )}
                 </div>
-                <span aria-hidden="true" className="text-2xl text-[#d7c895]">
-                  →
-                </span>
-              </div>
-            </Link>
-
-            <Link
-              href="/t/csk/events"
-              className="group min-h-40 rounded-2xl border border-[#6f5a2e] bg-[#221f18] p-6 transition hover:border-[#9a7c3e] hover:bg-[#2b271d] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d7c895] focus-visible:ring-offset-2 focus-visible:ring-offset-[#141814]"
-            >
-              <div className="flex items-start justify-between gap-4">
-                <div>
-                  <h3 className="text-2xl font-bold text-[#f2efe4]">
-                    Eventy / Szkolenia
-                  </h3>
-                  <p className="mt-3 leading-7 text-[#a9ada4]">
-                    Zobacz planowane szkolenia, wydarzenia i zapisz się na wybrany
-                    termin.
-                  </p>
-                </div>
-                <span aria-hidden="true" className="text-2xl text-[#d7c895]">
-                  →
-                </span>
-              </div>
-            </Link>
+              </article>
+            ))}
           </div>
         </section>
 
@@ -281,28 +297,7 @@ export default function DashboardPage() {
             Twoje konto
           </h2>
 
-          <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            <Link
-              href="/t/csk/my-reservations"
-              className="min-h-24 rounded-2xl border border-[#30372c] bg-[#191e19] p-5 transition hover:border-[#536143] hover:bg-[#20251d] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d7c895] focus-visible:ring-offset-2 focus-visible:ring-offset-[#141814]"
-            >
-              <h3 className="font-semibold text-[#f2efe4]">Moje rezerwacje</h3>
-              <p className="mt-2 text-sm leading-6 text-[#858c7f]">
-                Sprawdź swoje terminy, statusy rezerwacji oraz płatności.
-              </p>
-            </Link>
-
-            <Link
-              href="/t/csk/my-events"
-              className="min-h-24 rounded-2xl border border-[#30372c] bg-[#191e19] p-5 transition hover:border-[#536143] hover:bg-[#20251d] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d7c895] focus-visible:ring-offset-2 focus-visible:ring-offset-[#141814]"
-            >
-              <h3 className="font-semibold text-[#f2efe4]">Moje szkolenia</h3>
-              <p className="mt-2 text-sm leading-6 text-[#858c7f]">
-                Sprawdź szkolenia, na które jesteś zapisany oraz status
-                uczestnictwa.
-              </p>
-            </Link>
-
+          <div className="mt-4 grid gap-3 sm:grid-cols-2">
             <a
               href="/account"
               className="min-h-24 rounded-2xl border border-[#30372c] bg-[#191e19] p-5 transition hover:border-[#536143] hover:bg-[#20251d] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d7c895] focus-visible:ring-offset-2 focus-visible:ring-offset-[#141814]"
@@ -324,16 +319,6 @@ export default function DashboardPage() {
               </p>
             </a>
           </div>
-        </section>
-
-        <section aria-labelledby="location-heading" className="mt-6 rounded-2xl border border-[#30372c] bg-[#191e19] p-5">
-          <h2 id="location-heading" className="text-lg font-semibold text-[#d7c895]">Wybierz lokalizację</h2>
-          <p className="mt-2 text-sm leading-6 text-[#a9ada4]">
-            Funkcje obsługi i status weryfikacji są dostępne w kontekście wybranej lokalizacji.
-          </p>
-          <Link href="/t/csk" className="mt-4 inline-flex min-h-11 items-center rounded-xl border border-[#536143] px-5 py-3 text-sm font-semibold text-[#d7c895] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d7c895]">
-            CSK — przejdź do lokalizacji
-          </Link>
         </section>
 
         <div className="mt-8 flex justify-end border-t border-[#30372c] pt-6">

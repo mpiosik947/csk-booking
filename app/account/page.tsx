@@ -1225,17 +1225,17 @@ export default function AccountPage() {
           className="mt-8 flex flex-col gap-3 border-t border-[#30372c] pt-6 sm:flex-row"
         >
           <a
-            href="/my-reservations"
+            href="/dashboard"
             className="inline-flex min-h-11 items-center justify-center rounded-xl border border-[#30372c] bg-[#191e19] px-5 py-3 text-center text-sm font-semibold text-[#a9ada4] transition hover:border-[#536143] hover:text-[#d7c895] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#c5a861] focus-visible:ring-offset-2 focus-visible:ring-offset-[#141814]"
           >
-            Moje rezerwacje
+            Wybierz lokalizację dla rezerwacji
           </a>
 
           <a
-            href="/my-events"
+            href="/dashboard"
             className="inline-flex min-h-11 items-center justify-center rounded-xl border border-[#30372c] bg-[#191e19] px-5 py-3 text-center text-sm font-semibold text-[#a9ada4] transition hover:border-[#536143] hover:text-[#d7c895] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#c5a861] focus-visible:ring-offset-2 focus-visible:ring-offset-[#141814]"
           >
-            Moje szkolenia
+            Wybierz lokalizację dla szkoleń
           </a>
         </nav>
       </section>

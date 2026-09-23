@@ -29,17 +29,17 @@ export default async function ConfirmEventReservePage({
 
         <div className="mt-6 flex flex-col gap-3 sm:flex-row">
           <Link
-            href="/my-events"
+            href="/dashboard"
             className="inline-flex min-h-12 w-full items-center justify-center rounded-xl bg-[#536143] px-5 py-3 text-center text-sm font-semibold text-[#f2efe4] transition hover:bg-[#78865f] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d7c895] focus-visible:ring-offset-2 focus-visible:ring-offset-[#141814] sm:w-auto"
           >
-            Moje szkolenia
+            Wybierz lokalizację dla moich szkoleń
           </Link>
 
           <Link
-            href="/events"
+            href="/dashboard"
             className="inline-flex min-h-12 w-full items-center justify-center rounded-xl border border-[#30372c] px-5 py-3 text-center text-sm font-semibold text-[#a9ada4] transition hover:border-[#d7c895] hover:text-[#d7c895] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d7c895] focus-visible:ring-offset-2 focus-visible:ring-offset-[#141814] sm:w-auto"
           >
-            Lista szkoleń
+            Wybierz lokalizację dla szkoleń
           </Link>
         </div>
       </section>

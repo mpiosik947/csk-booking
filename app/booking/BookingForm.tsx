@@ -690,9 +690,7 @@ export default function BookingForm({
           Zaloguj się, aby utworzyć rezerwację.
         </p>
         <a
-          href={tenantSlug
-            ? `/login?redirectTo=${encodeURIComponent(`/t/${tenantSlug}/booking`)}`
-            : "/login?redirectTo=%2Fbooking"}
+          href={`/login?redirectTo=${encodeURIComponent(`/t/${tenantSlug}/booking`)}`}
           className="mt-5 inline-flex rounded-xl bg-[#536143] px-5 py-3 font-semibold"
         >
           Zaloguj się
@@ -770,7 +768,7 @@ export default function BookingForm({
             <button
               type="button"
               onClick={() => {
-                window.location.href = "/my-reservations";
+                window.location.href = `/t/${tenantSlug}/my-reservations`;
               }}
               className="mt-6 min-h-12 w-full rounded-xl bg-[#536143] px-5 py-3 font-semibold"
             >

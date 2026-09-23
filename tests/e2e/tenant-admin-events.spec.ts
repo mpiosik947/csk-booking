@@ -72,7 +72,8 @@ test("tenant admin modules use scoped contracts and legacy URLs hand off to CSK"
     expect(observed.some((call) => call.rpc === "get_my_active_tenant_verification_v1")).toBe(false);
     observed.length = 0;
     await page.goto("/dashboard");
-    await expect(page.getByRole("heading", { name: "Wybierz lokalizację" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Twoje lokalizacje" })).toBeVisible();
+    await expect.poll(() => observed.some((call) => call.rpc === "get_my_active_tenants_v1")).toBe(true);
     expect(observed.some((call) => call.rpc === "get_my_active_tenant_verification_v1")).toBe(false);
 
     for (const [route, heading] of [

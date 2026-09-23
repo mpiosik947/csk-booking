@@ -391,20 +391,18 @@ export default function MyReservationsPage({ tenantId, tenantSlug }: { tenantId:
     setCancellingReservationId(reservation.id);
 
     try {
-      const scopedResult = tenantSlug
-        ? await (async () => {
-            const { data: { session } } = await supabase.auth.getSession();
-            if (!session?.access_token) return { data: null, error: { code: "42501" } };
-            const response = await fetch(`/api/tenant-cancel-reservation?tenant=${encodeURIComponent(tenantSlug)}`, {
-              method: "POST",
-              headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
-              body: JSON.stringify({ reservationId: reservation.id }),
-            });
-            return response.ok
-              ? { data: await response.json(), error: null }
-              : { data: null, error: { code: response.status === 404 ? "P0002" : "42501" } };
-          })()
-        : supabase.rpc("cancel_reservation", { p_reservation_id: reservation.id });
+      const scopedResult = await (async () => {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session?.access_token) return { data: null, error: { code: "42501" } };
+        const response = await fetch(`/api/tenant-cancel-reservation?tenant=${encodeURIComponent(tenantSlug)}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
+          body: JSON.stringify({ reservationId: reservation.id }),
+        });
+        return response.ok
+          ? { data: await response.json(), error: null }
+          : { data: null, error: { code: response.status === 404 ? "P0002" : "42501" } };
+      })();
       const { data, error } = await scopedResult;
 
       if (error) {

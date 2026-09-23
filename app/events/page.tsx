@@ -490,9 +490,7 @@ export default function EventsPage({ tenantId, tenantSlug }: { tenantId: string;
           ) : !isLoggedIn ? (
             <div className="grid gap-3 sm:grid-cols-2">
               <a
-                href={tenantSlug
-                  ? `/login?redirectTo=${encodeURIComponent(`/t/${tenantSlug}/events`)}`
-                  : "/login?redirectTo=%2Fevents"}
+              href={`/login?redirectTo=${encodeURIComponent(`/t/${tenantSlug}/events`)}`}
                 className="min-h-12 rounded-xl bg-[#536143] px-5 py-3 text-center font-semibold text-[#f2efe4] transition hover:bg-[#78865f] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#c5a861] focus-visible:ring-offset-2 focus-visible:ring-offset-[#191e19]"
               >
                 Zaloguj się, aby się zapisać
@@ -739,7 +737,7 @@ export default function EventsPage({ tenantId, tenantSlug }: { tenantId: string;
                 <button
                   type="button"
                   onClick={() => {
-                    window.location.href = "/my-events";
+                    window.location.href = `/t/${tenantSlug}/my-events`;
                   }}
                   className="min-h-12 w-full rounded-xl bg-[#536143] px-5 py-3 font-semibold text-[#f2efe4] transition hover:bg-[#78865f] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#c5a861] focus-visible:ring-offset-2 focus-visible:ring-offset-[#141814]"
                 >

@@ -24,8 +24,10 @@ test("cancellation checks persisted registration tenant in DB and service recipi
   const api = await source("../../api/cancel-event-registration/route.ts");
   const service = await source("../../../lib/server/event-reserve-promotion.ts");
   const migration = await source("../../../supabase/migrations/20260927100000_add_tenant_scoped_staff_event_rpcs.sql");
-  assert.match(api, /selectedTenantId \? "cancel_event_registration_v2" : "cancel_event_registration"/);
-  assert.match(api, /promoteEventReserve\(rpcData\.event_id, selectedTenantId \?\? undefined\)/);
+  assert.match(api, /if \(!tenantSlug\)/);
+  assert.match(api, /"cancel_event_registration_v2"/);
+  assert.doesNotMatch(api, /selectedTenantId \? "cancel_event_registration_v2" : "cancel_event_registration"/);
+  assert.match(api, /promoteEventReserve\(rpcData\.event_id, selectedTenantId\)/);
   assert.match(migration, /join public\.events e on e\.id=r\.event_id and e\.tenant_id=r\.tenant_id/);
   assert.match(migration, /where r\.id=p_registration_id and r\.tenant_id=p_tenant_id/);
   assert.match(service, /expectedTenantId && eventData\.tenant_id !== expectedTenantId/);

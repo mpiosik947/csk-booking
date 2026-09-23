@@ -1,31 +1,11 @@
 ﻿"use client";
 
 import Image from "next/image";
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import { getLoginErrorMessage } from "../../lib/safe-client-error";
+import { getSafeLoginRedirect } from "../../lib/safe-login-redirect";
 import { supabase } from "../../lib/supabase";
-
-const ALLOWED_LOGIN_REDIRECTS: ReadonlySet<string> = new Set([
-  "/dashboard",
-  "/booking",
-  "/events",
-  "/my-reservations",
-  "/my-events",
-  "/admin",
-  "/admin/users",
-  "/admin/check-in",
-  "/admin/events",
-  "/admin/reservations",
-  "/admin/reports",
-  "/admin/calendar",
-  "/admin/lane-blocks",
-]);
-
-function getSafeLoginRedirect(redirectTo: string | null) {
-  return redirectTo && ALLOWED_LOGIN_REDIRECTS.has(redirectTo)
-    ? redirectTo
-    : "/dashboard";
-}
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
@@ -36,8 +16,11 @@ export default function LoginPage() {
   const [confirmationError, setConfirmationError] = useState(false);
 
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    setConfirmationError(params.get("confirmationError") === "1");
+    const timer = window.setTimeout(() => {
+      const params = new URLSearchParams(window.location.search);
+      setConfirmationError(params.get("confirmationError") === "1");
+    }, 0);
+    return () => window.clearTimeout(timer);
   }, []);
 
   async function handleLogin() {
@@ -119,12 +102,12 @@ export default function LoginPage() {
                   Hasło
                 </label>
 
-                <a
+                <Link
                   href="/forgot-password"
                   className="rounded text-sm font-semibold text-[#d7c895] transition hover:text-[#eadba6] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#c5a861] focus-visible:ring-offset-2 focus-visible:ring-offset-[#141814]"
                 >
                   Nie pamiętasz hasła?
-                </a>
+                </Link>
               </div>
 
               <input
@@ -162,19 +145,19 @@ export default function LoginPage() {
               {loading ? "Logowanie..." : "Zaloguj się"}
             </button>
 
-            <a
+            <Link
               href="/register"
               className="rounded text-center text-sm text-[#a9ada4] transition hover:text-[#d7c895] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#c5a861] focus-visible:ring-offset-2 focus-visible:ring-offset-[#141814] sm:text-base"
             >
               Nie masz konta? Utwórz konto
-            </a>
+            </Link>
 
-            <a
+            <Link
               href="/"
               className="rounded text-center text-sm text-[#858c7f] transition hover:text-[#d7c895] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#c5a861] focus-visible:ring-offset-2 focus-visible:ring-offset-[#141814] sm:text-base"
             >
               ← Strona główna
-            </a>
+            </Link>
           </div>
         </div>
       </section>
