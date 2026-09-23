@@ -63,8 +63,8 @@ begin
   perform pg_temp.ok(4,'legacy owner-list signatures retained',
     pg_catalog.to_regprocedure('public.get_my_reservations_v2()') is not null
     and pg_catalog.to_regprocedure('public.get_my_event_registrations_v1(text,text,integer,integer)') is not null);
-  perform pg_temp.ok(5,'definer inventory is 73 and retired bridge definitions are absent',
-    (select count(*)=73 from pg_catalog.pg_proc p join pg_catalog.pg_namespace n on n.oid=p.pronamespace
+  perform pg_temp.ok(5,'definer inventory is 74 and retired bridge definitions are absent',
+    (select count(*)=74 from pg_catalog.pg_proc p join pg_catalog.pg_namespace n on n.oid=p.pronamespace
       where n.nspname='public' and p.prosecdef)
     and (select count(*)=0 from pg_catalog.pg_proc p join pg_catalog.pg_namespace n on n.oid=p.pronamespace
       where n.nspname='public' and p.prosrc like '%active_single_tenant_id_v1%'));

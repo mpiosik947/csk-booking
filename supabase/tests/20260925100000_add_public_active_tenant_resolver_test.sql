@@ -78,8 +78,8 @@ begin
     not exists(select 1 from public.resolve_active_tenant_by_slug_v1('csk') result
       cross join lateral pg_catalog.jsonb_object_keys(pg_catalog.to_jsonb(result)) key
       where key not in('tenant_id','tenant_slug','tenant_name','tenant_status')));
-  perform pg_temp.ok(13,'SECURITY DEFINER inventory is exactly 76',
-    (select pg_catalog.count(*)=73 from pg_catalog.pg_proc p join pg_catalog.pg_namespace n on n.oid=p.pronamespace
+  perform pg_temp.ok(13,'SECURITY DEFINER inventory is exactly 74 after the 9F tenant selector',
+    (select pg_catalog.count(*)=74 from pg_catalog.pg_proc p join pg_catalog.pg_namespace n on n.oid=p.pronamespace
      where n.nspname='public' and p.prosecdef));
   perform pg_temp.ok(14,'seven CSK compatibility defaults remain',
     (select pg_catalog.count(*)=0 from information_schema.columns where table_schema='public'

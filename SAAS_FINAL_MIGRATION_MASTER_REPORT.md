@@ -1,10 +1,10 @@
 # SAAS FINAL MIGRATION MASTER REPORT
 
-Updated: 2026-09-22 (Europe/Warsaw)
+Updated: 2026-09-23 (Europe/Warsaw)
 
 ## Current stage
 
-**Stage C — SAAS-9D-5A CLOSED / PROD PASS.** Additive onboarding DB capability, application deployment `dd02b3138a591966697d89cce7d72c2a3b3b054d`, and corrected forward-only A2 retirement are live on the primary `csk-booking-5nwh` project. The discovered `auth.users.on_auth_user_created -> public.handle_new_user()` path is preserved as the canonical global-profile-only trigger. Both legacy CSK role-sync directions are removed, and the profile privilege guard no longer depends on the exact-single-tenant or profile-role bridge.
+**Stage E — SAAS-9G local-only two-active-tenant E2E.** SAAS-9F is complete in the authoritative production project: DB migration `20261002100000`, app commit `05cde069aaedac465a98b6d0f57e17e12296d2ad`, post-deploy smoke PASS, and zero remaining operational cutover residuals. Second production tenant remains NO-GO.
 
 ## Completed stages
 
@@ -15,12 +15,14 @@ Updated: 2026-09-22 (Europe/Warsaw)
 - SAAS-9E-C Phase 3 app: commit `b3a85bba9797f4ea056fbd41d6b3e990af59b2cc`, pushed to `origin/main` by fast-forward; authenticated production screen smoke PASS with stated ICS/mutating limitations.
 - SAAS-9E-C Phase 3 final checkpoint: `9d8c893b401436a1ac2fb122eeeae179bd165f16`, pushed to `origin/main`; repository reproducible.
 - SAAS-9D-4D-2: production migration `20260929100000_close_global_role_helper_execute.sql`, SHA-256 `4086E195BCE1F3A1CB0C107AC5231923BCBAED24132083990A3763BDC335D7AE`; deploy and post-deploy PASS.
+- SAAS-9D-5: CLOSED / PROD PASS; final checkpoint `38f3a79454b6316e7588b871c3cc5f384bdf9589`, LOCAL=origin/main, divergence 0/0, bridges 0, defaults 0, SECURITY DEFINER 73.
+- SAAS-9F: module audit and minimal cutover complete; production migration `20261002100000_add_my_active_tenants_reader.sql`, app commit `05cde069aaedac465a98b6d0f57e17e12296d2ad`, authoritative Vercel project `csk-booking-5nwh` PASS, runtime GET smoke PASS, operational residuals 0.
 
 ## Current production state
 
-- Application: C3 target live on `csk-booking-5nwh.vercel.app`.
-- Database: corrected A2 live; SECURITY DEFINER 95; canonical auth-to-profile trigger present; legacy role-sync triggers/functions 0/0; compatibility defaults 7/7.
-- Migration history: LOCAL = REMOTE through `20260930110000`; pending 0; final linked dry-run reports the remote database is up to date.
+- Application: SAAS-9F target commit `05cde069aaedac465a98b6d0f57e17e12296d2ad` live on `csk-booking-5nwh.vercel.app`.
+- Database: SAAS-9F selector target live; SECURITY DEFINER 74; bridge definitions 0; compatibility defaults 0.
+- Migration history: LOCAL = REMOTE through `20261002100000`; final dry-run reports remote database up to date.
 - Runtime callers at deployed source: legacy operational 0; `get_my_role()` 0; direct `is_admin*` application helper callers 0.
 - Legacy global-role helper ACL: PUBLIC/anon/authenticated/service_role EXECUTE denied on all four; bodies retained owner-only for 9D-5.
 - Active production tenants: exactly one active CSK tenant. Second production tenant remains NO-GO.
@@ -28,14 +30,15 @@ Updated: 2026-09-22 (Europe/Warsaw)
 
 ## Latest test counts
 
-- Clean local replay: PASS.
-- Full DB after the corrected A2 clean replay: 53 files, 1579/1579 PASS.
-- Focused 9D-5A onboarding/cutover SQL: 24/24 PASS.
-- Node: 782/782 PASS.
+- Clean local replay through `20261002100000`: PASS.
+- Focused 9F selector SQL: 8/8 PASS.
+- Full DB: 55 files, 1608/1608 PASS.
+- Node: 789/789 PASS.
 - TypeScript: PASS.
 - Production build: PASS (known middleware→proxy deprecation warning).
 - Changed-file ESLint: PASS, 0 new errors/warnings.
-- Playwright: 38/38 PASS.
+- Playwright: 38/38 PASS after correcting one stale selector-heading expectation.
+- `npm audit --omit=dev`: one moderate `baseline-browser-mapping` DoS advisory; 0 HIGH, 0 CRITICAL.
 - Local fixture cleanup: 0 test users/profiles/lanes/events; one active tenant; 95 definers.
 - `npm audit --omit=dev`: not rerun during the A2 blocker correction because the environment did not authorize the registry metadata request; no dependency files changed.
 - Production C3 rollback-only DB matrix: 16/16 PASS; persisted fixture 0.
@@ -44,10 +47,10 @@ Updated: 2026-09-22 (Europe/Warsaw)
 
 | Counter | Current |
 |---|---:|
-| SECURITY DEFINER | 95 |
+| SECURITY DEFINER | 74 production / 74 local 9F target |
 | Unexpected C3 DEFINER drift | 0 |
-| Bridge definitions | 22 |
-| Compatibility defaults | 7/7 |
+| Bridge definitions | 0 |
+| Compatibility defaults | 0 |
 | Legacy operational app callers | 0 |
 | `get_my_role()` app/API callers | 0 |
 | Cross-tenant anomalies in C3 production integrity checks | 0 |
@@ -56,8 +59,6 @@ Updated: 2026-09-22 (Europe/Warsaw)
 
 ## Blockers and exclusions
 
-- SAAS-9D-5A is deployed and verified; only its reproducibility checkpoint remains.
-- Normal 9D-5 bridge/default retirement requires a fresh per-object dependency audit after this checkpoint.
 - Second production tenant remains blocked until Stage G readiness verdict.
 - SEC-004 remains OPEN.
 - `AGENTS.md` is unrelated and always excluded. `supabase/drafts/*` is non-deployable and always excluded.
@@ -66,7 +67,7 @@ Updated: 2026-09-22 (Europe/Warsaw)
 
 ## Next stage
 
-Run the fail-closed 9D-5A production preflight, then deploy in the frozen compatibility order: onboarding DB capability (`20260930100000`) → application callers → legacy trigger/guard retirement (`20260930110000`). Only after 9D-5A PROD PASS may normal 9D-5 bridge/default retirement resume. No second tenant activation.
+Create the final reproducibility checkpoint for 9F, then execute SAAS-9G with two active tenants locally only. Do not activate a second production tenant.
 
 ## SAAS-9D-5A TENANT-AWARE ONBOARDING CUTOVER
 

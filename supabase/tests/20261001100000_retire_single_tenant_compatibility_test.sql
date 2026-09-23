@@ -28,8 +28,8 @@ select pg_temp.ok(3,'all seven tenant ownership columns remain NOT NULL',(
      and table_name in ('shooting_lanes','reservations','lane_blocks','events','event_lanes','event_registrations','email_deliveries')
      and is_nullable='NO'));
 
-select pg_temp.ok(4,'SECURITY DEFINER inventory reaches the reviewed 9D-5 target',(
-  select count(*)=73 from pg_catalog.pg_proc procedure
+select pg_temp.ok(4,'SECURITY DEFINER inventory reaches the reviewed 9F target',(
+  select count(*)=74 from pg_catalog.pg_proc procedure
    join pg_catalog.pg_namespace namespace on namespace.oid=procedure.pronamespace
    where namespace.nspname='public' and procedure.prosecdef));
 

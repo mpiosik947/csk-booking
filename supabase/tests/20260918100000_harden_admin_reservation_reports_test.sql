@@ -148,8 +148,8 @@ begin
     select 1 from (values('public'::name),('anon'::name),('authenticated'::name),('service_role'::name)) role(name)
     where pg_catalog.has_function_privilege(role.name,'public._admin_reservation_report_rows_v2(date,date,uuid,text,text,text)','EXECUTE')),
     'old helper exposed');
-  perform pg_temp.ok(8,'SECURITY DEFINER count is  73 after Phase 2',
-    (select count(*) from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.prosecdef)=73,
+  perform pg_temp.ok(8,'SECURITY DEFINER count is 74 after the 9F tenant selector',
+    (select count(*) from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.prosecdef)=74,
     'definer count differs');
   perform pg_temp.ok(9,'compatibility defaults remain 7/7',
     (select count(*) from information_schema.columns where table_schema='public'
