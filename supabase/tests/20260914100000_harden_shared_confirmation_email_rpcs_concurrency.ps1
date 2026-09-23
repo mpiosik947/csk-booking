@@ -26,6 +26,8 @@ insert into public.profiles(id,user_id,email,phone,first_name,last_name,full_nam
 select id,id,email,'000','Test','Race','[TEST][SAAS-9D-2C-1][$run]','user','verified' from auth.users
 where id='$user' and not exists(select 1 from public.profiles where profiles.user_id=auth.users.id);
 update public.profiles set phone='000',first_name='Test',last_name='Race',full_name='[TEST][SAAS-9D-2C-1][$run]',role='user',verification_status='verified' where user_id='$user';
+insert into public.tenant_memberships(tenant_id,user_id,role,status)
+values('$tenant','$user','user','active');
 insert into public.shooting_lanes(id,tenant_id,name,type,price_per_hour,is_active,max_shooters,booking_step_minutes,display_order,currency_code,resource_kind,parent_lane_id,whole_lane_bookable,positions_bookable)
 values('$lane','$tenant','[TEST][SAAS-9D-2C-1][$run] Lane','test',10,true,1,60,9988,'PLN','lane',null,true,false);
 insert into public.lane_pricing_rules(id,lane_id,day_group,min_shooters,max_shooters,label,hourly_price)

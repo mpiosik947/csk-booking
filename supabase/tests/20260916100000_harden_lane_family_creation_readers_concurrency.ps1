@@ -62,7 +62,7 @@ function New-FamilyPayload([string]$Name) {
 
 function New-CreateSql([string]$User,[string]$Payload) {
   $escaped = $Payload.Replace("'","''")
-  return "begin; select set_config('request.jwt.claims',jsonb_build_object('sub','$User','role','authenticated')::text,true); select set_config('request.jwt.claim.sub','$User',true); set local role authenticated; select public.admin_create_lane_booking_family_v1('$escaped'::jsonb)->>'code'; commit;"
+  return "begin; select set_config('request.jwt.claims',jsonb_build_object('sub','$User','role','authenticated')::text,true); select set_config('request.jwt.claim.sub','$User',true); set local role authenticated; select public.admin_create_lane_booking_family_v2('$csk','$escaped'::jsonb)->>'code'; commit;"
 }
 
 $userValues = @(
@@ -83,7 +83,10 @@ update public.profiles set role='admin',first_name='Test',last_name='9D3B Race',
 where user_id='$adminB';
 delete from public.tenant_memberships where tenant_id='$csk' and user_id='$adminB';
 insert into public.tenants(id,name,slug,status) values('$tenantB','$marker Tenant B','saas9d3b-race-$($run.Substring(0,12))','dormant');
-insert into public.tenant_memberships(tenant_id,user_id,role,status) values('$tenantB','$adminB','admin','active');
+insert into public.tenant_memberships(tenant_id,user_id,role,status) values
+('$csk','$adminA1','admin','active'),
+('$csk','$adminA2','admin','active'),
+('$tenantB','$adminB','admin','active');
 "@
 
 try {

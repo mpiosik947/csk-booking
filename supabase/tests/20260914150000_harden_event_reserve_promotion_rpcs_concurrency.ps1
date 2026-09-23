@@ -38,6 +38,7 @@ $userValues = for ($i = 0; $i -lt $users.Count; $i++) {
   "('$($users[$i])','00000000-0000-0000-0000-000000000000','authenticated','authenticated','9d2c2-race-$i-$run@example.invalid','',now(),'{}','{}',now(),now())"
 }
 $profileIds = ($users | ForEach-Object { "'$_'" }) -join ','
+$cskMembershipValues = (0..8 | ForEach-Object { "('$csk','$($users[$_])','user','active')" }) -join ",`n"
 
 $setup = @"
 insert into auth.users(id,instance_id,aud,role,email,encrypted_password,email_confirmed_at,raw_app_meta_data,raw_user_meta_data,created_at,updated_at) values
@@ -51,7 +52,9 @@ where user_id in($profileIds);
 insert into public.tenants(id,name,slug,status)
 values('$tenantB','[TEST][SAAS-9D-2C-2][$run] Tenant B','saas9d2c2-race-$($run.Substring(0,12))','dormant');
 insert into public.tenant_memberships(tenant_id,user_id,role,status)
-values('$tenantB','$($users[9])','user','active');
+values
+$cskMembershipValues,
+('$tenantB','$($users[9])','user','active');
 insert into public.events(id,tenant_id,title,description,event_date,start_time,end_time,location,price,max_participants,is_active) values
 ('$($events[0])','$csk','[TEST][SAAS-9D-2C-2][$run] Prepare','test',date '2099-12-01',time '10:00',time '11:00','Test',0,10,true),
 ('$($events[1])','$csk','[TEST][SAAS-9D-2C-2][$run] Complete','test',date '2099-12-02',time '10:00',time '11:00','Test',0,10,true),

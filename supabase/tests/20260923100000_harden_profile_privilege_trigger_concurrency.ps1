@@ -50,6 +50,8 @@ insert into auth.users(id,instance_id,aud,role,email,encrypted_password,email_co
 insert into public.profiles(id,user_id,email,first_name,last_name,full_name,phone,role,verification_status)
 select id,id,email,'Race','Fixture','$marker','500000000','user','pending' from auth.users where id in($userIds)
 on conflict(user_id) do nothing;
+update public.profiles set first_name='Race',last_name='Fixture',full_name='$marker',phone='500000000',verification_status='pending'
+where user_id in($userIds);
 update public.profiles set role='admin' where user_id='$adminA';
 update public.profiles set role='pracownik' where user_id='$employeeA';
 insert into public.tenant_memberships(tenant_id,user_id,role,status) values
@@ -63,8 +65,8 @@ try {
   Invoke-LocalSql $setup | Out-Null
   $deadlocksBefore = [int](Invoke-LocalSql "select deadlocks from pg_stat_database where datname=current_database();")
 
-  $ownerCallA = New-ActorSql $ownerA "select public.update_my_profile_v1('501111111','00-001','Warszawa','A','1',null,true,false,false,false,false,false,false,false,false,false)->>'code'"
-  $ownerCallB = New-ActorSql $ownerA "select public.update_my_profile_v1('502222222','00-002','Krakow','B','2',null,false,true,false,false,false,false,false,false,false,false)->>'code'"
+  $ownerCallA = New-ActorSql $ownerA "select public.update_my_profile_v2('501111111','00-001','Warszawa','A','1',null,true,false,false,false,false,false,false,false,false,false)->>'code'"
+  $ownerCallB = New-ActorSql $ownerA "select public.update_my_profile_v2('502222222','00-002','Krakow','B','2',null,false,true,false,false,false,false,false,false,false,false)->>'code'"
   $ownerResults = Receive-Pair (Start-LocalSqlJob $ownerCallA) (Start-LocalSqlJob $ownerCallB)
   if (@($ownerResults | Where-Object ExitCode -ne 0).Count -ne 0 -or @($ownerResults | Where-Object Output -notmatch '(?m)^updated\r?$').Count -ne 0) {
     throw "Concurrent owner updates failed: $($ownerResults | ConvertTo-Json -Compress -Depth 4)"
@@ -73,15 +75,15 @@ try {
   if ($ownerIntegrity -ne 'true') { throw 'Concurrent owner updates produced an invalid profile state.' }
   Write-Output 'PARALLEL_OWNER_UPDATES=PASS'
 
-  $identityCall = New-ActorSql $adminA "select public.update_profile_identity('$ownerA','Concurrent','Identity')->>'full_name'"
-  $contactCall = New-ActorSql $ownerA "select public.update_my_profile_v1('503333333','00-003','Gdansk','C','3',null,true,false,false,false,false,false,false,false,false,false)->>'code'"
+  $identityCall = New-ActorSql $adminA "select public.update_tenant_profile_identity_v2('$tenantA','$ownerA','Concurrent','Identity')->>'full_name'"
+  $contactCall = New-ActorSql $ownerA "select public.update_my_profile_v2('503333333','00-003','Gdansk','C','3',null,true,false,false,false,false,false,false,false,false,false)->>'code'"
   $mixedResults = Receive-Pair (Start-LocalSqlJob $identityCall) (Start-LocalSqlJob $contactCall)
   if (@($mixedResults | Where-Object ExitCode -ne 0).Count -ne 0) { throw "Staff/owner race failed: $($mixedResults | ConvertTo-Json -Compress -Depth 4)" }
   $mixedIntegrity = Invoke-LocalSql "select (first_name='Concurrent' and last_name='Identity' and phone='503333333' and role='user')::text from public.profiles where user_id='$ownerA';"
   if ($mixedIntegrity -ne 'true') { throw 'Staff/owner race lost a valid disjoint update.' }
   Write-Output 'STAFF_VS_OWNER_UPDATE=PASS'
 
-  $allowedCall = New-ActorSql $ownerA "select public.update_my_profile_v1('504444444','00-004','Poznan','D','4',null,false,true,false,false,false,false,false,false,false,false)->>'code'"
+  $allowedCall = New-ActorSql $ownerA "select public.update_my_profile_v2('504444444','00-004','Poznan','D','4',null,false,true,false,false,false,false,false,false,false,false)->>'code'"
   $deniedCall = "begin; select set_config('request.jwt.claims',jsonb_build_object('sub','$ownerA','role','authenticated')::text,true); select set_config('request.jwt.claim.sub','$ownerA',true); update public.profiles set role='admin' where user_id='$ownerA'; commit;"
   $protectedResults = Receive-Pair (Start-LocalSqlJob $allowedCall) (Start-LocalSqlJob $deniedCall)
   if (@($protectedResults | Where-Object ExitCode -eq 0).Count -ne 1 -or ($protectedResults.Output -join "`n") -notmatch '(?m)^updated\r?$') {

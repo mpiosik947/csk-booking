@@ -26,6 +26,9 @@ insert into public.profiles(id,user_id,email,phone,first_name,last_name,full_nam
 select id,id,email,'000','Test','Race','[TEST][SAAS-9D-2A][$run]','user','verified' from auth.users
 where id in('$userA','$userB') and not exists(select 1 from public.profiles where profiles.user_id=auth.users.id);
 update public.profiles set phone='000',first_name='Test',last_name='Race',full_name='[TEST][SAAS-9D-2A][$run]',verification_status='verified' where user_id in('$userA','$userB');
+insert into public.tenant_memberships(tenant_id,user_id,role,status) values
+('$tenant','$userA','user','active'),
+('$tenant','$userB','user','active');
 insert into public.events(id,tenant_id,title,description,event_date,start_time,end_time,location,price,max_participants,is_active)
 values('$event','$tenant','[TEST][SAAS-9D-2A][$run] Race','race',date '2099-12-01',time '10:00',time '11:00','Test',0,1,true);
 "@

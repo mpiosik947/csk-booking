@@ -4,7 +4,7 @@ Updated: 2026-09-23 (Europe/Warsaw)
 
 ## Current stage
 
-**Stage E — SAAS-9G local-only two-active-tenant E2E.** SAAS-9F is complete in the authoritative production project: DB migration `20261002100000`, app commit `05cde069aaedac465a98b6d0f57e17e12296d2ad`, post-deploy smoke PASS, and zero remaining operational cutover residuals. Second production tenant remains NO-GO.
+**Stage F — SAAS-9H final security audit and SEC-004 closure review.** SAAS-9G local two-active-tenant E2E is PASS with 39/39 Playwright, 1608/1608 DB tests, current concurrency matrices PASS, zero cross-tenant effects, zero deadlocks and zero fixture residue. Second production tenant remains NO-GO until the 9H verdict.
 
 ## Completed stages
 
@@ -17,6 +17,7 @@ Updated: 2026-09-23 (Europe/Warsaw)
 - SAAS-9D-4D-2: production migration `20260929100000_close_global_role_helper_execute.sql`, SHA-256 `4086E195BCE1F3A1CB0C107AC5231923BCBAED24132083990A3763BDC335D7AE`; deploy and post-deploy PASS.
 - SAAS-9D-5: CLOSED / PROD PASS; final checkpoint `38f3a79454b6316e7588b871c3cc5f384bdf9589`, LOCAL=origin/main, divergence 0/0, bridges 0, defaults 0, SECURITY DEFINER 73.
 - SAAS-9F: module audit and minimal cutover complete; production migration `20261002100000_add_my_active_tenants_reader.sql`, app commit `05cde069aaedac465a98b6d0f57e17e12296d2ad`, authoritative Vercel project `csk-booking-5nwh` PASS, runtime GET smoke PASS, operational residuals 0.
+- SAAS-9G: local-only two-active-tenant E2E PASS; global selector A+B, public A/B, admin A/B denial, current concurrency matrices, full regression and cleanup all PASS.
 
 ## Current production state
 
@@ -37,7 +38,7 @@ Updated: 2026-09-23 (Europe/Warsaw)
 - TypeScript: PASS.
 - Production build: PASS (known middleware→proxy deprecation warning).
 - Changed-file ESLint: PASS, 0 new errors/warnings.
-- Playwright: 38/38 PASS after correcting one stale selector-heading expectation.
+- Playwright: 39/39 PASS, including the dedicated two-active-tenant local E2E.
 - `npm audit --omit=dev`: one moderate `baseline-browser-mapping` DoS advisory; 0 HIGH, 0 CRITICAL.
 - Local fixture cleanup: 0 test users/profiles/lanes/events; one active tenant; 95 definers.
 - `npm audit --omit=dev`: not rerun during the A2 blocker correction because the environment did not authorize the registry metadata request; no dependency files changed.
@@ -67,7 +68,7 @@ Updated: 2026-09-23 (Europe/Warsaw)
 
 ## Next stage
 
-Create the final reproducibility checkpoint for 9F, then execute SAAS-9G with two active tenants locally only. Do not activate a second production tenant.
+Complete SAAS-9H final tenant-isolation audit and decide SEC-004 closure and technical second-tenant readiness. Do not activate a second production tenant automatically.
 
 ## SAAS-9D-5A TENANT-AWARE ONBOARDING CUTOVER
 

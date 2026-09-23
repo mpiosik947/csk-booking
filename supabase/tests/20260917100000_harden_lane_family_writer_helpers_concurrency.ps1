@@ -88,13 +88,16 @@ and not exists(select 1 from public.profiles p where p.user_id=u.id);
 update public.profiles set role='admin',first_name='Test',last_name='9D3C Race',full_name='$marker',verification_status='verified'
 where user_id in($userIds);
 insert into public.tenants(id,name,slug,status) values('$tenantB','$marker Tenant B','saas9d3c-race-$($run.Substring(0,12))','dormant');
+insert into public.tenant_memberships(tenant_id,user_id,role,status) values
+('$csk','$adminA1','admin','active'),
+('$csk','$adminA2','admin','active');
 "@
 
 try {
   Invoke-LocalSql $setup | Out-Null
   $deadlocksBefore = [int](Invoke-LocalSql "select deadlocks from pg_stat_database where datname=current_database();")
   $createPayload = (New-FamilyPayload "$marker Family").Replace("'","''")
-  $created = Invoke-LocalSql (New-ActorSql $adminA1 "select public.admin_create_lane_booking_family_v1('$createPayload'::jsonb)->>'root_lane_id'")
+  $created = Invoke-LocalSql (New-ActorSql $adminA1 "select public.admin_create_lane_booking_family_v2('$csk','$createPayload'::jsonb)->>'root_lane_id'")
   $rootMatches = [regex]::Matches($created,'(?i)[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}')
   $root = if ($rootMatches.Count -gt 0) { $rootMatches[$rootMatches.Count - 1].Value } else { '' }
   if ($root -notmatch '^[0-9a-f-]{36}$') { throw "Family setup failed: $created" }

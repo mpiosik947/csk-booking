@@ -72,8 +72,8 @@ try {
   Invoke-LocalSql $setup | Out-Null
   $deadlocksBefore = [int](Invoke-LocalSql "select deadlocks from pg_stat_database where datname=current_database();")
 
-  $update1 = New-ActorSql $ownerUpdate "select public.update_my_profile_v1('501111111','00-001','Warszawa','A','1',null,true,false,false,false,false,false,false,false,false,false)->>'code'"
-  $update2 = New-ActorSql $ownerUpdate "select public.update_my_profile_v1('502222222','00-002','Krakow','B','2',null,false,true,false,false,false,false,false,false,false,false)->>'code'"
+  $update1 = New-ActorSql $ownerUpdate "select public.update_my_profile_v2('501111111','00-001','Warszawa','A','1',null,true,false,false,false,false,false,false,false,false,false)->>'code'"
+  $update2 = New-ActorSql $ownerUpdate "select public.update_my_profile_v2('502222222','00-002','Krakow','B','2',null,false,true,false,false,false,false,false,false,false,false)->>'code'"
   $updateResults = Receive-Pair (Start-LocalSqlJob $update1) (Start-LocalSqlJob $update2)
   if (@($updateResults | Where-Object ExitCode -ne 0).Count -ne 0 -or ($updateResults.Output -join "`n") -notmatch '(?m)^updated\r?$') {
     throw "Concurrent owner updates failed: $($updateResults | ConvertTo-Json -Compress -Depth 4)"
@@ -83,7 +83,7 @@ try {
   Write-Output 'CONCURRENT_OWNER_UPDATES=PASS'
   Write-Output 'TENANT_INVALIDATION_AUDITS=2'
 
-  $activityCall = New-ActorSql $ownerRace "select public.update_my_profile_v1('503333333','00-003','Gdansk','C','3',null,true,false,false,false,false,false,false,false,false,false)->>'code'"
+  $activityCall = New-ActorSql $ownerRace "select public.update_my_profile_v2('503333333','00-003','Gdansk','C','3',null,true,false,false,false,false,false,false,false,false,false)->>'code'"
   $activityDeleteCall = New-ActorSql $ownerRace "select public.anonymize_my_account_v1()->>'code'"
   $activityResults = Receive-Pair (Start-LocalSqlJob $activityCall) (Start-LocalSqlJob $activityDeleteCall)
   if (@($activityResults | Where-Object ExitCode -ne 0).Count -ne 0) { throw "Account/tenant-activity race failed: $($activityResults | ConvertTo-Json -Compress -Depth 4)" }

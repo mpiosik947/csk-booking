@@ -64,6 +64,11 @@ select id,id,email,'$marker','000','user','pending',now(),now() from auth.users 
 on conflict(user_id) do update set email=excluded.email,full_name=excluded.full_name,phone=excluded.phone,updated_at=now();
 update public.profiles set role='admin' where user_id in('$admin1','$admin2');
 insert into public.tenants(id,name,slug,status) values('$tenantB','$marker Tenant B','saas9d4b2b-race-$($run.Substring(0,12))','dormant');
+insert into public.tenant_memberships(tenant_id,user_id,role,status) values
+('$tenant','$admin1','admin','active'),
+('$tenant','$admin2','admin','active'),
+('$tenant','$customer','user','active'),
+('$tenantB','$customer','user','active');
 insert into public.shooting_lanes(id,tenant_id,name,type,is_active,max_shooters,booking_step_minutes,display_order,currency_code,resource_kind,parent_lane_id,whole_lane_bookable,positions_bookable)
 values('$lane','$tenant','$marker Lane A','test',true,2,60,9997,'PLN','lane',null,true,false),
 ('$laneB','$tenantB','$marker Lane B','test',true,2,60,9998,'PLN','lane',null,true,false);
