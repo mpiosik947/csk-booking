@@ -200,7 +200,7 @@ exception when others then
 end;
 $function$;
 
-create function pg_temp.call_lane_block_toggle(p_user_id uuid)
+create function pg_temp.call_lane_block_toggle(p_user_id uuid,p_block_id uuid)
 returns jsonb
 language plpgsql
 set search_path = pg_catalog, public, pg_temp
@@ -215,7 +215,7 @@ begin
   );
   perform pg_catalog.set_config('request.jwt.claim.sub',p_user_id::text,true);
   execute 'set local role authenticated';
-  select public.admin_set_lane_block_active(null,true) into v_result;
+  select public.admin_set_lane_block_active(p_block_id,true) into v_result;
   execute 'reset role';
   return v_result;
 exception when others then
@@ -236,6 +236,8 @@ declare
   v_admin uuid := '6c020000-0000-4000-8000-000000000001';
   v_employee uuid := '6c020000-0000-4000-8000-000000000002';
   v_user uuid := '6c020000-0000-4000-8000-000000000003';
+  v_lane uuid := gen_random_uuid();
+  v_block uuid := gen_random_uuid();
   v_denied boolean;
   v_all_denied boolean := true;
   v_result jsonb;
@@ -479,12 +481,20 @@ begin
     'ACL permits the authenticated RPC surface, while the admin-only role check returns 42501.');
 
   v_result:=pg_temp.call_admin_configuration(v_admin);
+  -- Authority is resource-bound; a NULL block cannot establish a tenant role.
+  -- This dedicated writer fixture is independent of the configuration-reader probe.
+  insert into public.shooting_lanes(id,tenant_id,name,type,is_active,max_shooters,booking_step_minutes,currency_code,resource_kind,whole_lane_bookable,positions_bookable)
+  values(v_lane,'c5c00000-0000-4000-8000-000000000001','SEC002 synthetic','test',true,2,60,'PLN','lane',true,false);
+  insert into public.lane_blocks(id,tenant_id,lane_id,block_date,start_time,end_time,reason,is_active)
+  values(v_block,'c5c00000-0000-4000-8000-000000000001',v_lane,date '2099-12-01',time '10:00',time '11:00','SEC002 synthetic',false);
   perform pg_temp.record_result(16,'Authorized admin and employee behavior is preserved',
     v_result->>'contract_version'='2'
-    and pg_temp.call_lane_block_toggle(v_admin)->>'code'='invalid_input'
-    and pg_temp.call_lane_block_toggle(v_employee)->>'code'='invalid_input'
-    and pg_temp.call_lane_block_toggle(v_user)->>'code'='not_allowed',
-    'Admin-only reader allows admin; staff writer allows admin/employee and denies user.');
+    and pg_temp.call_lane_block_toggle(v_admin,v_block)->>'ok'='true'
+    and pg_temp.call_lane_block_toggle(v_employee,v_block)->>'ok'='true'
+    and pg_temp.call_lane_block_toggle(v_user,v_block)->>'code'='not_allowed'
+    and pg_temp.call_lane_block_toggle(v_admin,null)->>'code'='not_allowed'
+    and pg_temp.call_lane_block_toggle(v_employee,null)->>'code'='not_allowed',
+    'Admin-only reader allows admin; resource-bound staff writer allows admin/employee and denies user or missing resource.');
 
   v_denied:=false;
   begin
