@@ -25,7 +25,7 @@ test("home search is accessible, bounded and server-backed", () => {
 });
 
 test("directory cards use public slug routes and have safe empty/error states", () => {
-  assert.match(source, /href=\{`\/\$\{tenant\.slug\}`\}/u);
+  assert.match(source, /href=\{`\/\$\{tenant\.publicSlug\}`\}/u);
   assert.match(source, /Nie znaleźliśmy strzelnicy/u);
   assert.match(source, /Nie udało się pobrać katalogu/u);
   assert.match(source, /sm:grid-cols-2/u);
@@ -33,19 +33,20 @@ test("directory cards use public slug routes and have safe empty/error states", 
 });
 
 test("server directory accepts only the four-field PII-free RPC contract", () => {
-  assert.match(directory, /get_public_tenant_directory_v1/u);
+  assert.match(directory, /get_public_tenant_directory_v2/u);
+  assert.match(directory, /public_slug/u);
   assert.match(directory, /tenant_city/u);
   assert.match(directory, /tenant_logo_path/u);
   assert.match(directory, /tenant_name/u);
-  assert.match(directory, /tenant_slug/u);
   assert.doesNotMatch(
     directory,
     /user_id|email|phone|address|membership|SUPABASE_SERVICE_ROLE_KEY/u,
   );
 });
 
-test("root slug alias resolves only a published tenant before tenant routing", () => {
-  assert.match(alias, /getPublishedTenantBySlug\(slug\)/u);
+test("root slug renders the published canonical landing and redirects technical aliases", () => {
+  assert.match(alias, /getPublicTenantLanding\(slug\)/u);
   assert.match(alias, /if \(!tenant\) notFound\(\)/u);
-  assert.match(alias, /redirect\(`\/t\/\$\{tenant\.slug\}`\)/u);
+  assert.match(alias, /permanentRedirect\(`\/\$\{tenant\.publicSlug\}`\)/u);
+  assert.match(alias, /<PublicTenantLanding tenant=\{tenant\}/u);
 });

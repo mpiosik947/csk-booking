@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-test.describe("PRODUCT-10A public platform home", () => {
+test.describe("PRODUCT-10 public platform and tenant landing", () => {
   for (const width of [320, 375, 430, 768, 1440]) {
     test(`directory stays usable without horizontal overflow at ${width}px`, async ({ page }) => {
       await page.setViewportSize({ width, height: width < 768 ? 900 : 1000 });
@@ -34,8 +34,40 @@ test.describe("PRODUCT-10A public platform home", () => {
     });
     await expect(card).toContainText("Wolsztyn");
     await card.click();
-    await expect(page).toHaveURL(/\/t\/csk$/u);
-    await expect(page.getByRole("heading", { name: "CSK" })).toBeVisible();
+    await expect(page).toHaveURL(/\/csk-krutla$/u);
+    await expect(page.getByRole("heading", { name: "CSK — Centrum Szkolenia Krutla" })).toBeVisible();
+    await expect(page.getByRole("link", { name: "Zarezerwuj termin" })).toHaveAttribute("href", "/t/csk/booking");
+    await expect(page.getByRole("link", { name: "Szkolenia i eventy", exact: true })).toHaveAttribute("href", "/t/csk/events");
+  });
+
+  for (const width of [360, 390, 430, 768, 1440]) {
+    test(`tenant landing stays usable without horizontal overflow at ${width}px`, async ({ page }) => {
+      await page.setViewportSize({ width, height: width < 768 ? 900 : 1000 });
+      await page.goto("/csk-krutla");
+      await expect(page.getByRole("heading", { name: "CSK — Centrum Szkolenia Krutla" })).toBeVisible();
+      await expect(page.getByRole("link", { name: "Zarezerwuj termin" })).toBeVisible();
+      await expect(page.getByRole("link", { name: "Szkolenia i eventy", exact: true })).toBeVisible();
+      const overflow = await page.evaluate(
+        () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+      );
+      expect(overflow).toBeLessThanOrEqual(1);
+    });
+  }
+
+  test("technical aliases canonicalize without a redirect loop", async ({ page }) => {
+    await page.goto("/csk");
+    await expect(page).toHaveURL(/\/csk-krutla$/u);
+    await expect(page.getByRole("heading", { name: "CSK — Centrum Szkolenia Krutla" })).toBeVisible();
+
+    await page.goto("/t/csk");
+    await expect(page).toHaveURL(/\/csk-krutla$/u);
+  });
+
+  test("unknown public slug has a safe not-found response", async ({ page }) => {
+    const response = await page.goto("/tenant-that-does-not-exist");
+    expect(response?.status()).toBe(404);
+    await expect(page).toHaveURL(/\/tenant-that-does-not-exist$/u);
+    await expect(page.getByText("CSK — Centrum Szkolenia Krutla")).toHaveCount(0);
   });
 
   test("unknown search has a contextual empty state", async ({ page }) => {

@@ -50,7 +50,7 @@ begin
   report_a:=pg_temp.actor(admin_a,format('select public.admin_get_reservation_report_v3(%L,''2099-06-01'',''2099-06-01'',null,null,null,null,50,0)',a));
   export_a:=pg_temp.actor(admin_a,format('select public.admin_get_reservation_report_export_v2(%L,''2099-06-01'',''2099-06-01'',null,null,null,null)',a));
   perform pg_temp.ok(1,'two target signatures',to_regprocedure('public.admin_get_reservation_report_v3(uuid,date,date,uuid,text,text,text,integer,integer)') is not null and to_regprocedure('public.admin_get_reservation_report_export_v2(uuid,date,date,uuid,text,text,text)') is not null,'signatures');
-  perform pg_temp.ok(2,'75 definers',(select count(*)=75 from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.prosecdef),'DEFINER');
+  perform pg_temp.ok(2,'77 definers',(select count(*)=77 from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.prosecdef),'DEFINER');
   perform pg_temp.ok(3,'A report authorized',report_a->>'ok'='true',report_a::text);
   perform pg_temp.ok(4,'A report excludes B before details and KPI',(report_a->'pagination'->>'total')::integer=1 and (report_a->'summary'->>'planned_revenue')::numeric=100 and strpos(report_a::text,'B secret')=0 and not exists(select 1 from jsonb_array_elements(report_a->'filter_options'->'resources') option where option->>'id'=lane_b::text),'KPI/PII');
   perform pg_temp.ok(5,'A export authorized',export_a->>'ok'='true',export_a::text);

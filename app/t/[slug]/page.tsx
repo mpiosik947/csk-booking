@@ -1,11 +1,17 @@
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import type { Metadata } from "next";
+import { notFound, permanentRedirect } from "next/navigation";
+import { getPublicTenantLanding } from "@/lib/server/public-tenant-directory";
 import { getPublicRouteContext } from "@/lib/server/tenant-route-context";
+
+export const metadata: Metadata = { robots: { index: false, follow: true } };
 
 export default async function TenantHome({
   params,
 }: Readonly<{ params: Promise<{ slug: string }> }>) {
   const { slug } = await params;
+  const publishedTenant = await getPublicTenantLanding(slug);
+  if (publishedTenant) permanentRedirect(`/${publishedTenant.publicSlug}`);
   const context = await getPublicRouteContext(slug);
   if (!context.ok) notFound();
 

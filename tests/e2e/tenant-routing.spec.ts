@@ -8,11 +8,11 @@ const service = createClient(environment.supabaseUrl, environment.serviceRoleKey
   auth: { autoRefreshToken: false, persistSession: false },
 });
 
-test("active CSK slug renders tenant-specific module links", async ({ page }) => {
+test("technical tenant root canonicalizes while preserving tenant-specific module links", async ({ page }) => {
   await page.goto("/t/csk");
-  await expect(page.getByRole("heading", { name: "CSK" })).toBeVisible();
-  await expect(page.getByText(/Wybierz usługę w tej lokalizacji/)).toBeVisible();
-  await expect(page.getByRole("link", { name: "Rezerwacje" })).toHaveAttribute("href", "/t/csk/booking");
+  await expect(page).toHaveURL(/\/csk-krutla$/u);
+  await expect(page.getByRole("heading", { name: "CSK — Centrum Szkolenia Krutla" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Zarezerwuj termin" })).toHaveAttribute("href", "/t/csk/booking");
 });
 
 test("invalid and inactive slugs fail closed without CSK fallback", async ({ page }) => {

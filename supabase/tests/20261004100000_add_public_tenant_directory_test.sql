@@ -43,7 +43,7 @@ begin
     pg_catalog.to_regclass('public.tenant_public_profiles') is not null,
     'table missing');
   perform pg_temp.ok(2,'public profile schema and constraints are bounded',
-    (select pg_catalog.count(*)=7 from information_schema.columns
+    (select pg_catalog.count(*)=11 from information_schema.columns
       where table_schema='public' and table_name='tenant_public_profiles')
     and exists(select 1 from pg_catalog.pg_constraint where conrelid='public.tenant_public_profiles'::pg_catalog.regclass and conname='tenant_public_profiles_tenant_id_fkey')
     and exists(select 1 from pg_catalog.pg_constraint where conrelid='public.tenant_public_profiles'::pg_catalog.regclass and conname='tenant_public_profiles_logo_path_check'),
@@ -77,8 +77,8 @@ begin
     and pg_catalog.has_function_privilege('authenticated','public.get_public_tenant_directory_v1(text)','EXECUTE')
     and not pg_catalog.has_function_privilege('service_role','public.get_public_tenant_directory_v1(text)','EXECUTE'),
     'function ACL differs');
-  perform pg_temp.ok(9,'SECURITY DEFINER inventory is 75',
-    (select pg_catalog.count(*)=75 from pg_catalog.pg_proc procedure join pg_catalog.pg_namespace namespace on namespace.oid=procedure.pronamespace where namespace.nspname='public' and procedure.prosecdef),
+  perform pg_temp.ok(9,'SECURITY DEFINER inventory is 77 after PRODUCT-10B',
+    (select pg_catalog.count(*)=77 from pg_catalog.pg_proc procedure join pg_catalog.pg_namespace namespace on namespace.oid=procedure.pronamespace where namespace.nspname='public' and procedure.prosecdef),
     'definer inventory differs');
   perform pg_temp.ok(10,'CSK has one explicit published profile',
     exists(select 1 from public.tenant_public_profiles where tenant_id='c5c00000-0000-4000-8000-000000000001'::uuid
@@ -114,10 +114,10 @@ begin
     (tenant_b,'[TEST][PRODUCT-10A] Dormant','product10a-dormant','dormant'),
     (tenant_c,'[TEST][PRODUCT-10A] Private','product10a-private','active'),
     (tenant_d,'[TEST][PRODUCT-10A] Public','product10a-public','active');
-  insert into public.tenant_public_profiles(tenant_id,display_name,city,is_public) values
-    (tenant_b,'[TEST] Dormant','Testowo',true),
-    (tenant_c,'[TEST] Private','Testowo',false),
-    (tenant_d,'[TEST] Public','Testowo',true);
+  insert into public.tenant_public_profiles(tenant_id,display_name,city,is_public,public_slug) values
+    (tenant_b,'[TEST] Dormant','Testowo',true,'product10a-dormant-public'),
+    (tenant_c,'[TEST] Private','Testowo',false,'product10a-private-public'),
+    (tenant_d,'[TEST] Public','Testowo',true,'product10a-public-page');
 
   perform pg_temp.ok(20,'dormant and non-public tenants remain hidden',
     not exists(select 1 from public.get_public_tenant_directory_v1('product10a-dormant'))
@@ -141,11 +141,12 @@ select ('a2000000-0000-4000-8000-'||pg_catalog.lpad(value::text,12,'0'))::uuid,
        'active'
 from pg_catalog.generate_series(1,51) value;
 
-insert into public.tenant_public_profiles(tenant_id,display_name,city,is_public)
+insert into public.tenant_public_profiles(tenant_id,display_name,city,is_public,public_slug)
 select ('a2000000-0000-4000-8000-'||pg_catalog.lpad(value::text,12,'0'))::uuid,
        '[TEST][PRODUCT-10A] '||value,
        'Limitowo',
-       true
+       true,
+       'product10a-limit-public-'||value
 from pg_catalog.generate_series(1,51) value;
 
 update pg_temp.product10a_results

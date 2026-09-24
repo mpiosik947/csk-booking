@@ -105,9 +105,9 @@ export default async function Home({
           ) : (
             <ul className="mt-6 grid gap-4 sm:grid-cols-2">
               {directory.items.map((tenant) => (
-                <li key={tenant.slug} className="min-w-0">
+                <li key={tenant.publicSlug} className="min-w-0">
                   <Link
-                    href={`/${tenant.slug}`}
+                    href={`/${tenant.publicSlug}`}
                     className="group flex min-h-36 items-center gap-4 rounded-2xl border border-[#3d4638] bg-[#1a1f19] p-4 transition hover:-translate-y-0.5 hover:border-[#778462] hover:bg-[#20261e] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#a8b58a] sm:p-5"
                   >
                     <span className="flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-[#4f5947] bg-[#0f120f] text-xl font-black text-[#d7c895]">
