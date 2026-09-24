@@ -205,4 +205,22 @@ PRODUCT-10D local acceptance criteria are satisfied. The canonical entitlement e
 
 **PRODUCT-10D LOCAL: PASS**
 **READY FOR PRODUCTION PREFLIGHT: YES**
-**PRODUCTION WRITE: NO**
+
+## 17. Production deployment verification
+
+Deployment checkpoint: `3877970ac8a010eac70d89981c4bfa760a052137`.
+
+- Migration `20261007100000_add_saas_feature_entitlements.sql` was applied exactly once with SHA-256 `7EC71B28295BBD67C0277A867B352B883474E8018A15C28EC4B32FB5ECDC4C04`.
+- Local and remote migration history match through `20261007100000`; the final dry-run reports that the remote database is up to date.
+- Production contains 10 unique active feature keys, two active technical plans, one explicit CSK `current_full_v1` assignment, and zero non-CSK assignments.
+- The production SECURITY DEFINER inventory is 85. The four entitlement tables have RLS enabled, zero policies, and zero direct grants to PUBLIC, anon, authenticated, or service_role.
+- Protected entitlement functions have no PUBLIC or anon execution. The intentionally public allowlisted boolean reader remains available only to anon/authenticated.
+- The production resolver returns `true` for CSK booking, `false` for an unknown feature, and `false` for a missing tenant. Direct anonymous assignment-table access returns HTTP 401.
+- The landing DTO contains no plan, entitlement, billing, assignment, membership, tenant UUID, admin note, or user identifier fields.
+- GitHub/Vercel reports a successful deployment of the checkpoint to the intended `csk-booking-5nwh` project. The unused `csk-booking` project is not a deployment target.
+- Public, tenant-scoped, account, dashboard, login, and protected admin routes were smoke-tested with zero 5xx responses. Anonymous admin access redirects to login.
+- PRODUCT-10A, PRODUCT-10B, PRODUCT-10C, auth/account, tenant isolation, visibility masking, existing-data continuity, and the local booking-only/full-plan matrices remain passing.
+- The second production tenant remains inactive. DNS and custom domains remain untouched.
+
+**PRODUCT-10D PRODUCTION: PASS**
+**PRODUCT-10E READY: YES**
