@@ -106,9 +106,38 @@ controlled and exposes no data.
 remediation is outside PRODUCT-10A and the finding does not alter the directory
 authorization or data boundary.
 
+## Production deployment and smoke
+
+- checkpoint/deploy commit:
+  `030042d2f41936e91509b5218e51178df1410903`;
+- checkpoint push: fast-forward, LOCAL HEAD = `origin/main`, divergence `0/0`;
+- deployed migration:
+  `20261004100000_add_public_tenant_directory.sql`, applied exactly once;
+- post-deploy migration history: LOCAL=REMOTE through `20261004100000`;
+- post-deploy dry-run: `Remote database is up to date`, pending migrations: 0;
+- relevant Vercel production project `csk-booking-5nwh`: deployment success;
+- production `/`: HTTP 200 and new StrzelajTu.pl directory rendered;
+- public directory: one explicitly published and active CSK entry;
+- public DTO keys: `tenant_slug`, `tenant_name`, `tenant_city`,
+  `tenant_logo_path`; forbidden/PII fields: 0;
+- search by `Wolsztyn`, `Centrum Szkolenia` and `csk`: one correct result;
+- `/csk`: HTTP 200 after canonical redirect to `/t/csk`;
+- `/krutla`: safe HTTP 404 because it is not a published tenant slug;
+- unknown slug: safe HTTP 404 with no browser console error;
+- `/login`, `/account`, `/dashboard`, `/booking` and `/events`: HTTP 200;
+- production routes checked: no 5xx;
+- the migration's fail-closed active-tenant baseline passed with exactly one
+  active tenant; no second production tenant was created or activated;
+- DNS and custom-domain configuration: untouched.
+
+The GitHub commit status also contains a failure for a separate Vercel project
+named `csk-booking`. It is not the `csk-booking-5nwh` project serving the
+verified production URL. The relevant production project completed
+successfully and the live response matches the checkpointed PRODUCT-10A app.
+
 ## Verdict
 
-PRODUCT-10A PUBLIC PLATFORM FOUNDATION: **FULLY IMPLEMENTED LOCALLY**
+PRODUCT-10A PUBLIC PLATFORM FOUNDATION: **FULLY IMPLEMENTED / PROD PASS**
 
 PUBLIC HOME: **PASS**
 
@@ -124,4 +153,4 @@ SECOND PRODUCTION TENANT: **NOT ACTIVATED**
 
 CUSTOM DOMAIN / DNS: **NOT TOUCHED**
 
-DEPLOYMENT: **DB FIRST**
+DEPLOYMENT: **DB + APP PROD PASS**
