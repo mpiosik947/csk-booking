@@ -199,12 +199,39 @@ Pre-existing changes in `AGENTS.md`, SaaS planning/master reports, `FINAL_SAAS_S
 - Second production tenant activation.
 - Final legal/GDPR content model and richer regulations content management.
 
-## 12. Final gate
+## 12. Production deployment and verification
 
-PRODUCT-10C is locally complete. Tenant settings are admin-only and tenant-isolated, visibility is not authority or entitlement, the public DTO remains explicitly allowlisted, CSK keeps its existing public UX through safe defaults, and all automated gates pass.
+- checkpoint/deploy commit: `94d8bd0c9e6aa21f4deb38217fed43868012ea85`;
+- checkpoint push: fast-forward, LOCAL HEAD = `origin/main`, divergence `0/0`;
+- deployed migration: `20261006100000_add_tenant_public_settings.sql`, applied exactly once;
+- migration SHA-256: `33D153D92D5BFDEB95C9687F5AF8551C486AB71DE6B7AE3437AF33F29F7A30B4`;
+- post-deploy history: LOCAL=REMOTE through `20261006100000`;
+- post-deploy dry-run: `Remote database is up to date`, pending migrations: `0`;
+- relevant Vercel project `csk-booking-5nwh`: deployment completed successfully for the checkpoint commit;
+- the separate obsolete Vercel project `csk-booking` failed independently and was not used or modified;
+- production rollback-only matrix: **35/35 PASS** with a final `ROLLBACK`;
+- raw anon and authenticated DTO masking passed for contact, about and regulations fields;
+- authorization passed for Admin A → Tenant A, with Admin A → Tenant B, employee, instructor, ordinary user, pending/suspended membership and global-role-only access denied;
+- SECURITY DEFINER inventory: `80`; direct table access for public roles remains closed;
+- post-rollback cleanup: synthetic tenants `0`, auth users `0`, memberships `0`, public profiles `0`;
+- production CSK state remained public with `public_slug=csk-krutla` and all seven existing visibility flags enabled;
+- exactly one active production tenant remained; no second production tenant was created or activated;
+- `/`, `/csk-krutla`, `/t/csk/booking`, `/t/csk/events`, `/login`, `/account` and `/dashboard` returned without HTTP 5xx;
+- `/csk` and `/t/csk` retained their permanent redirects to `/csk-krutla`;
+- unauthenticated `/admin` and `/admin/settings` retained safe redirects to login;
+- public landing rendered the booking/events CTAs, about, location, pricing link and regulations link without empty contact cards, dead CTAs or browser console errors;
+- public landing V2 returned exactly 20 allowlisted fields, no tenant UUID, membership, billing, note, secret or user data;
+- anonymous direct table access returned HTTP `401`;
+- DNS, `strzelajtu.pl` and custom-domain configuration were untouched.
 
-No production write, deployment, staging, commit or push was performed. The next permitted step is a separate production preflight.
+## 13. Final gate
+
+PRODUCT-10C passed local verification, production migration deployment, the
+correct Vercel project deployment and post-deploy privacy/authorization smoke.
+Visibility remains separate from tenant authority and future entitlements.
 
 **PRODUCT-10C LOCAL: PASS**
 
-**READY FOR PRODUCTION PREFLIGHT: YES**
+**PRODUCT-10C PROD: PASS**
+
+**READY FOR PRODUCT-10D: YES**
