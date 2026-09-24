@@ -16,6 +16,7 @@ const KNOWN_ADMIN_PATHS = new Set([
   "admin", "admin/check-in", "admin/users", "admin/reports",
   "admin/reservations", "admin/calendar", "admin/events",
   "admin/lane-blocks", "admin/lane-configuration",
+  "admin/settings",
 ]);
 
 const TO_TENANT_ROLE = {

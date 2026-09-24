@@ -18,6 +18,7 @@ import AdminReservationsPage from "@/app/admin/reservations/page";
 import AdminHomePage from "@/app/admin/page";
 import AdminCheckInPage from "@/app/admin/check-in/page";
 import AdminCalendarPage from "@/app/admin/calendar/page";
+import AdminSettingsPage from "@/app/admin/settings/page";
 
 export default async function TenantModuleShell({
   params,
@@ -76,6 +77,9 @@ export default async function TenantModuleShell({
   }
   if (route.kind === "staff" && route.path === "admin/calendar") {
     return <AdminCalendarPage tenantId={tenantId} tenantSlug={slug} />;
+  }
+  if (route.kind === "staff" && route.path === "admin/settings") {
+    return <AdminSettingsPage tenantSlug={slug} />;
   }
 
   notFound();

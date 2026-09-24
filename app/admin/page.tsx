@@ -130,6 +130,13 @@ const adminTiles: AdminTile[] = [
     roles: ["admin"],
     hiddenWhenDenied: true,
   },
+  {
+    title: "Ustawienia publiczne",
+    description: "Profil obiektu, dane kontaktowe i widoczność sekcji strony publicznej.",
+    href: "/admin/settings",
+    roles: ["admin"],
+    hiddenWhenDenied: true,
+  },
 ];
 
 function getMonthRange(date = new Date()) {

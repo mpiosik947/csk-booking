@@ -13,14 +13,25 @@ const landing = readFileSync(
 const publicRoute = readFileSync(new URL("./[slug]/page.tsx", import.meta.url), "utf8");
 const technicalRoot = readFileSync(new URL("./t/[slug]/page.tsx", import.meta.url), "utf8");
 
-test("landing adapter accepts only the eight-field public DTO", () => {
-  assert.match(adapter, /get_public_tenant_landing_v1/u);
+test("landing adapter accepts only the PRODUCT-10C public DTO", () => {
+  assert.match(adapter, /get_public_tenant_landing_v2/u);
   for (const field of [
     "tenant_slug", "public_slug", "tenant_name", "tenant_city",
     "tenant_logo_path", "tenant_hero_image_path", "tenant_description",
     "tenant_regulations_path",
+    "tenant_public_address", "tenant_public_phone", "tenant_public_email",
+    "tenant_opening_hours", "tenant_social_links", "show_booking", "show_events",
   ]) assert.match(adapter, new RegExp(field, "u"));
   assert.doesNotMatch(adapter, /user_id|admin_note|membership|SUPABASE_SERVICE_ROLE_KEY/u);
+});
+
+test("landing section toggles are presentation-only and omit hidden blocks", () => {
+  for (const flag of ["showBooking", "showPricing", "showInstructor", "showEvents", "showAbout", "showContact", "showRegulations"]) {
+    assert.match(landing, new RegExp(`tenant\\.${flag}`, "u"));
+  }
+  assert.match(landing, /\/t\/\$\{tenant\.tenantSlug\}\/booking/u);
+  assert.match(landing, /\/t\/\$\{tenant\.tenantSlug\}\/events/u);
+  assert.doesNotMatch(landing, /dangerouslySetInnerHTML/u);
 });
 
 test("universal landing contains no CSK identity or contact hardcoding", () => {

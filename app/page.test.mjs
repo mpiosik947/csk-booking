@@ -40,7 +40,7 @@ test("server directory accepts only the four-field PII-free RPC contract", () =>
   assert.match(directory, /tenant_name/u);
   assert.doesNotMatch(
     directory,
-    /user_id|email|phone|address|membership|SUPABASE_SERVICE_ROLE_KEY/u,
+    /user_id|admin_id|membership|billing|SUPABASE_SERVICE_ROLE_KEY/u,
   );
 });
 

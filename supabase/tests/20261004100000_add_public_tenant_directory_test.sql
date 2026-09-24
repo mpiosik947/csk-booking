@@ -43,7 +43,7 @@ begin
     pg_catalog.to_regclass('public.tenant_public_profiles') is not null,
     'table missing');
   perform pg_temp.ok(2,'public profile schema and constraints are bounded',
-    (select pg_catalog.count(*)=11 from information_schema.columns
+    (select pg_catalog.count(*)=23 from information_schema.columns
       where table_schema='public' and table_name='tenant_public_profiles')
     and exists(select 1 from pg_catalog.pg_constraint where conrelid='public.tenant_public_profiles'::pg_catalog.regclass and conname='tenant_public_profiles_tenant_id_fkey')
     and exists(select 1 from pg_catalog.pg_constraint where conrelid='public.tenant_public_profiles'::pg_catalog.regclass and conname='tenant_public_profiles_logo_path_check'),
@@ -77,8 +77,8 @@ begin
     and pg_catalog.has_function_privilege('authenticated','public.get_public_tenant_directory_v1(text)','EXECUTE')
     and not pg_catalog.has_function_privilege('service_role','public.get_public_tenant_directory_v1(text)','EXECUTE'),
     'function ACL differs');
-  perform pg_temp.ok(9,'SECURITY DEFINER inventory is 77 after PRODUCT-10B',
-    (select pg_catalog.count(*)=77 from pg_catalog.pg_proc procedure join pg_catalog.pg_namespace namespace on namespace.oid=procedure.pronamespace where namespace.nspname='public' and procedure.prosecdef),
+  perform pg_temp.ok(9,'SECURITY DEFINER inventory is 80 after PRODUCT-10C',
+    (select pg_catalog.count(*)=80 from pg_catalog.pg_proc procedure join pg_catalog.pg_namespace namespace on namespace.oid=procedure.pronamespace where namespace.nspname='public' and procedure.prosecdef),
     'definer inventory differs');
   perform pg_temp.ok(10,'CSK has one explicit published profile',
     exists(select 1 from public.tenant_public_profiles where tenant_id='c5c00000-0000-4000-8000-000000000001'::uuid
