@@ -165,13 +165,39 @@ This report is the only new documentation file for PRODUCT-10B.
 - Custom domains and DNS for `strzelajtu.pl` or tenant domains.
 - New instructor, analytics, advertising, consent, or marketplace systems.
 
-## 11. Final gate
+## 11. Production deployment and verification
 
-All PRODUCT-10B local acceptance gates passed. Production was untouched, so production readiness still requires a separate migration/application preflight and explicit deployment authorization.
+- checkpoint/deploy commit: `d012f7a884b400212c74ceb62015c5bc4a810752`;
+- checkpoint push: fast-forward, LOCAL HEAD = `origin/main`, divergence `0/0`;
+- deployed migration: `20261005100000_add_public_tenant_landing.sql`;
+- migration SHA-256: `525171892E458491881E5C058205B0614DCFE8697E95B9C2E4E35166890EF10B`;
+- post-deploy migration history: LOCAL=REMOTE through `20261005100000`;
+- post-deploy dry-run: `Remote database is up to date`, pending migrations: `0`;
+- migration postflight confirmed SECURITY DEFINER inventory `77` and the reviewed function ACL;
+- relevant Vercel project `csk-booking-5nwh`: deployment `2ZvhvzHFstMijEfLanXCT8qnkFYE` completed successfully for the checkpoint commit;
+- the separate obsolete Vercel project `csk-booking` failed independently and was not used or modified;
+- production `/csk-krutla`: HTTP 200 with the canonical CSK landing;
+- production `/csk` and `/t/csk`: HTTP 308 to `/csk-krutla`, with no redirect loop;
+- `/t/csk/booking` and `/t/csk/events`: HTTP 200;
+- unknown public slug: safe HTTP 404;
+- public directory response: exactly four allowlisted fields and one active/public CSK row;
+- public landing response: exactly eight allowlisted fields and one canonical CSK row;
+- forbidden public fields and PII found: `0`;
+- direct anon table access to `tenant_public_profiles`: HTTP 401;
+- production route smoke: no HTTP 5xx;
+- new PRODUCT-10B public routes: no browser console or page errors;
+- the unauthenticated `/account` smoke retained its pre-existing `Account user read failed` console diagnostic, while the expected unknown-slug 404 produced the browser's normal failed-resource message; neither surface was changed by PRODUCT-10B;
+- no second production tenant was created or activated;
+- DNS, `strzelajtu.pl`, and custom-domain configuration were untouched.
+
+## 12. Final gate
+
+PRODUCT-10B passed local verification, production migration deployment, the
+correct Vercel project deployment, and post-deploy routing/security smoke.
 
 ## PRODUCT-10B — HANDOFF
 
-HEAD: `a9c0eda176fcc24fa2bd392e1c3c6990bfe1be8e`
+HEAD: `d012f7a884b400212c74ceb62015c5bc4a810752`
 FILES CHANGED: `42` including this report; pre-existing unrelated files excluded
 MIGRATIONS: `20261005100000_add_public_tenant_landing.sql`
 PUBLIC_SLUG MODEL: `tenant_public_profiles.public_slug`; selector only, never authority
@@ -196,10 +222,11 @@ BUILD: PASS
 ESLINT: PASS
 DIFF CHECK: PASS
 
-PRODUCTION WRITE: NO
+PRODUCTION WRITE: COMPLETE — authorized migration applied exactly once
 SECOND PROD TENANT: NOT ACTIVATED
 DNS/CUSTOM DOMAIN: UNTOUCHED
 
 PRODUCT-10B LOCAL: PASS
-READY FOR PRODUCTION PREFLIGHT: YES
-OPEN ITEMS: production preflight/deployment; richer public tenant settings and contact/branding fields remain deferred to later PRODUCT stages.
+PRODUCT-10B PROD: PASS
+READY FOR PRODUCT-10C: YES
+OPEN ITEMS: richer public tenant settings and contact/branding fields remain deferred to later PRODUCT stages; pre-existing unauthenticated `/account` console diagnostic remains outside PRODUCT-10B.
