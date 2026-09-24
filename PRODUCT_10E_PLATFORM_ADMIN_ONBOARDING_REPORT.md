@@ -1,7 +1,7 @@
 # PRODUCT-10E — Platform Admin and Tenant Onboarding
 
 Date: 2026-09-24
-Status: CANCELLATION AUTHORITY REMEDIATION LOCAL PASS. PRODUCT-10E onboarding itself is not yet implemented. Suspension policy and external-settlement recording scope remain APPROVED. Production is untouched; the correction is not deployed.
+Status: CANCELLATION AUTHORITY SECURITY PATCH PROD PASS. PRODUCT-10E onboarding itself is not yet implemented. Suspension policy and external-settlement recording scope remain APPROVED. Both security migrations are deployed and verified; see the production handoff below. Earlier local/preflight sections are historical evidence.
 
 ## Checkpoint verification
 
@@ -283,6 +283,45 @@ Exact proposed checkpoint scope remains the five files listed above: two migrati
 **READY FOR CHECKPOINT COMMIT/PUSH: YES.**
 **READY FOR PRODUCTION DEPLOYMENT: YES — readiness only; separate deployment authorization required.**
 **PRODUCTION WRITE / STAGING / COMMIT / PUSH / DEPLOYMENT: NO.**
+
+## Security patch production deployment — 2026-09-24 (latest authoritative result)
+
+**SECURITY PATCH PROD: PASS. PRODUCT-10E READY TO RESUME: YES, local implementation only after review; no onboarding continuation was performed.**
+
+### Checkpoint and deployment
+
+- Security checkpoint: `666eddfca92ddb8f7d7d9b68fe063fee97b80ba4`, message `PRODUCT-10E security patch tenant cancellation authority`.
+- Exactly the approved five files were staged and committed. Cached diff check passed. No AGENTS, drafts or unrelated SaaS document entered the checkpoint.
+- Push to origin/main was fast-forward from `90c5895ef48352f09d3df5ca7e5e2943dc06a39d`; live remote matched the checkpoint, divergence 0/0.
+- Final production gate rechecked project `yuyxfodozzpzrdzkmolu`, both authorized SHA-256 values, exactly two pending versions, 15/15 input fingerprints and SECURITY DEFINER=85.
+- `supabase db push --linked --yes` applied only `20261008100000_harden_cancellation_tenant_authority.sql` and `20261008110000_harden_resource_helper_role_authority.sql`.
+- Each version occurs exactly once in production migration history. LOCAL=REMOTE for all 119 versions; pending=0. Final dry-run: `Remote database is up to date`.
+- Both migration file SHA-256 values remain identical to the authorized preflight values above.
+- No separate application deployment was needed or invoked: the checkpoint changes SQL/tests/report only. Any automatic Git-integrated build does not change application source.
+
+### Target and production security matrix
+
+All 141 public function normalized fingerprints, signatures, owners, ACLs, security modes and search paths match the tested local target. Unexpected drift=0; unexpected grants=0; SECURITY DEFINER=85. All fifteen patched internal helpers remain closed INVOKER functions, with no PUBLIC/anon/authenticated/service_role direct EXECUTE.
+
+The focused test was executed through the production Management API as postgres in a single BEGIN/ROLLBACK transaction. Only psql transport directives were adapted in memory: `\\set` was removed, generated fixture UUIDs were bound explicitly, and `\\gset` cleanup references were replaced by the same exact UUIDs. No test expectation or authorization logic changed; no fixture script or migration was edited. Transaction-local lock/statement timeouts were added. No COMMIT was issued.
+
+Each of the 45 in-transaction assertions raises on mismatch. The API returned the final post-ROLLBACK result: `ok 46 - rollback cleanup across all fixture tables = 0`, with successful execution and no error. Thus **46/46 PASS**. Temporary synthetic active tenants were transaction-private and rolled back; no second tenant was durably activated or made visible to concurrent clients.
+
+- user membership + global user/admin: cutoff override DENY for both cancellation paths.
+- active resource-tenant admin/employee + global user: override ALLOW under existing scope.
+- pending/suspended/no resource membership, admin only in the other tenant, anonymous and foreign ownership: DENY.
+- eligible owner self-cancellation: PASS; reservation 12h and event 72h semantics unchanged.
+- Additional helper behavioral probes and all thirteen resource-authority/ACL/search-path assertions: PASS.
+
+Run fixture identifiers: tenant `58cf3bd7-3b76-4a17-84a3-a80817e1e589`, other tenant `55335993-4dfe-4751-9cbe-ffa4b7e770dd`, actor `30ec02a0-0fa7-429c-886b-2d3f5d5e312f`. The test's exact-ID cleanup covered users, profiles, memberships, plans, events, registrations, lanes, pricing, reservations and audit. An independent read-only query confirmed fixture tenants/users/audit=0; production tenants=1 and active tenants=1.
+
+### Regression and limitations of evidence
+
+Post-deploy production HTTP smoke: all 17 requested/relevant routes completed with HTTP 200 after expected redirects, 5xx=0: `/`, `/csk-krutla`, `/csk`, `/t/csk`, `/t/csk/booking`, `/t/csk/events`, `/booking`, `/events`, `/account`, `/dashboard`, `/login`, `/admin`, `/admin/settings`, `/t/csk/admin`, `/t/csk/admin/reservations`, `/t/csk/admin/users`, `/t/csk/admin/reports`. Public aliases canonicalize correctly; unauthenticated protected routes redirect to login.
+
+Full regression evidence comes from the immediately preceding repeated preflight on the identical target: DB 1804/1804, Node 803/803, Playwright 49/49, TypeScript/build/schema diff PASS. Production target parity plus the production 46-control matrix establishes the DB patch result. This is not a claim of a new authenticated production browser session or rerunning the full fixture-heavy DB suite on production. PRODUCT-10A/B/C/D and auth/account automated regression remain green; no application code changed.
+
+Final git diff check: PASS. No migration repair, force push, rebase/reset, DNS/custom-domain change, customer-record mutation or persistent synthetic fixture. The five pre-existing unrelated entries remain excluded. The evidence update is a separate report-only checkpoint, not mixed into the security implementation commit.
 
 ## Archived pre-remediation reproduction (2026-09-24)
 
