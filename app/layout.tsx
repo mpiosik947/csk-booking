@@ -2,9 +2,9 @@
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "CSK Booking | Centrum Szkolenia Krutla",
+  title: "StrzelajTu.pl | Rezerwacje strzelnic online",
   description:
-    "Rezerwacje strzelnicy, szkolenia strzeleckie, wydarzenia i obsluga klientow Centrum Szkolenia Krutla.",
+    "Znajdź strzelnicę, sprawdź dostępność i zarezerwuj termin online w StrzelajTu.pl.",
 };
 
 export default function RootLayout({

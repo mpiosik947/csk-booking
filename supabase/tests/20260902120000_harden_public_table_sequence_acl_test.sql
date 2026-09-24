@@ -41,6 +41,7 @@ insert into expected_table_acl values
   ('reservations','B','{}','{SELECT}','{DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE}'),
   ('shooting_lanes','A','{SELECT}','{SELECT}','{DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE}'),
   ('tenant_memberships','D','{}','{SELECT}','{}'),
+  ('tenant_public_profiles','D','{}','{}','{}'),
   ('tenant_user_admin_notes','D','{}','{}','{}'),
   ('tenant_user_verifications','D','{}','{}','{}'),
   ('tenants','D','{}','{}','{}');
@@ -99,9 +100,9 @@ declare
   v_denied boolean;
 begin
   perform pg_temp.record_result(1,'Complete public table inventory',
-    (select count(*)=18 from pg_temp.expected_table_acl)
-    and (select count(*)=18 from pg_catalog.pg_class relation join pg_catalog.pg_namespace namespace on namespace.oid=relation.relnamespace where namespace.nspname='public' and relation.relkind in ('r','p')),
-    'Oczekiwano dokładnie 18 zinwentaryzowanych tabel public.');
+    (select count(*)=19 from pg_temp.expected_table_acl)
+    and (select count(*)=19 from pg_catalog.pg_class relation join pg_catalog.pg_namespace namespace on namespace.oid=relation.relnamespace where namespace.nspname='public' and relation.relkind in ('r','p')),
+    'Oczekiwano dokładnie 19 zinwentaryzowanych tabel public.');
 
   perform pg_temp.record_result(2,'RLS enabled on every public table',
     not exists(select 1 from pg_catalog.pg_class relation join pg_catalog.pg_namespace namespace on namespace.oid=relation.relnamespace where namespace.nspname='public' and relation.relkind in ('r','p') and not relation.relrowsecurity),

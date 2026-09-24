@@ -109,8 +109,8 @@ begin
       where trigger_row.action_statement
         ~* '(get_my_role|is_admin|is_admin_or_employee|is_admin_or_staff)'));
 
-  perform pg_temp.ok(12, 'SECURITY DEFINER inventory is 74 after the 9F tenant selector',
-    (select pg_catalog.count(*) = 74
+  perform pg_temp.ok(12, 'SECURITY DEFINER inventory is 75 after PRODUCT-10A public directory',
+    (select pg_catalog.count(*) = 75
      from pg_catalog.pg_proc procedure
      join pg_catalog.pg_namespace namespace on namespace.oid = procedure.pronamespace
      where namespace.nspname = 'public' and procedure.prokind = 'f' and procedure.prosecdef));

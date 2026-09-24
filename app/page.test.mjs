@@ -3,43 +3,49 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 
 const source = readFileSync(new URL("./page.tsx", import.meta.url), "utf8");
+const directory = readFileSync(
+  new URL("../lib/server/public-tenant-directory.ts", import.meta.url),
+  "utf8",
+);
+const alias = readFileSync(new URL("./[slug]/page.tsx", import.meta.url), "utf8");
 
-test("home presents one prominent test-mode warning before the primary CTA", () => {
-  const warning = source.indexOf('id="test-mode-warning-title"');
-  const bookingCta = source.indexOf('href="/booking"');
-
-  assert.ok(warning >= 0);
-  assert.ok(bookingCta > warning);
-  assert.equal(source.match(/UWAGA — SYSTEM W WERSJI TESTOWEJ/gu)?.length, 1);
-  assert.doesNotMatch(source, /System w fazie sprawdzania/u);
+test("home is the neutral StrzelajTu.pl platform directory", () => {
+  assert.match(source, /StrzelajTu/u);
+  assert.match(source, /Znajdź strzelnicę i zarezerwuj termin online/u);
+  assert.match(source, /Publiczny katalog/u);
+  assert.doesNotMatch(source, /Strzelnica CSK nie została|Centrum Szkolenia Krutla/u);
 });
 
-test("warning clearly explains the test-only and non-binding status", () => {
-  assert.match(source, /Strzelnica CSK nie została jeszcze oficjalnie uruchomiona/u);
-  assert.match(source, /Aplikacja działa obecnie w trybie testowym/u);
-  assert.match(source, /nie są wiążące/u);
-  assert.match(source, /nie oznaczają potwierdzenia\s+rzeczywistego terminu/u);
-  assert.match(source, /oficjalnym uruchomieniu rezerwacji poinformujemy/u);
+test("home search is accessible, bounded and server-backed", () => {
+  assert.match(source, /role="search"/u);
+  assert.match(source, /Wyszukaj strzelnicę lub miejscowość/u);
+  assert.match(source, /name="q"/u);
+  assert.match(source, /maxLength=\{80\}/u);
+  assert.match(source, /getPublicTenantDirectory/u);
 });
 
-test("warning is semantic and does not rely on color alone", () => {
-  assert.match(source, /aria-labelledby="test-mode-warning-title"/u);
-  assert.match(source, /<h2\s+[\s\S]*?id="test-mode-warning-title"/u);
-  assert.match(source, />\s*TEST\s*</u);
-  assert.match(source, /name="warning"/u);
+test("directory cards use public slug routes and have safe empty/error states", () => {
+  assert.match(source, /href=\{`\/\$\{tenant\.slug\}`\}/u);
+  assert.match(source, /Nie znaleźliśmy strzelnicy/u);
+  assert.match(source, /Nie udało się pobrać katalogu/u);
+  assert.match(source, /sm:grid-cols-2/u);
+  assert.doesNotMatch(source, /\/t\/csk|tenant\.tenantId|profiles|service_role/u);
 });
 
-test("home keeps the primary booking and events calls to action", () => {
-  assert.match(source, /href="\/booking"/u);
-  assert.match(source, /Zarezerwuj termin/u);
-  assert.match(source, /href="\/events"/u);
-  assert.match(source, /Szkolenia i eventy/u);
+test("server directory accepts only the four-field PII-free RPC contract", () => {
+  assert.match(directory, /get_public_tenant_directory_v1/u);
+  assert.match(directory, /tenant_city/u);
+  assert.match(directory, /tenant_logo_path/u);
+  assert.match(directory, /tenant_name/u);
+  assert.match(directory, /tenant_slug/u);
+  assert.doesNotMatch(
+    directory,
+    /user_id|email|phone|address|membership|SUPABASE_SERVICE_ROLE_KEY/u,
+  );
 });
 
-test("warning and CTA layout stay bounded and responsive", () => {
-  assert.match(source, /flex min-w-0 items-start/u);
-  assert.match(source, /min-w-0 flex-1/u);
-  assert.match(source, /p-4[^"]*sm:p-5/u);
-  assert.match(source, /grid gap-4 md:grid-cols-2/u);
-  assert.doesNotMatch(source, /min-w-\[(?:[4-9]\d\d|\d{4,})px\]/u);
+test("root slug alias resolves only a published tenant before tenant routing", () => {
+  assert.match(alias, /getPublishedTenantBySlug\(slug\)/u);
+  assert.match(alias, /if \(!tenant\) notFound\(\)/u);
+  assert.match(alias, /redirect\(`\/t\/\$\{tenant\.slug\}`\)/u);
 });

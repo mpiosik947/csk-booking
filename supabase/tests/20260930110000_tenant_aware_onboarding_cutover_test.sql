@@ -161,8 +161,8 @@ begin
     (select pg_catalog.count(*)=0 from information_schema.columns where table_schema='public' and column_name='tenant_id'
       and table_name in('shooting_lanes','reservations','lane_blocks','events','event_lanes','event_registrations','email_deliveries')
       and column_default='''c5c00000-0000-4000-8000-000000000001''::uuid'));
-  perform pg_temp.ok(23,'SECURITY DEFINER target is 74 after the 9F tenant selector',
-    (select pg_catalog.count(*)=74 from pg_catalog.pg_proc p join pg_catalog.pg_namespace n on n.oid=p.pronamespace
+  perform pg_temp.ok(23,'SECURITY DEFINER target is 75 after PRODUCT-10A public directory',
+    (select pg_catalog.count(*)=75 from pg_catalog.pg_proc p join pg_catalog.pg_namespace n on n.oid=p.pronamespace
       where n.nspname='public' and p.prosecdef));
   perform pg_temp.ok(24,'only CSK is active after two-tenant test',
     (select pg_catalog.count(*)=1 from public.tenants where status='active')
