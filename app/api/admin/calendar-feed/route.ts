@@ -105,6 +105,14 @@ export async function GET(request: Request) {
       return jsonError("forbidden", "Brak uprawnień do kalendarza.", 403);
     }
 
+    const { data: hasCalendar, error: featureError } = await supabase.rpc(
+      "get_my_tenant_feature_access_v1",
+      { p_tenant_id: tenant.value.tenantId, p_feature_key: "advanced_calendar" }
+    );
+    if (featureError || hasCalendar !== true) {
+      return jsonError("forbidden", "Kalendarz jest niedostępny.", 403);
+    }
+
     const query = parsedQuery.value;
     const laneRequest = supabase
       .from("shooting_lanes")

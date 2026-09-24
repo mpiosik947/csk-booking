@@ -75,7 +75,7 @@ test("instructor is fail-closed for check-in navigation and customer dashboard r
   assert.doesNotMatch(dashboard, /\.from\("profiles"\)/);
   assert.match(
     dashboard,
-    /hasAccess\(role, \["admin", "pracownik"\]\) && \([\s\S]*?Najbliższe rezerwacje/
+    /hasAccess\(role, \["admin", "pracownik"\]\) && features\.has\("booking"\) && \([\s\S]*?Najbliższe rezerwacje/
   );
   assert.match(checkIn, /useRouter, useSearchParams/);
   assert.match(

@@ -27,6 +27,12 @@ create temporary table expected_function_acl(
 ) on commit drop;
 
 insert into expected_function_acl values
+  -- PRODUCT-10D: closed SaaS catalog and fail-closed entitlement readers/guard.
+  ('public.tenant_has_feature_v1(uuid,text)','A',false,false,true),
+  ('public.get_my_tenant_feature_access_v1(uuid,text)','B',false,true,false),
+  ('public.get_my_tenant_features_v1(uuid)','B',false,true,false),
+  ('public.get_public_tenant_feature_access_v1(uuid,text)','B',true,true,false),
+  ('public.enforce_tenant_feature_write_v1()','E',false,false,false),
   -- PRODUCT-10C: public presentation DTO and tenant-admin settings contracts.
   ('public.admin_get_tenant_public_settings_v1(text)','C',false,true,false),
   ('public.admin_update_tenant_public_settings_v1(text,jsonb,timestamp with time zone)','C',false,true,false),
@@ -267,8 +273,8 @@ begin
     and procedure.proname<>'csk_sec002_default_acl_probe';
 
   perform pg_temp.record_result(1,'Complete public function inventory',
-    (select pg_catalog.count(*)=136 from pg_temp.expected_function_acl)
-    and v_actual_count=136
+    (select pg_catalog.count(*)=141 from pg_temp.expected_function_acl)
+    and v_actual_count=141
     and not exists(
       select 1 from pg_temp.expected_function_acl expected
       where pg_catalog.to_regprocedure(expected.signature) is null
@@ -284,7 +290,7 @@ begin
           where pg_catalog.to_regprocedure(expected.signature)=procedure.oid
         )
     ),
-    'The exact 136-function PRODUCT-10C inventory has no missing or unexpected signature.');
+    'The exact 141-function PRODUCT-10D inventory has no missing or unexpected signature.');
 
   perform pg_temp.record_result(2,'PUBLIC executes no public function',
     not exists(
@@ -305,8 +311,8 @@ begin
       where pg_catalog.has_function_privilege('anon',expected.signature,'EXECUTE')
         is distinct from expected.anon_execute
     )
-    and (select pg_catalog.count(*)=10 from pg_temp.expected_function_acl where anon_execute),
-    'anon can execute only the ten intended non-PII public readers/policy helpers.');
+    and (select pg_catalog.count(*)=11 from pg_temp.expected_function_acl where anon_execute),
+    'anon can execute only the eleven intended non-PII public readers/policy helpers.');
 
   perform pg_temp.record_result(4,'Exact authenticated ACL matrix',
     not exists(
@@ -314,8 +320,8 @@ begin
       where pg_catalog.has_function_privilege('authenticated',expected.signature,'EXECUTE')
         is distinct from expected.authenticated_execute
     )
-    and (select pg_catalog.count(*)=68 from pg_temp.expected_function_acl where authenticated_execute),
-    'authenticated has exactly the 68 current tenant-aware RPC grants.');
+    and (select pg_catalog.count(*)=71 from pg_temp.expected_function_acl where authenticated_execute),
+    'authenticated has exactly the 71 current tenant-aware RPC grants.');
 
   perform pg_temp.record_result(5,'Exact service_role ACL matrix',
     not exists(
@@ -323,18 +329,18 @@ begin
       where pg_catalog.has_function_privilege('service_role',expected.signature,'EXECUTE')
         is distinct from expected.service_role_execute
     )
-    and (select pg_catalog.count(*)=4 from pg_temp.expected_function_acl where service_role_execute),
-    'service_role retains only the four explicitly intended server and rollback grants.');
+    and (select pg_catalog.count(*)=5 from pg_temp.expected_function_acl where service_role_execute),
+    'service_role retains only five explicitly intended server, entitlement and rollback grants.');
 
   perform pg_temp.record_result(6,'Trigger functions and internal helpers are isolated',
-    (select pg_catalog.count(*)=11 from pg_temp.expected_function_acl where category='E')
+    (select pg_catalog.count(*)=12 from pg_temp.expected_function_acl where category='E')
     and not exists(
       select 1 from pg_temp.expected_function_acl expected
       where expected.category='E' and (
         expected.anon_execute or expected.authenticated_execute or expected.service_role_execute
       )
     )
-    and (select pg_catalog.count(distinct trigger_record.tgfoid)=11
+    and (select pg_catalog.count(distinct trigger_record.tgfoid)=12
       from pg_catalog.pg_trigger trigger_record
       where not trigger_record.tgisinternal
         and exists(
@@ -372,14 +378,14 @@ begin
     'Future functions created by postgres receive no client or PUBLIC EXECUTE.');
 
   perform pg_temp.record_result(8,'Application function creator scope is exact',
-    (select pg_catalog.count(*)=136
+    (select pg_catalog.count(*)=141
       from pg_catalog.pg_proc procedure
       join pg_catalog.pg_namespace namespace on namespace.oid=procedure.pronamespace
       join pg_catalog.pg_roles owner_role on owner_role.oid=procedure.proowner
       where namespace.nspname='public' and procedure.prokind='f'
         and procedure.proname<>'csk_sec002_default_acl_probe'
         and owner_role.rolname='postgres'),
-    'All 136 application functions are owned by postgres, whose public-schema defaults are hardened.');
+    'All 141 application functions are owned by postgres, whose public-schema defaults are hardened.');
 
   perform pg_temp.record_result(9,'New function inherits owner-only execution',
     not pg_catalog.has_function_privilege('anon','public.csk_sec002_default_acl_probe()','EXECUTE')

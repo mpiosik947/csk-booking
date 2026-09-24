@@ -121,9 +121,9 @@ begin
   perform pg_temp.ok(30,'capacity and waitlist ordering remain authoritative after register cancel and promotion',(select registered_count=2 and reserve_count=1 and available_spots=18 from public.get_public_event_availability_v2(csk) where event_id=event_a),'capacity or waitlist semantics differ');
   perform pg_temp.ok(31,'2B-1 is hardened while 2C fingerprints remain unchanged',
     strpos(pg_get_functiondef('public.admin_list_events_v2(uuid,text,text,text,integer,integer)'::regprocedure),'get_my_tenant_role_v1')>0
-    and md5(replace(replace(pg_get_functiondef('public.prepare_event_reserve_promotions(uuid)'::regprocedure),E'\r\n',E'\n'),E'\r',E'\n'))='cdc7abeb7f8ced41cde0f5524a8953ef'
+    and md5(replace(replace(pg_get_functiondef('public.prepare_event_reserve_promotions(uuid)'::regprocedure),E'\r\n',E'\n'),E'\r',E'\n'))='2ff6d2638878cf68166b970a9c42df47'
     and md5(replace(replace(pg_get_functiondef('public.complete_event_reserve_promotion(uuid,uuid,boolean,text)'::regprocedure),E'\r\n',E'\n'),E'\r',E'\n'))='2c78ac26c5c55df3aac54360b610d39b',
-    '2C-2 promotion hardening drifted');
+    '2C-2 promotion contract or PRODUCT-10D entitlement gate drifted');
   perform pg_temp.ok(32,'event writer compatibility defaults are retired',(select count(*)=0 from information_schema.columns where table_schema='public' and table_name in('events','event_lanes','event_registrations') and column_name='tenant_id' and column_default is not null),'compatibility default remains');
 end;$tests$;
 

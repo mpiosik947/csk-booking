@@ -80,9 +80,9 @@ begin
       and bool_and(has_function_privilege('authenticated',p.oid,'EXECUTE'))
       and bool_and(not has_function_privilege('service_role',p.oid,'EXECUTE'))
     from (values
-      ('public.admin_create_event_v3(uuid,text,text,date,time without time zone,time without time zone,text,numeric,integer,uuid[])','837681c7e3d6c63b58c7d064b32c945c'),
-      ('public.admin_update_event_v3(uuid,uuid,text,text,date,time without time zone,time without time zone,text,numeric,integer,uuid[])','3a65986ce194e861a458f02fc331c2a7'),
-      ('public.admin_set_event_active_v3(uuid,uuid,boolean)','b08fb97ec4da100a337a6f64db5ff85e')
+      ('public.admin_create_event_v3(uuid,text,text,date,time without time zone,time without time zone,text,numeric,integer,uuid[])','e9a9ef6eeafbcbb9b87823272d6f5f51'),
+      ('public.admin_update_event_v3(uuid,uuid,text,text,date,time without time zone,time without time zone,text,numeric,integer,uuid[])','f1fa24f0ce451374a4974c86ccfc5d45'),
+      ('public.admin_set_event_active_v3(uuid,uuid,boolean)','585a2d05f90573b5eb83f4f518d87e38')
     ) expected(signature,fingerprint)
     join pg_proc p on p.oid=to_regprocedure(expected.signature)
     join pg_roles r on r.oid=p.proowner
@@ -134,11 +134,11 @@ begin
   perform pg_temp.ok(28,'explicit tenant writer remains bound with unrelated active tenant',result->>'code'='created','explicit tenant writer failed or was redirected');
   update public.tenants set status='dormant' where id=tenant_b;
 
-  perform pg_temp.ok(29,'public reader fingerprints match approved 2B-2 wrappers',md5(replace(replace(pg_get_functiondef('public.get_public_event_availability_v2(uuid)'::regprocedure),E'\r\n',E'\n'),E'\r',E'\n'))='783e1dc37ea222888be7ecb54fb6fa04' and md5(replace(replace(pg_get_functiondef('public.get_public_event_list_v3(uuid,text,text,integer,integer)'::regprocedure),E'\r\n',E'\n'),E'\r',E'\n'))='5c455312be9f3b6a2e9bd26fc15ded0a','2B-2 wrapper fingerprint changed');
+  perform pg_temp.ok(29,'public reader fingerprints include PRODUCT-10D entitlement gates',md5(replace(replace(pg_get_functiondef('public.get_public_event_availability_v2(uuid)'::regprocedure),E'\r\n',E'\n'),E'\r',E'\n'))='b90fb533cc2403b0acc79b09e574e622' and md5(replace(replace(pg_get_functiondef('public.get_public_event_list_v3(uuid,text,text,integer,integer)'::regprocedure),E'\r\n',E'\n'),E'\r',E'\n'))='11584f47abc277a6885f419822b917a2','PRODUCT-10D public entitlement gate drifted');
   result:=pg_temp.as_actor_json('anon',null,format('select public.get_public_event_list_v3(%L,%L,''upcoming'',1,50)',csk,marker));
   perform pg_temp.ok(30,'public events remain available and PII-free',result->>'code'='ok' and result::text !~* 'customer|user_id|registration_id|token|admin_note|phone|email','public event contract regressed');
   perform pg_temp.ok(31,'event compatibility defaults are retired',(select count(*)=0 from information_schema.columns where table_schema='public' and table_name in('events','event_lanes') and column_name='tenant_id' and column_default is not null),'compatibility default remains');
-  perform pg_temp.ok(32,'SECURITY DEFINER inventory reflects PRODUCT-10B public readers',(select count(*)=80 from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.prosecdef),'definer inventory drifted');
+  perform pg_temp.ok(32,'SECURITY DEFINER inventory reflects PRODUCT-10B public readers',(select count(*)=  85 from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.prosecdef),'definer inventory drifted');
 end;$tests$;
 
 select case when passed then 'ok ' else 'not ok ' end||test_order||' - '||test_name||case when passed then '' else E'\n# '||result end from test_results order by test_order;

@@ -260,17 +260,17 @@ begin
     'No application server contract needs these tables yet.');
 
   perform pg_temp.record_result(26, 'Only approved tenant authorization and self-onboarding contracts are SECURITY DEFINER',
-    (select pg_catalog.count(*)=7
+    (select pg_catalog.count(*)=12
      from pg_catalog.pg_proc procedure
      join pg_catalog.pg_namespace namespace on namespace.oid=procedure.pronamespace
      where namespace.nspname='public' and procedure.prosecdef
-       and procedure.proname in ('is_tenant_member_v1','has_tenant_role_v1','get_my_tenant_role_v1','is_active_public_tenant_v1','get_my_tenant_verification_v2','self_onboard_tenant_v1','get_my_active_tenants_v1'))
+       and procedure.proname in ('is_tenant_member_v1','has_tenant_role_v1','get_my_tenant_role_v1','is_active_public_tenant_v1','get_my_tenant_verification_v2','self_onboard_tenant_v1','get_my_active_tenants_v1','tenant_has_feature_v1','get_my_tenant_feature_access_v1','get_my_tenant_features_v1','get_public_tenant_feature_access_v1','enforce_tenant_feature_write_v1'))
     and not exists(
       select 1 from pg_catalog.pg_proc procedure
       join pg_catalog.pg_namespace namespace on namespace.oid=procedure.pronamespace
       where namespace.nspname='public' and procedure.prosecdef
         and procedure.proname like '%tenant%'
-        and procedure.proname not in ('is_tenant_member_v1','has_tenant_role_v1','get_my_tenant_role_v1','is_active_public_tenant_v1','get_my_tenant_verification_v2','self_onboard_tenant_v1','get_my_active_tenants_v1','resolve_active_tenant_by_slug_v1','get_public_tenant_directory_v1','get_public_tenant_directory_v2','get_public_tenant_landing_v1','get_public_tenant_landing_v2','admin_get_tenant_public_settings_v1','admin_update_tenant_public_settings_v1','get_my_tenant_verification_v2','update_tenant_profile_verification_v2','update_tenant_profile_identity_v2','update_tenant_profile_contact_details_v2')
+        and procedure.proname not in ('is_tenant_member_v1','has_tenant_role_v1','get_my_tenant_role_v1','is_active_public_tenant_v1','get_my_tenant_verification_v2','self_onboard_tenant_v1','get_my_active_tenants_v1','resolve_active_tenant_by_slug_v1','get_public_tenant_directory_v1','get_public_tenant_directory_v2','get_public_tenant_landing_v1','get_public_tenant_landing_v2','admin_get_tenant_public_settings_v1','admin_update_tenant_public_settings_v1','get_my_tenant_verification_v2','update_tenant_profile_verification_v2','update_tenant_profile_identity_v2','update_tenant_profile_contact_details_v2','tenant_has_feature_v1','get_my_tenant_feature_access_v1','get_my_tenant_features_v1','get_public_tenant_feature_access_v1','enforce_tenant_feature_write_v1')
     ),
     'Only the explicit authenticated self-onboarding writer may extend the approved tenant authorization surface.');
 
@@ -296,13 +296,13 @@ begin
     'Booking, Events, Reports and Check-in contracts must not be replaced.');
 
   perform pg_temp.record_result(30, 'Later ownership remains limited to approved tenant-owned tables',
-    (select pg_catalog.count(*) = 10
+    (select pg_catalog.count(*) = 11
      from information_schema.columns
      where table_schema = 'public' and column_name = 'tenant_id'
        and table_name in (
          'shooting_lanes', 'reservations', 'lane_blocks', 'events',
          'event_lanes', 'event_registrations', 'email_deliveries', 'audit_logs',
-         'tenant_user_admin_notes', 'tenant_user_verifications'
+         'tenant_user_admin_notes', 'tenant_user_verifications', 'tenant_plan_assignments'
        ))
     and not exists (
       select 1 from information_schema.columns
@@ -310,7 +310,8 @@ begin
         and table_name not in (
           'tenant_memberships', 'shooting_lanes', 'reservations', 'lane_blocks',
           'events', 'event_lanes', 'event_registrations', 'email_deliveries',
-          'audit_logs', 'tenant_public_profiles', 'tenant_user_admin_notes', 'tenant_user_verifications'
+          'audit_logs', 'tenant_public_profiles', 'tenant_user_admin_notes', 'tenant_user_verifications',
+          'tenant_plan_assignments'
         )
     ),
     'Tenant ownership must not spread outside the approved phased scope.');

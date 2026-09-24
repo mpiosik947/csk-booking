@@ -18,6 +18,7 @@ import {
   isExpectedTodayReservation,
   isUnpaidActionReservation,
 } from "../../lib/admin/action-queues.js";
+import type { TenantFeatureKey } from "../../lib/tenant-features";
 
 type Role = "admin" | "pracownik" | "instruktor" | "user";
 
@@ -78,6 +79,7 @@ type AdminTile = {
   href: string;
   roles: Role[];
   hiddenWhenDenied?: boolean;
+  feature?: TenantFeatureKey;
 };
 
 const adminTiles: AdminTile[] = [
@@ -86,48 +88,56 @@ const adminTiles: AdminTile[] = [
     description: "Podgląd i obsługa rezerwacji klientów.",
     href: "/admin/reservations",
     roles: ["admin", "pracownik"],
+    feature: "booking",
   },
   {
     title: "Kalendarz",
     description: "Widok dnia i tygodnia dla osi oraz wydarzeń.",
     href: "/admin/calendar",
     roles: ["admin", "pracownik", "instruktor"],
+    feature: "advanced_calendar",
   },
   {
     title: "Blokady osi",
     description: "Blokowanie osi z powodem widocznym dla klientów.",
     href: "/admin/lane-blocks",
     roles: ["admin", "pracownik"],
+    feature: "lane_blocks",
   },
   {
     title: "Eventy i szkolenia",
     description: "Tworzenie i zarządzanie szkoleniami oraz wydarzeniami.",
     href: "/admin/events",
     roles: ["admin", "pracownik", "instruktor"],
+    feature: "events",
   },
   {
     title: "Check-in",
     description: "Obsługa obecności, no-show i zakończonych wizyt.",
     href: "/admin/check-in",
     roles: ["admin", "pracownik"],
+    feature: "checkin",
   },
   {
     title: "Raporty",
     description: "Podsumowania rezerwacji, obłożenia i przychodów.",
     href: "/admin/reports",
     roles: ["admin"],
+    feature: "reports",
   },
   {
     title: "Użytkownicy",
     description: "Weryfikacja kont, role i notatki administratora.",
     href: "/admin/users",
     roles: ["admin"],
+    feature: "staff",
   },
   {
     title: "Konfiguracja osi",
     description: "Status, rezerwacje online, limity, czasy i cennik osi.",
     href: "/admin/lane-configuration",
     roles: ["admin"],
+    feature: "booking",
     hiddenWhenDenied: true,
   },
   {
@@ -357,6 +367,7 @@ export default function AdminPage({ tenantId, tenantSlug }: Readonly<{ tenantId:
 
   const [loading, setLoading] = useState(true);
   const [role, setRole] = useState<Role | null>(null);
+  const [features, setFeatures] = useState<Set<string>>(new Set());
   const [message, setMessage] = useState("");
 
   const [todayReservations, setTodayReservations] = useState<Reservation[]>([]);
@@ -386,10 +397,24 @@ export default function AdminPage({ tenantId, tenantSlug }: Readonly<{ tenantId:
       : roleData === "instructor" ? "instruktor"
       : roleData === "admin" ? "admin" : "user";
     setRole(currentRole);
+    const { data: featureData, error: featureError } = await supabase.rpc(
+      "get_my_tenant_features_v1",
+      { p_tenant_id: tenantId },
+    );
+    if (featureError || !Array.isArray(featureData)) {
+      reportClientError("Admin dashboard entitlement read failed", featureError);
+      setMessage("Nie udało się sprawdzić dostępnych modułów.");
+      setLoading(false);
+      return;
+    }
+    const loadedFeatures = new Set(
+      featureData.filter((value): value is string => typeof value === "string"),
+    );
+    setFeatures(loadedFeatures);
     const canReadCustomerOperations = hasAccess(currentRole, [
       "admin",
       "pracownik",
-    ]);
+    ]) && loadedFeatures.has("booking");
 
     const [
       todayReservationsResult,
@@ -454,7 +479,7 @@ export default function AdminPage({ tenantId, tenantSlug }: Readonly<{ tenantId:
             .order("start_time", { ascending: true })
         : Promise.resolve({ data: [], error: null }),
 
-      supabase
+      loadedFeatures.has("events") ? supabase
         .from("events")
         .select(
           `
@@ -475,7 +500,7 @@ export default function AdminPage({ tenantId, tenantSlug }: Readonly<{ tenantId:
         .gte("event_date", today)
         .order("event_date", { ascending: true })
         .order("start_time", { ascending: true })
-        .limit(4),
+        .limit(4) : Promise.resolve({ data: [], error: null }),
     ]);
 
     if (todayReservationsResult.error) {
@@ -532,8 +557,10 @@ export default function AdminPage({ tenantId, tenantSlug }: Readonly<{ tenantId:
 
   const availableTilesCount = useMemo(() => {
     if (!role) return 0;
-    return adminTiles.filter((tile) => hasAccess(role, tile.roles)).length;
-  }, [role]);
+    return adminTiles.filter(
+      (tile) => hasAccess(role, tile.roles) && (!tile.feature || features.has(tile.feature)),
+    ).length;
+  }, [features, role]);
 
   const activeTodayReservations = todayReservations.filter(
     (reservation) => !isCancelledReservationStatus(reservation.reservation_status)
@@ -642,7 +669,7 @@ export default function AdminPage({ tenantId, tenantSlug }: Readonly<{ tenantId:
           </div>
         ) : (
           <>
-            {hasAccess(role, ["admin", "pracownik"]) && (
+            {hasAccess(role, ["admin", "pracownik"]) && features.has("booking") && (
               <>
                 <section>
               <h2 className="text-xl font-bold text-[#f2efe4] sm:text-2xl">
@@ -829,7 +856,7 @@ export default function AdminPage({ tenantId, tenantSlug }: Readonly<{ tenantId:
               </>
             )}
 
-            {hasAccess(role, ["admin", "pracownik", "instruktor"]) && (
+            {hasAccess(role, ["admin", "pracownik", "instruktor"]) && features.has("events") && (
               <section className="mt-8 rounded-2xl border border-[#30372c] bg-[#191e19] p-5 sm:p-6">
                 <div className="mb-5 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                   <div>
@@ -923,7 +950,7 @@ export default function AdminPage({ tenantId, tenantSlug }: Readonly<{ tenantId:
               </section>
             )}
 
-            {hasAccess(role, ["admin"]) && (
+            {hasAccess(role, ["admin"]) && features.has("reports") && (
               <section className="mt-8">
                 <h2 className="text-xl font-bold text-[#f2efe4] sm:text-2xl">
                   Biznes
@@ -996,7 +1023,7 @@ export default function AdminPage({ tenantId, tenantSlug }: Readonly<{ tenantId:
                   <AdminModuleTile
                     key={tile.href + tile.title}
                     tile={tile}
-                    allowed={hasAccess(role, tile.roles)}
+                    allowed={hasAccess(role, tile.roles) && (!tile.feature || features.has(tile.feature))}
                     tenantSlug={tenantSlug}
                   />
                   ))}

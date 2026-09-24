@@ -114,8 +114,8 @@ begin
     (select pg_catalog.strpos(procedure_record.prosrc,'public.is_admin')=0 and procedure_record.prosrc !~ 'select[^;]*profile[.]role' from pg_catalog.pg_proc procedure_record where procedure_record.oid='public.prevent_non_admin_profile_privilege_changes()'::regprocedure));
   perform pg_temp.ok(5,'tenant membership helper is the privileged authority',
     (select pg_catalog.strpos(procedure_record.prosrc,'get_my_tenant_role_v1')>0 and pg_catalog.strpos(procedure_record.prosrc,'tenant_memberships')>0 from pg_catalog.pg_proc procedure_record where procedure_record.oid='public.prevent_non_admin_profile_privilege_changes()'::regprocedure));
-  perform pg_temp.ok(6,'SECURITY DEFINER count is 80 after PRODUCT-10C public landing',
-    (select pg_catalog.count(*)=80 from pg_catalog.pg_proc procedure_record join pg_catalog.pg_namespace namespace_record on namespace_record.oid=procedure_record.pronamespace where namespace_record.nspname='public' and procedure_record.prosecdef));
+  perform pg_temp.ok(6,'SECURITY DEFINER count is 85 after PRODUCT-10C public landing',
+    (select pg_catalog.count(*)=  85 from pg_catalog.pg_proc procedure_record join pg_catalog.pg_namespace namespace_record on namespace_record.oid=procedure_record.pronamespace where namespace_record.nspname='public' and procedure_record.prosecdef));
   perform pg_temp.ok(7,'compatibility defaults remain 7/7',
     (select pg_catalog.count(*)=0 from information_schema.columns where table_schema='public' and table_name in('shooting_lanes','reservations','lane_blocks','events','event_lanes','event_registrations','email_deliveries') and column_name='tenant_id' and column_default='''c5c00000-0000-4000-8000-000000000001''::uuid'));
 
@@ -243,7 +243,7 @@ begin
     (select pg_catalog.strpos(procedure_record.prosrc,'update public.profiles')=0 from pg_catalog.pg_proc procedure_record where procedure_record.oid='public.update_tenant_profile_verification_v2(uuid,uuid,text,text)'::regprocedure));
   perform pg_temp.ok(35,'4D-2 and 4E functions remain unchanged',
     pg_catalog.md5(pg_catalog.replace(pg_catalog.replace(pg_catalog.pg_get_functiondef('public.get_my_role()'::regprocedure),E'\r\n',E'\n'),E'\r',E'\n'))='eec66d2c695d3892caec4d4242756ed0'
-    and pg_catalog.md5(pg_catalog.replace(pg_catalog.replace(pg_catalog.pg_get_functiondef('public.get_public_booking_configuration_v2(uuid)'::regprocedure),E'\r\n',E'\n'),E'\r',E'\n'))='c22681300c18658a77e94b58320c5986');
+    and pg_catalog.md5(pg_catalog.replace(pg_catalog.replace(pg_catalog.pg_get_functiondef('public.get_public_booking_configuration_v2(uuid)'::regprocedure),E'\r\n',E'\n'),E'\r',E'\n'))='96b419fa86c59606bc6f953abbeac73f');
   perform pg_temp.ok(36,'fixture is transaction-scoped',
     (select pg_catalog.count(*)=1 from public.tenants where id=tenant_b)
     and (select pg_catalog.count(*)=8 from auth.users where id in(admin_a,employee_a,owner_a,b_only,global_admin,pending_admin,suspended_admin,no_membership)));

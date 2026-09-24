@@ -16,6 +16,8 @@ test("tenant admin settings are isolated, responsive, and visibility is presenta
   const user=created.data.user;
   try{
     localSql(`insert into public.tenants(id,name,slug,status) values('${tenant}','[TEST][PRODUCT-10C]','${slug}','active');
+      insert into public.tenant_plan_assignments(tenant_id,plan_id,status)
+      select '${tenant}',id,'active' from public.saas_plans where plan_key='current_full_v1';
       insert into public.tenant_memberships(tenant_id,user_id,role,status) values('${tenant}','${user.id}','admin','active');
       insert into public.tenant_public_profiles(tenant_id,display_name,city,is_public,public_slug) values('${tenant}','Testowa Strzelnica','Testowo',true,'${publicSlug}');`);
     await page.goto("/login"); await page.getByLabel("E-mail").fill(email); await page.getByLabel("Hasło").fill(password);
@@ -31,7 +33,7 @@ test("tenant admin settings are isolated, responsive, and visibility is presenta
     await expect(page.getByRole("link",{name:"Szkolenia i eventy"}).first()).toBeVisible();
     await page.goto(`/t/${slug}/booking`); await expect(page.getByRole("heading",{name:"Zarezerwuj oś"})).toBeVisible();
   }finally{
-    localSql(`delete from public.audit_logs where tenant_id='${tenant}'; delete from public.tenant_memberships where tenant_id='${tenant}'; delete from public.tenant_public_profiles where tenant_id='${tenant}'; delete from public.tenants where id='${tenant}';`);
+    localSql(`delete from public.audit_logs where tenant_id='${tenant}'; delete from public.tenant_memberships where tenant_id='${tenant}'; delete from public.tenant_public_profiles where tenant_id='${tenant}'; delete from public.tenant_plan_assignments where tenant_id='${tenant}'; delete from public.tenants where id='${tenant}';`);
     const removed=await service.auth.admin.deleteUser(user.id); if(removed.error)throw new Error(`Cannot clean PRODUCT-10C admin: ${removed.error.code}`);
     const cleanup=localSql(`select (select count(*) from public.tenants where id='${tenant}') as tenants,(select count(*) from public.tenant_memberships where tenant_id='${tenant}') as memberships,(select count(*) from auth.users where id='${user.id}') as users,(select count(*) from public.audit_logs where tenant_id='${tenant}') as audit;`);
     if(!/\b0\s*\|\s*0\s*\|\s*0\s*\|\s*0\b/u.test(cleanup))throw new Error(`PRODUCT-10C cleanup failed: ${cleanup}`);

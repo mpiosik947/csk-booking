@@ -29,6 +29,7 @@ test("two active local tenants stay isolated across selector, public, and staff 
   const runId = randomUUID();
   const tenantB = randomUUID();
   const slugB = `saas9g-${runId}`;
+  const publicSlugB = `public-${runId}`;
   const password = `Local-SaaS9G-${runId}!Aa1`;
   const accounts = await Promise.all(["shared", "admin-a", "admin-b"].map(async (kind) => {
     const email = `saas9g-${kind}-${runId}@example.invalid`;
@@ -50,6 +51,10 @@ test("two active local tenants stay isolated across selector, public, and staff 
       drop index if exists public.tenants_single_active_runtime_guard;
       insert into public.tenants(id,name,slug,status)
       values ('${tenantB}','[TEST][SAAS-9G] Tenant B','${slugB}','active');
+      insert into public.tenant_public_profiles(tenant_id,display_name,city,is_public,public_slug)
+      values ('${tenantB}','[TEST][SAAS-9G] Tenant B','Testowo',true,'${publicSlugB}');
+      insert into public.tenant_plan_assignments(tenant_id,plan_id,status)
+      select '${tenantB}',id,'active' from public.saas_plans where plan_key='current_full_v1';
       insert into public.tenant_memberships(tenant_id,user_id,role,status) values
         ('${TENANT_A}','${shared.id}','user','active'),
         ('${tenantB}','${shared.id}','user','active'),
@@ -97,6 +102,8 @@ test("two active local tenants stay isolated across selector, public, and staff 
       localSql(`
         delete from public.tenant_memberships where tenant_id='${tenantB}'
           or user_id in ('${shared.id}','${adminA.id}','${adminB.id}');
+        delete from public.tenant_plan_assignments where tenant_id='${tenantB}';
+        delete from public.tenant_public_profiles where tenant_id='${tenantB}';
         delete from public.tenants where id='${tenantB}';
       `);
     } finally {

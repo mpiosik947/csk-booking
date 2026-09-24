@@ -15,12 +15,16 @@ test("manual reserve promotion authenticates and tenant-authorizes before servic
   const membershipIndex = source.indexOf(
     'authenticatedSupabase.rpc("has_tenant_role_v1"'
   );
+  const entitlementIndex = source.indexOf(
+    'authenticatedSupabase.rpc("get_my_tenant_feature_access_v1"'
+  );
   const serviceIndex = source.indexOf("promoteEventReserve(eventId)");
 
   for (const [name, index] of [
     ["auth", authIndex],
     ["event lookup", eventIndex],
     ["tenant membership", membershipIndex],
+    ["event entitlement", entitlementIndex],
     ["service execution", serviceIndex],
   ]) {
     assert.notEqual(index, -1, `${name} should exist`);
@@ -28,7 +32,8 @@ test("manual reserve promotion authenticates and tenant-authorizes before servic
 
   assert.ok(authIndex < eventIndex);
   assert.ok(eventIndex < membershipIndex);
-  assert.ok(membershipIndex < serviceIndex);
+  assert.ok(membershipIndex < entitlementIndex);
+  assert.ok(entitlementIndex < serviceIndex);
 });
 
 test("tenant authority is derived from the event and only active admin or employee membership is accepted", async () => {

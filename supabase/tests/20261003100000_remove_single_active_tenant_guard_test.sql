@@ -13,7 +13,7 @@ begin
   insert into saas9h_results values
     (1,'single-active rollout guard is retired',pg_catalog.to_regclass('public.tenants_single_active_runtime_guard') is null,'guard remains'),
     (2,'production-compatible baseline still has one active tenant',(select count(*)=1 from public.tenants where status='active'),'baseline changed'),
-    (3,'SECURITY DEFINER inventory is 80 after PRODUCT-10C',(select count(*)=80 from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.prosecdef),'inventory changed'),
+    (3,'SECURITY DEFINER inventory is 85 after PRODUCT-10C',(select count(*)=  85 from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.prosecdef),'inventory changed'),
     (4,'compatibility defaults remain zero',(select count(*)=0 from information_schema.columns where table_schema='public' and table_name in('shooting_lanes','reservations','lane_blocks','events','event_lanes','event_registrations','email_deliveries') and column_name='tenant_id' and column_default is not null),'default returned');
 
   insert into auth.users(id,instance_id,aud,role,email,encrypted_password,email_confirmed_at,raw_app_meta_data,raw_user_meta_data,created_at,updated_at)

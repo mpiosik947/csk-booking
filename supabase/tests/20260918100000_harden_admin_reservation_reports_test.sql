@@ -148,8 +148,8 @@ begin
     select 1 from (values('public'::name),('anon'::name),('authenticated'::name),('service_role'::name)) role(name)
     where pg_catalog.has_function_privilege(role.name,'public._admin_reservation_report_rows_v2(date,date,uuid,text,text,text)','EXECUTE')),
     'old helper exposed');
-  perform pg_temp.ok(8,'SECURITY DEFINER count is 80 after PRODUCT-10C public landing',
-    (select count(*) from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.prosecdef)=80,
+  perform pg_temp.ok(8,'SECURITY DEFINER count is 85 after PRODUCT-10C public landing',
+    (select count(*) from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.prosecdef)=  85,
     'definer count differs');
   perform pg_temp.ok(9,'compatibility defaults remain 7/7',
     (select count(*) from information_schema.columns where table_schema='public'
@@ -199,7 +199,7 @@ begin
   perform pg_temp.ok(28,'active single tenant bridge exact',tenant_a is not null and (select count(*) from public.tenants where status='active')=1,'active-single bridge differs');
   perform pg_temp.ok(29,'profile administration follows approved 4B-2C closure',
     exists(select 1 from pg_proc where oid='public.admin_list_users_v2(uuid,integer,integer,text,text,text,text)'::regprocedure and prosrc~'\mget_my_tenant_role_v1\M' and prosrc~'\mtenant_user_admin_notes\M' and prosrc!~'profile[.]admin_note')
-    and md5(replace(replace(pg_get_functiondef('public.update_tenant_profile_verification_v2(uuid,uuid,text,text)'::regprocedure),E'\r\n',E'\n'),E'\r',E'\n'))='30f1028aa801afc1abd0df080a4fd17f',
+    and md5(replace(replace(pg_get_functiondef('public.update_tenant_profile_verification_v2(uuid,uuid,text,text)'::regprocedure),E'\r\n',E'\n'),E'\r',E'\n'))='ce01bdd4ba810ff578d063ca5a13db4b',
     '4B-1A list or closed verification contract drifted.');
   perform pg_temp.ok(30,'account lifecycle contract untouched',
     md5(replace(replace(pg_get_functiondef('public.export_my_data_v1()'::regprocedure),E'\r\n',E'\n'),E'\r',E'\n'))='d159b7d0a14f7ffc9d6c3e5088d18dc5'

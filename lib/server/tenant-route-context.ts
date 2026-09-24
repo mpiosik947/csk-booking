@@ -9,6 +9,7 @@ import {
   resolveStaffTenantContext,
   type TenantContextClient,
 } from "./tenant-context";
+import type { TenantFeatureKey } from "../tenant-features";
 
 /** A fresh anon-key client for the current request; never a service-role client. */
 export const getTenantRequestClient = cache(async (): Promise<TenantContextClient> => {
@@ -48,4 +49,25 @@ export async function getStaffRouteContext(
   roles: readonly ("admin" | "employee" | "instructor")[],
 ) {
   return resolveStaffTenantContext(await getTenantRequestClient(), slug, roles);
+}
+
+/** Fail-closed feature checks. Public checks disclose only effective availability. */
+export async function tenantRouteHasFeature(
+  tenantId: string,
+  feature: TenantFeatureKey,
+  access: "public" | "member",
+) {
+  const client = await getTenantRequestClient();
+  const rpc = access === "public"
+    ? "get_public_tenant_feature_access_v1"
+    : "get_my_tenant_feature_access_v1";
+  try {
+    const { data, error } = await client.rpc(rpc, {
+      p_tenant_id: tenantId,
+      p_feature_key: feature,
+    });
+    return !error && data === true;
+  } catch {
+    return false;
+  }
 }

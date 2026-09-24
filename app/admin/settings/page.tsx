@@ -12,6 +12,7 @@ type Settings = {
   social_links: Record<string, string>; show_booking: boolean; show_pricing: boolean;
   show_instructor: boolean; show_events: boolean; show_about: boolean; show_contact: boolean;
   show_regulations: boolean; updated_at: string;
+  feature_access: { booking: boolean; events: boolean; instructors: boolean };
 };
 
 const BOOLEAN_FIELDS = ["show_booking","show_pricing","show_instructor","show_events","show_about","show_contact","show_regulations"] as const;
@@ -22,7 +23,16 @@ function isSettings(value: unknown): value is Settings {
   const row = value as Record<string, unknown>;
   return TEXT_FIELDS.every((key) => typeof row[key] === "string" || row[key] === null) &&
     BOOLEAN_FIELDS.every((key) => typeof row[key] === "boolean") && typeof row.updated_at === "string" &&
-    !!row.social_links && typeof row.social_links === "object" && !Array.isArray(row.social_links);
+    !!row.social_links && typeof row.social_links === "object" && !Array.isArray(row.social_links) &&
+    !!row.feature_access && typeof row.feature_access === "object" && !Array.isArray(row.feature_access) &&
+    ["booking","events","instructors"].every(key => typeof (row.feature_access as Record<string, unknown>)[key] === "boolean");
+}
+
+function entitlementForFlag(settings: Settings, key: typeof BOOLEAN_FIELDS[number]) {
+  if (key === "show_booking" || key === "show_pricing") return settings.feature_access.booking;
+  if (key === "show_events") return settings.feature_access.events;
+  if (key === "show_instructor") return settings.feature_access.instructors;
+  return true;
 }
 
 function nullable(value: string) { return value.trim() || null; }
@@ -93,9 +103,10 @@ export default function AdminSettingsPage({ tenantSlug }: Readonly<{ tenantSlug:
         </section>
         <section className="rounded-2xl border border-[#30372c] bg-[#141814] p-5">
           <h2 className="text-xl font-bold">Widoczność sekcji</h2>
+          <p className="mt-2 text-sm text-[#a9ada4]">Widoczność nie przyznaje funkcji. Moduły niedostępne w planie są zablokowane.</p>
           <div className="mt-4 grid gap-3 sm:grid-cols-2">{([
             ["show_booking","Rezerwacja"],["show_pricing","Cennik"],["show_instructor","Instruktor"],["show_events","Eventy"],["show_about","O obiekcie"],["show_contact","Kontakt"],["show_regulations","Regulamin"],
-          ] as const).map(([key,label])=><label key={key} className="flex min-h-12 items-center gap-3 rounded-xl border border-[#343a31] p-3"><input type="checkbox" checked={settings[key]} onChange={e=>setFlag(key,e.target.checked)} className="h-5 w-5 accent-[#8b7b48]"/><span className="font-semibold">{label}</span></label>)}</div>
+          ] as const).map(([key,label])=>{const entitled=entitlementForFlag(settings,key); return <label key={key} className="flex min-h-12 items-center gap-3 rounded-xl border border-[#343a31] p-3"><input type="checkbox" checked={settings[key]} disabled={!entitled} onChange={e=>setFlag(key,e.target.checked)} className="h-5 w-5 accent-[#8b7b48] disabled:opacity-50"/><span className="font-semibold">{label}{!entitled&&<span className="ml-2 text-xs font-normal text-[#e1c477]">Niedostępne w obecnym planie</span>}</span></label>;})}</div>
         </section>
         <button disabled={saving} className="min-h-12 rounded-xl border border-[#c5a861] bg-[#3a301d] px-6 py-3 font-bold text-[#f0d17b] disabled:opacity-50">{saving?"Zapisywanie…":"Zapisz ustawienia"}</button>
       </form>}

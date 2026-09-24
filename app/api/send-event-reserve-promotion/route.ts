@@ -142,6 +142,15 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
+    const { data: hasEvents, error: featureError } =
+      await authenticatedSupabase.rpc("get_my_tenant_feature_access_v1", {
+        p_tenant_id: event.tenant_id,
+        p_feature_key: "events",
+      });
+    if (featureError || hasEvents !== true) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+
     const promotionResult = await promoteEventReserve(eventId);
 
     if (!promotionResult.success) {

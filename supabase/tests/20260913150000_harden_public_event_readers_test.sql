@@ -164,8 +164,8 @@ begin
   perform pg_temp.ok(7,'anon cannot invoke availability core directly',pg_temp.denied('anon','select public.get_public_event_availability_v1__saas9d2b2_core(null)'),'Anon core execution was allowed.');
   perform pg_temp.ok(8,'authenticated cannot invoke list core directly',pg_temp.denied('authenticated','select public.get_public_event_list_v2__saas9d2b2_core(null,null,''all'',1,20)'),'Authenticated core execution was allowed.');
   perform pg_temp.ok(9,'wrapper and core fingerprints are exact',
-    pg_catalog.md5(pg_catalog.replace(pg_catalog.replace(pg_catalog.pg_get_functiondef('public.get_public_event_availability_v2(uuid)'::pg_catalog.regprocedure),E'\r\n',E'\n'),E'\r',E'\n'))='783e1dc37ea222888be7ecb54fb6fa04'
-    and pg_catalog.md5(pg_catalog.replace(pg_catalog.replace(pg_catalog.pg_get_functiondef('public.get_public_event_list_v3(uuid,text,text,integer,integer)'::pg_catalog.regprocedure),E'\r\n',E'\n'),E'\r',E'\n'))='5c455312be9f3b6a2e9bd26fc15ded0a'
+    pg_catalog.md5(pg_catalog.replace(pg_catalog.replace(pg_catalog.pg_get_functiondef('public.get_public_event_availability_v2(uuid)'::pg_catalog.regprocedure),E'\r\n',E'\n'),E'\r',E'\n'))='b90fb533cc2403b0acc79b09e574e622'
+    and pg_catalog.md5(pg_catalog.replace(pg_catalog.replace(pg_catalog.pg_get_functiondef('public.get_public_event_list_v3(uuid,text,text,integer,integer)'::pg_catalog.regprocedure),E'\r\n',E'\n'),E'\r',E'\n'))='11584f47abc277a6885f419822b917a2'
     and pg_catalog.md5(pg_catalog.replace(pg_catalog.replace(pg_catalog.pg_get_functiondef('public.get_public_event_availability_v1__saas9d2b2_core(uuid)'::pg_catalog.regprocedure),E'\r\n',E'\n'),E'\r',E'\n'))='bac4afc5c5a26fc63d019304b7903f4b'
     and pg_catalog.md5(pg_catalog.replace(pg_catalog.replace(pg_catalog.pg_get_functiondef('public.get_public_event_list_v2__saas9d2b2_core(uuid,text,text,integer,integer)'::pg_catalog.regprocedure),E'\r\n',E'\n'),E'\r',E'\n'))='abe6f9d8e77655b1b5987825caee4c68'
     and pg_catalog.to_regprocedure('public.active_single_tenant_id_v1()') is null,
@@ -210,7 +210,7 @@ begin
 
   update public.tenants set status='dormant' where id=tenant_b;
   result:=pg_temp.as_json('anon',null,pg_catalog.format('select public.get_public_event_list_v3(%L,%L,''upcoming'',1,50)',csk,marker));
-  perform pg_temp.ok(29,'zero active tenants returns controlled not_found for public list selector',result @> '{"ok":false,"code":"not_found"}'::jsonb,'Zero-active list did not fail closed.');
+  perform pg_temp.ok(29,'zero active tenants returns controlled unavailable result for public list selector',result @> '{"ok":false,"code":"not_available"}'::jsonb,'Zero-active list did not fail closed.');
   perform pg_temp.ok(30,'zero active tenants rejects public availability selector',pg_temp.fails_closed('anon',pg_catalog.format('select * from public.get_public_event_availability_v2(%L)',csk)),'Zero-active availability did not fail closed.');
 
   update public.tenants set status='active' where id=csk;
@@ -228,7 +228,7 @@ begin
   perform pg_temp.ok(36,'existing event-lane relations remain tenant-consistent',not exists(select 1 from public.event_lanes relation join public.events event_record on event_record.id=relation.event_id join public.shooting_lanes lane on lane.id=relation.lane_id where relation.tenant_id<>event_record.tenant_id or relation.tenant_id<>lane.tenant_id),'A cross-tenant relation exists.');
   perform pg_temp.ok(37,'registration composite FK remains validated',exists(select 1 from pg_catalog.pg_constraint constraint_record where constraint_record.conrelid='public.event_registrations'::pg_catalog.regclass and constraint_record.conname='event_registrations_event_id_fkey' and constraint_record.contype='f' and constraint_record.convalidated),'Registration tenant FK differs.');
   perform pg_temp.ok(38,'event-lane composite FKs remain validated',(select pg_catalog.count(*)=2 from pg_catalog.pg_constraint constraint_record where constraint_record.conrelid='public.event_lanes'::pg_catalog.regclass and constraint_record.conname in('event_lanes_event_id_fkey','event_lanes_lane_id_fkey') and constraint_record.contype='f' and constraint_record.convalidated),'Event-lane tenant FKs differ.');
-  perform pg_temp.ok(39,'SECURITY DEFINER inventory includes PRODUCT-10B public readers',(select pg_catalog.count(*)=80 from pg_catalog.pg_proc procedure join pg_catalog.pg_namespace namespace on namespace.oid=procedure.pronamespace where namespace.nspname='public' and procedure.prosecdef),'Unexpected definer drift exists.');
+  perform pg_temp.ok(39,'SECURITY DEFINER inventory includes PRODUCT-10B public readers',(select pg_catalog.count(*)=  85 from pg_catalog.pg_proc procedure join pg_catalog.pg_namespace namespace on namespace.oid=procedure.pronamespace where namespace.nspname='public' and procedure.prosecdef),'Unexpected definer drift exists.');
   perform pg_temp.ok(40,'fixture is transaction scoped',(select pg_catalog.count(*)=1 from public.tenants where id=tenant_b) and (select pg_catalog.count(*)=56 from public.events where title like marker||'%') and (select pg_catalog.count(*)=5 from public.event_registrations where customer_name like marker||'%'),'Fixture count differs before rollback.');
 end;
 $tests$;

@@ -4,7 +4,9 @@ import {
   getPublicRouteContext,
   getStaffRouteContext,
   getUserRouteContext,
+  tenantRouteHasFeature,
 } from "@/lib/server/tenant-route-context";
+import { featureForTenantRoute } from "@/lib/tenant-features";
 import BookingPage from "@/app/booking/page";
 import EventsPage from "@/app/events/page";
 import MyReservationsPage from "@/app/my-reservations/page";
@@ -47,6 +49,15 @@ export default async function TenantModuleShell({
   if (route.kind === "staff" && !route.known) notFound();
 
   const tenantId = publicContext.value.tenantId;
+  const requiredFeature = featureForTenantRoute(route.path);
+  if (requiredFeature) {
+    const hasFeature = await tenantRouteHasFeature(
+      tenantId,
+      requiredFeature,
+      route.kind === "public" ? "public" : "member",
+    );
+    if (!hasFeature) notFound();
+  }
   if (route.path === "booking") return <BookingPage tenantId={tenantId} tenantSlug={slug} />;
   if (route.path === "events") return <EventsPage tenantId={tenantId} tenantSlug={slug} />;
   if (route.path === "my-reservations") return <MyReservationsPage tenantId={tenantId} tenantSlug={slug} />;

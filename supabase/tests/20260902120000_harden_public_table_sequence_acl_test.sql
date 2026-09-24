@@ -26,6 +26,10 @@ create temporary table expected_table_acl(
 ) on commit drop;
 
 insert into expected_table_acl values
+  ('saas_features','D','{}','{}','{}'),
+  ('saas_plans','D','{}','{}','{}'),
+  ('saas_plan_features','D','{}','{}','{}'),
+  ('tenant_plan_assignments','D','{}','{}','{}'),
   ('audit_logs','E','{}','{SELECT}','{DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE}'),
   ('confirmation_email_rate_limits','D','{}','{}','{MAINTAIN,REFERENCES,TRIGGER,TRUNCATE}'),
   ('email_deliveries','D','{}','{}','{DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE}'),
@@ -100,9 +104,9 @@ declare
   v_denied boolean;
 begin
   perform pg_temp.record_result(1,'Complete public table inventory',
-    (select count(*)=19 from pg_temp.expected_table_acl)
-    and (select count(*)=19 from pg_catalog.pg_class relation join pg_catalog.pg_namespace namespace on namespace.oid=relation.relnamespace where namespace.nspname='public' and relation.relkind in ('r','p')),
-    'Oczekiwano dokładnie 19 zinwentaryzowanych tabel public.');
+    (select count(*)=23 from pg_temp.expected_table_acl)
+    and (select count(*)=23 from pg_catalog.pg_class relation join pg_catalog.pg_namespace namespace on namespace.oid=relation.relnamespace where namespace.nspname='public' and relation.relkind in ('r','p')),
+    'Oczekiwano dokładnie 23 zinwentaryzowanych tabel public.');
 
   perform pg_temp.record_result(2,'RLS enabled on every public table',
     not exists(select 1 from pg_catalog.pg_class relation join pg_catalog.pg_namespace namespace on namespace.oid=relation.relnamespace where namespace.nspname='public' and relation.relkind in ('r','p') and not relation.relrowsecurity),
