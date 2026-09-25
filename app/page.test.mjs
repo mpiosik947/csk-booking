@@ -19,8 +19,12 @@ test("home is the neutral StrzelajTu.pl platform directory", () => {
 test("home search is accessible, bounded and server-backed", () => {
   assert.match(source, /role="search"/u);
   assert.match(source, /Wyszukaj strzelnicę lub miejscowość/u);
-  assert.match(source, /name="q"/u);
-  assert.match(source, /maxLength=\{80\}/u);
+  const input = readFileSync(new URL("./_components/DirectorySearchInput.tsx", import.meta.url), "utf8");
+  assert.match(source, /DirectorySearchInput search=\{directory.search\}/u);
+  assert.match(input, /name="q"/u);
+  assert.match(input, /maxLength=\{80\}/u);
+  assert.match(input, /Szukaj strzelnicy lub miasta/u);
+  assert.match(input, /Wyszukaj strzelnicę lub miejscowość/u);
   assert.match(source, /getPublicTenantDirectory/u);
 });
 

@@ -1,4 +1,5 @@
 ﻿"use client";
+import PlatformBrand from "@/app/_components/PlatformBrand";
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
@@ -123,19 +124,19 @@ function CheckboxField({
   description?: string;
 }) {
   return (
-    <label className="flex min-h-12 cursor-pointer items-start gap-3 rounded-xl border border-[#30372c] bg-[#141814] p-4 text-sm text-[#a9ada4] transition hover:border-[#536143]">
+    <label className="flex min-h-12 cursor-pointer items-start gap-3 rounded-xl border border-[#303A2D] bg-[#111712] p-4 text-sm text-[#A6ADA5] transition hover:border-[#697A2F]">
       <input
         type="checkbox"
         checked={checked}
         onChange={(event) => onChange(event.target.checked)}
-        className="mt-1 accent-[#536143] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#c5a861] focus-visible:ring-offset-2 focus-visible:ring-offset-[#141814]"
+        className="mt-1 accent-[#697A2F] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F5A900] focus-visible:ring-offset-2 focus-visible:ring-offset-[#111712]"
       />
 
       <span>
-        <span className="block font-semibold text-[#f2efe4]">{title}</span>
+        <span className="block font-semibold text-[#F4F3EE]">{title}</span>
 
         {description && (
-          <span className="mt-1 block text-xs leading-5 text-[#858c7f]">
+          <span className="mt-1 block text-xs leading-5 text-[#A6ADA5]">
             {description}
           </span>
         )}
@@ -611,41 +612,39 @@ export default function AccountPage() {
     !firstName.trim() || !lastName.trim();
 
   return (
-    <main className="min-h-screen bg-[#090b09] px-4 py-6 text-[#f2efe4] sm:px-6 sm:py-8">
-      <section className="mx-auto w-full max-w-6xl rounded-[2rem] border border-[#30372c] bg-[#141814] p-5 shadow-2xl shadow-black/30 sm:p-8">
-        <header className="mb-8 flex flex-col gap-5 border-b border-[#30372c] pb-6 sm:flex-row sm:items-start sm:justify-between">
+    <main className="platform-ui min-h-screen bg-[#080B09] px-4 py-6 text-[#F4F3EE] sm:px-6 sm:py-8">
+      <section className="mx-auto w-full max-w-6xl rounded-[2rem] border border-[#303A2D] bg-[#111712] p-5 shadow-2xl shadow-black/30 sm:p-8">
+        <header className="mb-8 flex flex-col gap-5 border-b border-[#303A2D] pb-6 sm:flex-row sm:items-start sm:justify-between">
           <div className="min-w-0">
-            <p className="mb-3 text-xs font-bold uppercase tracking-[0.25em] text-[#d7c895]">
-              CSK BOOKING
-            </p>
+            <div className="mb-4"><PlatformBrand compact /></div>
 
-            <h1 className="text-3xl font-bold text-[#f2efe4] sm:text-4xl">
+            <h1 className="text-3xl font-bold text-[#F4F3EE] sm:text-4xl">
               Moje konto
             </h1>
-            <Link href="/continuity" className="mt-3 inline-block underline text-[#d7c895]">Historia i obsługa istniejących zobowiązań</Link>
+            <Link href="/continuity" className="mt-3 inline-block underline text-[#F5A900]">Historia i obsługa istniejących zobowiązań</Link>
 
             {displayName && (
-              <p className="mt-3 break-words text-lg font-semibold text-[#f2efe4]">
+              <p className="mt-3 break-words text-lg font-semibold text-[#F4F3EE]">
                 {displayName}
               </p>
             )}
 
-            <p className="mt-3 max-w-3xl text-[#a9ada4]">
+            <p className="mt-3 max-w-3xl text-[#A6ADA5]">
               Zarządzaj swoimi danymi użytkownika, adresem, deklarowanymi
               uprawnieniami i bezpieczeństwem konta.
             </p>
           </div>
 
-          <a
+          <Link
             href="/dashboard"
-            className="inline-flex min-h-11 shrink-0 items-center justify-center rounded-xl border border-[#30372c] bg-[#191e19] px-5 py-3 text-center text-sm font-semibold text-[#a9ada4] transition hover:border-[#536143] hover:text-[#d7c895] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#c5a861] focus-visible:ring-offset-2 focus-visible:ring-offset-[#141814]"
+            className="inline-flex min-h-11 shrink-0 items-center justify-center rounded-xl border border-[#303A2D] bg-[#182019] px-5 py-3 text-center text-sm font-semibold text-[#A6ADA5] transition hover:border-[#697A2F] hover:text-[#F5A900] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F5A900] focus-visible:ring-offset-2 focus-visible:ring-offset-[#111712]"
           >
             ← Panel klienta
-          </a>
+          </Link>
         </header>
 
         {loading && (
-          <div role="status" className="rounded-2xl border border-[#30372c] bg-[#191e19] p-6 text-[#a9ada4]">
+          <div role="status" className="rounded-2xl border border-[#303A2D] bg-[#182019] p-6 text-[#A6ADA5]">
             Ładowanie konta...
           </div>
         )}
@@ -661,27 +660,27 @@ export default function AccountPage() {
             </p>
 
             <div className="flex flex-col gap-3 sm:flex-row sm:justify-center">
-              <a
+              <Link
                 href="/login"
-                className="min-h-12 rounded-xl bg-[#536143] px-5 py-3 font-semibold text-[#f2efe4] transition hover:bg-[#78865f] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#c5a861] focus-visible:ring-offset-2 focus-visible:ring-offset-[#2a1b1b]"
+                className="min-h-12 rounded-xl bg-[#697A2F] px-5 py-3 font-semibold text-[#F4F3EE] transition hover:bg-[#7A8D36] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F5A900] focus-visible:ring-offset-2 focus-visible:ring-offset-[#2a1b1b]"
               >
                 Zaloguj się
-              </a>
+              </Link>
 
-              <a
+              <Link
                 href="/register"
-                className="min-h-12 rounded-xl border border-[#744545] px-5 py-3 font-semibold text-[#e0a0a0] transition hover:bg-[#3a2222] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#c5a861] focus-visible:ring-offset-2 focus-visible:ring-offset-[#2a1b1b]"
+                className="min-h-12 rounded-xl border border-[#744545] px-5 py-3 font-semibold text-[#e0a0a0] transition hover:bg-[#3a2222] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F5A900] focus-visible:ring-offset-2 focus-visible:ring-offset-[#2a1b1b]"
               >
                 Utwórz konto
-              </a>
+              </Link>
             </div>
           </div>
         )}
 
         {!loading && isLoggedIn && (
           <div className="grid gap-6">
-            <section className="rounded-2xl border border-[#30372c] bg-[#191e19] p-4 sm:p-6">
-              <h2 className="mb-5 text-xl font-semibold text-[#f2efe4]">
+            <section className="rounded-2xl border border-[#303A2D] bg-[#182019] p-4 sm:p-6">
+              <h2 className="mb-5 text-xl font-semibold text-[#F4F3EE]">
                 Dane konta
               </h2>
 
@@ -689,7 +688,7 @@ export default function AccountPage() {
                 <div>
                   <label
                     htmlFor="account-email"
-                    className="mb-2 block text-sm text-[#a9ada4]"
+                    className="mb-2 block text-sm text-[#A6ADA5]"
                   >
                     Adres e-mail
                   </label>
@@ -699,7 +698,7 @@ export default function AccountPage() {
                     type="email"
                     value={email}
                     disabled
-                    className="min-h-12 w-full cursor-default rounded-xl border border-[#30372c] bg-[#141814] px-4 py-3 text-[#858c7f] outline-none disabled:opacity-100"
+                    className="min-h-12 w-full cursor-default rounded-xl border border-[#303A2D] bg-[#111712] px-4 py-3 text-[#A6ADA5] outline-none disabled:opacity-100"
                   />
                 </div>
 
@@ -707,7 +706,7 @@ export default function AccountPage() {
                   <div>
                     <label
                       htmlFor="account-first-name"
-                      className="mb-2 block text-sm text-[#a9ada4]"
+                      className="mb-2 block text-sm text-[#A6ADA5]"
                     >
                       Imię
                     </label>
@@ -719,14 +718,14 @@ export default function AccountPage() {
                       value={firstName}
                       readOnly
                       aria-readonly="true"
-                      className="min-h-12 w-full cursor-default rounded-xl border border-[#30372c] bg-[#141814] px-4 py-3 text-[#858c7f] outline-none"
+                      className="min-h-12 w-full cursor-default rounded-xl border border-[#303A2D] bg-[#111712] px-4 py-3 text-[#A6ADA5] outline-none"
                     />
                   </div>
 
                   <div>
                     <label
                       htmlFor="account-last-name"
-                      className="mb-2 block text-sm text-[#a9ada4]"
+                      className="mb-2 block text-sm text-[#A6ADA5]"
                     >
                       Nazwisko
                     </label>
@@ -738,12 +737,12 @@ export default function AccountPage() {
                       value={lastName}
                       readOnly
                       aria-readonly="true"
-                      className="min-h-12 w-full cursor-default rounded-xl border border-[#30372c] bg-[#141814] px-4 py-3 text-[#858c7f] outline-none"
+                      className="min-h-12 w-full cursor-default rounded-xl border border-[#303A2D] bg-[#111712] px-4 py-3 text-[#A6ADA5] outline-none"
                     />
                   </div>
                 </div>
 
-                <p className="rounded-xl border border-[#30372c] bg-[#141814] p-4 text-sm leading-6 text-[#a9ada4]">
+                <p className="rounded-xl border border-[#303A2D] bg-[#111712] p-4 text-sm leading-6 text-[#A6ADA5]">
                   Imię i nazwisko są przypisane do konta i mogą zostać
                   zmienione wyłącznie przez obsługę.
                 </p>
@@ -757,8 +756,8 @@ export default function AccountPage() {
               </div>
             </section>
 
-            <section className="rounded-2xl border border-[#30372c] bg-[#191e19] p-4 sm:p-6">
-              <h2 className="mb-5 text-xl font-semibold text-[#f2efe4]">
+            <section className="rounded-2xl border border-[#303A2D] bg-[#182019] p-4 sm:p-6">
+              <h2 className="mb-5 text-xl font-semibold text-[#F4F3EE]">
                 Dane kontaktowe
               </h2>
 
@@ -766,7 +765,7 @@ export default function AccountPage() {
                 <div>
                   <label
                     htmlFor="account-phone"
-                    className="mb-2 block text-sm text-[#a9ada4]"
+                    className="mb-2 block text-sm text-[#A6ADA5]"
                   >
                     Numer telefonu *
                   </label>
@@ -776,19 +775,19 @@ export default function AccountPage() {
                     type="tel"
                     value={phone}
                     onChange={(event) => setPhone(event.target.value)}
-                    className="min-h-12 w-full rounded-xl border border-[#30372c] bg-[#141814] px-4 py-3 text-[#f2efe4] outline-none placeholder:text-[#858c7f] focus-visible:border-[#536143] focus-visible:ring-2 focus-visible:ring-[#c5a861] focus-visible:ring-offset-2 focus-visible:ring-offset-[#191e19]"
+                    className="min-h-12 w-full rounded-xl border border-[#303A2D] bg-[#111712] px-4 py-3 text-[#F4F3EE] outline-none placeholder:text-[#A6ADA5] focus-visible:border-[#697A2F] focus-visible:ring-2 focus-visible:ring-[#F5A900] focus-visible:ring-offset-2 focus-visible:ring-offset-[#182019]"
                   />
                 </div>
 
               </div>
             </section>
 
-            <section className="rounded-2xl border border-[#30372c] bg-[#191e19] p-4 sm:p-6">
-                  <h2 className="mb-4 text-xl font-semibold text-[#f2efe4]">
+            <section className="rounded-2xl border border-[#303A2D] bg-[#182019] p-4 sm:p-6">
+                  <h2 className="mb-4 text-xl font-semibold text-[#F4F3EE]">
                     Deklarowane uprawnienia
                   </h2>
 
-                  <p className="mb-5 text-sm leading-6 text-[#a9ada4]">
+                  <p className="mb-5 text-sm leading-6 text-[#A6ADA5]">
                     Zaznacz, jakie uprawnienia posiadasz. Nie wpisuj numerów
                     dokumentów. Dokumenty okazujesz wyłącznie do wglądu
                     pracownikowi podczas wizyty.
@@ -799,12 +798,12 @@ export default function AccountPage() {
                     ponowną weryfikację konta przez pracownika.
                   </div>
 
-                  <div className="mb-5 rounded-xl border border-[#30372c] bg-[#141814] p-4 text-sm text-[#a9ada4]">
+                  <div className="mb-5 rounded-xl border border-[#303A2D] bg-[#111712] p-4 text-sm text-[#A6ADA5]">
                     <p className="font-semibold">
                       Minimalizacja danych osobowych
                     </p>
 
-                    <p className="mt-1 text-[#858c7f]">
+                    <p className="mt-1 text-[#A6ADA5]">
                       System zapisuje tylko deklarowany typ uprawnień i fakt
                       późniejszej weryfikacji. Numery dokumentów nie są tutaj
                       wymagane.
@@ -857,8 +856,8 @@ export default function AccountPage() {
 
             </section>
 
-            <section className="rounded-2xl border border-[#30372c] bg-[#191e19] p-4 sm:p-6">
-                  <h2 className="mb-4 text-xl font-semibold text-[#f2efe4]">
+            <section className="rounded-2xl border border-[#303A2D] bg-[#182019] p-4 sm:p-6">
+                  <h2 className="mb-4 text-xl font-semibold text-[#F4F3EE]">
                     Kwalifikacje dodatkowe
                   </h2>
 
@@ -893,27 +892,27 @@ export default function AccountPage() {
                   </div>
             </section>
 
-            <section className="rounded-2xl border border-[#30372c] bg-[#191e19] p-4 sm:p-6">
-              <h2 className="mb-4 text-xl font-semibold text-[#f2efe4]">Weryfikacja w lokalizacji</h2>
-              <p className="text-sm leading-6 text-[#a9ada4]">
+            <section className="rounded-2xl border border-[#303A2D] bg-[#182019] p-4 sm:p-6">
+              <h2 className="mb-4 text-xl font-semibold text-[#F4F3EE]">Weryfikacja w lokalizacji</h2>
+              <p className="text-sm leading-6 text-[#A6ADA5]">
                 Status weryfikacji uprawnień dotyczy konkretnej strzelnicy. Sprawdź go po wybraniu lokalizacji;
                 ten globalny profil nie przedstawia statusu żadnej lokalizacji jako statusu całego konta.
               </p>
             </section>
 
-            <section className="rounded-2xl border border-[#30372c] bg-[#191e19] p-4 sm:p-6">
-                  <h2 className="mb-4 text-xl font-semibold text-[#f2efe4]">
+            <section className="rounded-2xl border border-[#303A2D] bg-[#182019] p-4 sm:p-6">
+                  <h2 className="mb-4 text-xl font-semibold text-[#F4F3EE]">
                     Adres
                   </h2>
 
-                  <p className="mb-5 text-sm leading-6 text-[#a9ada4]">
+                  <p className="mb-5 text-sm leading-6 text-[#A6ADA5]">
                     Podaj dane adresowe bez wpisywania przykładowych wartości.
                     Kod pocztowy wpisz w dwóch polach, zgodnie z formatem
                     XX-XXX.
                   </p>
 
                   <div>
-                    <p className="mb-2 block text-sm text-[#a9ada4]">
+                    <p className="mb-2 block text-sm text-[#A6ADA5]">
                       Kod pocztowy *
                     </p>
 
@@ -927,10 +926,10 @@ export default function AccountPage() {
                         }
                         maxLength={2}
                         aria-label="Pierwsze dwie cyfry kodu pocztowego"
-                        className="min-h-12 w-20 rounded-xl border border-[#30372c] bg-[#141814] px-4 py-3 text-center text-[#f2efe4] outline-none focus-visible:border-[#536143] focus-visible:ring-2 focus-visible:ring-[#c5a861] focus-visible:ring-offset-2 focus-visible:ring-offset-[#191e19]"
+                        className="min-h-12 w-20 rounded-xl border border-[#303A2D] bg-[#111712] px-4 py-3 text-center text-[#F4F3EE] outline-none focus-visible:border-[#697A2F] focus-visible:ring-2 focus-visible:ring-[#F5A900] focus-visible:ring-offset-2 focus-visible:ring-offset-[#182019]"
                       />
 
-                      <span className="text-[#858c7f]">-</span>
+                      <span className="text-[#A6ADA5]">-</span>
 
                       <input
                         type="text"
@@ -941,7 +940,7 @@ export default function AccountPage() {
                         }
                         maxLength={3}
                         aria-label="Ostatnie trzy cyfry kodu pocztowego"
-                        className="min-h-12 w-24 rounded-xl border border-[#30372c] bg-[#141814] px-4 py-3 text-center text-[#f2efe4] outline-none focus-visible:border-[#536143] focus-visible:ring-2 focus-visible:ring-[#c5a861] focus-visible:ring-offset-2 focus-visible:ring-offset-[#191e19]"
+                        className="min-h-12 w-24 rounded-xl border border-[#303A2D] bg-[#111712] px-4 py-3 text-center text-[#F4F3EE] outline-none focus-visible:border-[#697A2F] focus-visible:ring-2 focus-visible:ring-[#F5A900] focus-visible:ring-offset-2 focus-visible:ring-offset-[#182019]"
                       />
                     </div>
                   </div>
@@ -949,7 +948,7 @@ export default function AccountPage() {
                   <div className="mt-5">
                     <label
                       htmlFor="account-city"
-                      className="mb-2 block text-sm text-[#a9ada4]"
+                      className="mb-2 block text-sm text-[#A6ADA5]"
                     >
                       Miasto / miejscowość *
                     </label>
@@ -959,14 +958,14 @@ export default function AccountPage() {
                       type="text"
                       value={city}
                       onChange={(event) => setCity(event.target.value)}
-                      className="min-h-12 w-full rounded-xl border border-[#30372c] bg-[#141814] px-4 py-3 text-[#f2efe4] outline-none placeholder:text-[#858c7f] focus-visible:border-[#536143] focus-visible:ring-2 focus-visible:ring-[#c5a861] focus-visible:ring-offset-2 focus-visible:ring-offset-[#191e19]"
+                      className="min-h-12 w-full rounded-xl border border-[#303A2D] bg-[#111712] px-4 py-3 text-[#F4F3EE] outline-none placeholder:text-[#A6ADA5] focus-visible:border-[#697A2F] focus-visible:ring-2 focus-visible:ring-[#F5A900] focus-visible:ring-offset-2 focus-visible:ring-offset-[#182019]"
                     />
                   </div>
 
                   <div className="mt-5">
                     <label
                       htmlFor="account-street"
-                      className="mb-2 block text-sm text-[#a9ada4]"
+                      className="mb-2 block text-sm text-[#A6ADA5]"
                     >
                       Ulica *
                     </label>
@@ -976,10 +975,10 @@ export default function AccountPage() {
                       type="text"
                       value={street}
                       onChange={(event) => setStreet(event.target.value)}
-                      className="min-h-12 w-full rounded-xl border border-[#30372c] bg-[#141814] px-4 py-3 text-[#f2efe4] outline-none placeholder:text-[#858c7f] focus-visible:border-[#536143] focus-visible:ring-2 focus-visible:ring-[#c5a861] focus-visible:ring-offset-2 focus-visible:ring-offset-[#191e19]"
+                      className="min-h-12 w-full rounded-xl border border-[#303A2D] bg-[#111712] px-4 py-3 text-[#F4F3EE] outline-none placeholder:text-[#A6ADA5] focus-visible:border-[#697A2F] focus-visible:ring-2 focus-visible:ring-[#F5A900] focus-visible:ring-offset-2 focus-visible:ring-offset-[#182019]"
                     />
 
-                    <p className="mt-2 text-xs text-[#858c7f]">
+                    <p className="mt-2 text-xs text-[#A6ADA5]">
                       Podaj ulicę, numer domu i opcjonalnie numer mieszkania w
                       osobnych polach poniżej.
                     </p>
@@ -989,7 +988,7 @@ export default function AccountPage() {
                     <div>
                       <label
                         htmlFor="account-house-number"
-                        className="mb-2 block text-sm text-[#a9ada4]"
+                        className="mb-2 block text-sm text-[#A6ADA5]"
                       >
                         Numer domu *
                       </label>
@@ -999,14 +998,14 @@ export default function AccountPage() {
                         type="text"
                         value={houseNumber}
                         onChange={(event) => setHouseNumber(event.target.value)}
-                        className="min-h-12 w-full rounded-xl border border-[#30372c] bg-[#141814] px-4 py-3 text-[#f2efe4] outline-none placeholder:text-[#858c7f] focus-visible:border-[#536143] focus-visible:ring-2 focus-visible:ring-[#c5a861] focus-visible:ring-offset-2 focus-visible:ring-offset-[#191e19]"
+                        className="min-h-12 w-full rounded-xl border border-[#303A2D] bg-[#111712] px-4 py-3 text-[#F4F3EE] outline-none placeholder:text-[#A6ADA5] focus-visible:border-[#697A2F] focus-visible:ring-2 focus-visible:ring-[#F5A900] focus-visible:ring-offset-2 focus-visible:ring-offset-[#182019]"
                       />
                     </div>
 
                     <div>
                       <label
                         htmlFor="account-apartment-number"
-                        className="mb-2 block text-sm text-[#a9ada4]"
+                        className="mb-2 block text-sm text-[#A6ADA5]"
                       >
                         Numer mieszkania
                       </label>
@@ -1018,18 +1017,18 @@ export default function AccountPage() {
                         onChange={(event) =>
                           setApartmentNumber(event.target.value)
                         }
-                        className="min-h-12 w-full rounded-xl border border-[#30372c] bg-[#141814] px-4 py-3 text-[#f2efe4] outline-none placeholder:text-[#858c7f] focus-visible:border-[#536143] focus-visible:ring-2 focus-visible:ring-[#c5a861] focus-visible:ring-offset-2 focus-visible:ring-offset-[#191e19]"
+                        className="min-h-12 w-full rounded-xl border border-[#303A2D] bg-[#111712] px-4 py-3 text-[#F4F3EE] outline-none placeholder:text-[#A6ADA5] focus-visible:border-[#697A2F] focus-visible:ring-2 focus-visible:ring-[#F5A900] focus-visible:ring-offset-2 focus-visible:ring-offset-[#182019]"
                       />
                     </div>
                   </div>
             </section>
 
-            <section className="rounded-2xl border border-[#30372c] bg-[#191e19] p-4 sm:p-6">
-                  <h2 className="mb-4 text-xl font-semibold text-[#f2efe4]">
+            <section className="rounded-2xl border border-[#303A2D] bg-[#182019] p-4 sm:p-6">
+                  <h2 className="mb-4 text-xl font-semibold text-[#F4F3EE]">
                     Bezpieczeństwo konta
                   </h2>
 
-                  <p className="mb-5 text-sm text-[#a9ada4]">
+                  <p className="mb-5 text-sm text-[#A6ADA5]">
                     Zmień hasło do swojego konta. Nowe hasło musi mieć minimum
                     {` ${PASSWORD_MIN_LENGTH} znaków.`}
                   </p>
@@ -1038,7 +1037,7 @@ export default function AccountPage() {
                     <div>
                       <label
                         htmlFor="account-new-password"
-                        className="mb-2 block text-sm text-[#a9ada4]"
+                        className="mb-2 block text-sm text-[#A6ADA5]"
                       >
                         Nowe hasło
                       </label>
@@ -1053,14 +1052,14 @@ export default function AccountPage() {
                         minLength={PASSWORD_MIN_LENGTH}
                         maxLength={PASSWORD_MAX_LENGTH}
                         placeholder={`Minimum ${PASSWORD_MIN_LENGTH} znaków`}
-                        className="min-h-12 w-full rounded-xl border border-[#30372c] bg-[#141814] px-4 py-3 text-[#f2efe4] outline-none placeholder:text-[#858c7f] focus-visible:border-[#536143] focus-visible:ring-2 focus-visible:ring-[#c5a861] focus-visible:ring-offset-2 focus-visible:ring-offset-[#191e19]"
+                        className="min-h-12 w-full rounded-xl border border-[#303A2D] bg-[#111712] px-4 py-3 text-[#F4F3EE] outline-none placeholder:text-[#A6ADA5] focus-visible:border-[#697A2F] focus-visible:ring-2 focus-visible:ring-[#F5A900] focus-visible:ring-offset-2 focus-visible:ring-offset-[#182019]"
                       />
                     </div>
 
                     <div>
                       <label
                         htmlFor="account-repeat-password"
-                        className="mb-2 block text-sm text-[#a9ada4]"
+                        className="mb-2 block text-sm text-[#A6ADA5]"
                       >
                         Powtórz hasło
                       </label>
@@ -1075,7 +1074,7 @@ export default function AccountPage() {
                         minLength={PASSWORD_MIN_LENGTH}
                         maxLength={PASSWORD_MAX_LENGTH}
                         placeholder="Powtórz nowe hasło"
-                        className="min-h-12 w-full rounded-xl border border-[#30372c] bg-[#141814] px-4 py-3 text-[#f2efe4] outline-none placeholder:text-[#858c7f] focus-visible:border-[#536143] focus-visible:ring-2 focus-visible:ring-[#c5a861] focus-visible:ring-offset-2 focus-visible:ring-offset-[#191e19]"
+                        className="min-h-12 w-full rounded-xl border border-[#303A2D] bg-[#111712] px-4 py-3 text-[#F4F3EE] outline-none placeholder:text-[#A6ADA5] focus-visible:border-[#697A2F] focus-visible:ring-2 focus-visible:ring-[#F5A900] focus-visible:ring-offset-2 focus-visible:ring-offset-[#182019]"
                       />
                     </div>
                   </div>
@@ -1084,18 +1083,18 @@ export default function AccountPage() {
                     type="button"
                     onClick={changePassword}
                     disabled={savingPassword}
-                    className="mt-5 min-h-12 w-full rounded-xl border border-[#30372c] bg-[#141814] px-5 py-3 font-semibold text-[#d7c895] transition hover:border-[#536143] hover:text-[#f2efe4] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#c5a861] focus-visible:ring-offset-2 focus-visible:ring-offset-[#191e19] disabled:cursor-not-allowed disabled:text-[#858c7f] sm:w-auto"
+                    className="mt-5 min-h-12 w-full rounded-xl border border-[#303A2D] bg-[#111712] px-5 py-3 font-semibold text-[#F5A900] transition hover:border-[#697A2F] hover:text-[#F4F3EE] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F5A900] focus-visible:ring-offset-2 focus-visible:ring-offset-[#182019] disabled:cursor-not-allowed disabled:text-[#A6ADA5] sm:w-auto"
                   >
                     {savingPassword ? "Zmiana hasła..." : "Zmień hasło"}
                   </button>
             </section>
 
-            <section className="rounded-2xl border border-[#30372c] bg-[#191e19] p-4 sm:p-6">
-              <h2 className="mb-4 text-xl font-semibold text-[#f2efe4]">
+            <section className="rounded-2xl border border-[#303A2D] bg-[#182019] p-4 sm:p-6">
+              <h2 className="mb-4 text-xl font-semibold text-[#F4F3EE]">
                 Twoje dane i konto
               </h2>
 
-              <p className="mb-5 text-sm leading-6 text-[#a9ada4]">
+              <p className="mb-5 text-sm leading-6 text-[#A6ADA5]">
                 Możesz pobrać wersjonowany eksport swoich danych albo trwale
                 zamknąć konto. Eksport nie zawiera haseł, tokenów ani notatek
                 administracyjnych.
@@ -1106,7 +1105,7 @@ export default function AccountPage() {
                   type="button"
                   onClick={exportMyData}
                   disabled={exportingData || deletingAccount}
-                  className="min-h-12 rounded-xl border border-[#30372c] bg-[#141814] px-5 py-3 font-semibold text-[#d7c895] transition hover:border-[#536143] hover:text-[#f2efe4] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#c5a861] focus-visible:ring-offset-2 focus-visible:ring-offset-[#191e19] disabled:cursor-not-allowed disabled:text-[#858c7f]"
+                  className="min-h-12 rounded-xl border border-[#303A2D] bg-[#111712] px-5 py-3 font-semibold text-[#F5A900] transition hover:border-[#697A2F] hover:text-[#F4F3EE] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F5A900] focus-visible:ring-offset-2 focus-visible:ring-offset-[#182019] disabled:cursor-not-allowed disabled:text-[#A6ADA5]"
                 >
                   {exportingData ? "Przygotowywanie eksportu..." : "Pobierz moje dane"}
                 </button>
@@ -1118,7 +1117,7 @@ export default function AccountPage() {
                     setShowDeleteConfirmation(true);
                   }}
                   disabled={deletingAccount || exportingData}
-                  className="min-h-12 rounded-xl border border-[#744545] bg-[#2a1b1b] px-5 py-3 font-semibold text-[#e0a0a0] transition hover:bg-[#3a2222] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#e0a0a0] focus-visible:ring-offset-2 focus-visible:ring-offset-[#191e19] disabled:cursor-not-allowed disabled:opacity-60"
+                  className="min-h-12 rounded-xl border border-[#744545] bg-[#2a1b1b] px-5 py-3 font-semibold text-[#e0a0a0] transition hover:bg-[#3a2222] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#e0a0a0] focus-visible:ring-offset-2 focus-visible:ring-offset-[#182019] disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   Usuń konto
                 </button>
@@ -1143,7 +1142,7 @@ export default function AccountPage() {
                   type="button"
                   onClick={saveProfile}
                   disabled={savingProfile}
-                  className="min-h-12 w-full rounded-xl border border-[#536143] bg-[#536143] px-4 py-3 font-semibold text-[#f2efe4] transition hover:border-[#78865f] hover:bg-[#78865f] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#c5a861] focus-visible:ring-offset-2 focus-visible:ring-offset-[#141814] disabled:cursor-not-allowed disabled:border-[#30372c] disabled:bg-[#30372c] disabled:text-[#858c7f]"
+                  className="platform-primary min-h-12 w-full rounded-xl border border-[#697A2F] bg-[#697A2F] px-4 py-3 font-semibold text-[#F4F3EE] transition hover:border-[#7A8D36] hover:bg-[#7A8D36] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F5A900] focus-visible:ring-offset-2 focus-visible:ring-offset-[#111712] disabled:cursor-not-allowed disabled:border-[#303A2D] disabled:bg-[#303A2D] disabled:text-[#A6ADA5]"
                 >
                   {savingProfile ? "Zapisywanie..." : "Zapisz dane"}
                 </button>
@@ -1157,7 +1156,7 @@ export default function AccountPage() {
               aria-modal="true"
               aria-labelledby="delete-account-title"
               aria-describedby="delete-account-description"
-              className="w-full max-w-xl rounded-[2rem] border border-[#744545] bg-[#141814] p-6 shadow-2xl shadow-black/50 sm:p-8"
+              className="w-full max-w-xl rounded-[2rem] border border-[#744545] bg-[#111712] p-6 shadow-2xl shadow-black/50 sm:p-8"
             >
               <h2
                 id="delete-account-title"
@@ -1168,7 +1167,7 @@ export default function AccountPage() {
 
               <div
                 id="delete-account-description"
-                className="mt-4 space-y-3 text-sm leading-6 text-[#a9ada4]"
+                className="mt-4 space-y-3 text-sm leading-6 text-[#A6ADA5]"
               >
                 <p>
                   Dane profilu zostaną usunięte. Historyczne rezerwacje i
@@ -1183,7 +1182,7 @@ export default function AccountPage() {
 
               <label
                 htmlFor="delete-account-confirmation"
-                className="mt-6 block text-sm font-semibold text-[#f2efe4]"
+                className="mt-6 block text-sm font-semibold text-[#F4F3EE]"
               >
                 Wpisz <span className="text-[#e0a0a0]">USUŃ KONTO</span>, aby
                 potwierdzić
@@ -1195,7 +1194,7 @@ export default function AccountPage() {
                 onChange={(event) => setDeleteConfirmation(event.target.value)}
                 disabled={deletingAccount}
                 autoComplete="off"
-                className="mt-2 min-h-12 w-full rounded-xl border border-[#744545] bg-[#191e19] px-4 py-3 text-[#f2efe4] outline-none focus-visible:ring-2 focus-visible:ring-[#e0a0a0] focus-visible:ring-offset-2 focus-visible:ring-offset-[#141814]"
+                className="mt-2 min-h-12 w-full rounded-xl border border-[#744545] bg-[#182019] px-4 py-3 text-[#F4F3EE] outline-none focus-visible:ring-2 focus-visible:ring-[#e0a0a0] focus-visible:ring-offset-2 focus-visible:ring-offset-[#111712]"
               />
 
               <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
@@ -1203,7 +1202,7 @@ export default function AccountPage() {
                   type="button"
                   onClick={() => setShowDeleteConfirmation(false)}
                   disabled={deletingAccount}
-                  className="min-h-12 rounded-xl border border-[#30372c] px-5 py-3 font-semibold text-[#a9ada4] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#c5a861] disabled:opacity-60"
+                  className="min-h-12 rounded-xl border border-[#303A2D] px-5 py-3 font-semibold text-[#A6ADA5] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F5A900] disabled:opacity-60"
                 >
                   Anuluj
                 </button>
@@ -1213,7 +1212,7 @@ export default function AccountPage() {
                   disabled={
                     deletingAccount || deleteConfirmation !== "USUŃ KONTO"
                   }
-                  className="min-h-12 rounded-xl border border-[#744545] bg-[#7a3030] px-5 py-3 font-semibold text-white transition hover:bg-[#963d3d] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#e0a0a0] focus-visible:ring-offset-2 focus-visible:ring-offset-[#141814] disabled:cursor-not-allowed disabled:bg-[#30372c] disabled:text-[#858c7f]"
+                  className="min-h-12 rounded-xl border border-[#744545] bg-[#7a3030] px-5 py-3 font-semibold text-white transition hover:bg-[#963d3d] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#e0a0a0] focus-visible:ring-offset-2 focus-visible:ring-offset-[#111712] disabled:cursor-not-allowed disabled:bg-[#303A2D] disabled:text-[#A6ADA5]"
                 >
                   {deletingAccount ? "Usuwanie konta..." : "Potwierdź usunięcie"}
                 </button>
@@ -1224,21 +1223,21 @@ export default function AccountPage() {
 
         <nav
           aria-label="Pozostałe strony konta"
-          className="mt-8 flex flex-col gap-3 border-t border-[#30372c] pt-6 sm:flex-row"
+          className="mt-8 flex flex-col gap-3 border-t border-[#303A2D] pt-6 sm:flex-row"
         >
-          <a
+          <Link
             href="/dashboard"
-            className="inline-flex min-h-11 items-center justify-center rounded-xl border border-[#30372c] bg-[#191e19] px-5 py-3 text-center text-sm font-semibold text-[#a9ada4] transition hover:border-[#536143] hover:text-[#d7c895] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#c5a861] focus-visible:ring-offset-2 focus-visible:ring-offset-[#141814]"
+            className="inline-flex min-h-11 items-center justify-center rounded-xl border border-[#303A2D] bg-[#182019] px-5 py-3 text-center text-sm font-semibold text-[#A6ADA5] transition hover:border-[#697A2F] hover:text-[#F5A900] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F5A900] focus-visible:ring-offset-2 focus-visible:ring-offset-[#111712]"
           >
             Wybierz lokalizację dla rezerwacji
-          </a>
+          </Link>
 
-          <a
+          <Link
             href="/dashboard"
-            className="inline-flex min-h-11 items-center justify-center rounded-xl border border-[#30372c] bg-[#191e19] px-5 py-3 text-center text-sm font-semibold text-[#a9ada4] transition hover:border-[#536143] hover:text-[#d7c895] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#c5a861] focus-visible:ring-offset-2 focus-visible:ring-offset-[#141814]"
+            className="inline-flex min-h-11 items-center justify-center rounded-xl border border-[#303A2D] bg-[#182019] px-5 py-3 text-center text-sm font-semibold text-[#A6ADA5] transition hover:border-[#697A2F] hover:text-[#F5A900] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F5A900] focus-visible:ring-offset-2 focus-visible:ring-offset-[#111712]"
           >
             Wybierz lokalizację dla szkoleń
-          </a>
+          </Link>
         </nav>
       </section>
     </main>

@@ -1,6 +1,7 @@
 ﻿"use client";
 
-import Image from "next/image";
+import Link from "next/link";
+import PlatformBrand from "@/app/_components/PlatformBrand";
 import { useEffect, useState } from "react";
 import {
   getPasswordLengthError,
@@ -112,25 +113,18 @@ export default function ResetPasswordPage() {
   }
 
   return (
-    <main className="min-h-screen bg-[#090b09] text-[#f2efe4]">
+    <main className="platform-ui min-h-screen bg-[#080B09] text-[#F4F3EE]">
       <section className="mx-auto flex min-h-screen w-full max-w-[480px] items-center px-4 py-6 sm:px-6 sm:py-8">
-        <div className="w-full rounded-[2rem] border border-[#30372c] bg-[#141814] p-6 shadow-2xl shadow-black/30 sm:p-9">
+        <div className="w-full rounded-[2rem] border border-[#303A2D] bg-[#111712] p-6 shadow-2xl shadow-black/30 sm:p-9">
           <div className="mb-7 flex justify-center">
-            <Image
-              src="/login-brand.png"
-              alt="CSK - Centrum Szkolenia Krutla"
-              width={1536}
-              height={1024}
-              priority
-              className="h-auto w-full max-w-[280px] rounded-xl sm:max-w-[310px]"
-            />
+            <PlatformBrand />
           </div>
 
-          <h1 className="mb-2 text-3xl font-bold text-[#f2efe4] sm:text-4xl">
+          <h1 className="mb-2 text-3xl font-bold text-[#F4F3EE] sm:text-4xl">
             Ustaw nowe hasło
           </h1>
 
-          <p className="mb-7 text-base text-[#a9ada4] sm:text-lg">
+          <p className="mb-7 text-base text-[#A6ADA5] sm:text-lg">
             Wprowadź nowe hasło do swojego konta.
           </p>
 
@@ -138,7 +132,7 @@ export default function ResetPasswordPage() {
             <div
               role="status"
               aria-live="polite"
-              className="rounded-xl border border-[#30372c] bg-[#191e19] p-4 text-sm text-[#a9ada4]"
+              className="rounded-xl border border-[#303A2D] bg-[#182019] p-4 text-sm text-[#A6ADA5]"
             >
               Sprawdzanie linku resetującego...
             </div>
@@ -147,7 +141,7 @@ export default function ResetPasswordPage() {
               <div>
                 <label
                   htmlFor="reset-password-new"
-                  className="mb-2 block text-sm text-[#a9ada4] sm:text-base"
+                  className="mb-2 block text-sm text-[#A6ADA5] sm:text-base"
                 >
                   Nowe hasło
                 </label>
@@ -161,14 +155,14 @@ export default function ResetPasswordPage() {
                   maxLength={PASSWORD_MAX_LENGTH}
                   placeholder={`Minimum ${PASSWORD_MIN_LENGTH} znaków`}
                   disabled={!hasSession}
-                  className="min-h-12 w-full rounded-xl border border-[#30372c] bg-[#191e19] px-4 py-3.5 text-base text-[#f2efe4] placeholder:text-[#858c7f] focus-visible:border-[#536143] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#c5a861] focus-visible:ring-offset-2 focus-visible:ring-offset-[#141814] disabled:cursor-not-allowed disabled:bg-[#171a17] disabled:text-[#858c7f]"
+                  className="min-h-12 w-full rounded-xl border border-[#303A2D] bg-[#182019] px-4 py-3.5 text-base text-[#F4F3EE] placeholder:text-[#A6ADA5] focus-visible:border-[#697A2F] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F5A900] focus-visible:ring-offset-2 focus-visible:ring-offset-[#111712] disabled:cursor-not-allowed disabled:bg-[#171a17] disabled:text-[#A6ADA5]"
                 />
               </div>
 
               <div>
                 <label
                   htmlFor="reset-password-repeat"
-                  className="mb-2 block text-sm text-[#a9ada4] sm:text-base"
+                  className="mb-2 block text-sm text-[#A6ADA5] sm:text-base"
                 >
                   Powtórz nowe hasło
                 </label>
@@ -182,7 +176,7 @@ export default function ResetPasswordPage() {
                   maxLength={PASSWORD_MAX_LENGTH}
                   placeholder="Powtórz hasło"
                   disabled={!hasSession}
-                  className="min-h-12 w-full rounded-xl border border-[#30372c] bg-[#191e19] px-4 py-3.5 text-base text-[#f2efe4] placeholder:text-[#858c7f] focus-visible:border-[#536143] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#c5a861] focus-visible:ring-offset-2 focus-visible:ring-offset-[#141814] disabled:cursor-not-allowed disabled:bg-[#171a17] disabled:text-[#858c7f]"
+                  className="min-h-12 w-full rounded-xl border border-[#303A2D] bg-[#182019] px-4 py-3.5 text-base text-[#F4F3EE] placeholder:text-[#A6ADA5] focus-visible:border-[#697A2F] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F5A900] focus-visible:ring-offset-2 focus-visible:ring-offset-[#111712] disabled:cursor-not-allowed disabled:bg-[#171a17] disabled:text-[#A6ADA5]"
                 />
               </div>
 
@@ -203,24 +197,24 @@ export default function ResetPasswordPage() {
                 type="button"
                 onClick={handleUpdatePassword}
                 disabled={loading || !hasSession}
-                className="min-h-12 w-full rounded-xl border border-[#536143] bg-[#536143] px-4 py-3.5 text-base font-semibold text-[#f2efe4] transition hover:border-[#78865f] hover:bg-[#78865f] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#c5a861] focus-visible:ring-offset-2 focus-visible:ring-offset-[#141814] disabled:cursor-not-allowed disabled:border-[#30372c] disabled:bg-[#30372c] disabled:text-[#858c7f]"
+                className="platform-primary min-h-12 w-full rounded-xl border border-[#697A2F] bg-[#697A2F] px-4 py-3.5 text-base font-semibold text-[#F4F3EE] transition hover:border-[#7A8D36] hover:bg-[#7A8D36] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F5A900] focus-visible:ring-offset-2 focus-visible:ring-offset-[#111712] disabled:cursor-not-allowed disabled:border-[#303A2D] disabled:bg-[#303A2D] disabled:text-[#A6ADA5]"
               >
                 {loading ? "Zapisywanie..." : "Zmień hasło"}
               </button>
 
-              <a
+              <Link prefetch={false}
                 href="/forgot-password"
-                className="rounded text-center text-sm text-[#a9ada4] transition hover:text-[#d7c895] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#c5a861] focus-visible:ring-offset-2 focus-visible:ring-offset-[#141814] sm:text-base"
+                className="rounded text-center text-sm text-[#A6ADA5] transition hover:text-[#F5A900] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F5A900] focus-visible:ring-offset-2 focus-visible:ring-offset-[#111712] sm:text-base"
               >
                 Wygeneruj nowy link resetujący
-              </a>
+              </Link>
 
-              <a
+              <Link prefetch={false}
                 href="/login"
-                className="rounded text-center text-sm text-[#858c7f] transition hover:text-[#d7c895] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#c5a861] focus-visible:ring-offset-2 focus-visible:ring-offset-[#141814] sm:text-base"
+                className="rounded text-center text-sm text-[#A6ADA5] transition hover:text-[#F5A900] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F5A900] focus-visible:ring-offset-2 focus-visible:ring-offset-[#111712] sm:text-base"
               >
                 ← Wróć do logowania
-              </a>
+              </Link>
             </div>
           )}
         </div>

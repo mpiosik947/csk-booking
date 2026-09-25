@@ -1,4 +1,5 @@
 ﻿"use client";
+import PlatformBrand from "@/app/_components/PlatformBrand";
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
@@ -128,12 +129,12 @@ export default function DashboardPage() {
 
   if (loading) {
     return (
-      <main className="flex min-h-screen items-center bg-[#090b09] px-4 py-6 text-[#f2efe4] sm:px-6 sm:py-8">
-        <section className="mx-auto w-full max-w-2xl rounded-[2rem] border border-[#30372c] bg-[#141814] p-6 shadow-2xl shadow-black/20 sm:p-8">
+      <main className="platform-ui flex min-h-screen items-center bg-[#080B09] px-4 py-6 text-[#F4F3EE] sm:px-6 sm:py-8">
+        <section className="mx-auto w-full max-w-2xl rounded-[2rem] border border-[#303A2D] bg-[#111712] p-6 shadow-2xl shadow-black/20 sm:p-8">
           <div
             role="status"
             aria-live="polite"
-            className="rounded-2xl border border-[#30372c] bg-[#191e19] p-5 text-[#a9ada4]"
+            className="rounded-2xl border border-[#303A2D] bg-[#182019] p-5 text-[#A6ADA5]"
           >
             Ładowanie panelu klienta...
           </div>
@@ -144,8 +145,8 @@ export default function DashboardPage() {
 
   if (!isLoggedIn) {
     return (
-      <main className="flex min-h-screen items-center bg-[#090b09] px-4 py-6 text-[#f2efe4] sm:px-6 sm:py-8">
-        <section className="mx-auto w-full max-w-2xl rounded-[2rem] border border-[#30372c] bg-[#141814] p-6 text-center shadow-2xl shadow-black/20 sm:p-9">
+      <main className="platform-ui flex min-h-screen items-center bg-[#080B09] px-4 py-6 text-[#F4F3EE] sm:px-6 sm:py-8">
+        <section className="mx-auto w-full max-w-2xl rounded-[2rem] border border-[#303A2D] bg-[#111712] p-6 text-center shadow-2xl shadow-black/20 sm:p-9">
           <div>
             <h1 className="text-3xl font-bold sm:text-4xl">
               Logowanie wymagane
@@ -160,19 +161,19 @@ export default function DashboardPage() {
             </p>
 
             <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:justify-center">
-              <a
+              <Link prefetch={false}
                 href="/login"
-                className="inline-flex min-h-12 items-center justify-center rounded-xl bg-[#536143] px-6 py-3 font-semibold text-[#f2efe4] transition hover:bg-[#78865f] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d7c895] focus-visible:ring-offset-2 focus-visible:ring-offset-[#141814]"
+                className="inline-flex min-h-12 items-center justify-center rounded-xl bg-[#697A2F] px-6 py-3 font-semibold text-[#F4F3EE] transition hover:bg-[#7A8D36] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F5A900] focus-visible:ring-offset-2 focus-visible:ring-offset-[#111712]"
               >
                 Zaloguj się
-              </a>
+              </Link>
 
-              <a
+              <Link prefetch={false}
                 href="/register"
-                className="inline-flex min-h-12 items-center justify-center rounded-xl border border-[#30372c] px-6 py-3 font-semibold text-[#a9ada4] transition hover:border-[#d7c895] hover:text-[#d7c895] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d7c895] focus-visible:ring-offset-2 focus-visible:ring-offset-[#141814]"
+                className="inline-flex min-h-12 items-center justify-center rounded-xl border border-[#303A2D] px-6 py-3 font-semibold text-[#A6ADA5] transition hover:border-[#F5A900] hover:text-[#F5A900] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F5A900] focus-visible:ring-offset-2 focus-visible:ring-offset-[#111712]"
               >
                 Utwórz konto
-              </a>
+              </Link>
             </div>
           </div>
         </section>
@@ -181,26 +182,24 @@ export default function DashboardPage() {
   }
 
   return (
-    <main className="min-h-screen bg-[#090b09] px-4 py-6 text-[#f2efe4] sm:px-6 sm:py-8">
-      <section className="mx-auto max-w-6xl rounded-[2rem] border border-[#30372c] bg-[#141814] p-5 shadow-2xl shadow-black/20 sm:p-8">
+    <main className="platform-ui min-h-screen bg-[#080B09] px-4 py-6 text-[#F4F3EE] sm:px-6 sm:py-8">
+      <section className="mx-auto max-w-6xl rounded-[2rem] border border-[#303A2D] bg-[#111712] p-5 shadow-2xl shadow-black/20 sm:p-8">
         <header className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
           <div>
-            <p className="mb-3 text-xs font-semibold uppercase tracking-[0.22em] text-[#858c7f]">
-              CSK Booking
-            </p>
+            <div className="mb-4"><PlatformBrand compact /></div>
 
             <h1 className="text-3xl font-bold sm:text-4xl">Panel klienta</h1>
 
-            <p className="mt-3 leading-7 text-[#a9ada4]">
+            <p className="mt-3 leading-7 text-[#A6ADA5]">
               Witaj,{" "}
-              <span className="font-semibold text-[#d7c895]">{fullName}</span>.
+              <span className="font-semibold text-[#F5A900]">{fullName}</span>.
               Zarządzaj swoimi rezerwacjami i szkoleniami.
             </p>
           </div>
 
-          <div className="w-full rounded-2xl border border-[#30372c] bg-[#191e19] px-5 py-4 text-sm text-[#a9ada4] lg:max-w-sm lg:text-right">
+          <div className="w-full rounded-2xl border border-[#303A2D] bg-[#182019] px-5 py-4 text-sm text-[#A6ADA5] lg:max-w-sm lg:text-right">
             Zalogowany jako:{" "}
-            <span className="break-all font-semibold text-[#f2efe4]">
+            <span className="break-all font-semibold text-[#F4F3EE]">
               {email}
             </span>
           </div>
@@ -227,12 +226,12 @@ export default function DashboardPage() {
               zweryfikuje konto i rezerwacja przebiegnie sprawniej.
             </p>
 
-            <a
+            <Link prefetch={false}
               href="/account"
-              className="mt-5 inline-flex min-h-11 items-center rounded-xl bg-[#6f5a2e] px-5 py-3 text-sm font-semibold text-[#f2efe4] transition hover:bg-[#9a7c3e] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d7c895] focus-visible:ring-offset-2 focus-visible:ring-offset-[#2b2618]"
+              className="mt-5 inline-flex min-h-11 items-center rounded-xl bg-[#6f5a2e] px-5 py-3 text-sm font-semibold text-[#F4F3EE] transition hover:bg-[#9a7c3e] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F5A900] focus-visible:ring-offset-2 focus-visible:ring-offset-[#2b2618]"
             >
               Uzupełnij profil
-            </a>
+            </Link>
           </div>
         )}
 
@@ -255,7 +254,7 @@ export default function DashboardPage() {
         <section aria-labelledby="locations-heading" className="mt-8">
           <h2
             id="locations-heading"
-            className="text-xl font-semibold text-[#f2efe4]"
+            className="text-xl font-semibold text-[#F4F3EE]"
           >
             Twoje lokalizacje
           </h2>
@@ -272,14 +271,14 @@ export default function DashboardPage() {
           )}
           <div className="mt-4 grid gap-4">
             {tenants.map((tenant) => (
-              <article key={tenant.tenant_id} className="rounded-2xl border border-[#536143] bg-[#20251d] p-5 sm:p-6">
-                <h3 className="text-2xl font-bold text-[#f2efe4]">{tenant.tenant_name}</h3>
-                <p className="mt-2 text-sm text-[#a9ada4]">Wybierz operację w tej lokalizacji.</p>
+              <article key={tenant.tenant_id} className="rounded-2xl border border-[#697A2F] bg-[#20251d] p-5 sm:p-6">
+                <h3 className="text-2xl font-bold text-[#F4F3EE]">{tenant.tenant_name}</h3>
+                <p className="mt-2 text-sm text-[#A6ADA5]">Wybierz operację w tej lokalizacji.</p>
                 <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-                  <Link href={`/t/${tenant.tenant_slug}/booking`} className="min-h-11 rounded-xl bg-[#536143] px-4 py-3 text-center text-sm font-semibold">Zarezerwuj oś</Link>
-                  <Link href={`/t/${tenant.tenant_slug}/events`} className="min-h-11 rounded-xl border border-[#6f5a2e] px-4 py-3 text-center text-sm font-semibold text-[#d7c895]">Eventy</Link>
-                  <Link href={`/t/${tenant.tenant_slug}/my-reservations`} className="min-h-11 rounded-xl border border-[#30372c] px-4 py-3 text-center text-sm font-semibold">Moje rezerwacje</Link>
-                  <Link href={`/t/${tenant.tenant_slug}/my-events`} className="min-h-11 rounded-xl border border-[#30372c] px-4 py-3 text-center text-sm font-semibold">Moje szkolenia</Link>
+                  <Link href={`/t/${tenant.tenant_slug}/booking`} className="min-h-11 rounded-xl bg-[#697A2F] px-4 py-3 text-center text-sm font-semibold">Zarezerwuj oś</Link>
+                  <Link href={`/t/${tenant.tenant_slug}/events`} className="min-h-11 rounded-xl border border-[#6f5a2e] px-4 py-3 text-center text-sm font-semibold text-[#F5A900]">Eventy</Link>
+                  <Link href={`/t/${tenant.tenant_slug}/my-reservations`} className="min-h-11 rounded-xl border border-[#303A2D] px-4 py-3 text-center text-sm font-semibold">Moje rezerwacje</Link>
+                  <Link href={`/t/${tenant.tenant_slug}/my-events`} className="min-h-11 rounded-xl border border-[#303A2D] px-4 py-3 text-center text-sm font-semibold">Moje szkolenia</Link>
                   {tenant.tenant_role !== "user" && (
                     <Link href={`/t/${tenant.tenant_slug}/admin`} className="min-h-11 rounded-xl border border-[#806a32] px-4 py-3 text-center text-sm font-semibold text-[#e1c477]">Panel obsługi</Link>
                   )}
@@ -292,41 +291,41 @@ export default function DashboardPage() {
         <section aria-labelledby="account-actions-heading" className="mt-8">
           <h2
             id="account-actions-heading"
-            className="text-xl font-semibold text-[#f2efe4]"
+            className="text-xl font-semibold text-[#F4F3EE]"
           >
             Twoje konto
           </h2>
 
           <div className="mt-4 grid gap-3 sm:grid-cols-2">
-            <a
+            <Link prefetch={false}
               href="/account"
-              className="min-h-24 rounded-2xl border border-[#30372c] bg-[#191e19] p-5 transition hover:border-[#536143] hover:bg-[#20251d] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d7c895] focus-visible:ring-offset-2 focus-visible:ring-offset-[#141814]"
+              className="min-h-24 rounded-2xl border border-[#303A2D] bg-[#182019] p-5 transition hover:border-[#697A2F] hover:bg-[#20251d] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F5A900] focus-visible:ring-offset-2 focus-visible:ring-offset-[#111712]"
             >
-              <h3 className="font-semibold text-[#f2efe4]">Moje konto</h3>
-              <p className="mt-2 text-sm leading-6 text-[#858c7f]">
+              <h3 className="font-semibold text-[#F4F3EE]">Moje konto</h3>
+              <p className="mt-2 text-sm leading-6 text-[#A6ADA5]">
                 Edytuj swoje dane użytkownika, imię, nazwisko oraz numer telefonu.
               </p>
-            </a>
+            </Link>
 
-            <a
+            <Link prefetch={false}
               href="/terms"
-              className="min-h-24 rounded-2xl border border-[#30372c] bg-[#191e19] p-5 transition hover:border-[#536143] hover:bg-[#20251d] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d7c895] focus-visible:ring-offset-2 focus-visible:ring-offset-[#141814]"
+              className="min-h-24 rounded-2xl border border-[#303A2D] bg-[#182019] p-5 transition hover:border-[#697A2F] hover:bg-[#20251d] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F5A900] focus-visible:ring-offset-2 focus-visible:ring-offset-[#111712]"
             >
-              <h3 className="font-semibold text-[#f2efe4]">Regulamin i RODO</h3>
-              <p className="mt-2 text-sm leading-6 text-[#858c7f]">
+              <h3 className="font-semibold text-[#F4F3EE]">Regulamin i RODO</h3>
+              <p className="mt-2 text-sm leading-6 text-[#A6ADA5]">
                 Regulamin strzelnicy, zasady bezpieczeństwa oraz polityka
                 prywatności.
               </p>
-            </a>
+            </Link>
           </div>
         </section>
 
-        <div className="mt-8 flex justify-end border-t border-[#30372c] pt-6">
+        <div className="mt-8 flex justify-end border-t border-[#303A2D] pt-6">
           <Link
             href="/"
-            className="inline-flex min-h-11 items-center justify-center rounded-xl border border-[#30372c] bg-[#191e19] px-5 py-3 text-sm font-semibold text-[#a9ada4] transition hover:border-[#536143] hover:bg-[#20251d] hover:text-[#f2efe4] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d7c895] focus-visible:ring-offset-2 focus-visible:ring-offset-[#141814]"
+            className="inline-flex min-h-11 items-center justify-center rounded-xl border border-[#303A2D] bg-[#182019] px-5 py-3 text-sm font-semibold text-[#A6ADA5] transition hover:border-[#697A2F] hover:bg-[#20251d] hover:text-[#F4F3EE] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F5A900] focus-visible:ring-offset-2 focus-visible:ring-offset-[#111712]"
           >
-            ← Strona główna
+            ← Wróć do StrzelajTu.pl
           </Link>
         </div>
       </section>

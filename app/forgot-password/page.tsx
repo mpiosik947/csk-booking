@@ -1,7 +1,7 @@
 ﻿"use client";
 
-import Image from "next/image";
 import Link from "next/link";
+import PlatformBrand from "@/app/_components/PlatformBrand";
 import { useState } from "react";
 import { supabase } from "../../lib/supabase";
 import { PLATFORM_BASE_URL } from "@/lib/platform-domain";
@@ -45,25 +45,18 @@ export default function ForgotPasswordPage() {
   }
 
   return (
-    <main className="min-h-screen bg-[#090b09] text-[#f2efe4]">
+    <main className="platform-ui min-h-screen bg-[#080B09] text-[#F4F3EE]">
       <section className="mx-auto flex min-h-screen w-full max-w-[480px] items-center px-4 py-6 sm:px-6 sm:py-8">
-        <div className="w-full rounded-[2rem] border border-[#30372c] bg-[#141814] p-6 shadow-2xl shadow-black/30 sm:p-9">
+        <div className="w-full rounded-[2rem] border border-[#303A2D] bg-[#111712] p-6 shadow-2xl shadow-black/30 sm:p-9">
           <div className="mb-7 flex justify-center">
-            <Image
-              src="/login-brand.png"
-              alt="CSK - Centrum Szkolenia Krutla"
-              width={1536}
-              height={1024}
-              priority
-              className="h-auto w-full max-w-[280px] rounded-xl sm:max-w-[310px]"
-            />
+            <PlatformBrand />
           </div>
 
-          <h1 className="mb-2 text-3xl font-bold text-[#f2efe4] sm:text-4xl">
+          <h1 className="mb-2 text-3xl font-bold text-[#F4F3EE] sm:text-4xl">
             Reset hasła
           </h1>
 
-          <p className="mb-7 text-base text-[#a9ada4] sm:text-lg">
+          <p className="mb-7 text-base text-[#A6ADA5] sm:text-lg">
             Podaj adres e-mail przypisany do konta. Wyślemy link do ustawienia
             nowego hasła.
           </p>
@@ -72,7 +65,7 @@ export default function ForgotPasswordPage() {
             <div>
               <label
                 htmlFor="forgot-password-email"
-                className="mb-2 block text-sm text-[#a9ada4] sm:text-base"
+                className="mb-2 block text-sm text-[#A6ADA5] sm:text-base"
               >
                 E-mail
               </label>
@@ -83,7 +76,7 @@ export default function ForgotPasswordPage() {
                 value={email}
                 onChange={(event) => setEmail(event.target.value)}
                 placeholder="jan@example.com"
-                className="min-h-12 w-full rounded-xl border border-[#30372c] bg-[#191e19] px-4 py-3.5 text-base text-[#f2efe4] placeholder:text-[#858c7f] focus-visible:border-[#536143] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#c5a861] focus-visible:ring-offset-2 focus-visible:ring-offset-[#141814]"
+                className="min-h-12 w-full rounded-xl border border-[#303A2D] bg-[#182019] px-4 py-3.5 text-base text-[#F4F3EE] placeholder:text-[#A6ADA5] focus-visible:border-[#697A2F] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F5A900] focus-visible:ring-offset-2 focus-visible:ring-offset-[#111712]"
               />
             </div>
 
@@ -104,23 +97,23 @@ export default function ForgotPasswordPage() {
               type="button"
               onClick={handleResetPassword}
               disabled={loading}
-              className="min-h-12 w-full rounded-xl border border-[#536143] bg-[#536143] px-4 py-3.5 text-base font-semibold text-[#f2efe4] transition hover:border-[#78865f] hover:bg-[#78865f] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#c5a861] focus-visible:ring-offset-2 focus-visible:ring-offset-[#141814] disabled:cursor-not-allowed disabled:border-[#30372c] disabled:bg-[#30372c] disabled:text-[#858c7f]"
+              className="platform-primary min-h-12 w-full rounded-xl border border-[#697A2F] bg-[#697A2F] px-4 py-3.5 text-base font-semibold text-[#F4F3EE] transition hover:border-[#7A8D36] hover:bg-[#7A8D36] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F5A900] focus-visible:ring-offset-2 focus-visible:ring-offset-[#111712] disabled:cursor-not-allowed disabled:border-[#303A2D] disabled:bg-[#303A2D] disabled:text-[#A6ADA5]"
             >
               {loading ? "Wysyłanie..." : "Wyślij link resetujący"}
             </button>
 
             <Link
               href="/login"
-              className="rounded text-center text-sm text-[#a9ada4] transition hover:text-[#d7c895] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#c5a861] focus-visible:ring-offset-2 focus-visible:ring-offset-[#141814] sm:text-base"
+              className="rounded text-center text-sm text-[#A6ADA5] transition hover:text-[#F5A900] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F5A900] focus-visible:ring-offset-2 focus-visible:ring-offset-[#111712] sm:text-base"
             >
               ← Wróć do logowania
             </Link>
 
             <Link
               href="/"
-              className="rounded text-center text-sm text-[#858c7f] transition hover:text-[#d7c895] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#c5a861] focus-visible:ring-offset-2 focus-visible:ring-offset-[#141814] sm:text-base"
+              className="rounded text-center text-sm text-[#A6ADA5] transition hover:text-[#F5A900] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F5A900] focus-visible:ring-offset-2 focus-visible:ring-offset-[#111712] sm:text-base"
             >
-              ← Strona główna
+              ← Wróć do StrzelajTu.pl
             </Link>
           </div>
         </div>

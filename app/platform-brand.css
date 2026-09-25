@@ -1,0 +1,35 @@
+.platform-ui {
+  --platform-bg: #080B09;
+  --platform-surface: #111712;
+  --platform-surface-hover: #182019;
+  --platform-border: #303A2D;
+  --platform-olive: #697A2F;
+  --platform-olive-active: #7A8D36;
+  --platform-amber: #F5A900;
+  --platform-amber-hover: #FFB61A;
+  --platform-text: #F4F3EE;
+  --platform-muted: #A6ADA5;
+  background: var(--platform-bg);
+  color: var(--platform-text);
+}
+.platform-brand { display: inline-flex; max-width: 100%; border-radius: 8px; }
+.platform-logo { display: block; width: min(100%, 400px); height: auto; object-fit: contain; }
+.platform-logo-compact { width: 240px; }
+.platform-ui :is(a, button, input, select, textarea):focus-visible {
+  outline: 2px solid #F5A900;
+  outline-offset: 4px;
+}
+.platform-ui .platform-primary {
+  background: var(--platform-amber);
+  border-color: var(--platform-amber);
+  color: #080B09;
+}
+.platform-ui .platform-primary:hover:not(:disabled) {
+  background: var(--platform-amber-hover);
+  border-color: var(--platform-amber-hover);
+}
+.platform-ui .platform-primary:disabled { opacity: .55; }
+.platform-ui input:not([type="checkbox"]) { color-scheme: dark; }
+.platform-ui input[type="checkbox"] { accent-color: var(--platform-amber); }
+.platform-ui > main { background: var(--platform-bg); color: var(--platform-text); }
+.platform-ui > main > div > section { background: var(--platform-surface); border-color: var(--platform-border); }
