@@ -1,5 +1,102 @@
 # PRODUCT-10E — Platform Admin and Tenant Onboarding
 
+## PRODUCT-10E production deployment — 2026-09-25: PASS
+
+Authoritative deployment result superseding earlier local-only/blocked sections.
+Deploy commit: fc1e966063e83a0ffe85bca6bcecbd9a7a7c8adc.
+Exactly 70 clean-candidate paths were staged by explicit index entries and
+verified against their candidate Git blobs. Mixed working-tree contents were
+not copied into the commit. TCM, CSK visual/public subpages, AGENTS.md, drafts
+and unrelated SaaS documents remain excluded. Push was ordinary fast-forward.
+
+### Deployment and live database evidence
+
+Immediately after push, isolated history and dry-run again showed exactly five
+PRODUCT-10E migrations, with matching approved SHA values and all 119 prior
+versions aligned through 20261008110000. Seven normalized input fingerprints,
+SECURITY DEFINER=85 and the technical ACL baseline were unchanged.
+
+The isolated db push applied only 20261009100000, 20261009110000,
+20261009120000, 20261009130000 and 20261009140000. Each is recorded exactly once.
+Post-deploy history: LOCAL=REMOTE 124/124; pending PRODUCT-10E=0.
+Final dry-run: Remote database is up to date.
+TCM 20261010100000 remains local-only and was not included in the deploy workspace.
+
+Live catalog: SECURITY DEFINER=97; protected PRODUCT-10E functions=16;
+PUBLIC EXECUTE=0; unexpected anon/service_role/internal authenticated EXECUTE=0.
+New platform/settlement tables: RLS enabled, policies=0, client direct grants=0.
+Both owner-only technical tables retain empty service_role ACL.
+TCM content table/reader absent. Drift=0 in checked history, guarded inputs,
+target inventory and ACL; no claim of exhaustive full production schema equivalence.
+
+### Production rollback-only verification
+
+The focused test's 85 security assertions were executed against production.
+The transport adaptation removed psql meta-commands, used three fixed synthetic
+user UUIDs and a unique synthetic slug, and replaced psql cleanup variables with
+explicit post-rollback queries. Authorization assertions were unchanged.
+A count guard required all 85 assertions; cleanup supplied control 86.
+Result: 86/86 PASS, transaction ROLLED BACK, fixture_remaining=0.
+Afterward: tenants=1, active tenants=1, platform_admins=0.
+No real account was bootstrapped and no second tenant persisted.
+
+Verified: separate platform authority; tenant memberships remain authority;
+profiles.role does not grant platform access; tenant admin denied platform
+operations; platform authority alone denied tenant operational history/settings.
+Creation is dormant/private without automatic plan/admin/publication. Explicit
+plan and initial membership assignment, readiness, protected preview, activation,
+publication, cross-tenant denial and suspended membership denial passed.
+Suspension denies new business while preserving history/cancellation; external
+settlement/refund is audited notation only, unpaid is not a refund and no real
+payment/refund was executed. Account-wide redaction and downgrade continuity passed.
+No hard-delete contract was added.
+
+### Application deployment and regression
+
+GitHub deployment 6654692088 reports SUCCESS for environment
+Production - csk-booking-5nwh, exact deploy commit above.
+Vercel deployment: BEKGDq1j25QZSrvo26KrrhSpoH2y.
+Deployment URL:
+https://csk-booking-5nwh-p6ml5s29l-mpiosik94-9167s-projects.vercel.app
+
+The old csk-booking project independently reported a failed deployment.
+It is not the approved production project; no changes were made to it.
+The approved csk-booking-5nwh deployment succeeded.
+
+Production host HTTP smoke: 17/17 without 5xx:
+/, /csk-krutla, /csk, /t/csk, /t/csk/booking, /t/csk/events,
+/booking, /events, /account, /dashboard, /login, /admin,
+/admin/settings, /t/csk/admin, /platform-admin, /tenant-setup/csk,
+/continuity. Protected unauthenticated paths correctly redirect to login.
+Browser verification confirmed CSK public branding and tenant-bound booking/events
+CTAs. CSK visual restore and new public subpages were not deployed.
+
+Fresh preflight regression for the identical candidate: focused SQL 86/86,
+full DB 1890/1890, concurrency 6/6 (deadlocks=0), Node 817/817,
+isolated no-TCM Playwright 2/2, TypeScript/build PASS, schema diff=0, cleanup=0.
+Changed-scope ESLint has no new errors; the documented five Account baseline
+anchor errors and one pre-existing admin warning remain.
+No claim is made of an authenticated real Platform Admin browser walkthrough:
+bootstrap is intentionally absent. Privileged production behavior was verified
+through rollback-only synthetic DB contracts; browser workflows passed locally.
+
+### Bootstrap contract and boundaries
+
+PLATFORM ADMIN BOOTSTRAP REQUIRED: YES.
+Required future input: exact existing confirmed auth.users UUID selected by the
+user, with separate explicit authorization. Verify that exact account is live,
+confirmed and not already provisioned; stop on unexpected row/status.
+A privileged transaction may then create only its approved platform_admins row,
+with exact-row guards and an audit record. Do not infer the account from global
+profiles.role, tenant membership, email resemblance or first-user ordering.
+Do not create auth users or grant tenant operational membership as a side effect.
+No bootstrap was performed in this task.
+
+Second production tenant: NOT ACTIVATED. DNS/custom domains: UNTOUCHED.
+TCM: FROZEN / NOT DEPLOYED.
+PRODUCT-10E PROD: PASS.
+READY FOR TCM PREFLIGHT: YES, as a separate scoped task, not deployment authorization.
+
 ## Clean checkpoint remediation — 2026-09-25: LOCAL PASS
 
 This section supersedes the blocked build gate below. No staging, commit, push,
@@ -48,6 +145,58 @@ Fresh clean-candidate evidence:
 Tenant membership authority and separate platform authority are preserved;
 profiles.role and client tenantSlug are not authorization sources.
 TCM remains FROZEN. Production preflight may be retried separately.
+
+## Checkpoint/deployment gate — 2026-09-25: BLOCKED before staging
+
+Authorized deployment was not started. A standalone candidate was constructed
+outside the repo at `C:/Users/Mpios/Desktop/APP Krutla/product10e-checkpoint-candidate`
+from HEAD plus only PRODUCT-10E source/test changes. TCM and CSK visual/public
+subpages were excluded. Candidate manifest contains 64 proposed paths; nothing
+was staged. The main application worktree and all migrations remain untouched.
+
+Fresh candidate results: Node 814/814; focused SQL 86/86; full pre-TCM DB
+1890/1890; concurrency 6/6; SECURITY DEFINER 97; TCM objects absent; SQL schema
+diff 0. The scratch database and both temporary Auth/REST containers were removed.
+
+**Blocking build evidence:** a fresh Webpack production build of this candidate
+compiled JavaScript but failed generated Next.js page type validation:
+
+```text
+.next/types/app/admin/settings/page.ts(39,13): TS2344
+Property 'tenantSlug' is incompatible with index signature.
+Type 'string' is not assignable to type 'never'.
+.next/types/app/admin/settings/page.ts(39,29): TS2559
+Readonly<{ tenantSlug: string; }> has no properties in common with PageProps.
+```
+
+The implicated default export is already present in HEAD, not introduced by the
+TCM diff. Therefore prior mixed-worktree build PASS does not certify the clean
+checkpoint candidate. The exact reason the earlier build did not expose this
+validation failure has not been established; no cache explanation is asserted.
+Isolated Playwright did not run because its fresh app build failed.
+
+Additional scope finding: extracting only the continuity link from account/page
+leaves five pre-existing no-html-link-for-pages ESLint errors. The mixed worktree
+had a-to-Link conversions which were excluded from the narrow candidate. These
+must be explicitly classified as required compatibility cleanup or separately
+approved; do not silently include unrelated hunks.
+
+An initial archive-based SQL replay also exposed a historical raw-fingerprint
+test's CRLF/LF dependency. Repeating with byte-identical historical migrations
+(the approved preflight input) passed all 1890 checks; no assertion or deployed
+migration was edited. This reproducibility limitation remains documented.
+
+Recommended correction, requiring scope review: separate the reusable tenant
+settings component from its Next.js page entry, preserve the existing trusted
+tenant route/caller contract and pre-TCM RPCs, and keep the global page fail-closed.
+Do not add a fallback tenant, weaken type checks, or copy TCM contracts. Then
+rerun the clean candidate build, lint and E2E before any checkpoint/deployment.
+
+HEAD unchanged: `80341fe4c9512e5fcd719963aa636777098cf705`.
+STAGING / COMMIT / PUSH / PRODUCTION WRITE / DEPLOYMENT: NONE.
+PLATFORM ADMIN BOOTSTRAP: not performed.
+PRODUCT-10E PRODUCTION DEPLOYMENT: BLOCKED.
+TCM: FROZEN, not deployed. Second production tenant/DNS: untouched.
 
 ## Production preflight — 2026-09-25: BLOCKED (deployment scope)
 
