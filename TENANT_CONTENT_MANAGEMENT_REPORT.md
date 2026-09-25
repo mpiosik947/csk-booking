@@ -1,5 +1,26 @@
 # TENANT CONTENT MANAGEMENT — LOCAL IMPLEMENTATION REPORT
 
+## Final production verification — 2026-09-25: PROD PASS
+
+This section supersedes earlier local/preflight blockers and historical open items below.
+Deploy commit: e3e479a243479f6973f5e70a468fab4a23d3f3d5.
+Correct Vercel project csk-booking-5nwh: GitHub production deployment 6660380462 is success, deployment 5VFsawZda2Jzkr2FVQhUd29qiBxz, URL https://csk-booking-5nwh-bvyhzk9ei-mpiosik94-9167s-projects.vercel.app. Current production alias serves the three new navigation links and subpages. The obsolete csk-booking project's separate failed status is not this release and was not changed.
+
+Migration 20261010100000_add_tenant_public_content.sql, SHA-256 FE899CBD76D8F0E1BAB24A14374CF9E29A96DAFD34B969714E699415A71CD10B: applied exactly once, all126 local/remote versions equal, head20261010100000, pending0, final dry-run up to date. No repeat deployment or rollback performed. Migration-history drift0; target audit fingerprint f230cb11fa1b59cc801b48c21e18b66b. SD100, public EXECUTE0, pricing table RLS true and client grants0. Three RPC ACL/owner/search_path match target: postgres owner, protected writers authenticated only, intended public reader anon/authenticated, no service_role direct grants.
+
+Production matrix:43/43 enforced assertions, including explicit existing public price update, create/disable/order, about/contact edits, cross-tenant denial, employee/instructor/user/global-role denial, pending/suspended denial, Platform Admin without tenant membership denial, authority spoof/foreign item denial, anon/service-role ACL closure, stale version rejection, allowlisted public DTO, flag/entitlement masking, audit creation without content/PII values. Denied operations additionally require unchanged audit row count. Full existing reservations JSON fingerprint before/after identical. Transaction ended ROLLBACK, fixture tenants/users0; no second production tenant persisted.
+
+Live CSK visibility test: temporarily set show_pricing/show_about/show_contact false; all three links absent and each corresponding route HTTP404. Finally restored exact original flags true/true/true and verified. Separate rollback-only CSK raw reader check validated address/phone/email/opening hours NULL, social links {}, description NULL. First harness attempt hit reserved PowerShell HOME variable but finally restoration succeeded; second HTTP run passed, its extra raw-query expression failed and was replaced by the successful dedicated rollback-only query. No application defect or persistent test configuration.
+
+Final smoke13/13 without5xx: /, /login, /account, /dashboard, /platform-admin, /admin, /admin/settings, /csk-krutla, its cennik/o-obiekcie/kontakt subpages, /t/csk/booking and /t/csk/events. Public routes200; unauthenticated protected routes correctly redirect to login. This is HTTP/auth-boundary smoke, not a fresh interactive login as a real customer. Authenticated authorization is covered by production SQL matrix and prior exact-candidate browser suite.
+
+Production landing navigation matches the three approved changes. Committed landing differs from6280ec0 only by these navigation hunks; no CSK visual/responsive/information-row redesign. Public DTO4 allowlisted fields, pricing DTO5 allowlisted fields, no private identifiers/plan/audit metadata. Public pricing is isolated from operational pricing and existing booking history.
+
+Prior exact candidate evidence remains: focused41/41, DB1970/1970, Node832/832, Playwright57/57, TypeScript/build/ESLint/diff/schema checks PASS. No full suite rerun against production. One production tenant/one active tenant, DNS/custom domains untouched. No bootstrap, no real customer content changes, no second tenant activation.
+
+TCM PROD PASS. Remaining non-blocking content task: enter authentic CSK public pricing/contact/about extensions; no missing values were invented. Main mixed-worktree CSK visual work remains excluded.
+
+
 ## Clean UI checkpoint extraction — 2026-09-25: PASS
 
 This section supersedes the mixed-tree release blocker below. Candidate: `C:/Users/Mpios/Desktop/APP Krutla/tcm-clean-candidate-6280ec0`, based on exact commit `6280ec0a02e622c9b5eadf5cf5dbb468ed93a24d`. No staging/commit/push/deployment/production write.
