@@ -16,7 +16,7 @@ function sql(statement: string) {
 
 test.beforeAll(() => {
   if (database === "postgres") return;
-  expect(sql("select max(version) from supabase_migrations.schema_migrations").trim()).toBe("20261009140000");
+  expect(sql("select max(version) from supabase_migrations.schema_migrations").trim()).toBe("20261009150000");
   expect(sql("select count(*) from pg_proc where pronamespace='public'::regnamespace and prosecdef").trim()).toBe("97");
   expect(sql("select count(*) from pg_proc where pronamespace='public'::regnamespace and proname in('admin_get_tenant_content_v1','admin_update_tenant_content_v1','get_public_tenant_content_v1')").trim()).toBe("0");
 });
@@ -32,7 +32,10 @@ test("platform onboarding is private, explicit, responsive and separate from ten
       if (created.error || !created.data.user) throw new Error("Cannot create local synthetic account");
       users.push(created.data.user.id);
     }
-    sql(`insert into public.platform_admins(user_id,status) values('${users[0]}','active');`);
+    const denied = await service.rpc("operator_bootstrap_platform_admin_v1", { p_user_id: users[0] });
+    expect(denied.error).not.toBeNull();
+    expect(sql(`select public.operator_bootstrap_platform_admin_v1('${users[0]}');`).trim()).toBe("assigned");
+    expect(sql(`select public.operator_bootstrap_platform_admin_v1('${users[0]}');`).trim()).toBe("already_assigned");
     await page.goto("/login"); await page.getByLabel("E-mail").fill(platformEmail); await page.getByLabel("Hasło").fill(password);
     await page.getByRole("button", { name: "Zaloguj się" }).click(); await expect(page).toHaveURL(/\/dashboard$/);
     await page.goto("/platform-admin"); await expect(page.getByRole("heading", { name: "Obiekty i onboarding" })).toBeVisible();
@@ -104,6 +107,7 @@ test("platform onboarding is private, explicit, responsive and separate from ten
       delete from public.tenant_plan_assignments where tenant_id in(select id from public.tenants where slug='${slug}');
       delete from public.tenants where slug='${slug}';`);
     for (const id of users) {
+      sql(`delete from public.platform_audit_logs where action='platform_admin_bootstrapped' and details->>'user_id'='${id}';`);
       sql(`delete from public.platform_admins where user_id='${id}';`);
       const removed = await service.auth.admin.deleteUser(id);
       if (removed.error) throw new Error("Local fixture cleanup failed");

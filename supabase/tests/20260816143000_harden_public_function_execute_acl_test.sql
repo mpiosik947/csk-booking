@@ -27,6 +27,7 @@ create temporary table expected_function_acl(
 ) on commit drop;
 
 insert into expected_function_acl values
+  ('public.operator_bootstrap_platform_admin_v1(uuid)','C',false,false,false),
   -- PRODUCT-10E: closed platform/continuity helpers and authenticated contracts.
   ('public.is_platform_admin_v1()','C',false,true,false),
   ('public.platform_slug_valid_v1(text)','A',false,false,false),
@@ -292,8 +293,8 @@ begin
     and procedure.proname<>'csk_sec002_default_acl_probe';
 
   perform pg_temp.record_result(1,'Complete public function inventory',
-    (select pg_catalog.count(*)=157 from pg_temp.expected_function_acl)
-    and v_actual_count=157
+    (select pg_catalog.count(*)=158 from pg_temp.expected_function_acl)
+    and v_actual_count=158
     and not exists(
       select 1 from pg_temp.expected_function_acl expected
       where pg_catalog.to_regprocedure(expected.signature) is null
@@ -309,7 +310,7 @@ begin
           where pg_catalog.to_regprocedure(expected.signature)=procedure.oid
         )
     ),
-    'The exact 157-function PRODUCT-10E inventory has no missing or unexpected signature.');
+    'The exact 158-function PRODUCT-10E inventory has no missing or unexpected signature.');
 
   perform pg_temp.record_result(2,'PUBLIC executes no public function',
     not exists(
@@ -397,14 +398,14 @@ begin
     'Future functions created by postgres receive no client or PUBLIC EXECUTE.');
 
   perform pg_temp.record_result(8,'Application function creator scope is exact',
-    (select pg_catalog.count(*)=157
+    (select pg_catalog.count(*)=158
       from pg_catalog.pg_proc procedure
       join pg_catalog.pg_namespace namespace on namespace.oid=procedure.pronamespace
       join pg_catalog.pg_roles owner_role on owner_role.oid=procedure.proowner
       where namespace.nspname='public' and procedure.prokind='f'
         and procedure.proname<>'csk_sec002_default_acl_probe'
         and owner_role.rolname='postgres'),
-    'All 157 application functions are owned by postgres, whose public-schema defaults are hardened.');
+    'All 158 application functions are owned by postgres, whose public-schema defaults are hardened.');
 
   perform pg_temp.record_result(9,'New function inherits owner-only execution',
     not pg_catalog.has_function_privilege('anon','public.csk_sec002_default_acl_probe()','EXECUTE')
