@@ -74,7 +74,7 @@ export function PublicTenantLanding({
 
       <section className="mx-auto grid w-full max-w-6xl gap-4 px-4 pb-10 sm:grid-cols-2 sm:px-6">
         {tenant.showAbout && <div className="rounded-2xl border border-[#30372c] bg-[#141814] p-6">
-          <h2 className="text-xl font-bold">O obiekcie</h2>
+          <h2 className="text-xl font-bold"><LandingLink preview={preview} href={`/${tenant.publicSlug}/o-obiekcie`}>O obiekcie</LandingLink></h2>
           <p className="mt-3 leading-7 text-[#aeb4a8]">{tenant.description ?? `${tenant.name} — obiekt w miejscowości ${tenant.city}.`}</p>
         </div>}
         {(tenant.showContact || tenant.showPricing || (tenant.showRegulations && tenant.regulationsPath)) && <div className="rounded-2xl border border-[#30372c] bg-[#141814] p-6">
@@ -86,7 +86,8 @@ export function PublicTenantLanding({
             {tenant.publicEmail && <div><dt className="inline font-semibold text-[#d7ddcd]">E-mail: </dt><dd className="inline"><a href={`mailto:${tenant.publicEmail}`} className="hover:underline">{tenant.publicEmail}</a></dd></div>}
           </dl>}
           <div className="mt-5 flex flex-wrap gap-4 text-sm font-semibold text-[#d7c895]">
-            {tenant.showPricing && <LandingLink preview={preview} href={bookingHref} className="underline-offset-4 hover:underline">Cennik i rezerwacja</LandingLink>}
+            {tenant.showPricing && <LandingLink preview={preview} href={`/${tenant.publicSlug}/cennik`} className="underline-offset-4 hover:underline">Cennik</LandingLink>}
+            {tenant.showContact && <LandingLink preview={preview} href={`/${tenant.publicSlug}/kontakt`} className="underline-offset-4 hover:underline">Kontakt i lokalizacja</LandingLink>}
             {tenant.showRegulations && tenant.regulationsPath && (
               <LandingLink preview={preview} href={tenant.regulationsPath} className="underline-offset-4 hover:underline">Regulamin</LandingLink>
             )}

@@ -5,7 +5,10 @@ import AdminShell from "../_components/AdminShell";
 import { supabase } from "../../../lib/supabase";
 import { reportClientError } from "../../../lib/safe-client-error";
 
+type PricingItem = { id: string | null; title: string; price: number; currency: string; unit: string; short_description: string | null; display_order: number; is_active: boolean };
+
 type Settings = {
+  about_offer: string | null; about_audience: string | null; public_map_url: string | null; pricing_items: PricingItem[];
   display_name: string; city: string; logo_path: string | null; hero_image_path: string | null;
   description: string | null; regulations_path: string | null; public_address: string | null;
   public_phone: string | null; public_email: string | null; opening_hours: string | null;
@@ -16,12 +19,12 @@ type Settings = {
 };
 
 const BOOLEAN_FIELDS = ["show_booking","show_pricing","show_instructor","show_events","show_about","show_contact","show_regulations"] as const;
-const TEXT_FIELDS = ["display_name","city","logo_path","hero_image_path","description","regulations_path","public_address","public_phone","public_email","opening_hours"] as const;
+const TEXT_FIELDS = ["display_name","city","logo_path","hero_image_path","description","regulations_path","public_address","public_phone","public_email","opening_hours","about_offer","about_audience","public_map_url"] as const;
 
 function isSettings(value: unknown): value is Settings {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;
   const row = value as Record<string, unknown>;
-  return TEXT_FIELDS.every((key) => typeof row[key] === "string" || row[key] === null) &&
+  return Array.isArray(row.pricing_items) && TEXT_FIELDS.every((key) => typeof row[key] === "string" || row[key] === null) &&
     BOOLEAN_FIELDS.every((key) => typeof row[key] === "boolean") && typeof row.updated_at === "string" &&
     !!row.social_links && typeof row.social_links === "object" && !Array.isArray(row.social_links) &&
     !!row.feature_access && typeof row.feature_access === "object" && !Array.isArray(row.feature_access) &&
@@ -44,7 +47,7 @@ export default function AdminSettingsPage({ tenantSlug }: Readonly<{ tenantSlug:
 
   const load=useCallback(async()=>{
     setLoading(true); setError("");
-    const {data,error:rpcError}=await supabase.rpc("admin_get_tenant_public_settings_v1",{p_tenant_slug:tenantSlug});
+    const {data,error:rpcError}=await supabase.rpc("admin_get_tenant_content_v1",{p_tenant_slug:tenantSlug});
     if(rpcError||!isSettings(data)){ reportClientError("Tenant public settings read failed",rpcError); setError("Nie udało się pobrać ustawień publicznych."); }
     else setSettings(data);
     setLoading(false);
@@ -69,7 +72,7 @@ export default function AdminSettingsPage({ tenantSlug }: Readonly<{ tenantSlug:
       opening_hours:nullable(settings.opening_hours??""),social_links,
       ...Object.fromEntries(BOOLEAN_FIELDS.map(key=>[key,settings[key]])),
     };
-    const {data,error:rpcError}=await supabase.rpc("admin_update_tenant_public_settings_v1",{p_tenant_slug:tenantSlug,p_settings:payload,p_expected_updated_at:settings.updated_at});
+    const {data,error:rpcError}=await supabase.rpc("admin_update_tenant_content_v1",{p_tenant_slug:tenantSlug,p_settings:payload,p_content:{about_offer:nullable(settings.about_offer??""),about_audience:nullable(settings.about_audience??""),public_map_url:nullable(settings.public_map_url??""),pricing_items:settings.pricing_items},p_expected_updated_at:settings.updated_at});
     if(rpcError||!isSettings(data)){
       reportClientError("Tenant public settings update failed",rpcError);
       setError(rpcError?.message?.includes("settings_conflict")?"Ustawienia zmieniły się w innej sesji. Odśwież dane i spróbuj ponownie.":"Nie udało się zapisać ustawień. Sprawdź format pól.");
@@ -89,17 +92,41 @@ export default function AdminSettingsPage({ tenantSlug }: Readonly<{ tenantSlug:
           <Field label="Miejscowość" value={settings.city} required onChange={value=>setText("city",value)}/>
           <Field label="Ścieżka logo" value={settings.logo_path??""} placeholder="/logo.png" onChange={value=>setText("logo_path",value)}/>
           <Field label="Ścieżka hero" value={settings.hero_image_path??""} placeholder="/hero.jpg" onChange={value=>setText("hero_image_path",value)}/>
-          <label className="sm:col-span-2 text-sm font-semibold">Opis<textarea value={settings.description??""} maxLength={1200} onChange={e=>setText("description",e.target.value)} className="mt-2 min-h-28 w-full rounded-xl border border-[#3d4638] bg-[#0e110e] p-3 font-normal"/></label>
           <Field label="Ścieżka regulaminu" value={settings.regulations_path??""} placeholder="/terms" onChange={value=>setText("regulations_path",value)}/>
           <p className="self-end text-xs leading-5 text-[#858c7f]">Obsługa uploadu logo/hero nie jest częścią PRODUCT-10C. Akceptowane są bezpieczne ścieżki same-origin.</p>
         </section>
         <section className="grid gap-4 rounded-2xl border border-[#30372c] bg-[#141814] p-5 sm:grid-cols-2">
-          <h2 className="sm:col-span-2 text-xl font-bold">Kontakt publiczny</h2>
+          <h2 className="sm:col-span-2 text-xl font-bold">Kontakt i lokalizacja</h2>
+          <Field label="Link do mapy (HTTPS)" type="url" value={settings.public_map_url??""} onChange={value=>setText("public_map_url",value)}/>
           <Field label="Adres" value={settings.public_address??""} onChange={value=>setText("public_address",value)}/>
           <Field label="Telefon" value={settings.public_phone??""} onChange={value=>setText("public_phone",value)}/>
           <Field label="E-mail" type="email" value={settings.public_email??""} onChange={value=>setText("public_email",value)}/>
           <Field label="Godziny otwarcia" value={settings.opening_hours??""} onChange={value=>setText("opening_hours",value)}/>
           {(["facebook","instagram","youtube"] as const).map(key=><Field key={key} label={`${key[0].toUpperCase()}${key.slice(1)} URL`} type="url" value={settings.social_links[key]??""} placeholder="https://" onChange={value=>setSocial(key,value)}/>) }
+        </section>
+        <section className="space-y-4 rounded-2xl border border-[#30372c] bg-[#141814] p-5">
+          <h2 className="text-xl font-bold">O obiekcie</h2>
+          {([["description","Główny opis"],["about_offer","Co oferujemy"],["about_audience","Dla kogo"]] as const).map(([key,label])=><label key={key} className="block text-sm font-semibold">{label}<textarea value={settings[key]??""} maxLength={1200} onChange={e=>setText(key,e.target.value)} className="mt-2 min-h-28 w-full rounded-xl border border-[#3d4638] bg-[#0e110e] p-3 font-normal"/></label>)}
+        </section>
+        <section className="space-y-4 rounded-2xl border border-[#30372c] bg-[#141814] p-5">
+          <h2 className="text-xl font-bold">Cennik</h2>
+          <p className="text-sm text-[#a9ada4]">Publiczna oferta informacyjna. Nie zmienia cen booking ani historycznych rezerwacji. Ceny rezerwacji edytuje się w konfiguracji osi.</p>
+          {settings.pricing_items.length===0&&<p className="text-sm">Brak pozycji cennika.</p>}
+          {settings.pricing_items.map((item,index)=>{
+            const update=(patch:Partial<PricingItem>)=>setSettings(current=>current?{...current,pricing_items:current.pricing_items.map((row,i)=>i===index?{...row,...patch}:row)}:current);
+            return <fieldset key={item.id??`new-${index}`} className="grid min-w-0 gap-3 rounded-xl border border-[#343a31] p-4 sm:grid-cols-2">
+              <legend className="px-2 text-sm">Pozycja {index+1}</legend>
+              <Field label="Nazwa pozycji" value={item.title} required onChange={title=>update({title})}/>
+              <label className="text-sm font-semibold">Cena<input aria-label="Cena" type="number" min="0" max="9999999.99" step="0.01" required value={item.price} onChange={e=>update({price:e.target.valueAsNumber})} className="mt-2 min-h-12 w-full rounded-xl border border-[#3d4638] bg-[#0e110e] px-3"/></label>
+              <Field label="Waluta (ISO, np. PLN lub EUR)" value={item.currency} required onChange={currency=>update({currency:currency.toUpperCase()})}/>
+              <Field label="Jednostka (np. godzina)" value={item.unit} required onChange={unit=>update({unit})}/>
+              <Field label="Krótki opis" value={item.short_description??""} onChange={short_description=>update({short_description:nullable(short_description)})}/>
+              <label className="text-sm font-semibold">Kolejność<input aria-label="Kolejność" type="number" min="0" max="9999" step="1" required value={item.display_order} onChange={e=>update({display_order:e.target.valueAsNumber})} className="mt-2 min-h-12 w-full rounded-xl border border-[#3d4638] bg-[#0e110e] px-3"/></label>
+              <label className="flex min-h-11 items-center gap-3 text-sm"><input type="checkbox" checked={item.is_active} onChange={e=>update({is_active:e.target.checked})}/>Aktywna pozycja</label>
+              {item.id===null&&<button type="button" className="min-h-11 text-sm underline" onClick={()=>setSettings(current=>current?{...current,pricing_items:current.pricing_items.filter((_,i)=>i!==index)}:current)}>Usuń niezapisaną pozycję</button>}
+            </fieldset>;
+          })}
+          <button type="button" disabled={settings.pricing_items.length>=100} className="min-h-11 rounded-xl border border-[#536143] px-4 disabled:opacity-50" onClick={()=>setSettings(current=>current?{...current,pricing_items:[...current.pricing_items,{id:null,title:"",price:0,currency:"",unit:"",short_description:null,display_order:Math.min(current.pricing_items.length*10,9999),is_active:true}]}:current)}>Dodaj pozycję</button>
         </section>
         <section className="rounded-2xl border border-[#30372c] bg-[#141814] p-5">
           <h2 className="text-xl font-bold">Widoczność sekcji</h2>

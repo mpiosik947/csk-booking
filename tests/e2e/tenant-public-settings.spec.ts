@@ -8,7 +8,7 @@ const env=getLocalSupabaseTestEnvironment();
 const service=createClient(env.supabaseUrl,env.serviceRoleKey,{auth:{autoRefreshToken:false,persistSession:false}});
 function localSql(sql:string){return execFileSync("docker",["exec","supabase_db_csk-booking","psql","-X","-v","ON_ERROR_STOP=1","-U","postgres","-d","postgres","-c",sql],{encoding:"utf8"});}
 
-test("tenant admin settings are isolated, responsive, and visibility is presentation-only",async({page})=>{
+test("tenant admin settings are isolated, responsive, and visibility is presentation-only",async({page},info)=>{
   const run=randomUUID(); const tenant=randomUUID(); const slug=`p10c-${run}`; const publicSlug=`public-${run}`;
   const email=`p10c-${run}@example.invalid`; const password=`Local-P10C-${run}!Aa1`;
   const created=await service.auth.admin.createUser({email,password,email_confirm:true,user_metadata:{test_marker:"[TEST][PRODUCT-10C]"}});
@@ -25,15 +25,50 @@ test("tenant admin settings are isolated, responsive, and visibility is presenta
     await page.goto(`/t/${slug}/admin/settings`); await expect(page.getByRole("heading",{name:"Ustawienia publiczne"})).toBeVisible();
     await page.getByLabel("Adres").fill("Testowa 10"); await page.getByLabel("Telefon").fill("+48 123 456 789");
     await page.getByLabel("E-mail",{exact:true}).fill("public@example.invalid"); await page.getByLabel("Godziny otwarcia").fill("Pon-Pt 10-18");
+    await page.getByLabel("Główny opis").fill("Opis testowego obiektu");
+    await page.getByLabel("Co oferujemy").fill("Oferta syntetyczna");
+    await page.getByLabel("Dla kogo").fill("Dla uczestników testu");
+    await page.getByLabel("Link do mapy (HTTPS)").fill("https://maps.example.invalid/test");
+    await page.getByRole("button",{name:"Dodaj pozycję"}).click();
+    await page.getByLabel("Nazwa pozycji").fill("Oferta informacyjna testowa");
+    await page.getByLabel("Cena",{exact:true}).fill("123.45");
+    await page.getByLabel("Waluta (ISO, np. PLN lub EUR)").fill("PLN");
+    await page.getByLabel("Jednostka (np. godzina)").fill("osoba");
+    await page.getByLabel("Krótki opis").fill("Bez wpływu na booking");
     for(const label of ["Rezerwacja","Instruktor","O obiekcie","Regulamin"]){await page.getByLabel(label,{exact:true}).uncheck();}
     await page.getByRole("button",{name:"Zapisz ustawienia"}).click(); await expect(page.getByText("Ustawienia publiczne zostały zapisane.")).toBeVisible();
     for(const width of [320,375,430]){await page.setViewportSize({width,height:850}); expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);}
-    await page.goto(`/${publicSlug}`); await expect(page.getByText("Testowa 10")).toBeVisible(); await expect(page.getByText("public@example.invalid")).toBeVisible();
+    await page.goto(`/${publicSlug}`);
+    const contactPage = await page.context().newPage();
+    await contactPage.goto(`/${publicSlug}/kontakt`);
+    await expect(contactPage.getByText("Testowa 10")).toBeVisible();
+    await expect(contactPage.getByRole("link",{name:/Napisz wiadomość/})).toHaveAttribute("href","mailto:public@example.invalid");
+    await expect(contactPage.getByRole("link",{name:"Otwórz mapę"})).toHaveAttribute("href","https://maps.example.invalid/test");
+    for(const width of [375,430,768,1440]){await contactPage.setViewportSize({width,height:900});expect(await contactPage.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);}
+    await contactPage.screenshot({path:info.outputPath("content-contact-1440.png"),fullPage:true});
+    await contactPage.goto(`/${publicSlug}/cennik`);
+    await expect(contactPage.getByText("Oferta informacyjna testowa")).toBeVisible();
+    for(const width of [375,430,768,1440]){await contactPage.setViewportSize({width,height:900});expect(await contactPage.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);}
+    await contactPage.close();
     await expect(page.getByRole("link",{name:"Zarezerwuj termin"})).toHaveCount(0); await expect(page.getByText("Strzelanie z instruktorem")).toHaveCount(0); await expect(page.getByRole("heading",{name:"O obiekcie"})).toHaveCount(0);
     await expect(page.getByRole("link",{name:"Szkolenia i eventy"}).first()).toBeVisible();
     await page.goto(`/t/${slug}/booking`); await expect(page.getByRole("heading",{name:"Zarezerwuj oś"})).toBeVisible();
+    await page.goto(`/t/${slug}/admin/settings`);
+    await page.getByLabel("O obiekcie",{exact:true}).check();
+    await page.getByLabel("Aktywna pozycja").uncheck();
+    await page.getByRole("button",{name:"Zapisz ustawienia"}).click();
+    await expect(page.getByText("Ustawienia publiczne zostały zapisane.")).toBeVisible();
+    await page.goto(`/${publicSlug}/o-obiekcie`);
+    await expect(page.getByText("Opis testowego obiektu")).toBeVisible();
+    await expect(page.getByText("Oferta syntetyczna")).toBeVisible();
+    await expect(page.getByText("Dla uczestników testu")).toBeVisible();
+    for(const width of [375,430,768,1440]){await page.setViewportSize({width,height:900});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);}
+    await page.screenshot({path:info.outputPath("content-about-1440.png"),fullPage:true});
+    await page.goto(`/${publicSlug}/cennik`);
+    await expect(page.getByText("Oferta informacyjna testowa")).toHaveCount(0);
+    await expect(page.getByText("Cennik nie został jeszcze opublikowany.")).toBeVisible();
   }finally{
-    localSql(`delete from public.audit_logs where tenant_id='${tenant}'; delete from public.tenant_memberships where tenant_id='${tenant}'; delete from public.tenant_public_profiles where tenant_id='${tenant}'; delete from public.tenant_plan_assignments where tenant_id='${tenant}'; delete from public.tenants where id='${tenant}';`);
+    localSql(`delete from public.audit_logs where tenant_id='${tenant}'; delete from public.tenant_public_pricing_items where tenant_id='${tenant}'; delete from public.tenant_memberships where tenant_id='${tenant}'; delete from public.tenant_public_profiles where tenant_id='${tenant}'; delete from public.tenant_plan_assignments where tenant_id='${tenant}'; delete from public.tenants where id='${tenant}';`);
     const removed=await service.auth.admin.deleteUser(user.id); if(removed.error)throw new Error(`Cannot clean PRODUCT-10C admin: ${removed.error.code}`);
     const cleanup=localSql(`select (select count(*) from public.tenants where id='${tenant}') as tenants,(select count(*) from public.tenant_memberships where tenant_id='${tenant}') as memberships,(select count(*) from auth.users where id='${user.id}') as users,(select count(*) from public.audit_logs where tenant_id='${tenant}') as audit;`);
     if(!/\b0\s*\|\s*0\s*\|\s*0\s*\|\s*0\b/u.test(cleanup))throw new Error(`PRODUCT-10C cleanup failed: ${cleanup}`);

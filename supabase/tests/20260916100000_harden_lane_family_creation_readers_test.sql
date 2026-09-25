@@ -98,7 +98,7 @@ begin
   perform pg_temp.ok(2,'all targets remain postgres-owned SP1 definers with original volatility',(select count(*)=2 and bool_and(p.prosecdef) and bool_and(r.rolname='postgres') and bool_and(p.proconfig=array['search_path=pg_catalog, public, pg_temp']::text[]) and count(*) filter(where p.provolatile='v')=1 and count(*) filter(where p.provolatile='s')=1 from pg_proc p join pg_namespace n on n.oid=p.pronamespace join pg_roles r on r.oid=p.proowner where n.nspname='public' and p.proname in('admin_create_lane_booking_family_v2','admin_get_lane_booking_configuration_v3')),'Target metadata differs.');
   perform pg_temp.ok(3,'creator and V2 are authenticated-only while V1 is internal-only',has_function_privilege('authenticated','public.admin_create_lane_booking_family_v2(uuid,jsonb)','EXECUTE') and has_function_privilege('authenticated','public.admin_get_lane_booking_configuration_v3(uuid)','EXECUTE') and not has_function_privilege('public','public.admin_create_lane_booking_family_v2(uuid,jsonb)','EXECUTE') and not has_function_privilege('anon','public.admin_get_lane_booking_configuration_v3(uuid)','EXECUTE') and not has_function_privilege('service_role','public.admin_get_lane_booking_configuration_v3(uuid)','EXECUTE'),'ACL differs.');
   perform pg_temp.ok(4,'closed cores use explicit tenant membership authority',(select count(*)=2 and bool_and(strpos(pg_get_functiondef(p.oid),'active_single_tenant_id_v1')=0) and bool_and(strpos(pg_get_functiondef(p.oid),'get_my_tenant_role_v1')>0) from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname in('admin_create_lane_booking_family_v2__saas9ec2b_core','admin_get_lane_booking_configuration_v3__saas9ec2b_core')),'Tenant authority missing.');
-  perform pg_temp.ok(5,'SECURITY DEFINER count is 100 after PRODUCT-10C public landing',(select count(*)=  97 from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.prosecdef),'Definer count drifted.');
+  perform pg_temp.ok(5,'SECURITY DEFINER count is 100 after PRODUCT-10C public landing',(select count(*)=  100 from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.prosecdef),'Definer count drifted.');
   perform pg_temp.ok(6,'compatibility defaults are retired',not exists(select 1 from information_schema.columns where table_schema='public' and table_name in('shooting_lanes','reservations','lane_blocks','events','event_lanes','event_registrations','email_deliveries') and column_name='tenant_id' and column_default is not null),'A compatibility default remains.');
 
   snapshot:=pg_temp.as_actor_json(admin_a,'select public.admin_get_lane_booking_configuration_v3(''c5c00000-0000-4000-8000-000000000001''::uuid)');
@@ -153,7 +153,7 @@ do $assert$ begin if exists(select 1 from test_results where not passed) then ra
 rollback;
 
 select case when
-  (select count(*) from pg_catalog.pg_proc procedure join pg_catalog.pg_namespace namespace on namespace.oid=procedure.pronamespace where namespace.nspname='public' and procedure.prosecdef)=  97
+  (select count(*) from pg_catalog.pg_proc procedure join pg_catalog.pg_namespace namespace on namespace.oid=procedure.pronamespace where namespace.nspname='public' and procedure.prosecdef)=  100
   and not exists(select 1 from public.profiles where full_name like '[TEST][SAAS-9D-3B][%')
   and not exists(select 1 from public.tenants where slug like 'saas9d3b-%')
 then 'ok 33 - rollback removed every SAAS-9D-3B fixture'

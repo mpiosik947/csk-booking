@@ -73,7 +73,7 @@ begin
       where n.nspname='public' and p.proname in
         ('get_my_reservation_calendar_v1','update_my_profile_v2')));
   perform pg_temp.ok(5,'inventory 75 definers with bridge/default compatibility retired',
-    (select count(*)=  97 from pg_catalog.pg_proc p join pg_catalog.pg_namespace n on n.oid=p.pronamespace
+    (select count(*)=  100 from pg_catalog.pg_proc p join pg_catalog.pg_namespace n on n.oid=p.pronamespace
       where n.nspname='public' and p.prosecdef)
     and (select count(*)=0 from pg_catalog.pg_proc p join pg_catalog.pg_namespace n on n.oid=p.pronamespace
       where n.nspname='public' and p.prosrc like '%active_single_tenant_id_v1%')

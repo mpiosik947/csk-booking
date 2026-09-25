@@ -8,8 +8,8 @@ const routes=readFileSync(new URL("../../../lib/tenant-routing.ts",import.meta.u
 const permissions=readFileSync(new URL("../../../lib/admin/route-protection.js",import.meta.url),"utf8");
 
 test("settings UI uses only tenant-scoped RPC contracts",()=>{
-  assert.match(page,/admin_get_tenant_public_settings_v1/u);
-  assert.match(page,/admin_update_tenant_public_settings_v1/u);
+  assert.match(page,/admin_get_tenant_content_v1/u);
+  assert.match(page,/admin_update_tenant_content_v1/u);
   assert.match(page,/p_tenant_slug:tenantSlug/u);
   assert.doesNotMatch(page,/p_tenant_id|profiles\.role|service_role/u);
 });

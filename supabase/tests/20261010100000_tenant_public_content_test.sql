@@ -1,0 +1,102 @@
+\set ON_ERROR_STOP on
+begin;
+set local app.product10d_test_enforce='on';
+create temporary table results(n serial,name text,ok boolean) on commit drop;
+create function pg_temp.ok(name text,ok boolean) returns void language sql as $$insert into results(name,ok) values($1,coalesce($2,false));$$;
+create function pg_temp.run(uid uuid,q text) returns jsonb language plpgsql as $$declare r jsonb;begin
+ perform set_config('request.jwt.claims',jsonb_build_object('sub',uid,'role','authenticated')::text,true);
+ set local role authenticated; execute q into r; reset role; return r;
+exception when others then reset role; raise; end;$$;
+create function pg_temp.denied(uid uuid,q text,code text default '42501') returns boolean language plpgsql as $$begin
+ perform pg_temp.run(uid,q);return false; exception when others then return sqlstate=code;end;$$;
+create function pg_temp.save(uid uuid,slug text,s jsonb,c jsonb) returns jsonb language sql as $$
+ select pg_temp.run(uid,format('select public.admin_update_tenant_content_v1(%L,%L::jsonb,%L::jsonb,%L::timestamptz)',slug,
+ (s-array['updated_at','feature_access','about_offer','about_audience','public_map_url','pricing_items'])::text,c::text,s->>'updated_at'));$$;
+do $$
+declare a uuid:=gen_random_uuid();b uuid:=gen_random_uuid();aa uuid:=gen_random_uuid();ab uuid:=gen_random_uuid();u uuid;
+ s jsonb;out jsonb;c jsonb;item jsonb;raw jsonb;old_stamp text;bid uuid;role_name text;status_name text;
+begin
+ insert into auth.users(id,email) values(aa,'tcm-aa@example.invalid'),(ab,'tcm-ab@example.invalid');
+ insert into public.tenants(id,name,slug,status) values(a,'TCM A','tcm-test-a','active'),(b,'TCM B','tcm-test-b','active');
+ insert into public.tenant_memberships(tenant_id,user_id,role,status) values(a,aa,'admin','active'),(b,ab,'admin','active');
+ insert into public.tenant_plan_assignments(tenant_id,plan_id,status) select t.id,p.id,'active' from public.tenants t cross join public.saas_plans p where t.id in(a,b) and p.plan_key='current_full_v1';
+ insert into public.tenant_public_profiles(tenant_id,display_name,city,is_public,public_slug) values(a,'TCM A','Test A',true,'tcm-public-a'),(b,'TCM B','Test B',true,'tcm-public-b');
+ s:=pg_temp.run(aa,$q$select public.admin_get_tenant_content_v1('tcm-test-a')$q$);
+ perform pg_temp.ok('admin own content read',s->>'display_name'='TCM A');
+ perform pg_temp.ok('cross tenant content read denied',pg_temp.denied(aa,$q$select public.admin_get_tenant_content_v1('tcm-test-b')$q$));
+ item:=jsonb_build_object('id',null,'title','Oferta A','price',123.45,'currency','EUR','unit','godzina','short_description','Opis publiczny','display_order',10,'is_active',true);
+ c:=jsonb_build_object('about_offer','Oferta','about_audience','Dla wszystkich','public_map_url','https://www.openstreetmap.org/','pricing_items',jsonb_build_array(item));
+ s:=s||jsonb_build_object('description','Opis główny','public_address','Testowa 1','public_phone','+48 111 222 333','public_email','public@example.invalid');
+ old_stamp:=s->>'updated_at';
+ out:=pg_temp.save(aa,'tcm-test-a',s,c);
+ perform pg_temp.ok('create pricing own tenant',jsonb_array_length(out->'pricing_items')=1);
+ perform pg_temp.ok('about blocks saved',out->>'about_offer'='Oferta' and out->>'description'='Opis główny');
+ perform pg_temp.ok('contact saved',out->>'public_address'='Testowa 1');
+ perform pg_temp.ok('map saved without embed',out->>'public_map_url'='https://www.openstreetmap.org/');
+ perform pg_temp.ok('stale writer fails',pg_temp.denied(aa,format('select public.admin_update_tenant_content_v1(%L,%L::jsonb,%L::jsonb,%L::timestamptz)','tcm-test-a',(s-array['updated_at','feature_access','about_offer','about_audience','public_map_url','pricing_items'])::text,c::text,(old_stamp::timestamptz-interval '1 second')::text),'40001'));
+ perform pg_temp.ok('tenant B unchanged',not exists(select 1 from public.tenant_public_pricing_items where tenant_id=b));
+ c:=c||jsonb_build_object('pricing_items',out->'pricing_items');
+ for role_name in select unnest(array['employee','instructor','user','global']) loop
+  u:=gen_random_uuid(); insert into auth.users(id,email) values(u,'tcm-'||u||'@example.invalid');
+  if role_name='global' then perform set_config('request.jwt.claims','{}',true); update public.profiles set role='admin' where user_id=u;
+  else insert into public.tenant_memberships(tenant_id,user_id,role,status) values(a,u,role_name,'active');end if;
+  perform pg_temp.ok(role_name||' writer denied',pg_temp.denied(u,format('select public.admin_update_tenant_content_v1(%L,%L::jsonb,%L::jsonb,%L::timestamptz)','tcm-test-a',(out-array['updated_at','feature_access','about_offer','about_audience','public_map_url','pricing_items'])::text,c::text,out->>'updated_at')));
+ end loop;
+ for status_name in select unnest(array['pending','suspended']) loop
+  update public.tenant_memberships set status=status_name where tenant_id=a and user_id=aa;
+  perform pg_temp.ok(status_name||' membership denied',pg_temp.denied(aa,$q$select public.admin_get_tenant_content_v1('tcm-test-a')$q$));
+ end loop;
+ update public.tenant_memberships set status='active' where tenant_id=a and user_id=aa;
+ perform pg_temp.ok('cross tenant write denied',pg_temp.denied(ab,format('select public.admin_update_tenant_content_v1(%L,%L::jsonb,%L::jsonb,%L::timestamptz)','tcm-test-a',(out-array['updated_at','feature_access','about_offer','about_audience','public_map_url','pricing_items'])::text,c::text,out->>'updated_at')));
+ perform pg_temp.ok('extra authority key rejected',pg_temp.denied(aa,format('select public.admin_update_tenant_content_v1(%L,%L::jsonb,%L::jsonb,%L::timestamptz)','tcm-test-a',(out-array['updated_at','feature_access','about_offer','about_audience','public_map_url','pricing_items'])::text,(c||jsonb_build_object('tenant_id',b))::text,out->>'updated_at'),'22023'));
+ insert into public.tenant_public_pricing_items(tenant_id,title,price,currency,unit,display_order,is_active) values(b,'Oferta B',99,'PLN','wejście',0,true) returning id into bid;
+ perform pg_temp.ok('foreign pricing ID rejected',pg_temp.denied(aa,format('select public.admin_update_tenant_content_v1(%L,%L::jsonb,%L::jsonb,%L::timestamptz)','tcm-test-a',(out-array['updated_at','feature_access','about_offer','about_audience','public_map_url','pricing_items'])::text,jsonb_set(c,'{pricing_items,0,id}',to_jsonb(bid))::text,out->>'updated_at')));
+ raw:=public.get_public_tenant_content_v1('tcm-public-a');
+ set local role anon;
+ select public.get_public_tenant_content_v1('tcm-public-a') into raw;
+ reset role;
+ perform pg_temp.ok('anon raw reader allowlisted content',raw->'pricing_items'->0->>'title'='Oferta A');
+ raw:=pg_temp.run(ab,$q$select public.get_public_tenant_content_v1('tcm-public-a')$q$);
+ perform pg_temp.ok('authenticated public reader same public DTO',raw=public.get_public_tenant_content_v1('tcm-public-a'));
+ perform pg_temp.ok('public pricing and about',raw->'pricing_items'->0->>'title'='Oferta A' and raw->>'about_offer'='Oferta');
+ perform pg_temp.ok('public no foreign data',raw::text not like '%Oferta B%');
+ perform pg_temp.ok('public exact fields',(select array_agg(key order by key)=array['about_audience','about_offer','pricing_items','public_map_url'] from jsonb_object_keys(raw) key));
+ perform pg_temp.ok('public pricing no IDs',(select array_agg(key order by key)=array['currency','price','short_description','title','unit'] from jsonb_object_keys(raw->'pricing_items'->0) key));
+ update public.tenant_public_profiles set show_pricing=false,show_about=false,show_contact=false where tenant_id=a;
+ raw:=public.get_public_tenant_content_v1('tcm-public-a');
+ perform pg_temp.ok('raw flags mask content',raw->'pricing_items'='[]'::jsonb and raw->'about_offer'='null'::jsonb and raw->'about_audience'='null'::jsonb and raw->'public_map_url'='null'::jsonb);
+ set local role anon;
+ select public.get_public_tenant_content_v1('tcm-public-a') into raw;
+ reset role;
+ perform pg_temp.ok('anon masked raw content',raw->'pricing_items'='[]'::jsonb and raw->'about_offer'='null'::jsonb and raw->'public_map_url'='null'::jsonb);
+ raw:=pg_temp.run(ab,$q$select public.get_public_tenant_content_v1('tcm-public-a')$q$);
+ perform pg_temp.ok('authenticated masked raw content',raw->'pricing_items'='[]'::jsonb and raw->'about_audience'='null'::jsonb and raw->'public_map_url'='null'::jsonb);
+ update public.tenant_public_profiles set show_pricing=true,show_about=true,show_contact=true where tenant_id=a;
+ delete from public.tenant_plan_assignments where tenant_id=a;
+ perform pg_temp.ok('raw pricing entitlement enforced',public.get_public_tenant_content_v1('tcm-public-a')->'pricing_items'='[]'::jsonb);
+ insert into public.tenant_plan_assignments(tenant_id,plan_id,status) select a,id,'active' from public.saas_plans where plan_key='current_full_v1';
+ out:=pg_temp.run(aa,$q$select public.admin_get_tenant_content_v1('tcm-test-a')$q$);
+ c:=jsonb_set(c,'{pricing_items,0,is_active}','false'::jsonb);
+ c:=jsonb_set(c,'{pricing_items,0,display_order}','20'::jsonb);
+ out:=pg_temp.save(aa,'tcm-test-a',out,c);
+ perform pg_temp.ok('soft disable and reorder saved',out->'pricing_items'->0->>'display_order'='20' and out->'pricing_items'->0->>'is_active'='false');
+ perform pg_temp.ok('disabled price hidden',public.get_public_tenant_content_v1('tcm-public-a')->'pricing_items'='[]'::jsonb);
+ perform pg_temp.ok('no destructive omitted rows',pg_temp.denied(aa,format('select public.admin_update_tenant_content_v1(%L,%L::jsonb,%L::jsonb,%L::timestamptz)','tcm-test-a',(out-array['updated_at','feature_access','about_offer','about_audience','public_map_url','pricing_items'])::text,jsonb_set(c,'{pricing_items}','[]'::jsonb)::text,out->>'updated_at'),'22023'));
+ perform pg_temp.ok('negative price denied',pg_temp.denied(aa,format('select public.admin_update_tenant_content_v1(%L,%L::jsonb,%L::jsonb,%L::timestamptz)','tcm-test-a',(out-array['updated_at','feature_access','about_offer','about_audience','public_map_url','pricing_items'])::text,jsonb_set(c,'{pricing_items,0,price}','-1'::jsonb)::text,out->>'updated_at'),'23514'));
+ perform pg_temp.ok('precision denied',pg_temp.denied(aa,format('select public.admin_update_tenant_content_v1(%L,%L::jsonb,%L::jsonb,%L::timestamptz)','tcm-test-a',(out-array['updated_at','feature_access','about_offer','about_audience','public_map_url','pricing_items'])::text,jsonb_set(c,'{pricing_items,0,price}','1.001'::jsonb)::text,out->>'updated_at'),'23514'));
+ perform pg_temp.ok('unsafe map denied',pg_temp.denied(aa,format('select public.admin_update_tenant_content_v1(%L,%L::jsonb,%L::jsonb,%L::timestamptz)','tcm-test-a',(out-array['updated_at','feature_access','about_offer','about_audience','public_map_url','pricing_items'])::text,jsonb_set(c,'{public_map_url}',to_jsonb('javascript:alert(1)'::text))::text,out->>'updated_at'),'23514'));
+ perform pg_temp.ok('audit events present',(select count(distinct action)=5 from public.audit_logs where tenant_id=a and action in('public_about_updated','public_contact_updated','pricing_item_created','pricing_item_disabled','pricing_order_changed')));
+ perform pg_temp.ok('audit payload values excluded',not exists(select 1 from public.audit_logs where tenant_id=a and (details::text like '%public@example.invalid%' or details::text like '%Opis główny%' or details::text like '%111 222%')));
+ perform pg_temp.ok('table RLS closed',(select relrowsecurity from pg_class where oid='public.tenant_public_pricing_items'::regclass) and not exists(select 1 from pg_policies where tablename='tenant_public_pricing_items'));
+ perform pg_temp.ok('table client access denied',not has_table_privilege('anon','public.tenant_public_pricing_items','SELECT,INSERT,UPDATE,DELETE') and not has_table_privilege('authenticated','public.tenant_public_pricing_items','SELECT,INSERT,UPDATE,DELETE') and not has_table_privilege('service_role','public.tenant_public_pricing_items','SELECT,INSERT,UPDATE,DELETE'));
+ perform pg_temp.ok('anon writer execute denied',not has_function_privilege('anon','public.admin_update_tenant_content_v1(text,jsonb,jsonb,timestamptz)','EXECUTE'));
+ perform pg_temp.ok('service writer execute denied',not has_function_privilege('service_role','public.admin_update_tenant_content_v1(text,jsonb,jsonb,timestamptz)','EXECUTE'));
+ update public.tenants set status='suspended' where id=a;
+ perform pg_temp.ok('suspended public content absent',public.get_public_tenant_content_v1('tcm-public-a') is null);
+ perform pg_temp.ok('unknown public content absent',public.get_public_tenant_content_v1('unknown-content-xyz') is null);
+end;$$;
+select '1..'||count(*) from results;
+select (case when ok then 'ok ' else 'not ok ' end)||n||' - '||name from results order by n;
+do $$begin if exists(select 1 from results where not ok) then raise exception 'tenant content tests failed';end if;end;$$;
+rollback;
+select 'fixture_remaining='||count(*) from public.tenants where slug in ('tcm-test-a','tcm-test-b');
