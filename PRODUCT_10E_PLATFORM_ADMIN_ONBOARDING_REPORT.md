@@ -1,7 +1,449 @@
 # PRODUCT-10E — Platform Admin and Tenant Onboarding
 
+## Clean checkpoint remediation — 2026-09-25: LOCAL PASS
+
+This section supersedes the blocked build gate below. No staging, commit, push,
+deployment or production write was performed.
+
+Root cause: commit 94d8bd0 (PRODUCT-10C) already exported a Next.js page with
+a required custom tenantSlug prop. This was a historical component-boundary
+defect, not a new PRODUCT-10E authority requirement. The scoped route reused that
+page as a component. The fix keeps the global page a zero-prop, fail-closed
+notFound entrypoint and moves the reusable UI into TenantAdminSettings.tsx.
+The authenticated scoped route retains its existing server-side tenant checks.
+No type checking was disabled.
+
+The mixed worktree component preserves its existing TCM content unchanged.
+The clean candidate component contains only the pre-TCM public-settings reader
+and writer. TenantOnboardingSettings remains independent of TCM. The settings
+source-contract tests now read the component; three new boundary tests prevent
+regression. Playwright additionally checks assigned-admin scoped settings after
+activation.
+
+Account ESLint classification: A / unrelated baseline. HEAD and the clean
+candidate produce the same five no-html-link-for-pages errors for the existing
+anchors. PRODUCT-10E adds no such errors; these anchors were not modified.
+Other changed PRODUCT-10E lint targets: zero errors, one existing admin-page
+useEffect dependency warning. This is not an all-files zero-error ESLint claim.
+
+Clean candidate: C:/Users/Mpios/Desktop/APP Krutla/product10e-checkpoint-candidate.
+Source HEAD: 80341fe4c9512e5fcd719963aa636777098cf705.
+Exactly five PRODUCT-10E migrations retain their approved hashes; historical
+migration bytes are preserved. No TCM migration, public subpages or CSK visual
+changes are included. The isolated replay ends at 20261009140000, with 124
+migrations, SECURITY DEFINER=97, TCM objects absent and both technical-table
+service_role ACL baselines empty.
+
+Fresh clean-candidate evidence:
+- Focused SQL: 86/86 PASS.
+- Full pre-TCM DB: 1890/1890 PASS across 62 files.
+- Concurrency: 6/6 PASS; deadlocks=0.
+- Node: 817/817 PASS.
+- TypeScript: PASS; production webpack build including generated route types: PASS.
+- Isolated no-TCM Playwright: 2/2 PASS, including draft setup and scoped settings.
+- Schema diff after SQL and E2E: 0.
+- E2E/concurrency fixtures: 0; temporary Auth/REST containers removed: 2;
+  scratch database remaining: 0.
+
+Tenant membership authority and separate platform authority are preserved;
+profiles.role and client tenantSlug are not authorization sources.
+TCM remains FROZEN. Production preflight may be retried separately.
+
+## Production preflight — 2026-09-25: BLOCKED (deployment scope)
+
+Fresh read-only evidence: HEAD/main and GitHub origin/main both equal
+`80341fe4c9512e5fcd719963aa636777098cf705`. Index is empty. Historical
+migration files have no tracked diff; `git diff --check` passes. All five
+PRODUCT-10E migration SHA-256 values match the identities recorded below.
+
+Windows `npx.cmd --no-install supabase migration list --linked` succeeded.
+Applied local/remote versions match through `20261008110000`; no remote-only
+version was shown. There are SIX local pending migrations: the five ordered
+PRODUCT-10E migrations 20261009100000 through 20261009140000, followed by
+`20261010100000_add_tenant_public_content.sql` (frozen TCM).
+
+Fresh `npx.cmd --no-install supabase db push --linked --dry-run` explicitly
+reported all SIX files under "Would push these migrations". It also explicitly
+reported "DRY RUN: migrations will *not* be pushed to the database." Thus the
+required exact-five deployment scope gate FAILS in the current repository.
+CLI exit 0 is not a scope PASS. No actual db push was performed.
+
+The optional JSON-format wrapper failed parsing CLI output; its zero/null
+summary is invalid and is not evidence. A subsequent complete migration-list
+read succeeded and is the source for the migration history statement above.
+
+Preflight stopped at this scope gate. No fresh full test suite, production
+bootstrap catalog audit, complete hunk reconciliation or schema/function drift
+comparison was completed in this preflight. Earlier LOCAL PASS results remain
+historical evidence only and are not relabelled as fresh preflight results.
+
+Recommended next action: prepare a separate, hash-verified deployment/preflight
+workspace containing the full applied history plus exactly the five 10E
+migrations, without moving/editing source migrations or including TCM; rerun
+the exact-five dry-run and remaining gates there. Do not run a production push
+from the current mixed migration directory. This isolation was not performed
+automatically after the failed gate.
+
+PRODUCTION WRITE: NO. STAGING/COMMIT/PUSH/DEPLOYMENT: NONE.
+TCM: FROZEN, unchanged. AGENTS.md and unrelated changes: untouched.
+PREFLIGHT RESULT: BLOCKED.
+READY FOR CHECKPOINT COMMIT/PUSH: NO.
+READY FOR PRODUCTION DEPLOYMENT: NO.
+
+## Latest gate — history-preserving isolated replay (2026-09-25)
+
+**PRODUCT-10E LOCAL: PASS. READY FOR PRODUCTION PREFLIGHT: YES.**
+This supersedes the earlier ACL/replay and independent-E2E blockers below. It is
+not authorization for deployment and no production preflight was started.
+
+HEAD: `80341fe4c9512e5fcd719963aa636777098cf705` (unchanged).
+
+### Exact remediation scope
+
+- `scripts/product10e-isolated-schema-check.mjs`: removed current public default
+  ACL pre-seeding; historical migrations install their own defaults in order;
+  added explicit zero service-role grant gate and optional isolated E2E runner.
+- `supabase/tests/20260902120000_harden_public_table_sequence_acl_test.sql`:
+  changed only the two approved service-role expected arrays to `{}` in this
+  task. Other PRODUCT-10E/TCM inventory hunks pre-existed and remain mixed scope.
+- `scripts/product10e-isolated-e2e.mjs`: new local-only Auth/REST/proxy and app-copy
+  harness connected to the same scratch database used by SQL tests.
+- `scripts/product10e-local-concurrency.mjs`: optional validated scratch database
+  selector; concurrency assertions unchanged.
+- `tests/e2e/platform-onboarding.spec.ts`: optional validated scratch database
+  selector and no-TCM/head/97-DEFINER preconditions; existing workflow assertions
+  unchanged.
+- This report: final evidence. No application component or migration was edited.
+
+The disposable application workspace is outside the repository at
+`C:/Users/Mpios/Desktop/APP Krutla/product10e-isolated-review`. Its `.env.local`
+contains only a comment; test credentials are passed in process environment and
+never printed. It contains mechanically copied application/test files, build and
+Playwright artifacts; none is checkpoint scope. Existing application services
+were not switched to a different database.
+
+### ACL provenance result
+
+| Object | Fresh replay service_role grants | Production read-only audit 2026-09-24 | Updated test |
+|---|---|---|---|
+| confirmation_email_rate_limits | `{}` | `{}` | `{}` |
+| lane_booking_family_configuration_versions | `{}` | `{}` | `{}` |
+
+The production column refers to the recorded fresh catalog audit in
+`PRODUCT_10E_ACL_PROVENANCE_REPORT.md`; no new production connection/write was
+required for this local gate. No grants were added and no historical migration
+was changed.
+
+### Independent no-TCM environment
+
+The final run used `node scripts/product10e-isolated-schema-check.mjs --with-e2e`.
+It replayed all **124** unchanged migrations through
+`20261009140000_preserve_onboarding_account_lifecycle.sql` into a new empty
+scratch database. SECURITY DEFINER = **97**. TCM pricing table and all three
+TCM RPCs = **absent**. The TCM migration was never applied.
+
+Focused/full DB tests, concurrency tests and browser tests used that same
+database. Dedicated Auth and REST containers reused the installed local images
+and local credentials with only their database target changed to the validated
+scratch name. Only the Auth migration ledger, not user/business data, was copied
+to bootstrap the managed Auth service. Local HTTP bindings were loopback-only:
+15498 proxy, 15499 Auth, 15500 REST; app copy used 3001.
+
+The existing in-memory removal of TCM-only inventory expectations remains
+explicit: full DB here means the complete **pre-TCM** SQL suite (62 files), not
+the later TCM test file. No authorization assertions were weakened. The two ACL
+expectation corrections above are the only source assertion edits in this task.
+
+### Final results
+
+| Check | Result |
+|---|---|
+| Focused PRODUCT-10E SQL | **86/86 PASS**, ROLLBACK and cleanup 0 |
+| Full pre-TCM DB suite | **1890/1890 PASS**, 62 files including two undated contracts |
+| Isolated concurrency | **6/6 PASS**, deadlocks 0, fixture cleanup 0 |
+| Node, full current workspace | **829/829 PASS**; includes pre-existing static TCM/UI tests |
+| Playwright PRODUCT-10E, isolated Auth/REST/no-TCM DB | **2/2 PASS**, Chromium |
+| TypeScript | PASS |
+| Normal repository production build | PASS, Turbopack |
+| Disposable application build | PASS, Webpack (junction-compatible local harness) |
+| ESLint changed JS/TS tooling/tests | PASS |
+| git diff --check | PASS |
+| Public schema before/after SQL tests | identical |
+| Public schema after concurrency/E2E | identical |
+| E2E temporary users/platform admins/audit/tenants | 0 |
+| Disposable Auth/REST containers | removed, 2/2 |
+| Scratch database remaining | 0 |
+
+SQL evidence verifies platform authority separate from tenant authority;
+profiles.role cannot grant platform/tenant privileges; draft/private creation
+without automatic plan; explicit plan and initial-admin assignment; readiness;
+private preview; activation/publication; suspension history/cancellation;
+audited external settlement notation; downgrade continuity; no automatic
+platform operational access; cross-tenant denial; tenant-admin denial for
+platform lifecycle/plan changes. No hard-delete endpoint was added.
+
+Browser evidence verifies actual login, platform draft creation, plan/admin
+assignment, dedicated `TenantOnboardingSettings` rendering and saving using
+pre-TCM settings RPCs, denied tenant-admin platform access, continuity screen,
+private preview, activation/publication/suspension, anonymous protection, and
+responsive platform UI at 320/375/430/768/1440.
+
+Earlier harness attempts are not hidden: managed Auth ledger restore needed the
+local managed-schema administrator (no GRANT); inheriting Linux PATH into the
+Windows Docker launcher was corrected; Turbopack rejected the copied workspace's
+dependency junction so only its build uses supported `--webpack`; the first
+isolated browser attempt was 1/2 because the new local proxy omitted PostgREST
+`accept-profile`/`content-profile` CORS headers. The proxy-only correction led to
+the final 2/2 run. No application/security contract was changed to force PASS.
+
+### Boundaries and next step
+
+TCM remains **FROZEN**. Its migration SHA is unchanged:
+`FE899CBD76D8F0E1BAB24A14374CF9E29A96DAFD34B969714E699415A71CD10B`.
+The working tree remains mixed; this local PASS is not approval to stage whole
+shared files. AGENTS.md, drafts, unrelated UI and historical migrations remain
+outside this task's edits.
+
+PRODUCTION WRITE / STAGING / COMMIT / PUSH / DEPLOYMENT: **NO**.
+Second production tenant: not activated by this task. DNS/custom domain: untouched.
+Next action: separately requested production preflight with precise scope/hunk
+reconciliation. No production readiness claim is made by this local-only gate.
+
+## Historical gate — tenant setup decoupling (2026-09-24, superseded)
+
+**PRODUCT-10E LOCAL: BLOCKED / PARTIAL. READY FOR PRODUCTION PREFLIGHT: NO.** This gate supersedes earlier LOCAL PASS for the current mixed working tree.
+
+The draft route now imports dedicated `app/tenant-setup/TenantOnboardingSettings.tsx`, not the TCM-enhanced AdminSettingsPage. The component is based on the committed pre-TCM settings form and calls only `admin_get_tenant_public_settings_v1(text)` and `admin_update_tenant_public_settings_v1(text,jsonb,timestamptz)`. It retains optimistic concurrency, visibility/feature flags and existing tenant-admin authorization. No platform-role bypass is added: Platform Admin can perform platform onboarding/preview, but platform authority alone still cannot edit tenant settings. No TCM schema, content RPC, pricing CRUD or expanded content DTO is required by this route.
+
+### Isolation and evidence
+
+`scripts/product10e-isolated-schema-check.mjs` creates a uniquely named EMPTY scratch database inside local `supabase_db_csk-booking` (port 54322), restores managed non-application schema dependencies, rebuilds public schema, and applies all 124 repository migrations transactionally through `20261009140000`. Each applied version is recorded only after successful local execution. This is not migration repair. No production connection, existing DB reset or modification of historical migration files occurs. The new scratch database is removed in finally, including failure paths.
+
+Fresh replay target: SECURITY DEFINER **97**, all three TCM RPCs and TCM pricing table absent. Focused unchanged SQL matrix **86/86 PASS**, ending ROLLBACK and exact fixture cleanup 0. This verifies platform/tenant authority separation, own/cross-tenant settings, draft/private creation, explicit plan/admin assignment, readiness, preview, activation/publication, suspension, external settlement, account preservation and no automatic platform operational access.
+
+Full DB tests use an explicit in-memory projection of later TCM-only inventory expectations back to the PRODUCT-10E baseline (97 DEFINER, 157 functions, 26 tables, old audit fingerprint). Source SQL test files and TCM files remain untouched. Authorization assertions are not relaxed.
+
+**Full replay suite FAIL:** `20260902120000_harden_public_table_sequence_acl_test.sql`, check 6, `service_role table ACL unchanged`. On both `confirmation_email_rate_limits` and `lane_booking_family_configuration_versions`, expected privileges are `{MAINTAIN,REFERENCES,TRIGGER,TRUNCATE}`; replay produces `{DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE}`. The 28 other assertions in that file pass. Before it, 49 assertions in three files pass. This is a reproducibility/security-baseline blocker, not established production drift or a demonstrated tenant data leak. No grant/revoke correction or test weakening was performed to force PASS.
+
+An earlier schema-reconstruction-only diagnostic (not full migration replay) passed 1875 assertions in 60 dated SQL files. It omitted two undated tests and is explicitly NOT the final full DB gate; the subsequent complete-chain replay failure above is authoritative.
+
+| Check | Result |
+|---|---|
+| Focused SQL on complete replay, no TCM | 86/86 PASS |
+| Full DB on complete replay | FAIL: service_role ACL mismatch on two tables |
+| Full Node on current workspace | 829/829 PASS (includes existing unrelated/TCM tests) |
+| TypeScript | PASS |
+| Production build locally | PASS |
+| ESLint new/changed code | PASS |
+| git diff --check | PASS |
+| Playwright onboarding smoke | 2/2 PASS on dedicated local app port 3001; existing API/database includes TCM, so NOT independent E2E evidence |
+| Initial reused-dev Playwright attempt | 1/2; stopped at login; retry used separate production-mode server |
+| Isolated API/Auth/browser full E2E | NOT COMPLETED |
+| Final schema parity gate | BLOCKED by replay ACL discrepancy |
+| Cleanup | Focused fixture 0; each scratch DB removed; local browser synthetic users/tenants query 0/0 |
+
+### Current-turn scope / classification
+
+PRODUCT-10E only: dedicated TenantOnboardingSettings component (new); tenant-setup/[slug]/page.tsx import/render change; tenant-onboarding-settings.test.mjs (new, 3 tests); product10e-isolated-schema-check.mjs (new tooling); this report and reconciliation report evidence update. No new shared application hunk introduced. The pre-existing shared-file inventory remains documented separately and is not approved for whole-file staging.
+
+TCM remains FROZEN. Its migration SHA remains `FE899CBD76D8F0E1BAB24A14374CF9E29A96DAFD34B969714E699415A71CD10B`. None of the five PRODUCT-10E migration timestamps/content was edited. AGENTS.md, drafts and unrelated UI remain untouched by this decoupling task.
+
+Next required work: reconcile provider/baseline service_role ACL provenance against the migration chain without changing historical migrations or broadening authority; obtain clean independent DB replay and full suite; attach isolated Auth/REST/browser tests to that same baseline. Do not infer production readiness from the mixed-stack browser smoke.
+
+PRODUCTION WRITE / STAGING / COMMIT / PUSH / DEPLOYMENT: NO. SECOND PRODUCTION TENANT: not activated. DNS/custom domains: untouched.
+
 Date: 2026-09-24
-Status: CANCELLATION AUTHORITY SECURITY PATCH PROD PASS. PRODUCT-10E onboarding itself is not yet implemented. Suspension policy and external-settlement recording scope remain APPROVED. Both security migrations are deployed and verified; see the production handoff below. Earlier local/preflight sections are historical evidence.
+Status: PRODUCT-10E LOCAL PASS (2026-09-24). Cancellation security patch remains PROD PASS. The implementation below is LOCAL ONLY and supersedes the historical implementation-blocked status. Production preflight has NOT been started.
+
+## PRODUCT-10E resumed local implementation — authoritative handoff
+
+### Source of truth and scope
+
+HEAD `80341fe4c9512e5fcd719963aa636777098cf705`, branch `main`; existing origin/main tracking reference matches, divergence 0/0. No network fetch, staging, commit, push, deployment or production SQL was performed in this local implementation task. The working tree contains real implementation changes, not only a report. Five existing unrelated entries remain excluded: AGENTS.md, SAAS_9D_RPC_SECURITY_DEFINER_HARDENING_PLAN.md, SAAS_FINAL_MIGRATION_MASTER_REPORT.md, FINAL_SAAS_SECURITY_AUDIT_2026_09.md and supabase/drafts/*.
+
+The PRODUCT-10D docs checkpoint audit below remains valid: 90c5895 was report-only; lib/tenant-features.ts belonged to the preceding implementation checkpoint.
+
+### Platform authority and bootstrap
+
+New closed table `platform_admins` stores an explicit active/suspended platform role. Authority is never inferred from profiles.role, auth metadata, tenant membership, a slug or an arbitrary client tenant ID. Server routes authenticate with auth.getUser and independently call is_platform_admin_v1; every privileged RPC repeats platform authorization.
+
+Platform Admin can manage metadata/lifecycle/plan/initial onboarding, but gets NO automatic tenant operational membership or customer-data access. Initial-admin assignment is draft-only, requires a verified existing account, refuses an existing active admin/membership, and cannot be used to grant platform staff access to an already active tenant.
+
+PRODUCTION PLATFORM ADMIN BOOTSTRAP REQUIRED = YES. Before production deployment, the owner must explicitly identify the existing verified account to provision and authorize a separate controlled bootstrap. No real UUID/email is embedded in migrations; no account is selected automatically. Provisioning and revocation are deliberately not exposed as a self-service RPC/UI.
+
+### Lifecycle, creation, identity and readiness
+
+Creation is atomic: tenant dormant (the existing draft-equivalent status), a minimal private public-profile row, all optional public sections off, no plan assignment. No CSK data is copied.
+
+Technical/public slugs are distinct, stable, lowercase 2–63-character selectors, validated against the reserved namespace including platform-admin/continuity/tenant-setup. Existing cross-table uniqueness/namespace triggers are preserved, with the same advisory namespace lock. Both tables additionally use the canonical closed validator in CHECK constraints. No rename API or hard-delete API exists.
+
+Lifecycle: dormant -> active; active -> suspended; suspended -> active. Active -> draft is rejected. Activation and publication are separate, authorized actions. Readiness requires valid identity/slugs, public settings/name/city, an active plan, and a verified active tenant admin. Suspension unpublishes without deleting resources or memberships. Reactivation checks readiness and does not silently republish.
+
+Plan assignment is explicit, accepts an existing active plan, locks the tenant, updates one assignment and records platform audit. Repeated identical assignments are idempotent. Tenant admins/employee/instructor/user/anon cannot assign plans. Downgrade preserves rows/history/cancellation while the existing entitlement engine blocks new unavailable module use.
+
+### Initial administrator, setup and private preview
+
+Exact-email lookup is platform-only, bounded to a single verified non-deleted account, returns only account ID/email needed for assignment, rejects ambiguous matches, and is not a user directory or invitation/auth-user creation flow.
+
+Draft tenant admins configure their own public settings through /tenant-setup/[slug]. Existing settings RPCs accept dormant or active tenants, still require active admin membership, and use a closed draft-aware presentation feature helper. General operational tenant-role/RLS/entitlement helpers remain active-only.
+
+Private /platform-admin/tenants/[id]/preview uses an independently authorized RPC and the existing strict public-landing DTO parser. It neither publishes nor makes anonymous draft readers succeed. Booking/event navigation in preview is disabled; privacy visibility masking and entitlement AND visibility remain intact.
+
+### Suspension and external settlement continuity
+
+/continuity is authenticated and linked from /account. The owner sees only their own existing reservation/event history; active tenant admin/employee may select only their authorized tenant. Reads are 25 resources/page with stable ordering. Platform role alone cannot read staff history, cancel a resource or record a settlement.
+
+A closed resource-derived continuity role helper accepts active memberships in active/suspended tenants. Only the four existing cancellation wrappers/cores use it; canonical reservation 12-hour and event 72-hour rules/status restrictions remain unchanged. General tenant authority remains active-only. Continuity cancellation never initiates waitlist promotion or new email delivery.
+
+The external settlement RPC derives tenant from the locked reservation/registration resource, permits active tenant admin/employee only, validates positive decimal amount/currency/reference, binds idempotency to exact payload and tenant, and writes tenant-bound audit. It records an externally performed refund/reconciliation; it does not move money, create payment links/charges, change payment_status, or interpret unpaid as refunded. Owner history displays minimal settlement metadata, not staff identity or reference.
+
+Database triggers on reservations/events/event_registrations serialize resource writes with lifecycle transitions via tenant row locks. Suspended new obligations, registrations, events, extensions and promotion writes are denied. Only exact cancellation/redaction shapes are allowed. The existing local-postgres fixture switch is retained; normal application sessions cannot use it to gain authority.
+
+Account-wide anonymization remains separate from leave-tenant: new actor references are pseudonymized, operational references redacted and own platform authority removed. Existing account authorization/last-admin semantics remain intact. No new leave-tenant or global account export contract is introduced.
+
+### Security inventory / ACL
+
+Local target: 157 public functions; SECURITY DEFINER 85 -> 97; 26 public tables. All 16 new functions are owned by postgres and pin search_path to pg_catalog, public, pg_temp. New tables have RLS and zero permissive policies; PUBLIC/anon/authenticated/service_role direct table privileges are revoked.
+
+| New functions | Mode / reason | Client EXECUTE |
+| --- | --- | --- |
+| is_platform_admin_v1 | DEFINER: read closed platform authority | authenticated only |
+| platform_list_tenants_v1, platform_lookup_initial_admin_v1 | DEFINER: minimal authorized metadata/account lookup | authenticated only, platform check |
+| platform_create_tenant_v1, platform_set_tenant_plan_v1, platform_assign_initial_admin_v1, platform_set_tenant_state_v1 | DEFINER: atomic authorized writes to closed tables | authenticated only, platform check |
+| platform_preview_tenant_v1 | DEFINER: private allowlisted preview | authenticated only, platform check |
+| get_my_continuity_v1, record_external_settlement_v1, cancel_continuity_resource_v1 | DEFINER: owner/resource-bound continuity on closed resources | authenticated only, independent owner/membership checks |
+| enforce_suspended_obligations_v1 | DEFINER trigger: authoritative lifecycle lock/check | no direct client EXECUTE |
+| platform_slug_valid_v1, platform_tenant_readiness_core_v1, get_my_continuity_role_core_v1, tenant_setup_has_feature_core_v1 | closed INVOKER helpers | no direct client EXECUTE |
+
+PUBLIC/anon/service_role EXECUTE on all new functions is denied. No service key enters app code. Existing public directory/landing contracts and allowlisted DTOs are unchanged. Public API contains no platform audit, readiness, plan assignment, membership or customer PII. Privileged platform lookup intentionally returns the exact selected administrator email; this is not a public DTO.
+
+### Migrations and identity
+
+These are five NEW, uncommitted, undeployed forward-only migrations. Existing deployed migration files are unchanged. Their timestamps follow the repository's established future-dated sequence after 20261008110000; no historical rename/repair was performed.
+
+| Migration | SHA-256 |
+| --- | --- |
+| 20261009100000_add_platform_tenant_onboarding.sql | 01BE8C0C5E7469C03F9364C295EB673ADFB34CA409C86B3847E84A1A6DB9912C |
+| 20261009110000_add_tenant_continuity.sql | A24B6AA56821033AF2269D29F476522B72BC911D2949E47D110527A3F5320042 |
+| 20261009120000_add_private_tenant_setup.sql | 73737BB5D7C90D7F48BAC27DCC1038430CA7A2A066FC05E780F682A52F3D733C |
+| 20261009130000_guard_suspended_obligations.sql | F05CA543C9D100C85E6E776FEAC4B67A79D273CF0B9508016E12B62AD01ED483 |
+| 20261009140000_preserve_onboarding_account_lifecycle.sql | 243E355C920BFB0EFD527C638CE2830A2BCB04B6336C4868302252FF90E25BB8 |
+
+Existing function replacements use normalized CRLF/CR -> LF fingerprint guards; the account-redaction change also checks a unique replacement anchor. Local schema replay validates the complete chain. Production input fingerprint/slug/inventory/volume preflight remains a separate required step; LOCAL PASS is not production readiness approval.
+
+### Local tests and evidence
+
+All DB/test actions targeted Windows Docker container supabase_db_csk-booking, local port 54322. No linked commands, production SQL, reset, Docker cleanup or CLI update.
+
+| Gate | Final result |
+| --- | --- |
+| Focused onboarding / privacy / continuity SQL | 86/86 PASS; BEGIN/ROLLBACK; final exact fixture cleanup 0 |
+| Full DB | 1890/1890 PASS, 62 files |
+| Concurrency | 6/6 PASS; deadlocks 0; cleanup 0 |
+| Node | 811/811 PASS |
+| Playwright | 51/51 PASS, Chromium |
+| TypeScript | PASS |
+| Production build | PASS, 41 generated pages |
+| Changed-files ESLint | PASS, 0 errors; 1 existing app/admin/page.tsx hook-dependency warning |
+| git diff --check | PASS |
+| Local schema diff / full migration replay | PASS: No schema changes found |
+| Independent cleanup query | synthetic tenants 0, auth users 0, memberships 0, platform admins 0, platform audit 0, external settlements 0 |
+| SECURITY DEFINER local inventory | 97 |
+
+Concurrency covers duplicate technical/public slugs, concurrent plan writes, initial-admin assignment, activation racing incomplete setup, and suspension racing new events. Browser evidence includes platform-only route protection; private draft creation; explicit booking-only plan; exact-account assignment; separate tenant-admin draft settings; preview; activate/publish/suspend; 320/375/430/768/1440 no-overflow checks; and existing two-tenant/operational regressions.
+
+Focused SQL additionally checks no automatic plan, no global profiles.role platform authority, tenant-role negative cases, private preview, resource cancellation, settlement idempotency and audit, suspended membership denial, downgrade preserving data/owner history/cancellation eligibility, global anonymization, and closed table ACLs. Existing cancellation/security suites preserve cutoff and cross-tenant regressions.
+
+An initial Playwright run was 50/51: legacy dashboard quick links still pointed to entitlement-disabled Check-in/events despite correct module tiles. The minimal correction applies the same existing feature flags to those links. Full rerun 51/51. A DB run overlapped browser fixtures and failed the pre-existing baseline-membership assertion; isolated final DB run passed without weakening that assertion. Neither event is evidence of production failure.
+
+### Exact local scope (58 files)
+
+The 37 existing SQL regression files change expected inventory/counts/allowlists and the explicitly changed account/cancellation helper fingerprints/contracts only. Historical migration files are NOT edited. No unrelated checkpoint files are included.
+
+- `app/_components/PublicTenantLanding.tsx`
+- `app/account/page.tsx`
+- `app/admin/page.tsx`
+- `app/continuity/ContinuityPanel.tsx`
+- `app/continuity/page.tsx`
+- `app/platform-admin/page.tsx`
+- `app/platform-admin/PlatformTenants.tsx`
+- `app/platform-admin/tenants/[id]/preview/page.tsx`
+- `app/tenant-setup/[slug]/page.tsx`
+- `lib/platform-onboarding.test.mjs`
+- `lib/server/platform-admin.ts`
+- `lib/server/public-tenant-directory.ts`
+- `PRODUCT_10E_PLATFORM_ADMIN_ONBOARDING_REPORT.md`
+- `scripts/product10e-local-concurrency.mjs`
+- `supabase/migrations/20261009100000_add_platform_tenant_onboarding.sql`
+- `supabase/migrations/20261009110000_add_tenant_continuity.sql`
+- `supabase/migrations/20261009120000_add_private_tenant_setup.sql`
+- `supabase/migrations/20261009130000_guard_suspended_obligations.sql`
+- `supabase/migrations/20261009140000_preserve_onboarding_account_lifecycle.sql`
+- `supabase/tests/20260816143000_harden_public_function_execute_acl_test.sql`
+- `supabase/tests/20260902120000_harden_public_table_sequence_acl_test.sql`
+- `supabase/tests/20260903100000_harden_audit_log_integrity_test.sql`
+- `supabase/tests/20260907100000_add_dormant_tenant_foundation_test.sql`
+- `supabase/tests/20260910120000_tenant_aware_booking_rls_test.sql`
+- `supabase/tests/20260913100000_harden_event_management_rpcs_test.sql`
+- `supabase/tests/20260913150000_harden_public_event_readers_test.sql`
+- `supabase/tests/20260914100000_harden_shared_confirmation_email_rpcs_test.sql`
+- `supabase/tests/20260914150000_harden_event_reserve_promotion_rpcs_test.sql`
+- `supabase/tests/20260915100000_harden_lane_block_rpcs_test.sql`
+- `supabase/tests/20260916100000_harden_lane_family_creation_readers_test.sql`
+- `supabase/tests/20260917100000_harden_lane_family_writer_helpers_test.sql`
+- `supabase/tests/20260918100000_harden_admin_reservation_reports_test.sql`
+- `supabase/tests/20260919100000_add_tenant_user_admin_notes_test.sql`
+- `supabase/tests/20260919150000_harden_tenant_user_role_identity_contact_test.sql`
+- `supabase/tests/20260920100000_add_tenant_user_verification_foundation_test.sql`
+- `supabase/tests/20260920150000_cutover_tenant_user_verification_test.sql`
+- `supabase/tests/20260921100000_close_legacy_global_verification_path_test.sql`
+- `supabase/tests/20260922100000_harden_account_lifecycle_rpcs_test.sql`
+- `supabase/tests/20260923100000_harden_profile_privilege_trigger_test.sql`
+- `supabase/tests/20260924100000_harden_public_booking_configuration_test.sql`
+- `supabase/tests/20260925100000_add_public_active_tenant_resolver_test.sql`
+- `supabase/tests/20260926100000_add_tenant_scoped_operational_readers_test.sql`
+- `supabase/tests/20260927100000_add_tenant_scoped_staff_event_rpcs_test.sql`
+- `supabase/tests/20260927110000_add_tenant_scoped_lane_configuration_rpcs_test.sql`
+- `supabase/tests/20260927120000_add_tenant_scoped_admin_reports_test.sql`
+- `supabase/tests/20260927130000_add_tenant_scoped_admin_users_test.sql`
+- `supabase/tests/20260928100000_add_c3_owner_calendar_and_global_profile_contracts_test.sql`
+- `supabase/tests/20260929100000_close_global_role_helper_execute_test.sql`
+- `supabase/tests/20260930110000_tenant_aware_onboarding_cutover_test.sql`
+- `supabase/tests/20261001100000_retire_single_tenant_compatibility_test.sql`
+- `supabase/tests/20261003100000_remove_single_active_tenant_guard_test.sql`
+- `supabase/tests/20261004100000_add_public_tenant_directory_test.sql`
+- `supabase/tests/20261005100000_add_public_tenant_landing_test.sql`
+- `supabase/tests/20261006100000_add_tenant_public_settings_test.sql`
+- `supabase/tests/20261007100000_add_saas_feature_entitlements_test.sql`
+- `supabase/tests/20261008100000_harden_cancellation_tenant_authority_test.sql`
+- `supabase/tests/20261009100000_platform_tenant_onboarding_test.sql`
+- `tests/e2e/platform-onboarding.spec.ts`
+
+### Deferred scope / pre-production gates
+
+- Explicit production Platform Admin identity and separately authorized bootstrap are required. No automatic CSK-admin grant.
+- Separate production preflight must verify migration history, all five SHAs, normalized inputs, reserved-slug compatibility, ACL/inventory, and lock risk before any deployment decision.
+- DNS/custom domains, actual payments/refunds/billing, invites, storage upload lifecycle, transactional email branding, and final legal/GDPR documents remain deferred as specified.
+- Legal/account-export review must include new external-settlement/platform-audit retention and lawful access requirements; this task preserves existing account export and extends anonymization, not a final legal completeness claim.
+- Second production tenant was not activated; production, DNS and custom domains were not accessed or changed.
+
+### Final local gate
+
+PRODUCT-10E LOCAL: PASS.
+PLATFORM AUTHORITY SEPARATION: PASS.
+TENANT ISOLATION / PII: PASS.
+SUSPENSION / EXTERNAL-ONLY CONTINUITY: PASS.
+PRODUCTION PLATFORM ADMIN BOOTSTRAP REQUIRED: YES.
+READY FOR SEPARATE PRODUCTION PREFLIGHT: YES.
+READY FOR PRODUCTION WRITE: NO.
+STAGING / COMMIT / PUSH / DEPLOYMENT: NONE.
+
+---
+
+## Historical security-patch and blocker evidence
+
+The following sections retain the earlier chronology and production cancellation-patch evidence; earlier onboarding-blocked wording does not override the authoritative local handoff above.
+
 
 ## Checkpoint verification
 

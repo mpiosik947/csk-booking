@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 
-const page=readFileSync(new URL("./page.tsx",import.meta.url),"utf8");
+const page=readFileSync(new URL("./TenantAdminSettings.tsx",import.meta.url),"utf8");
 const shell=readFileSync(new URL("../../t/[slug]/[...path]/page.tsx",import.meta.url),"utf8");
 const routes=readFileSync(new URL("../../../lib/tenant-routing.ts",import.meta.url),"utf8");
 const permissions=readFileSync(new URL("../../../lib/admin/route-protection.js",import.meta.url),"utf8");

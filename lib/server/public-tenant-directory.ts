@@ -100,7 +100,7 @@ function isSafePublicPath(value: unknown): value is string | null {
     LOGO_PATH.test(value) && !value.includes("..") && !value.includes("//"));
 }
 
-function readLanding(value: unknown): PublicTenantLanding | null {
+export function readLanding(value: unknown): PublicTenantLanding | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   const row = value as Record<string, unknown>;
   if (Object.keys(row).sort().join(",") !== LANDING_FIELDS.join(",")) return null;

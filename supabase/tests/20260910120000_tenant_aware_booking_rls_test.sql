@@ -249,7 +249,8 @@ begin
     (select pg_catalog.count(*)=6 from pg_catalog.pg_proc p join pg_catalog.pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname in ('create_reservation_v2','cancel_reservation','admin_create_lane_block','admin_update_lane_block','admin_set_lane_block_active','admin_set_lane_booking_family_configuration_v2') and p.prosecdef),
     'Critical writer SECURITY DEFINER inventory differs.');
   perform pg_temp.ok(55,'SAAS-9D-1, 9D-3A, and 9D-3C writers consume tenant membership',
-    (select pg_catalog.count(*)=2 from pg_catalog.pg_proc p join pg_catalog.pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname in ('create_reservation_v2','cancel_reservation') and p.prosrc ~ '\mget_my_tenant_role_v1\M')
+    (select pg_catalog.count(*)=1 from pg_catalog.pg_proc p join pg_catalog.pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname='create_reservation_v2' and p.prosrc ~ '\mget_my_tenant_role_v1\M')
+    and (select pg_catalog.count(*)=1 from pg_catalog.pg_proc p where p.pronamespace='public'::regnamespace and p.proname='cancel_reservation' and p.prosrc ~ '\mget_my_continuity_role_core_v1\M')
     and (select pg_catalog.count(*)=3 from pg_catalog.pg_proc p join pg_catalog.pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname in ('admin_create_lane_block','admin_update_lane_block','admin_set_lane_block_active') and p.prosrc ~ '\mget_my_tenant_role_v1\M')
     and (select pg_catalog.count(*)=1 from pg_catalog.pg_proc p join pg_catalog.pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname='admin_set_lane_booking_family_configuration_v2__saas9d3c_core' and not p.prosecdef and p.prosrc ~ '\mget_my_tenant_role_v1\M'),
     'SAAS-9D phased writer boundary differs.');

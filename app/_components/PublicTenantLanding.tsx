@@ -1,5 +1,6 @@
 import Image from "next/image";
 import Link from "next/link";
+import type { ReactNode } from "react";
 import type { PublicTenantLanding as PublicTenantLandingData } from "@/lib/server/public-tenant-directory";
 
 function initials(name: string) {
@@ -7,14 +8,20 @@ function initials(name: string) {
     .map((part) => part[0]?.toUpperCase()).join("");
 }
 
+function LandingLink({ href, className, children, preview }: { href: string; className?: string; children: ReactNode; preview: boolean }) {
+  return preview ? <span className={className} aria-disabled="true">{children}</span>
+    : <Link href={href} className={className}>{children}</Link>;
+}
+
 export function PublicTenantLanding({
   tenant,
-}: Readonly<{ tenant: PublicTenantLandingData }>) {
+  preview = false,
+}: Readonly<{ tenant: PublicTenantLandingData; preview?: boolean }>) {
   const bookingHref = `/t/${tenant.tenantSlug}/booking`;
   const eventsHref = `/t/${tenant.tenantSlug}/events`;
 
   return (
-    <main className="min-h-screen overflow-x-hidden bg-[#090b09] text-[#f2efe4]">
+    <main inert={preview} className="min-h-screen overflow-x-hidden bg-[#090b09] text-[#f2efe4]">
       <section className="relative border-b border-[#30372c] px-4 py-8 sm:px-6 sm:py-12">
         {tenant.heroImagePath && (
           <div className="absolute inset-0 overflow-hidden opacity-25">
@@ -23,9 +30,9 @@ export function PublicTenantLanding({
           </div>
         )}
         <div className="relative mx-auto flex w-full max-w-6xl flex-col items-center text-center">
-          <Link href="/" className="self-start text-sm font-semibold text-[#d7c895] underline-offset-4 hover:underline">
+          <LandingLink preview={preview} href="/" className="self-start text-sm font-semibold text-[#d7c895] underline-offset-4 hover:underline">
             ← StrzelajTu.pl
-          </Link>
+          </LandingLink>
           <div className="mt-8 flex h-28 w-28 items-center justify-center overflow-hidden rounded-2xl border border-[#7c6a39] bg-[#111511] text-2xl font-black text-[#e8d18f] shadow-2xl shadow-black/40 sm:h-32 sm:w-32">
             {tenant.logoPath ? (
               <Image src={tenant.logoPath} alt={`Logo ${tenant.name}`} width={256} height={256} className="h-full w-full object-contain" />
@@ -37,27 +44,27 @@ export function PublicTenantLanding({
             <p className="mt-5 max-w-2xl text-base leading-7 text-[#bdc3b8] sm:text-lg">{tenant.description}</p>
           )}
           <div className="mt-8 flex w-full max-w-xl flex-col gap-3 sm:flex-row sm:justify-center">
-            {tenant.showBooking && <Link href={bookingHref} className="min-h-12 rounded-xl border border-[#c5a861] bg-[#3a301d] px-6 py-3 font-bold text-[#f0d17b] transition hover:bg-[#493b22] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d2b66f]">
+            {tenant.showBooking && <LandingLink preview={preview} href={bookingHref} className="min-h-12 rounded-xl border border-[#c5a861] bg-[#3a301d] px-6 py-3 font-bold text-[#f0d17b] transition hover:bg-[#493b22] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d2b66f]">
               Zarezerwuj termin
-            </Link>}
-            {tenant.showEvents && <Link href={eventsHref} className="min-h-12 rounded-xl border border-[#657054] bg-[#1a2019] px-6 py-3 font-bold text-[#d7ddcd] transition hover:bg-[#222a20] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#9eaa88]">
+            </LandingLink>}
+            {tenant.showEvents && <LandingLink preview={preview} href={eventsHref} className="min-h-12 rounded-xl border border-[#657054] bg-[#1a2019] px-6 py-3 font-bold text-[#d7ddcd] transition hover:bg-[#222a20] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#9eaa88]">
               Szkolenia i eventy
-            </Link>}
+            </LandingLink>}
           </div>
         </div>
       </section>
 
       <section aria-label="Oferta obiektu" className="mx-auto grid w-full max-w-6xl gap-4 px-4 py-8 sm:grid-cols-2 sm:px-6 lg:grid-cols-3">
-        {tenant.showBooking && <Link href={bookingHref} className="rounded-2xl border border-[#3d4638] bg-[#171c17] p-6 transition hover:border-[#778462] hover:bg-[#20261e]">
+        {tenant.showBooking && <LandingLink preview={preview} href={bookingHref} className="rounded-2xl border border-[#3d4638] bg-[#171c17] p-6 transition hover:border-[#778462] hover:bg-[#20261e]">
           <p className="text-xs font-bold uppercase tracking-[0.18em] text-[#b89545]">Rezerwacje</p>
           <h2 className="mt-3 text-xl font-bold">Wybierz termin online</h2>
           <p className="mt-3 text-sm leading-6 text-[#aeb4a8]">Sprawdź dostępność stanowisk i przejdź do bezpiecznego procesu rezerwacji.</p>
-        </Link>}
-        {tenant.showEvents && <Link href={eventsHref} className="rounded-2xl border border-[#3d4638] bg-[#171c17] p-6 transition hover:border-[#778462] hover:bg-[#20261e]">
+        </LandingLink>}
+        {tenant.showEvents && <LandingLink preview={preview} href={eventsHref} className="rounded-2xl border border-[#3d4638] bg-[#171c17] p-6 transition hover:border-[#778462] hover:bg-[#20261e]">
           <p className="text-xs font-bold uppercase tracking-[0.18em] text-[#b89545]">Wydarzenia</p>
           <h2 className="mt-3 text-xl font-bold">Szkolenia i eventy</h2>
           <p className="mt-3 text-sm leading-6 text-[#aeb4a8]">Zobacz opublikowane wydarzenia i dostępne miejsca.</p>
-        </Link>}
+        </LandingLink>}
         {tenant.showInstructor && <div className="rounded-2xl border border-[#30372c] bg-[#121612] p-6">
           <p className="text-xs font-bold uppercase tracking-[0.18em] text-[#7e8875]">Wkrótce</p>
           <h2 className="mt-3 text-xl font-bold">Strzelanie z instruktorem</h2>
@@ -79,9 +86,9 @@ export function PublicTenantLanding({
             {tenant.publicEmail && <div><dt className="inline font-semibold text-[#d7ddcd]">E-mail: </dt><dd className="inline"><a href={`mailto:${tenant.publicEmail}`} className="hover:underline">{tenant.publicEmail}</a></dd></div>}
           </dl>}
           <div className="mt-5 flex flex-wrap gap-4 text-sm font-semibold text-[#d7c895]">
-            {tenant.showPricing && <Link href={bookingHref} className="underline-offset-4 hover:underline">Cennik i rezerwacja</Link>}
+            {tenant.showPricing && <LandingLink preview={preview} href={bookingHref} className="underline-offset-4 hover:underline">Cennik i rezerwacja</LandingLink>}
             {tenant.showRegulations && tenant.regulationsPath && (
-              <Link href={tenant.regulationsPath} className="underline-offset-4 hover:underline">Regulamin</Link>
+              <LandingLink preview={preview} href={tenant.regulationsPath} className="underline-offset-4 hover:underline">Regulamin</LandingLink>
             )}
           </div>
           {tenant.showContact && Object.entries(tenant.socialLinks).length > 0 && <div className="mt-4 flex flex-wrap gap-4 text-sm text-[#d7c895]">{Object.entries(tenant.socialLinks).map(([name,url]) => <a key={name} href={url} rel="noreferrer" target="_blank" className="capitalize hover:underline">{name}</a>)}</div>}

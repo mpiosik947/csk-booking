@@ -53,7 +53,7 @@ begin
   perform pg_temp.ok(2,'target normalized fingerprints are exact',
     pg_catalog.md5(pg_catalog.replace(pg_catalog.replace(pg_catalog.pg_get_functiondef('public.update_my_profile_v2(text,text,text,text,text,text,boolean,boolean,boolean,boolean,boolean,boolean,boolean,boolean,boolean,boolean)'::regprocedure),E'\r\n',E'\n'),E'\r',E'\n'))='6b740226c6de401754dfb9da2fd543f7'
     and pg_catalog.md5(pg_catalog.replace(pg_catalog.replace(pg_catalog.pg_get_functiondef('public.export_my_data_v1()'::regprocedure),E'\r\n',E'\n'),E'\r',E'\n'))='d159b7d0a14f7ffc9d6c3e5088d18dc5'
-    and pg_catalog.md5(pg_catalog.replace(pg_catalog.replace(pg_catalog.pg_get_functiondef('public.anonymize_my_account_v1()'::regprocedure),E'\r\n',E'\n'),E'\r',E'\n'))='70b5f590399aa3f3a147935459b7f085');
+    and pg_catalog.md5(pg_catalog.replace(pg_catalog.replace(pg_catalog.pg_get_functiondef('public.anonymize_my_account_v1()'::regprocedure),E'\r\n',E'\n'),E'\r',E'\n'))='c44c385685f00f36449c5ae80a9e81ce');
   perform pg_temp.ok(3,'all three remain postgres SECURITY DEFINER with hardened search_path',
     (select pg_catalog.bool_and(procedure_record.prosecdef and pg_catalog.pg_get_userbyid(procedure_record.proowner)='postgres' and procedure_record.proconfig=array['search_path=pg_catalog, public, pg_temp'])
      from pg_catalog.pg_proc procedure_record where procedure_record.oid in(
@@ -67,10 +67,11 @@ begin
      from pg_catalog.pg_proc procedure_record where procedure_record.oid in(
        'public.update_my_profile_v2(text,text,text,text,text,text,boolean,boolean,boolean,boolean,boolean,boolean,boolean,boolean,boolean,boolean)'::regprocedure,
        'public.export_my_data_v1()'::regprocedure,'public.anonymize_my_account_v1()'::regprocedure)));
-  perform pg_temp.ok(5,'SECURITY DEFINER count is 85 after PRODUCT-10C public landing',(select pg_catalog.count(*)=  85 from pg_catalog.pg_proc procedure_record join pg_catalog.pg_namespace namespace_record on namespace_record.oid=procedure_record.pronamespace where namespace_record.nspname='public' and procedure_record.prosecdef));
+  perform pg_temp.ok(5,'SECURITY DEFINER count is 100 after PRODUCT-10C public landing',(select pg_catalog.count(*)=  97 from pg_catalog.pg_proc procedure_record join pg_catalog.pg_namespace namespace_record on namespace_record.oid=procedure_record.pronamespace where namespace_record.nspname='public' and procedure_record.prosecdef));
   perform pg_temp.ok(6,'compatibility defaults remain 7/7',(select pg_catalog.count(*)=0 from information_schema.columns where table_schema='public' and table_name in('shooting_lanes','reservations','lane_blocks','events','event_lanes','event_registrations','email_deliveries') and column_name='tenant_id' and column_default='''c5c00000-0000-4000-8000-000000000001''::uuid'));
   perform pg_temp.ok(7,'frozen lifecycle dependencies remain unchanged',
     pg_catalog.md5(pg_catalog.replace(pg_catalog.replace(pg_catalog.pg_get_functiondef('public.redact_account_audit_details_v1(jsonb,uuid,text,text[])'::regprocedure),E'\r\n',E'\n'),E'\r',E'\n'))='43aab16c26223ca68f4b8a34310bcfb5'
+    -- Tenant content adds only public-content audit targets; lifecycle branches remain unchanged.
     and pg_catalog.md5(pg_catalog.replace(pg_catalog.replace(pg_catalog.pg_get_functiondef('public.set_audit_log_tenant_id()'::regprocedure),E'\r\n',E'\n'),E'\r',E'\n'))='7695b54796226d5e95d1594692a5f891'
     and pg_catalog.md5(pg_catalog.replace(pg_catalog.replace(pg_catalog.pg_get_functiondef('public.prevent_non_admin_profile_privilege_changes()'::regprocedure),E'\r\n',E'\n'),E'\r',E'\n'))='05fe62eb086d5bfe7a6f5bd5a1c2dcca');
   perform pg_temp.ok(8,'no leave-tenant contract was introduced',pg_catalog.to_regprocedure('public.leave_tenant_v1()') is null);

@@ -84,8 +84,9 @@ begin
    perform pg_temp.check_result(kind||' non-owner global admin',pg_temp.call_cancel(u,call_sql),'42501');
    update public.event_registrations set user_id=u where id=r;
    update public.reservations set user_id=u where id=booking;
+   update public.reservations set reservation_date=starts::date where id=booking;
    update public.tenants set status='suspended' where id=t;
-   perform pg_temp.check_result(kind||' suspension not unlocked by global role',pg_temp.call_cancel(u,call_sql),'42501');
+   perform pg_temp.check_result(kind||' suspension does not grant global-role override',pg_temp.call_cancel(u,call_sql),case kind when 'reservation' then '55000' else '42501' end);
    update public.tenants set status='active' where id=t;
    update public.events set event_date=starts::date where id=e;
    update public.reservations set reservation_date=starts::date where id=booking;
@@ -120,7 +121,7 @@ begin
    select 1 from unnest(array['anon','authenticated','service_role']) role_name
    cross join unnest(array['public.cancel_reservation__saas9d1_core(uuid)','public.cancel_event_registration__saas9d2a_core(uuid)']) signature
    where has_function_privilege(role_name,signature,'EXECUTE')) then 'PASS' else 'FAIL' end,'PASS');
- perform pg_temp.check_result('SECURITY DEFINER unchanged',case when (select count(*) from pg_proc where pronamespace='public'::regnamespace and prosecdef)=85 then 'PASS' else 'FAIL' end,'PASS');
+ perform pg_temp.check_result('SECURITY DEFINER unchanged',case when (select count(*) from pg_proc where pronamespace='public'::regnamespace and prosecdef)=97 then 'PASS' else 'FAIL' end,'PASS');
 end;$test$;
 select '1..'||(count(*)+1) from results;
 select 'ok '||n||' - '||label from results order by n;

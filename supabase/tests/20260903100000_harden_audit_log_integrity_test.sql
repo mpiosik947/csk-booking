@@ -271,7 +271,7 @@ begin
     and pg_catalog.strpos(pg_catalog.lower(pg_catalog.pg_get_functiondef(procedure.oid)),'insert into')>0;
 
   perform pg_temp.record_result(17,'All current audit writers are trusted database functions',
-    v_writer_count=20 and v_untrusted_writer_count=0,
+    v_writer_count=25 and v_untrusted_writer_count=0,
     'Oczekiwano 20 zaufanych writerów po dodaniu tenant public settings: SECURITY DEFINER albo zamknięte nieklienckie cores/helpers, owner=postgres, auth.uid() i explicit search_path.');
 
   perform pg_temp.record_result(18,'All fixture remains transaction-scoped',

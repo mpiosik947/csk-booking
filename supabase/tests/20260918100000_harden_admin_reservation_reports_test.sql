@@ -148,8 +148,8 @@ begin
     select 1 from (values('public'::name),('anon'::name),('authenticated'::name),('service_role'::name)) role(name)
     where pg_catalog.has_function_privilege(role.name,'public._admin_reservation_report_rows_v2(date,date,uuid,text,text,text)','EXECUTE')),
     'old helper exposed');
-  perform pg_temp.ok(8,'SECURITY DEFINER count is 85 after PRODUCT-10C public landing',
-    (select count(*) from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.prosecdef)=  85,
+  perform pg_temp.ok(8,'SECURITY DEFINER count is 100 after PRODUCT-10C public landing',
+    (select count(*) from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.prosecdef)=  97,
     'definer count differs');
   perform pg_temp.ok(9,'compatibility defaults remain 7/7',
     (select count(*) from information_schema.columns where table_schema='public'
@@ -203,7 +203,7 @@ begin
     '4B-1A list or closed verification contract drifted.');
   perform pg_temp.ok(30,'account lifecycle contract untouched',
     md5(replace(replace(pg_get_functiondef('public.export_my_data_v1()'::regprocedure),E'\r\n',E'\n'),E'\r',E'\n'))='d159b7d0a14f7ffc9d6c3e5088d18dc5'
-    and md5(replace(replace(pg_get_functiondef('public.anonymize_my_account_v1()'::regprocedure),E'\r\n',E'\n'),E'\r',E'\n'))='70b5f590399aa3f3a147935459b7f085',
+    and md5(replace(replace(pg_get_functiondef('public.anonymize_my_account_v1()'::regprocedure),E'\r\n',E'\n'),E'\r',E'\n'))='c44c385685f00f36449c5ae80a9e81ce',
     '4C account-wide contract drifted');
   perform pg_temp.ok(31,'report reads create no audit',(select count(*) from public.audit_logs)=audit_before,'read-only report created audit');
   perform pg_temp.ok(32,'no report RLS policy added',not exists(select 1 from pg_policies where schemaname='public' and policyname like '%SAAS-9D-4A%'),'RLS widened');

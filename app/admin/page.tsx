@@ -684,7 +684,7 @@ export default function AdminPage({ tenantId, tenantSlug }: Readonly<{ tenantId:
                   title="Oczekiwani dzisiaj"
                   value={pendingCheckIns.length}
                   description="Potwierdzone wizyty zaplanowane na dziś, jeszcze bez check-in."
-                  href={tenantHref(queueLinks.expectedToday)}
+                  href={features.has("checkin") ? tenantHref(queueLinks.expectedToday) : undefined}
                   tone={pendingCheckIns.length > 0 ? "yellow" : "green"}
                   variant="alert"
                 />
@@ -698,13 +698,13 @@ export default function AdminPage({ tenantId, tenantSlug }: Readonly<{ tenantId:
                   variant="alert"
                 />
 
-                <StatCard
+                {features.has("events") && <StatCard
                   title="Lista rezerwowa eventów"
                   description="Otwórz szkolenia z przygotowanym filtrem uczestników: lista rezerwowa."
                   href={tenantHref(queueLinks.eventReserve)}
                   tone="yellow"
                   variant="alert"
-                />
+                />}
 
                 <StatCard
                   title="Dzisiejsze rezerwacje"
@@ -750,7 +750,7 @@ export default function AdminPage({ tenantId, tenantSlug }: Readonly<{ tenantId:
                       ? `${nextReservation.customer_name || "Klient"} · ${getLaneName(nextReservation)}`
                       : "Brak kolejnych rezerwacji na dziś."
                   }
-                  href={tenantHref("/admin/check-in")}
+                  href={features.has("checkin") ? tenantHref("/admin/check-in") : undefined}
                   tone={nextReservation ? "yellow" : "green"}
                 />
 
@@ -758,7 +758,7 @@ export default function AdminPage({ tenantId, tenantSlug }: Readonly<{ tenantId:
                   title="Do check-in"
                   value={pendingCheckIns.length}
                   description="Wizyty zaplanowane, jeszcze nieobsłużone."
-                  href={tenantHref("/admin/check-in")}
+                  href={features.has("checkin") ? tenantHref("/admin/check-in") : undefined}
                   tone={pendingCheckIns.length > 0 ? "yellow" : "green"}
                 />
 
@@ -766,7 +766,7 @@ export default function AdminPage({ tenantId, tenantSlug }: Readonly<{ tenantId:
                   title="Do pobrania"
                   value={`${paymentToCollectToday.toFixed(0)} zł`}
                   description={`${payOnSiteToday.length} wizyt z płatnością na miejscu.`}
-                  href={tenantHref("/admin/check-in")}
+                  href={features.has("checkin") ? tenantHref("/admin/check-in") : undefined}
                   tone={payOnSiteToday.length > 0 ? "yellow" : "green"}
                 />
               </div>
@@ -783,12 +783,12 @@ export default function AdminPage({ tenantId, tenantSlug }: Readonly<{ tenantId:
                     </p>
                   </div>
 
-                  <Link
+                  {features.has("checkin") && <Link
                     href={tenantHref("/admin/check-in")}
                     className="inline-flex min-h-11 items-center rounded-lg px-2 text-sm font-semibold text-[#d7c895] hover:text-[#f2efe4] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d7c895] focus-visible:ring-offset-2 focus-visible:ring-offset-[#191e19]"
                   >
                     Check-in →
-                  </Link>
+                  </Link>}
                 </div>
 
                 {upcomingReservations.length === 0 ? (
@@ -839,12 +839,12 @@ export default function AdminPage({ tenantId, tenantSlug }: Readonly<{ tenantId:
                             </td>
 
                             <td className="py-4 pr-4">
-                              <Link
+                              {features.has("checkin") && <Link
                                 href={tenantHref("/admin/check-in")}
                                 className="inline-flex min-h-11 items-center rounded-lg border border-[#536143] bg-[#191e19] px-3 py-2 text-xs font-bold text-[#d7c895] transition hover:border-[#78865f] hover:text-[#f2efe4] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d7c895] focus-visible:ring-offset-2 focus-visible:ring-offset-[#141814]"
                               >
                                 Check-in
-                              </Link>
+                              </Link>}
                             </td>
                           </tr>
                         ))}

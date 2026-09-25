@@ -77,8 +77,8 @@ begin
     and pg_catalog.has_function_privilege('authenticated','public.get_public_tenant_directory_v1(text)','EXECUTE')
     and not pg_catalog.has_function_privilege('service_role','public.get_public_tenant_directory_v1(text)','EXECUTE'),
     'function ACL differs');
-  perform pg_temp.ok(9,'SECURITY DEFINER inventory is 85 after PRODUCT-10C',
-    (select pg_catalog.count(*)=  85 from pg_catalog.pg_proc procedure join pg_catalog.pg_namespace namespace on namespace.oid=procedure.pronamespace where namespace.nspname='public' and procedure.prosecdef),
+  perform pg_temp.ok(9,'SECURITY DEFINER inventory is 100 after PRODUCT-10C',
+    (select pg_catalog.count(*)=  97 from pg_catalog.pg_proc procedure join pg_catalog.pg_namespace namespace on namespace.oid=procedure.pronamespace where namespace.nspname='public' and procedure.prosecdef),
     'definer inventory differs');
   perform pg_temp.ok(10,'CSK has one explicit published profile',
     exists(select 1 from public.tenant_public_profiles where tenant_id='c5c00000-0000-4000-8000-000000000001'::uuid

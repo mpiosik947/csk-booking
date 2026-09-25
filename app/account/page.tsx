@@ -1,6 +1,7 @@
 ﻿"use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import {
   getPasswordLengthError,
   PASSWORD_MAX_LENGTH,
@@ -621,6 +622,7 @@ export default function AccountPage() {
             <h1 className="text-3xl font-bold text-[#f2efe4] sm:text-4xl">
               Moje konto
             </h1>
+            <Link href="/continuity" className="mt-3 inline-block underline text-[#d7c895]">Historia i obsługa istniejących zobowiązań</Link>
 
             {displayName && (
               <p className="mt-3 break-words text-lg font-semibold text-[#f2efe4]">

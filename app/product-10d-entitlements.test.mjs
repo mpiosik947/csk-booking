@@ -43,7 +43,7 @@ test("admin navigation is entitlement-backed without exposing commercial plan da
 });
 
 test("settings toggles cannot present unavailable public modules", async () => {
-  const source = await read("./admin/settings/page.tsx");
+  const source = await read("./admin/settings/TenantAdminSettings.tsx");
   assert.match(source, /feature_access/u);
   assert.match(source, /disabled=\{!entitled\}/u);
   assert.match(source, /Niedostępne w obecnym planie/u);
