@@ -1,5 +1,5 @@
 const GLOBAL_LOGIN_REDIRECTS: ReadonlySet<string> = new Set([
-  "/dashboard", "/booking", "/events", "/my-reservations", "/my-events",
+  "/dashboard", "/account", "/platform-admin", "/booking", "/events", "/my-reservations", "/my-events",
   "/admin", "/admin/users", "/admin/check-in", "/admin/events",
   "/admin/reservations", "/admin/reports", "/admin/calendar",
   "/admin/lane-blocks", "/admin/lane-configuration",

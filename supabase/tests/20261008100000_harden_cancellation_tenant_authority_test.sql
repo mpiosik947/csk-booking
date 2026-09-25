@@ -121,7 +121,7 @@ begin
    select 1 from unnest(array['anon','authenticated','service_role']) role_name
    cross join unnest(array['public.cancel_reservation__saas9d1_core(uuid)','public.cancel_event_registration__saas9d2a_core(uuid)']) signature
    where has_function_privilege(role_name,signature,'EXECUTE')) then 'PASS' else 'FAIL' end,'PASS');
- perform pg_temp.check_result('SECURITY DEFINER unchanged',case when (select count(*) from pg_proc where pronamespace='public'::regnamespace and prosecdef)=100 then 'PASS' else 'FAIL' end,'PASS');
+ perform pg_temp.check_result('SECURITY DEFINER unchanged',case when (select count(*) from pg_proc where pronamespace='public'::regnamespace and prosecdef)=104 then 'PASS' else 'FAIL' end,'PASS');
 end;$test$;
 select '1..'||(count(*)+1) from results;
 select 'ok '||n||' - '||label from results order by n;

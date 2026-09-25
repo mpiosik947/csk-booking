@@ -2,6 +2,7 @@ import Image from "next/image";
 import Link from "next/link";
 import type { ReactNode } from "react";
 import type { PublicTenantLanding as PublicTenantLandingData } from "@/lib/server/public-tenant-directory";
+import { PLATFORM_BASE_URL } from "@/lib/platform-domain";
 
 function initials(name: string) {
   return name.split(/\s+/).filter(Boolean).slice(0, 2)
@@ -16,9 +17,11 @@ function LandingLink({ href, className, children, preview }: { href: string; cla
 export function PublicTenantLanding({
   tenant,
   preview = false,
-}: Readonly<{ tenant: PublicTenantLandingData; preview?: boolean }>) {
-  const bookingHref = `/t/${tenant.tenantSlug}/booking`;
-  const eventsHref = `/t/${tenant.tenantSlug}/events`;
+  customDomain = false,
+}: Readonly<{ tenant: PublicTenantLandingData; preview?: boolean; customDomain?: boolean }>) {
+  const bookingHref = `${customDomain ? PLATFORM_BASE_URL : ""}/t/${tenant.tenantSlug}/booking`;
+  const eventsHref = `${customDomain ? PLATFORM_BASE_URL : ""}/t/${tenant.tenantSlug}/events`;
+  const publicBase = customDomain ? "" : `/${tenant.publicSlug}`;
 
   return (
     <main inert={preview} className="min-h-screen overflow-x-hidden bg-[#090b09] text-[#f2efe4]">
@@ -30,7 +33,7 @@ export function PublicTenantLanding({
           </div>
         )}
         <div className="relative mx-auto flex w-full max-w-6xl flex-col items-center text-center">
-          <LandingLink preview={preview} href="/" className="self-start text-sm font-semibold text-[#d7c895] underline-offset-4 hover:underline">
+          <LandingLink preview={preview} href={customDomain ? PLATFORM_BASE_URL : "/"} className="self-start text-sm font-semibold text-[#d7c895] underline-offset-4 hover:underline">
             ← StrzelajTu.pl
           </LandingLink>
           <div className="mt-8 flex h-28 w-28 items-center justify-center overflow-hidden rounded-2xl border border-[#7c6a39] bg-[#111511] text-2xl font-black text-[#e8d18f] shadow-2xl shadow-black/40 sm:h-32 sm:w-32">
@@ -74,7 +77,7 @@ export function PublicTenantLanding({
 
       <section className="mx-auto grid w-full max-w-6xl gap-4 px-4 pb-10 sm:grid-cols-2 sm:px-6">
         {tenant.showAbout && <div className="rounded-2xl border border-[#30372c] bg-[#141814] p-6">
-          <h2 className="text-xl font-bold"><LandingLink preview={preview} href={`/${tenant.publicSlug}/o-obiekcie`}>O obiekcie</LandingLink></h2>
+          <h2 className="text-xl font-bold"><LandingLink preview={preview} href={`${publicBase}/o-obiekcie`}>O obiekcie</LandingLink></h2>
           <p className="mt-3 leading-7 text-[#aeb4a8]">{tenant.description ?? `${tenant.name} — obiekt w miejscowości ${tenant.city}.`}</p>
         </div>}
         {(tenant.showContact || tenant.showPricing || (tenant.showRegulations && tenant.regulationsPath)) && <div className="rounded-2xl border border-[#30372c] bg-[#141814] p-6">
@@ -86,8 +89,8 @@ export function PublicTenantLanding({
             {tenant.publicEmail && <div><dt className="inline font-semibold text-[#d7ddcd]">E-mail: </dt><dd className="inline"><a href={`mailto:${tenant.publicEmail}`} className="hover:underline">{tenant.publicEmail}</a></dd></div>}
           </dl>}
           <div className="mt-5 flex flex-wrap gap-4 text-sm font-semibold text-[#d7c895]">
-            {tenant.showPricing && <LandingLink preview={preview} href={`/${tenant.publicSlug}/cennik`} className="underline-offset-4 hover:underline">Cennik</LandingLink>}
-            {tenant.showContact && <LandingLink preview={preview} href={`/${tenant.publicSlug}/kontakt`} className="underline-offset-4 hover:underline">Kontakt i lokalizacja</LandingLink>}
+            {tenant.showPricing && <LandingLink preview={preview} href={`${publicBase}/cennik`} className="underline-offset-4 hover:underline">Cennik</LandingLink>}
+            {tenant.showContact && <LandingLink preview={preview} href={`${publicBase}/kontakt`} className="underline-offset-4 hover:underline">Kontakt i lokalizacja</LandingLink>}
             {tenant.showRegulations && tenant.regulationsPath && (
               <LandingLink preview={preview} href={tenant.regulationsPath} className="underline-offset-4 hover:underline">Regulamin</LandingLink>
             )}

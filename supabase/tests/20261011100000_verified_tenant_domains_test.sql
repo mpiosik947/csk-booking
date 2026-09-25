@@ -1,0 +1,83 @@
+\set ON_ERROR_STOP on
+begin;
+create temporary table domain_results(n serial,name text,ok boolean) on commit drop;
+create function pg_temp.ok(text,boolean) returns void language sql as $$insert into domain_results(name,ok) values($1,coalesce($2,false));$$;
+create function pg_temp.run(uid uuid,q text) returns jsonb language plpgsql as $$declare r jsonb;begin
+ perform set_config('request.jwt.claims',jsonb_build_object('sub',uid,'role','authenticated')::text,true);
+ set local role authenticated; execute q into r; reset role; return r;
+exception when others then reset role; raise;end;$$;
+create function pg_temp.denied(uid uuid,q text,code text default '42501') returns boolean language plpgsql as $$begin
+ perform pg_temp.run(uid,q);return false;exception when others then return sqlstate=code;end;$$;
+create function pg_temp.fail_audit() returns trigger language plpgsql as $$begin raise exception 'test audit rejected';end;$$;
+do $$
+declare a uuid:=gen_random_uuid();b uuid:=gen_random_uuid();pa uuid:=gen_random_uuid();u uuid;d uuid;e uuid;
+ r jsonb;challenge jsonb;role_name text;hostname text;before_count bigint;
+begin
+ insert into auth.users(id,email) values(pa,'domain-pa@example.invalid');
+ insert into public.platform_admins(user_id,status) values(pa,'active');
+ insert into public.tenants(id,name,slug,status) values(a,'Domain A','domain-local-a','active'),(b,'Domain B','domain-local-b','active');
+ insert into public.tenant_public_profiles(tenant_id,display_name,city,is_public,public_slug) values(a,'Domain A','A',true,'domain-public-a'),(b,'Domain B','B',true,'domain-public-b');
+ for role_name in select unnest(array['admin','employee','instructor','user','global']) loop
+  u:=gen_random_uuid();insert into auth.users(id,email) values(u,'domain-'||u||'@example.invalid');
+  perform set_config('request.jwt.claims','{}',true);
+  if role_name='global' then update public.profiles set role='admin' where user_id=u;
+  else insert into public.tenant_memberships(tenant_id,user_id,role,status) values(a,u,role_name,'active');end if;
+  perform pg_temp.ok(role_name||' domain write denied',pg_temp.denied(u,format('select public.platform_manage_tenant_domain_v1(%L,''add'',null,''tenant-a.test'')',a)));
+ end loop;
+ perform pg_temp.ok('anonymous mutation denied',not has_function_privilege('anon','public.platform_manage_tenant_domain_v1(uuid,text,uuid,text)','EXECUTE'));
+ r:=pg_temp.run(pa,format('select public.platform_manage_tenant_domain_v1(%L,''add'',null,''Tenant-A.Test'')',a));d:=(r->>'id')::uuid;
+ perform pg_temp.ok('platform add normalized pending',r->>'hostname'='tenant-a.test' and r->>'status'='pending');
+ perform pg_temp.ok('pending not public',public.resolve_public_tenant_domain_v1('tenant-a.test') is null);
+ perform pg_temp.ok('pending activation denied',pg_temp.denied(pa,format('select public.platform_manage_tenant_domain_v1(%L,''activate'',%L)',a,d)));
+ perform pg_temp.ok('cross resource domain id denied',pg_temp.denied(pa,format('select public.platform_manage_tenant_domain_v1(%L,''disable'',%L)',b,d)));
+ perform pg_temp.ok('duplicate host denied',pg_temp.denied(pa,format('select public.platform_manage_tenant_domain_v1(%L,''add'',null,''tenant-a.test'')',b),'23505'));
+ for hostname in select unnest(array['strzelajtu.pl','www.strzelajtu.pl','api.strzelajtu.pl','csk-booking-5nwh.vercel.app','https://bad.test','bad.test/path','bad.test:443','xn--test.test','127.0.0.1','bad..test']) loop
+  perform pg_temp.ok('invalid/reserved host '||hostname,pg_temp.denied(pa,format('select public.platform_manage_tenant_domain_v1(%L,''add'',null,%L)',a,hostname),'23514'));
+ end loop;
+ challenge:=pg_temp.run(pa,format('select public.platform_manage_tenant_domain_v1(%L,''start_verification'',%L)',a,d));
+ perform pg_temp.ok('challenge generated',length(challenge->>'txt_value')=64 and challenge->>'txt_name'='_strzelajtu-verification.tenant-a.test');
+ perform pg_temp.ok('challenge never in audit',not exists(select 1 from public.platform_audit_logs where tenant_id=a and details::text like '%'||(challenge->>'txt_value')||'%'));
+ r:=pg_temp.run(pa,format('select public.platform_list_tenant_domains_v1(%L)',a));
+ perform pg_temp.ok('challenge not in list',r::text not like '%'||(challenge->>'txt_value')||'%');
+ perform pg_temp.ok('browser cannot verify',not has_function_privilege('authenticated','public.operator_verify_tenant_domain_v1(uuid,integer,text,text,boolean)','EXECUTE'));
+ perform pg_temp.ok('service cannot verify',not has_function_privilege('service_role','public.operator_verify_tenant_domain_v1(uuid,integer,text,text,boolean)','EXECUTE'));
+ perform set_config('request.jwt.claims','{}',true);
+ begin perform public.operator_verify_tenant_domain_v1(d,null,challenge->>'txt_value','csk-booking-5nwh',true);perform pg_temp.ok('null version rejected',false);
+ exception when insufficient_privilege then perform pg_temp.ok('null version rejected',true);end;
+ begin perform public.operator_verify_tenant_domain_v1(d,1,'wrong','csk-booking-5nwh',true);perform pg_temp.ok('wrong token rejected',false);
+ exception when insufficient_privilege then perform pg_temp.ok('wrong token rejected',true);end;
+ begin perform public.operator_verify_tenant_domain_v1(d,1,challenge->>'txt_value','csk-booking',true);perform pg_temp.ok('wrong provider rejected',false);
+ exception when insufficient_privilege then perform pg_temp.ok('wrong provider rejected',true);end;
+ perform public.operator_verify_tenant_domain_v1(d,1,challenge->>'txt_value','csk-booking-5nwh',true);
+ perform pg_temp.ok('verified not yet public',public.resolve_public_tenant_domain_v1('tenant-a.test') is null);
+ r:=pg_temp.run(pa,format('select public.platform_manage_tenant_domain_v1(%L,''activate'',%L)',a,d));
+ perform pg_temp.ok('verified activation',r->>'status'='active');
+ r:=public.resolve_public_tenant_domain_v1('tenant-a.test');
+ perform pg_temp.ok('public exact DTO',r=jsonb_build_object('tenant_slug','domain-local-a','public_slug','domain-public-a'));
+ set local role anon;select public.resolve_public_tenant_domain_v1('tenant-a.test') into r;reset role;
+ perform pg_temp.ok('anon public reader',r->>'tenant_slug'='domain-local-a');
+ perform pg_temp.ok('unknown host unavailable',public.resolve_public_tenant_domain_v1('unknown.test') is null);
+ perform pg_temp.run(pa,format('select public.platform_manage_tenant_domain_v1(%L,''set_primary'',%L)',a,d));
+ perform pg_temp.ok('primary canonical',public.get_public_tenant_primary_domain_v1('domain-public-a')='tenant-a.test');
+ update public.tenant_public_profiles set is_public=false where tenant_id=a;
+ perform pg_temp.ok('private tenant unavailable',public.resolve_public_tenant_domain_v1('tenant-a.test') is null);
+ update public.tenant_public_profiles set is_public=true where tenant_id=a;
+ update public.tenants set status='suspended' where id=a;
+ perform pg_temp.ok('suspended tenant unavailable',public.resolve_public_tenant_domain_v1('tenant-a.test') is null);
+ update public.tenants set status='active' where id=a;
+ select count(*) into before_count from public.tenant_domains;
+ create trigger domain_test_audit_failure before insert on public.platform_audit_logs for each row execute function pg_temp.fail_audit();
+ perform pg_temp.ok('audit failure rejects mutation',pg_temp.denied(pa,format('select public.platform_manage_tenant_domain_v1(%L,''add'',null,''audit-fail.test'')',a),'P0001'));
+ drop trigger domain_test_audit_failure on public.platform_audit_logs;
+ perform pg_temp.ok('atomic rollback',before_count=(select count(*) from public.tenant_domains));
+ perform pg_temp.run(pa,format('select public.platform_manage_tenant_domain_v1(%L,''disable'',%L)',a,d));
+ perform pg_temp.ok('disabled unavailable',public.resolve_public_tenant_domain_v1('tenant-a.test') is null);
+ perform pg_temp.ok('disabled primary cleared',public.get_public_tenant_primary_domain_v1('domain-public-a') is null);
+ perform pg_temp.ok('direct tables closed',not has_table_privilege('anon','public.tenant_domains','SELECT,INSERT,UPDATE,DELETE') and not has_table_privilege('authenticated','public.tenant_domains','SELECT,INSERT,UPDATE,DELETE') and not has_table_privilege('service_role','public.tenant_domains','SELECT,INSERT,UPDATE,DELETE'));
+ perform pg_temp.ok('security definer target',(select count(*)=104 from pg_proc where pronamespace='public'::regnamespace and prosecdef));
+end;$$;
+select '1..'||count(*) from domain_results;
+select (case when ok then 'ok ' else 'not ok ' end)||n||' - '||name from domain_results order by n;
+do $$begin if exists(select 1 from domain_results where not ok) then raise exception 'domain tests failed';end if;end;$$;
+rollback;
+select 'FIXTURE_CLEANUP='||count(*) from public.tenants where slug in('domain-local-a','domain-local-b');

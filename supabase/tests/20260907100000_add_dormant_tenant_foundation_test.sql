@@ -271,6 +271,7 @@ begin
       where namespace.nspname='public' and procedure.prosecdef
         and procedure.proname like '%tenant%'
         and procedure.proname not in ('admin_get_tenant_content_v1','admin_update_tenant_content_v1','get_public_tenant_content_v1')
+        and procedure.proname not in ('platform_manage_tenant_domain_v1','platform_list_tenant_domains_v1','resolve_public_tenant_domain_v1','get_public_tenant_primary_domain_v1')
         and procedure.proname not in ('platform_list_tenants_v1','platform_create_tenant_v1','platform_set_tenant_plan_v1','platform_set_tenant_state_v1','platform_preview_tenant_v1','is_tenant_member_v1','has_tenant_role_v1','get_my_tenant_role_v1','is_active_public_tenant_v1','get_my_tenant_verification_v2','self_onboard_tenant_v1','get_my_active_tenants_v1','resolve_active_tenant_by_slug_v1','get_public_tenant_directory_v1','get_public_tenant_directory_v2','get_public_tenant_landing_v1','get_public_tenant_landing_v2','admin_get_tenant_public_settings_v1','admin_update_tenant_public_settings_v1','get_my_tenant_verification_v2','update_tenant_profile_verification_v2','update_tenant_profile_identity_v2','update_tenant_profile_contact_details_v2','tenant_has_feature_v1','get_my_tenant_feature_access_v1','get_my_tenant_features_v1','get_public_tenant_feature_access_v1','enforce_tenant_feature_write_v1')
     ),
     'Only the explicit authenticated self-onboarding writer may extend the approved tenant authorization surface.');
@@ -312,7 +313,7 @@ begin
           'tenant_memberships', 'shooting_lanes', 'reservations', 'lane_blocks',
           'events', 'event_lanes', 'event_registrations', 'email_deliveries',
           'audit_logs', 'tenant_public_profiles', 'tenant_public_pricing_items', 'tenant_user_admin_notes', 'tenant_user_verifications',
-          'tenant_plan_assignments','platform_audit_logs','external_settlement_records'
+          'tenant_plan_assignments','platform_audit_logs','external_settlement_records','tenant_domains'
         )
     ),
     'Tenant ownership must not spread outside the approved phased scope.');

@@ -2,10 +2,18 @@ import Image from "next/image";
 import Link from "next/link";
 import { notFound, permanentRedirect } from "next/navigation";
 import { getPublicSubpageTenant, getPublicTenantContent, type PublicSection } from "@/lib/server/public-tenant-subpages";
+import { PLATFORM_BASE_URL } from "@/lib/platform-domain";
+import { tenantCanonical } from "@/lib/server/tenant-domain";
+import type { Metadata } from "next";
 
 const titles = { cennik: "Cennik", "o-obiekcie": "O obiekcie", kontakt: "Kontakt i lokalizacja" };
 
-export async function renderPublicTenantSubpage(slug: string, section: PublicSection) {
+export async function publicSubpageMetadata(slug: string, section: PublicSection): Promise<Metadata> {
+  const tenant = await getPublicSubpageTenant(slug, section);
+  return tenant ? { title: `${titles[section]} — ${tenant.name}`, alternates: { canonical: await tenantCanonical(tenant.publicSlug, section) } } : {};
+}
+
+export async function renderPublicTenantSubpage(slug: string, section: PublicSection, customDomain = false) {
   const tenant = await getPublicSubpageTenant(slug, section);
   if (!tenant) notFound();
   if (slug !== tenant.publicSlug) permanentRedirect(`/${tenant.publicSlug}/${section}`);
@@ -28,7 +36,7 @@ export async function renderPublicTenantSubpage(slug: string, section: PublicSec
               <p className="mt-3 break-words font-semibold text-[#d7c895]">{new Intl.NumberFormat("pl-PL", { style: "currency", currency: item.currency }).format(item.price)} / {item.unit}</p>
             </section>)}
           <p className="text-sm text-[#a9ada4]">Cennik informacyjny oferty. Ostateczna cena rezerwacji jest potwierdzana w systemie booking.</p>
-          {tenant.showBooking && <Link href={`/t/${tenant.tenantSlug}/booking`} className="inline-flex min-h-11 items-center rounded-xl border border-[#536143] bg-[#26301f] px-5 py-3 font-semibold">Zarezerwuj termin</Link>}
+          {tenant.showBooking && <Link href={`${customDomain ? PLATFORM_BASE_URL : ""}/t/${tenant.tenantSlug}/booking`} className="inline-flex min-h-11 items-center rounded-xl border border-[#536143] bg-[#26301f] px-5 py-3 font-semibold">Zarezerwuj termin</Link>}
         </>}
         {section === "o-obiekcie" && <>
           {tenant.heroImagePath && <Image src={tenant.heroImagePath} alt="" width={1200} height={600} className="h-auto w-full rounded-xl" />}
@@ -52,7 +60,7 @@ export async function renderPublicTenantSubpage(slug: string, section: PublicSec
         </div><section className="min-w-0 rounded-xl border border-[#343a31] p-4"><h2 className="font-semibold">Lokalizacja</h2>{content?.public_map_url ? <a href={content.public_map_url} target="_blank" rel="noreferrer" className="mt-3 inline-flex min-h-11 items-center text-[#d7c895] underline">Otwórz mapę</a> : <p className="mt-3 text-sm text-[#a9ada4]">Link do mapy nie został jeszcze uzupełniony.</p>}</section></div>}
       </div>
       <nav className="mt-8 border-t border-[#30372c] pt-4">
-        <Link href={`/${tenant.publicSlug}`} className="inline-flex min-h-11 items-center text-[#d7c895]">← Wróć do strony obiektu</Link>
+        <Link href={customDomain ? "/" : `/${tenant.publicSlug}`} className="inline-flex min-h-11 items-center text-[#d7c895]">← Wróć do strony obiektu</Link>
       </nav>
     </article>
   </main>;

@@ -88,14 +88,8 @@ export function getApplicationSecurityHeaders() {
 }
 
 const nextConfig: NextConfig = {
-  async redirects() {
-    return [
-      { source: "/booking", destination: "/t/csk/booking", permanent: false },
-      { source: "/events", destination: "/t/csk/events", permanent: false },
-      { source: "/my-reservations", destination: "/t/csk/my-reservations", permanent: false },
-      { source: "/my-events", destination: "/t/csk/my-events", permanent: false },
-    ];
-  },
+  // Preserve the actual server origin for internal rewrites (including local IP hosts).
+  skipProxyUrlNormalize: true,
   async headers() {
     const securityHeaders = getApplicationSecurityHeaders();
 

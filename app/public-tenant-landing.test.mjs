@@ -43,8 +43,9 @@ test("universal landing contains no CSK identity or contact hardcoding", () => {
 });
 
 test("booking and event CTA preserve the resolved technical tenant context", () => {
-  assert.match(landing, /`\/t\/\$\{tenant\.tenantSlug\}\/booking`/u);
-  assert.match(landing, /`\/t\/\$\{tenant\.tenantSlug\}\/events`/u);
+  assert.match(landing, /\/t\/\$\{tenant\.tenantSlug\}\/booking`/u);
+  assert.match(landing, /\/t\/\$\{tenant\.tenantSlug\}\/events`/u);
+  assert.match(landing, /customDomain \? PLATFORM_BASE_URL : ""/u);
   assert.doesNotMatch(landing, /\/t\/csk/u);
 });
 

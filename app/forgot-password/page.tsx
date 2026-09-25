@@ -1,8 +1,10 @@
 ﻿"use client";
 
 import Image from "next/image";
+import Link from "next/link";
 import { useState } from "react";
 import { supabase } from "../../lib/supabase";
+import { PLATFORM_BASE_URL } from "@/lib/platform-domain";
 
 export default function ForgotPasswordPage() {
   const [email, setEmail] = useState("");
@@ -22,7 +24,7 @@ export default function ForgotPasswordPage() {
 
     setLoading(true);
 
-    const redirectTo = `${window.location.origin}/reset-password`;
+    const redirectTo = `${PLATFORM_BASE_URL}/reset-password`;
 
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
       redirectTo,
@@ -107,19 +109,19 @@ export default function ForgotPasswordPage() {
               {loading ? "Wysyłanie..." : "Wyślij link resetujący"}
             </button>
 
-            <a
+            <Link
               href="/login"
               className="rounded text-center text-sm text-[#a9ada4] transition hover:text-[#d7c895] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#c5a861] focus-visible:ring-offset-2 focus-visible:ring-offset-[#141814] sm:text-base"
             >
               ← Wróć do logowania
-            </a>
+            </Link>
 
-            <a
+            <Link
               href="/"
               className="rounded text-center text-sm text-[#858c7f] transition hover:text-[#d7c895] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#c5a861] focus-visible:ring-offset-2 focus-visible:ring-offset-[#141814] sm:text-base"
             >
               ← Strona główna
-            </a>
+            </Link>
           </div>
         </div>
       </section>

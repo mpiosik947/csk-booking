@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { supabase } from "@/lib/supabase";
 import AdminShell from "../admin/_components/AdminShell";
+import TenantDomains from "./TenantDomains";
 
 type Tenant = { id: string; name: string; tenant_slug: string; public_slug: string; city: string;
   status: string; is_public: boolean; plan_key: string | null; created_at: string; readiness: Record<string, boolean> };
@@ -76,6 +77,7 @@ export default function PlatformTenants() {
           <button disabled={busy} className={control} onClick={() => { setSelected(selected === tenant.id ? null : tenant.id); setAccount(null); }}>Konfiguruj</button>
         </div>
         {selected === tenant.id && <div className="mt-4 space-y-4">
+          <TenantDomains tenantId={tenant.id} />
           <form onSubmit={event => { event.preventDefault(); const plan = new FormData(event.currentTarget).get("plan"); void mutate("platform_set_tenant_plan_v1", { p_tenant_id: tenant.id, p_plan_key: plan }); }} className="flex flex-wrap gap-2">
             <label className="grid gap-1">Jawny wybór planu<select required name="plan" defaultValue="" className={control}>
               <option value="" disabled>Wybierz</option><option>booking_only_v1</option><option>current_full_v1</option></select></label>

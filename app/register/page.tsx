@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import Link from "next/link";
 import { useState } from "react";
 import {
   getPasswordLengthError,
@@ -9,6 +10,7 @@ import {
 } from "../../lib/password-policy";
 import { getRegistrationErrorMessage } from "../../lib/safe-client-error";
 import { supabase } from "../../lib/supabase";
+import { PLATFORM_BASE_URL } from "@/lib/platform-domain";
 
 type ConfirmationData = {
   fullName: string;
@@ -65,7 +67,7 @@ export default function RegisterPage() {
       email,
       password,
       options: {
-        emailRedirectTo: `${window.location.origin}/auth/callback`,
+        emailRedirectTo: `${PLATFORM_BASE_URL}/auth/callback`,
         data: {
           first_name: trimmedFirstName,
           last_name: trimmedLastName,
@@ -159,12 +161,12 @@ export default function RegisterPage() {
             </div>
 
             <div className="mt-6 grid gap-3 sm:grid-cols-2">
-              <a
+              <Link
                 href="/login"
                 className="min-h-12 rounded-xl border border-[#536143] bg-[#536143] px-5 py-3.5 text-center font-semibold text-[#f2efe4] transition hover:border-[#78865f] hover:bg-[#78865f] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#c5a861] focus-visible:ring-offset-2 focus-visible:ring-offset-[#141814]"
               >
                 Przejdź do logowania
-              </a>
+              </Link>
 
               <button
                 type="button"
@@ -360,19 +362,19 @@ export default function RegisterPage() {
                 {loading ? "Tworzenie konta..." : "Utwórz konto"}
               </button>
 
-              <a
+              <Link
                 href="/login"
                 className="rounded text-center text-sm text-[#a9ada4] transition hover:text-[#d7c895] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#c5a861] focus-visible:ring-offset-2 focus-visible:ring-offset-[#141814] sm:text-base"
               >
                 Masz już konto? Zaloguj się
-              </a>
+              </Link>
 
-              <a
+              <Link
                 href="/"
                 className="rounded text-center text-sm text-[#858c7f] transition hover:text-[#d7c895] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#c5a861] focus-visible:ring-offset-2 focus-visible:ring-offset-[#141814] sm:text-base"
               >
                 ← Strona główna
-              </a>
+              </Link>
             </div>
           </div>
         </section>

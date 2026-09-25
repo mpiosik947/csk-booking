@@ -110,7 +110,7 @@ begin
         ~* '(get_my_role|is_admin|is_admin_or_employee|is_admin_or_staff)'));
 
   perform pg_temp.ok(12, 'SECURITY DEFINER inventory is 100 after PRODUCT-10C public landing',
-    (select pg_catalog.count(*) =   100
+    (select pg_catalog.count(*) =   104
      from pg_catalog.pg_proc procedure
      join pg_catalog.pg_namespace namespace on namespace.oid = procedure.pronamespace
      where namespace.nspname = 'public' and procedure.prokind = 'f' and procedure.prosecdef));
