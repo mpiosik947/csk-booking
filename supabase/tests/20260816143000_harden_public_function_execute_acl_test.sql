@@ -27,6 +27,9 @@ create temporary table expected_function_acl(
 ) on commit drop;
 
 insert into expected_function_acl values
+  ('public.create_recovery_grant_v1(uuid,text)','D',false,false,true),
+  ('public.check_recovery_grant_v1(text)','C',false,true,false),
+  ('public.consume_recovery_grant_v1(text)','C',false,true,false),
   ('public.operator_bootstrap_platform_admin_v1(uuid)','C',false,false,false),
   ('public.admin_get_tenant_content_v1(text)','C',false,true,false),
   ('public.admin_update_tenant_content_v1(text,jsonb,jsonb,timestamp with time zone)','C',false,true,false),
@@ -301,8 +304,8 @@ begin
     and procedure.proname<>'csk_sec002_default_acl_probe';
 
   perform pg_temp.record_result(1,'Complete public function inventory',
-    (select pg_catalog.count(*)=166 from pg_temp.expected_function_acl)
-    and v_actual_count=166
+    (select pg_catalog.count(*)=169 from pg_temp.expected_function_acl)
+    and v_actual_count=169
     and not exists(
       select 1 from pg_temp.expected_function_acl expected
       where pg_catalog.to_regprocedure(expected.signature) is null
@@ -348,7 +351,7 @@ begin
       where pg_catalog.has_function_privilege('authenticated',expected.signature,'EXECUTE')
         is distinct from expected.authenticated_execute
     )
-    and (select pg_catalog.count(*)=89 from pg_temp.expected_function_acl where authenticated_execute),
+    and (select pg_catalog.count(*)=91 from pg_temp.expected_function_acl where authenticated_execute),
     'authenticated has exactly 85 independently authorized RPC grants after tenant content.');
 
   perform pg_temp.record_result(5,'Exact service_role ACL matrix',
@@ -357,7 +360,7 @@ begin
       where pg_catalog.has_function_privilege('service_role',expected.signature,'EXECUTE')
         is distinct from expected.service_role_execute
     )
-    and (select pg_catalog.count(*)=5 from pg_temp.expected_function_acl where service_role_execute),
+    and (select pg_catalog.count(*)=6 from pg_temp.expected_function_acl where service_role_execute),
     'service_role retains only five explicitly intended server, entitlement and rollback grants.');
 
   perform pg_temp.record_result(6,'Trigger functions and internal helpers are isolated',
@@ -406,7 +409,7 @@ begin
     'Future functions created by postgres receive no client or PUBLIC EXECUTE.');
 
   perform pg_temp.record_result(8,'Application function creator scope is exact',
-    (select pg_catalog.count(*)=166
+    (select pg_catalog.count(*)=169
       from pg_catalog.pg_proc procedure
       join pg_catalog.pg_namespace namespace on namespace.oid=procedure.pronamespace
       join pg_catalog.pg_roles owner_role on owner_role.oid=procedure.proowner

@@ -79,7 +79,7 @@ begin
       cross join lateral pg_catalog.jsonb_object_keys(pg_catalog.to_jsonb(result)) key
       where key not in('tenant_id','tenant_slug','tenant_name','tenant_status')));
   perform pg_temp.ok(13,'SECURITY DEFINER inventory is exactly 100 after PRODUCT-10C public landing',
-    (select pg_catalog.count(*)=  104 from pg_catalog.pg_proc p join pg_catalog.pg_namespace n on n.oid=p.pronamespace
+    (select pg_catalog.count(*)=  107 from pg_catalog.pg_proc p join pg_catalog.pg_namespace n on n.oid=p.pronamespace
      where n.nspname='public' and p.prosecdef));
   perform pg_temp.ok(14,'seven CSK compatibility defaults remain',
     (select pg_catalog.count(*)=0 from information_schema.columns where table_schema='public'

@@ -74,7 +74,7 @@ begin
  perform pg_temp.ok('disabled unavailable',public.resolve_public_tenant_domain_v1('tenant-a.test') is null);
  perform pg_temp.ok('disabled primary cleared',public.get_public_tenant_primary_domain_v1('domain-public-a') is null);
  perform pg_temp.ok('direct tables closed',not has_table_privilege('anon','public.tenant_domains','SELECT,INSERT,UPDATE,DELETE') and not has_table_privilege('authenticated','public.tenant_domains','SELECT,INSERT,UPDATE,DELETE') and not has_table_privilege('service_role','public.tenant_domains','SELECT,INSERT,UPDATE,DELETE'));
- perform pg_temp.ok('security definer target',(select count(*)=104 from pg_proc where pronamespace='public'::regnamespace and prosecdef));
+ perform pg_temp.ok('security definer target',(select count(*)=107 from pg_proc where pronamespace='public'::regnamespace and prosecdef));
 end;$$;
 select '1..'||count(*) from domain_results;
 select (case when ok then 'ok ' else 'not ok ' end)||n||' - '||name from domain_results order by n;

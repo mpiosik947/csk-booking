@@ -8,8 +8,6 @@ import {
   PASSWORD_MAX_LENGTH,
   PASSWORD_MIN_LENGTH,
 } from "../../lib/password-policy";
-import { getPasswordUpdateErrorMessage } from "../../lib/safe-client-error";
-import { supabase } from "../../lib/supabase";
 
 export default function ResetPasswordPage() {
   const [password, setPassword] = useState("");
@@ -29,32 +27,19 @@ export default function ResetPasswordPage() {
       setMessageType("");
 
       const params = new URLSearchParams(window.location.search);
-      const code = params.get("code");
-
-      if (code) {
-        const { error } = await supabase.auth.exchangeCodeForSession(code);
-
-        if (error) {
-          setHasSession(false);
-          setMessage(
-            "Link resetujący jest nieprawidłowy albo wygasł. Wygeneruj nowy link."
-          );
-          setMessageType("error");
-          setCheckingSession(false);
-          return;
-        }
-
-        window.history.replaceState({}, document.title, "/reset-password");
+      const invalidLink = params.has("code") || params.has("recoveryError") || Boolean(window.location.hash);
+      window.history.replaceState({}, document.title, "/reset-password");
+      let verified = false;
+      if (!invalidLink) {
+        try {
+          const response = await fetch("/auth/recovery", { cache: "no-store" });
+          verified = response.ok && (await response.json()).ok === true;
+        } catch { /* Recovery stays closed on network failure. */ }
       }
-
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-
-      setHasSession(Boolean(session));
+      setHasSession(verified);
       setCheckingSession(false);
 
-      if (!session) {
+      if (!verified) {
         setMessage(
           "Brak aktywnej sesji resetowania hasła. Wejdź tutaj z linku otrzymanego w wiadomości e-mail."
         );
@@ -68,6 +53,8 @@ export default function ResetPasswordPage() {
   async function handleUpdatePassword() {
     setMessage("");
     setMessageType("");
+
+    if (!hasSession || loading) return;
 
     if (!password || !passwordRepeat) {
       setMessage("Podaj nowe hasło i powtórz je.");
@@ -90,14 +77,30 @@ export default function ResetPasswordPage() {
 
     setLoading(true);
 
-    const { error } = await supabase.auth.updateUser({
-      password,
-    });
+    let updated = false;
+    let cleanupFailed = false;
+    try {
+      const response = await fetch("/auth/recovery", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password }),
+      });
+      const result = await response.json();
+      cleanupFailed = result.status === "password_changed_session_cleanup_failed";
+      updated = response.ok && result.ok === true;
+    } catch { /* No success state on network failure. */ }
 
     setLoading(false);
 
-    if (error) {
-      setMessage(getPasswordUpdateErrorMessage(error, "reset"));
+    if (cleanupFailed) {
+      setHasSession(false);
+      setMessage("Hasło zostało zmienione, ale nie udało się automatycznie zakończyć bieżącej sesji.");
+      setMessageType("error");
+      return;
+    }
+
+    if (!updated) {
+      setHasSession(false);
+      setMessage("Nie udało się potwierdzić zmiany hasła. Wygeneruj nowy link resetujący.");
       setMessageType("error");
       return;
     }
@@ -105,7 +108,7 @@ export default function ResetPasswordPage() {
     setMessage("Hasło zostało zmienione. Możesz się teraz zalogować.");
     setMessageType("success");
 
-    await supabase.auth.signOut();
+    setHasSession(false);
 
     setTimeout(() => {
       window.location.href = "/login";

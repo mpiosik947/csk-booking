@@ -1,5 +1,6 @@
 ﻿"use client";
 import PlatformBrand from "@/app/_components/PlatformBrand";
+import GlobalAccountHeader from "@/app/_components/GlobalAccountHeader";
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
@@ -44,6 +45,7 @@ function hasValue(value: string | null | undefined) {
 export default function DashboardPage() {
   const [email, setEmail] = useState("");
   const [fullName, setFullName] = useState("");
+  const [greetingFirstName, setGreetingFirstName] = useState<string | null>(null);
   const [profileComplete, setProfileComplete] = useState(false);
 
   const [loading, setLoading] = useState(true);
@@ -90,6 +92,7 @@ export default function DashboardPage() {
 
       if (profile) {
         const profileData = profile as ProfileData;
+        setGreetingFirstName(profileData.first_name);
 
         const displayedName = getProfileDisplayName({
           first_name: profileData.first_name,
@@ -184,6 +187,7 @@ export default function DashboardPage() {
   return (
     <main className="platform-ui min-h-screen bg-[#080B09] px-4 py-6 text-[#F4F3EE] sm:px-6 sm:py-8">
       <section className="mx-auto max-w-6xl rounded-[2rem] border border-[#303A2D] bg-[#111712] p-5 shadow-2xl shadow-black/20 sm:p-8">
+        <GlobalAccountHeader firstName={greetingFirstName} />
         <header className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
           <div>
             <div className="mb-4"><PlatformBrand compact /></div>
@@ -197,9 +201,9 @@ export default function DashboardPage() {
             </p>
           </div>
 
-          <div className="w-full rounded-2xl border border-[#303A2D] bg-[#182019] px-5 py-4 text-sm text-[#A6ADA5] lg:max-w-sm lg:text-right">
+          <div className="w-full min-w-0 rounded-2xl border border-[#303A2D] bg-[#182019] px-5 py-4 text-sm text-[#A6ADA5] lg:max-w-xs lg:border-0 lg:bg-transparent lg:px-0 lg:py-1 lg:text-xs lg:text-right">
             Zalogowany jako:{" "}
-            <span className="break-all font-semibold text-[#F4F3EE]">
+            <span data-testid="account-email" className="[overflow-wrap:anywhere] lg:font-normal">
               {email}
             </span>
           </div>

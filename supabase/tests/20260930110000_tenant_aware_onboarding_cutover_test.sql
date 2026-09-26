@@ -162,7 +162,7 @@ begin
       and table_name in('shooting_lanes','reservations','lane_blocks','events','event_lanes','event_registrations','email_deliveries')
       and column_default='''c5c00000-0000-4000-8000-000000000001''::uuid'));
   perform pg_temp.ok(23,'SECURITY DEFINER target is 100 after PRODUCT-10C public landing',
-    (select pg_catalog.count(*)=  104 from pg_catalog.pg_proc p join pg_catalog.pg_namespace n on n.oid=p.pronamespace
+    (select pg_catalog.count(*)=  107 from pg_catalog.pg_proc p join pg_catalog.pg_namespace n on n.oid=p.pronamespace
       where n.nspname='public' and p.prosecdef));
   perform pg_temp.ok(24,'only CSK is active after two-tenant test',
     (select pg_catalog.count(*)=1 from public.tenants where status='active')

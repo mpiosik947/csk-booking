@@ -98,7 +98,7 @@ begin
     and not pg_catalog.has_function_privilege('service_role','public.get_public_tenant_landing_v1(text)','EXECUTE'),
     'reader ACL differs');
   perform pg_temp.ok(9,'SECURITY DEFINER inventory is 100',
-    (select pg_catalog.count(*)=  104 from pg_catalog.pg_proc p join pg_catalog.pg_namespace n on n.oid=p.pronamespace
+    (select pg_catalog.count(*)=  107 from pg_catalog.pg_proc p join pg_catalog.pg_namespace n on n.oid=p.pronamespace
       where n.nspname='public' and p.prosecdef),'definer inventory differs');
   perform pg_temp.ok(10,'CSK technical slug remains csk',
     exists(select 1 from public.tenants where id='c5c00000-0000-4000-8000-000000000001'::uuid and slug='csk'),

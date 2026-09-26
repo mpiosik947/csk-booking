@@ -1,5 +1,6 @@
 ﻿"use client";
 import PlatformBrand from "@/app/_components/PlatformBrand";
+import GlobalAccountHeader from "@/app/_components/GlobalAccountHeader";
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
@@ -156,6 +157,7 @@ export default function AccountPage() {
 
   const [email, setEmail] = useState("");
   const [firstName, setFirstName] = useState("");
+  const [greetingFirstName, setGreetingFirstName] = useState<string | null>(null);
   const [lastName, setLastName] = useState("");
   const [fullName, setFullName] = useState("");
   const [phone, setPhone] = useState("");
@@ -269,6 +271,7 @@ export default function AccountPage() {
 
     if (profile) {
       const profileData = profile as ProfileData;
+      setGreetingFirstName(profileData.first_name);
 
       setFirstName(profileData.first_name ?? metadata.first_name ?? "");
       setLastName(profileData.last_name ?? metadata.last_name ?? "");
@@ -614,6 +617,7 @@ export default function AccountPage() {
   return (
     <main className="platform-ui min-h-screen bg-[#080B09] px-4 py-6 text-[#F4F3EE] sm:px-6 sm:py-8">
       <section className="mx-auto w-full max-w-6xl rounded-[2rem] border border-[#303A2D] bg-[#111712] p-5 shadow-2xl shadow-black/30 sm:p-8">
+        {!loading && isLoggedIn && <GlobalAccountHeader firstName={greetingFirstName} />}
         <header className="mb-8 flex flex-col gap-5 border-b border-[#303A2D] pb-6 sm:flex-row sm:items-start sm:justify-between">
           <div className="min-w-0">
             <div className="mb-4"><PlatformBrand compact /></div>

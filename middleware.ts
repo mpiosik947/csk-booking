@@ -79,6 +79,15 @@ export async function middleware(
     return destination ? NextResponse.redirect(destination, 307) : unavailable();
   }
   // Existing platform-only compatibility aliases; never used to resolve a custom host.
+  if (requestedPath === "/reset-password" && request.nextUrl.searchParams.has("code")) {
+    // Intercept before any browser SDK mounts; only this server handler exchanges PKCE.
+    const legacy = new URL(request.url);
+    legacy.pathname = "/auth/recovery/legacy";
+    const rewritten = NextResponse.rewrite(legacy);
+    rewritten.headers.set("Cache-Control", "private, no-store");
+    rewritten.headers.set("Referrer-Policy", "no-referrer");
+    return rewritten;
+  }
   if (["/booking", "/events", "/my-reservations", "/my-events"].includes(requestedPath)) {
     return NextResponse.redirect(new URL(`/t/csk${requestedPath}`, safeOrigin));
   }

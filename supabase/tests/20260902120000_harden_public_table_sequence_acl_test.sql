@@ -26,6 +26,7 @@ create temporary table expected_table_acl(
 ) on commit drop;
 
 insert into expected_table_acl values
+  ('recovery_grants','D','{}','{}','{}'),
   ('platform_admins','D','{}','{}','{}'),
   ('platform_audit_logs','D','{}','{}','{}'),
   ('external_settlement_records','D','{}','{}','{}'),
@@ -109,8 +110,8 @@ declare
   v_denied boolean;
 begin
   perform pg_temp.record_result(1,'Complete public table inventory',
-    (select count(*)=28 from pg_temp.expected_table_acl)
-    and (select count(*)=28 from pg_catalog.pg_class relation join pg_catalog.pg_namespace namespace on namespace.oid=relation.relnamespace where namespace.nspname='public' and relation.relkind in ('r','p')),
+    (select count(*)=29 from pg_temp.expected_table_acl)
+    and (select count(*)=29 from pg_catalog.pg_class relation join pg_catalog.pg_namespace namespace on namespace.oid=relation.relnamespace where namespace.nspname='public' and relation.relkind in ('r','p')),
     'Oczekiwano dokładnie 26 zinwentaryzowanych tabel public.');
 
   perform pg_temp.record_result(2,'RLS enabled on every public table',
