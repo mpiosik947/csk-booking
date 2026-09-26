@@ -27,7 +27,10 @@ test('same password shows precise UX, leaves DB grant consumed and denies captur
     await page.getByLabel('Nowe hasło', { exact: true }).fill(password);
     await page.getByLabel('Powtórz nowe hasło').fill(password);
     await page.getByRole('button', { name: 'Zmień hasło' }).click();
-    await expect(page.locator('main').getByRole('alert')).toHaveText('Nowe hasło musi różnić się od obecnego. Wygeneruj nowy link resetujący i ustaw inne hasło.');
+    await expect(page.locator('main').getByRole('alert')).toHaveText('Nowe hasło musi różnić się od obecnego. Ten link resetujący został już wykorzystany.');
+    const freshLink = page.getByRole('link', { name: 'Wygeneruj nowy link', exact: true });
+    await expect(freshLink).toBeVisible();
+    await expect(freshLink).toHaveAttribute('href', '/forgot-password');
     await expect(page.getByRole('button', { name: 'Zmień hasło' })).toBeDisabled();
     expect((await context.cookies()).some(cookie => cookie.name === 'st-recovery-context')).toBe(false);
     if (!/^[0-9a-f-]{36}$/.test(id)) throw new Error('Invalid local fixture UUID');

@@ -103,7 +103,7 @@ export default function ResetPasswordPage() {
     if (!updated) {
       setHasSession(false);
       setMessage(samePassword
-        ? "Nowe hasło musi różnić się od obecnego. Wygeneruj nowy link resetujący i ustaw inne hasło."
+        ? "Nowe hasło musi różnić się od obecnego. Ten link resetujący został już wykorzystany."
         : "Nie udało się potwierdzić zmiany hasła. Wygeneruj nowy link resetujący.");
       setMessageType("error");
       return;
@@ -211,9 +211,9 @@ export default function ResetPasswordPage() {
 
               <Link prefetch={false}
                 href="/forgot-password"
-                className="rounded text-center text-sm text-[#A6ADA5] transition hover:text-[#F5A900] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F5A900] focus-visible:ring-offset-2 focus-visible:ring-offset-[#111712] sm:text-base"
+                className="flex min-h-12 items-center justify-center rounded-xl border border-[#697A2F] bg-[#182019] px-4 py-3 text-center text-base font-semibold text-[#F4F3EE] transition hover:bg-[#303A2D] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F5A900] focus-visible:ring-offset-2 focus-visible:ring-offset-[#111712]"
               >
-                Wygeneruj nowy link resetujący
+                Wygeneruj nowy link
               </Link>
 
               <Link prefetch={false}
