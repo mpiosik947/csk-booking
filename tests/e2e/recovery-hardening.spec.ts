@@ -1,10 +1,53 @@
 import { randomUUID } from "node:crypto";
+import { execFileSync } from "node:child_process";
 import { createClient } from "@supabase/supabase-js";
 import { createServerClient } from "@supabase/ssr";
 import { test, expect } from "@playwright/test";
 import { getLocalSupabaseTestEnvironment } from "./local-supabase";
 const env = getLocalSupabaseTestEnvironment();
 const admin = createClient(env.supabaseUrl, env.serviceRoleKey, { auth: { persistSession: false, autoRefreshToken: false } });
+
+test('same password shows precise UX, leaves DB grant consumed and denies captured-cookie retry', async ({ browser, baseURL }) => {
+  const marker = randomUUID();
+  const email = `same-password-${marker}@example.invalid`;
+  const password = `Initial-${marker}!Aa1`;
+  const created = await admin.auth.admin.createUser({ email, password, email_confirm: true });
+  if (created.error || !created.data.user) throw new Error('Local fixture creation failed');
+  const id = created.data.user.id;
+  const context = await browser.newContext();
+  try {
+    const link = await admin.auth.admin.generateLink({ type: 'recovery', email });
+    if (link.error) throw new Error('Local recovery link generation failed');
+    const verified = await context.request.get(`${baseURL}/auth/confirm?token_hash=${encodeURIComponent(link.data.properties.hashed_token)}&type=recovery`, { maxRedirects: 0 });
+    expect(verified.headers().location).toBe(`${baseURL}/reset-password`);
+    const capturedCookies = await context.cookies();
+    const page = await context.newPage();
+    await page.goto(`${baseURL}/reset-password`);
+    await expect(page.getByLabel('Nowe hasło', { exact: true })).toBeEnabled();
+    await page.getByLabel('Nowe hasło', { exact: true }).fill(password);
+    await page.getByLabel('Powtórz nowe hasło').fill(password);
+    await page.getByRole('button', { name: 'Zmień hasło' }).click();
+    await expect(page.locator('main').getByRole('alert')).toHaveText('Nowe hasło musi różnić się od obecnego. Wygeneruj nowy link resetujący i ustaw inne hasło.');
+    await expect(page.getByRole('button', { name: 'Zmień hasło' })).toBeDisabled();
+    expect((await context.cookies()).some(cookie => cookie.name === 'st-recovery-context')).toBe(false);
+    if (!/^[0-9a-f-]{36}$/.test(id)) throw new Error('Invalid local fixture UUID');
+    const consumed = () => execFileSync('docker', ['exec', 'supabase_db_csk-booking', 'psql', '-U', 'postgres', '-d', 'postgres', '-Atc',
+      `SELECT count(*) FROM public.recovery_grants WHERE user_id='${id}'::uuid AND consumed_at IS NOT NULL`], { encoding: 'utf8' }).trim();
+    expect(consumed()).toBe('1');
+    await context.addCookies(capturedCookies);
+    expect((await context.request.post(`${baseURL}/auth/recovery`, {
+      headers: { origin: baseURL! }, data: { password: `Different-${marker}!Aa2` },
+    })).status()).toBe(403);
+    expect(consumed()).toBe('1');
+    const loginClient = createClient(env.supabaseUrl, env.anonKey, { auth: { persistSession: false, autoRefreshToken: false } });
+    expect((await loginClient.auth.signInWithPassword({ email, password })).error === null).toBe(true);
+    await loginClient.auth.signOut();
+  } finally {
+    await context.close();
+    expect((await admin.auth.admin.deleteUser(id)).error === null).toBe(true);
+    expect((await admin.auth.admin.getUserById(id)).data.user).toBeNull();
+  }
+});
 
 for (const width of [1440, 375]) {
   test(`fresh independent browser recovery, update, logout and reuse denial (${width})`, async ({ browser, baseURL }) => {

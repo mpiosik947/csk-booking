@@ -8,8 +8,8 @@ async function handle(request: NextRequest, update: boolean) {
   const deny = () => protectResponse(NextResponse.json({ ok: false }, { status: 403 }));
   if (!origin || (update && request.headers.get("origin") !== origin)) return deny();
   let claimAttempted = false;
-  const freshLink = () => {
-    const failed = protectResponse(NextResponse.json({ ok: false, status: "fresh_recovery_link_required" }, { status: 400 }));
+  const freshLink = (code?: "same_password") => {
+    const failed = protectResponse(NextResponse.json({ ok: false, status: "fresh_recovery_link_required", ...(code ? { code } : {}) }, { status: 400 }));
     clearRecovery(failed, origin);
     return failed;
   };
@@ -42,7 +42,7 @@ async function handle(request: NextRequest, update: boolean) {
     }
     clearRecovery(response, origin);
     const result = await client.auth.updateUser({ password });
-    if (result.error) return freshLink();
+    if (result.error) return freshLink(result.error.code === "same_password" ? "same_password" : undefined);
     let cleanupFailed = false;
     try {
       const cleanup = await client.auth.signOut({ scope: "local" });

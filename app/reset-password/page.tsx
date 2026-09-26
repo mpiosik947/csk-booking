@@ -79,6 +79,7 @@ export default function ResetPasswordPage() {
 
     let updated = false;
     let cleanupFailed = false;
+    let samePassword = false;
     try {
       const response = await fetch("/auth/recovery", {
         method: "POST", headers: { "Content-Type": "application/json" },
@@ -86,6 +87,7 @@ export default function ResetPasswordPage() {
       });
       const result = await response.json();
       cleanupFailed = result.status === "password_changed_session_cleanup_failed";
+      samePassword = !response.ok && result.status === "fresh_recovery_link_required" && result.code === "same_password";
       updated = response.ok && result.ok === true;
     } catch { /* No success state on network failure. */ }
 
@@ -100,7 +102,9 @@ export default function ResetPasswordPage() {
 
     if (!updated) {
       setHasSession(false);
-      setMessage("Nie udało się potwierdzić zmiany hasła. Wygeneruj nowy link resetujący.");
+      setMessage(samePassword
+        ? "Nowe hasło musi różnić się od obecnego. Wygeneruj nowy link resetujący i ustaw inne hasło."
+        : "Nie udało się potwierdzić zmiany hasła. Wygeneruj nowy link resetujący.");
       setMessageType("error");
       return;
     }
