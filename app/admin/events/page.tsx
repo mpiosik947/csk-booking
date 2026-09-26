@@ -1384,14 +1384,14 @@ export default function AdminEventsPage({ tenantId, tenantSlug }: Readonly<{ ten
   const visibleEvents = events;
 
   return (
-    <main className="min-h-screen bg-[#141814] text-[#f2efe4]">
-      <section className="mx-auto max-w-7xl px-4 py-8 sm:px-6 sm:py-12">
-        <div className="mb-10">
+    <main className="min-h-screen min-w-0 bg-[#090b09] px-4 py-6 text-[#f2efe4] sm:px-6 sm:py-8 [[data-testid=tenant-shell]_&]:max-sm:px-0">
+      <section data-testid="admin-panel" className="mx-auto w-full min-w-0 max-w-7xl rounded-[2rem] border border-[#30372c] bg-[#141814] p-3 shadow-[0_24px_70px_rgba(0,0,0,0.25)] sm:p-8">
+        <div className="mb-8 border-b border-[#30372c] pb-6">
           <p className="mb-4 text-sm uppercase tracking-[0.35em] text-[#d7c895]">
             ADMIN PANEL
           </p>
 
-          <h1 className="text-4xl font-bold">Eventy i szkolenia</h1>
+          <h1 className="text-3xl font-bold sm:text-4xl">Eventy i szkolenia</h1>
 
           <p className="mt-3 text-[#a9ada4]">
             Dodawanie, edycja, aktywacja, lista uczestników, zatwierdzanie

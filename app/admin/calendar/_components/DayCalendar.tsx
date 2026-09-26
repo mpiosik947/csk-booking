@@ -58,7 +58,7 @@ function CalendarGrid({
   }
 
   return (
-    <div className="max-h-[72vh] overflow-auto rounded-2xl border border-[#30372c] bg-[#111511]">
+    <div className="max-h-[72vh] overflow-auto rounded-2xl border border-[#30372c] bg-[#111511] [color-scheme:dark] [scrollbar-color:#536143_#111511] [scrollbar-width:thin]">
       <div
         className="relative grid min-w-full"
         style={{

@@ -18,9 +18,9 @@ export default function AdminShell({
   children,
 }: AdminShellProps) {
   return (
-    <main className="min-h-screen bg-[#090b09] px-4 py-6 text-[#f2efe4] sm:px-6 sm:py-8">
+    <main className="min-h-screen min-w-0 bg-[#090b09] px-4 py-6 text-[#f2efe4] sm:px-6 sm:py-8 [[data-testid=tenant-shell]_&]:max-sm:px-0">
       <div className="mx-auto w-full max-w-7xl">
-        <section className="rounded-[2rem] border border-[#30372c] bg-[#141814] p-5 shadow-[0_24px_70px_rgba(0,0,0,0.25)] sm:p-8">
+        <section data-testid="admin-panel" className="min-w-0 rounded-[2rem] border border-[#30372c] bg-[#141814] p-3 shadow-[0_24px_70px_rgba(0,0,0,0.25)] sm:p-8">
           <header className="mb-8 flex flex-col gap-6 border-b border-[#30372c] pb-6 lg:flex-row lg:items-end lg:justify-between">
             <div className="min-w-0">
               <p className="mb-3 text-sm uppercase tracking-[0.35em] text-[#d7c895]">

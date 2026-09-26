@@ -64,8 +64,8 @@ export default function CalendarToolbar({
           {periodLabel}
         </p>
       </div>
-      <div className="grid gap-4 xl:grid-cols-[auto_minmax(180px,1fr)_minmax(210px,1fr)]">
-        <div className="flex flex-wrap items-end gap-2">
+      <div className="grid min-w-0 grid-cols-1 gap-4 xl:grid-cols-[auto_minmax(180px,1fr)_minmax(210px,1fr)]">
+        <div className="flex min-w-0 flex-wrap items-end gap-2">
           <button
             type="button"
             className={controlClass}
@@ -104,25 +104,25 @@ export default function CalendarToolbar({
           >
             →
           </button>
-          <label className="flex min-w-44 flex-1 flex-col gap-1 text-xs font-semibold uppercase tracking-[0.16em] text-[#858c7f] sm:flex-none">
+          <label className="flex w-full min-w-0 max-w-full flex-col gap-1 text-xs font-semibold uppercase tracking-[0.16em] text-[#858c7f] sm:w-44 sm:flex-none">
             Data
             <input
               type="date"
               value={date}
               onChange={(event) => onDateChange(event.target.value)}
               disabled={disabled}
-              className={`${controlClass} w-full [color-scheme:dark]`}
+              className={`${controlClass} w-full min-w-0 max-w-full [color-scheme:dark]`}
             />
           </label>
         </div>
 
-        <label className="flex flex-col gap-1 text-xs font-semibold uppercase tracking-[0.16em] text-[#858c7f]">
+        <label className="flex min-w-0 max-w-full flex-col gap-1 text-xs font-semibold uppercase tracking-[0.16em] text-[#858c7f]">
           Oś
           <select
             value={laneId}
             onChange={(event) => onLaneChange(event.target.value)}
             disabled={disabled || lanes.length === 0}
-            className={controlClass}
+            className={`${controlClass} w-full min-w-0 max-w-full`}
           >
             <option value="all">Wszystkie osie</option>
             {lanes.map((lane) => (
@@ -134,7 +134,7 @@ export default function CalendarToolbar({
           </select>
         </label>
 
-        <fieldset>
+        <fieldset className="min-w-0">
           <legend className="mb-1 text-xs font-semibold uppercase tracking-[0.16em] text-[#858c7f]">
             Typy wpisów
           </legend>

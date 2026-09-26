@@ -191,9 +191,9 @@ export default function LaneBlocksPage({ tenantId, tenantSlug }: Readonly<{ tena
     : null;
 
   return (
-    <main className="min-h-screen bg-[#090b09] text-[#f2efe4]">
-      <section className="mx-auto max-w-6xl px-4 py-8 sm:px-6 sm:py-12">
-        <header className="mb-8 sm:mb-10">
+    <main className="min-h-screen min-w-0 bg-[#090b09] px-4 py-6 text-[#f2efe4] sm:px-6 sm:py-8 [[data-testid=tenant-shell]_&]:max-sm:px-0">
+      <section data-testid="admin-panel" className="mx-auto w-full min-w-0 max-w-7xl rounded-[2rem] border border-[#30372c] bg-[#141814] p-3 shadow-[0_24px_70px_rgba(0,0,0,0.25)] sm:p-8">
+        <header className="mb-8 border-b border-[#30372c] pb-6">
           <p className="mb-3 text-xs font-bold uppercase tracking-[0.3em] text-[#d7c895] sm:text-sm">
             ADMIN PANEL
           </p>
