@@ -757,7 +757,6 @@ export default function BookingForm({
                 {confirmationData.shootersCount} strzelców ·{" "}
                 {formatDuration(confirmationData.durationMinutes)}
               </p>
-              <p>{BOOKING_DAY_GROUP_LABELS[confirmationData.pricingDayGroup]}</p>
               <p className="font-semibold text-[#d7c895]">
                 {formatMoney(
                   confirmationData.totalPrice,

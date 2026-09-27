@@ -1,6 +1,12 @@
 import "server-only";
 
-// Current sender is preserved; no provider/display-name configuration cutover.
+// Only the display name is platform branding; the configured mailbox is preserved.
 export function getOperationalEmailSenderConfiguration(environment: NodeJS.ProcessEnv = process.env) {
-  return { resendApiKey: environment.RESEND_API_KEY?.trim(), from: environment.RESERVATION_EMAIL_FROM?.trim() };
+  const configuredFrom = environment.RESERVATION_EMAIL_FROM?.trim();
+  const mailbox = configuredFrom?.match(/^[^<>\r\n]*<([^<>\s]+@[^<>\s]+)>$/)?.[1]
+    ?? (configuredFrom && /^[^<>\s]+@[^<>\s]+$/.test(configuredFrom) ? configuredFrom : undefined);
+  return {
+    resendApiKey: environment.RESEND_API_KEY?.trim(),
+    from: mailbox ? `StrzelajTu.pl <${mailbox}>` : undefined,
+  };
 }
