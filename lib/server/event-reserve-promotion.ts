@@ -1,6 +1,6 @@
 import "server-only";
+import { resolveEventEmailTenantContext, operationalEmailBrand, operationalEmailActionUrl, getOperationalEmailSenderConfiguration } from "./operational-email";
 
-import { headers } from "next/headers";
 import { Resend } from "resend";
 import { escapeEmailHref, escapeHtml } from "./email-html";
 import { createClient } from "@supabase/supabase-js";
@@ -200,26 +200,6 @@ function getAdminSupabaseClient() {
   });
 }
 
-async function getSiteUrl() {
-  const configuredSiteUrl = process.env.NEXT_PUBLIC_SITE_URL
-    ?.replace(/^NEXT_PUBLIC_SITE_URL=/, "")
-    .replace(/\/$/, "");
-
-  if (configuredSiteUrl) {
-    return configuredSiteUrl;
-  }
-
-  const requestHeaders = await headers();
-  const host =
-    requestHeaders.get("x-forwarded-host") ?? requestHeaders.get("host");
-
-  if (!host) {
-    throw new Error("Brak konfiguracji adresu aplikacji.");
-  }
-
-  const protocol = requestHeaders.get("x-forwarded-proto") ?? "http";
-  return `${protocol}://${host}`.replace(/\/$/, "");
-}
 
 function formatDate(date?: string | null) {
   if (!date) {
@@ -380,8 +360,7 @@ export async function promoteEventReserve(
     }
 
     try {
-      const resendApiKey = process.env.RESEND_API_KEY;
-    const from = process.env.RESERVATION_EMAIL_FROM;
+      const { resendApiKey, from } = getOperationalEmailSenderConfiguration();
 
     if (!resendApiKey || !from) {
       await failPreparedPromotions("email_provider_error");
@@ -396,29 +375,6 @@ export async function promoteEventReserve(
         reason: "email_configuration_missing",
         statusCode: 500,
         error: "Brak konfiguracji wysyłki email.",
-      };
-    }
-
-    let siteUrl: string;
-
-    try {
-      siteUrl = await getSiteUrl();
-    } catch (error) {
-      await failPreparedPromotions("unexpected_error");
-      console.error("Event reserve promotion URL configuration failed", {
-        ...getSafeErrorDetails(error),
-      });
-
-      return {
-        attempted: true,
-        success: false,
-        reserveFound: true,
-        notifiedCount: 0,
-        failedCount: preparedPromotions.length,
-        warning: true,
-        reason: "site_url_missing",
-        statusCode: 500,
-        error: "Brak konfiguracji adresu aplikacji.",
       };
     }
 
@@ -459,6 +415,9 @@ export async function promoteEventReserve(
     }
 
     const eventItem = eventData as EventRecord;
+    const tenant = await resolveEventEmailTenantContext(eventId);
+    if (tenant.tenantId !== eventItem.tenant_id) throw new Error("Operational email context unavailable");
+    const brand = operationalEmailBrand(tenant, "Zwolniło się miejsce na szkoleniu");
     const registrationIds = preparedPromotions.map(
       (promotion) => promotion.registration_id
     );
@@ -509,7 +468,7 @@ export async function promoteEventReserve(
         continue;
       }
 
-      const confirmUrl = `${siteUrl}/events/confirm/${promotion.promotion_token}`;
+      const confirmUrl = operationalEmailActionUrl("events/confirm", promotion.promotion_token);
       const displayName = registration.customer_name?.trim() || "Uczestniku";
       const safeDisplayName = escapeHtml(displayName);
       const safeEventTitle = escapeHtml(eventItem.title ?? "-");
@@ -520,13 +479,13 @@ export async function promoteEventReserve(
       const safeFormattedPrice = escapeHtml(formattedPrice);
       const safeConfirmUrl = escapeEmailHref(confirmUrl);
 
-      const subject = "Zwolniło się miejsce na szkoleniu — CSK Booking";
+      const subject = brand.subject;
       const html = `
         <div style="margin:0;padding:0;background:#09090b;font-family:Arial,Helvetica,sans-serif;color:#ffffff;">
           <div style="max-width:620px;margin:0 auto;padding:32px 20px;">
             <div style="border:1px solid #27272a;background:#18181b;border-radius:18px;padding:32px;">
               <p style="margin:0 0 18px 0;color:#22c55e;font-size:12px;letter-spacing:4px;text-transform:uppercase;font-weight:bold;">
-                CSK Booking
+                ${brand.headerHtml}
               </p>
               <h1 style="margin:0 0 16px 0;font-size:28px;line-height:1.25;color:#ffffff;">
                 Zwolniło się miejsce na szkoleniu
@@ -550,12 +509,12 @@ export async function promoteEventReserve(
               <p style="margin:0 0 14px 0;font-size:14px;line-height:1.6;color:#a1a1aa;">Link jest ważny przez 24 godziny. Samo otrzymanie tej wiadomości nie gwarantuje miejsca — decyduje pierwsze skuteczne potwierdzenie.</p>
               <p style="margin:0;font-size:14px;line-height:1.6;color:#a1a1aa;">Jeżeli nie chcesz brać udziału w szkoleniu, zignoruj tę wiadomość.</p>
             </div>
-            <p style="margin:18px 0 0 0;text-align:center;font-size:12px;color:#71717a;">Centrum Szkolenia Krutla · CSK Booking</p>
+            <p style="margin:18px 0 0 0;text-align:center;font-size:12px;color:#71717a;">${brand.footerHtml}</p>
           </div>
         </div>
       `;
       const text = `
-CSK Booking — zwolniło się miejsce na szkoleniu
+${brand.headerText}
 
 Cześć ${displayName},
 
@@ -572,8 +531,7 @@ ${confirmUrl}
 
 Link jest ważny przez 24 godziny. Samo otrzymanie tej wiadomości nie gwarantuje miejsca — decyduje pierwsze skuteczne potwierdzenie.
 
-Centrum Szkolenia Krutla
-CSK Booking
+${brand.footerText}
       `;
 
       let sendError: unknown = null;

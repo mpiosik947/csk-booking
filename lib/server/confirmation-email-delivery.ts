@@ -1,4 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
+import { getOperationalEmailSenderConfiguration } from "./operational-email-config.ts";
 
 export type ConfirmationDeliveryCode =
   | "sent"
@@ -197,8 +198,7 @@ function completionSucceeded(value: unknown, expectedCode: "sent" | "failed") {
 export function getConfirmationEmailConfiguration(
   environment: NodeJS.ProcessEnv = process.env
 ): ConfirmationEmailConfiguration | null {
-  const resendApiKey = environment.RESEND_API_KEY?.trim();
-  const from = environment.RESERVATION_EMAIL_FROM?.trim();
+  const { resendApiKey, from } = getOperationalEmailSenderConfiguration(environment);
   const supabaseUrl = environment.NEXT_PUBLIC_SUPABASE_URL?.trim();
   const serviceRoleKey = environment.SUPABASE_SERVICE_ROLE_KEY?.trim();
 

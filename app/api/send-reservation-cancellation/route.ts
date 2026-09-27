@@ -1,4 +1,5 @@
 ﻿import { NextResponse } from "next/server";
+import { resolveReservationEmailTenantContext, operationalEmailBrand } from "@/lib/server/operational-email";
 import { Resend } from "resend";
 import { createClient } from "@supabase/supabase-js";
 import { getProfileDisplayName } from "../../../lib/profile-display-name";
@@ -302,17 +303,19 @@ export async function POST(request: Request) {
 
     const cancelledByText =
       cancelledBy === "admin"
-        ? "Rezerwacja została anulowana przez obsługę CSK."
+        ? "Rezerwacja została anulowana przez obsługę obiektu."
         : "Twoja rezerwacja została anulowana.";
 
-    const subject = "Anulowanie rezerwacji — CSK Booking";
+    const tenant = await resolveReservationEmailTenantContext(reservationId);
+    const brand = operationalEmailBrand(tenant, "Anulowanie rezerwacji");
+    const subject = brand.subject;
 
     const html = `
       <div style="margin:0;padding:0;background:#09090b;font-family:Arial,Helvetica,sans-serif;color:#ffffff;">
         <div style="max-width:620px;margin:0 auto;padding:32px 20px;">
           <div style="border:1px solid #27272a;background:#18181b;border-radius:18px;padding:32px;">
             <p style="margin:0 0 18px 0;color:#ef4444;font-size:12px;letter-spacing:4px;text-transform:uppercase;font-weight:bold;">
-              CSK Booking
+              ${brand.headerHtml}
             </p>
 
             <h1 style="margin:0 0 16px 0;font-size:28px;line-height:1.25;color:#ffffff;">
@@ -336,19 +339,19 @@ export async function POST(request: Request) {
             </div>
 
             <p style="margin:0;font-size:14px;line-height:1.6;color:#a1a1aa;">
-              W przypadku pytań skontaktuj się z obsługą CSK.
+              W przypadku pytań skontaktuj się z obsługą obiektu.
             </p>
           </div>
 
           <p style="margin:18px 0 0 0;text-align:center;font-size:12px;color:#71717a;">
-            Centrum Szkolenia Krutla · CSK Booking
+            ${brand.footerHtml}
           </p>
         </div>
       </div>
     `;
 
     const text = `
-CSK Booking — anulowanie rezerwacji
+${brand.headerText}
 
 Cześć ${displayName},
 
@@ -358,10 +361,9 @@ Data: ${formattedDate}
 Godzina: ${startTime ?? "-"} - ${endTime ?? "-"}
 Oś: ${laneName ?? "-"}
 
-W przypadku pytań skontaktuj się z obsługą CSK.
+W przypadku pytań skontaktuj się z obsługą obiektu.
 
-Centrum Szkolenia Krutla
-CSK Booking
+${brand.footerText}
     `;
 
     const resend = new Resend(configuration.resendApiKey);

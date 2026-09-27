@@ -134,7 +134,8 @@ test("dynamic HTML remains escaped and plain text remains plain", async () => {
       .filter(
         (interpolation) =>
           !interpolation.startsWith("safe") &&
-          interpolation !== "cancelledByText"
+          interpolation !== "cancelledByText" &&
+          !["brand.headerHtml", "brand.footerHtml"].includes(interpolation)
       ),
     []
   );

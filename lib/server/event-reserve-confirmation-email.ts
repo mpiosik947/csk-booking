@@ -1,4 +1,5 @@
 import "server-only";
+import { resolveEventRegistrationEmailTenantContext, operationalEmailBrand, operationalEmailHistoryUrl, getOperationalEmailSenderConfiguration } from "./operational-email";
 
 import { Resend } from "resend";
 import { escapeEmailHref, escapeHtml } from "./email-html";
@@ -58,8 +59,7 @@ function formatPrice(price?: number | null) {
 export async function sendConfirmedPlaceEmail(
   registration: ConfirmedRegistration
 ) {
-  const resendApiKey = process.env.RESEND_API_KEY;
-  const from = process.env.RESERVATION_EMAIL_FROM;
+  const { resendApiKey, from } = getOperationalEmailSenderConfiguration();
 
   if (!resendApiKey || !from || !registration.customer_email) {
     return;
@@ -75,13 +75,10 @@ export async function sendConfirmedPlaceEmail(
   const formattedEndTime = formatTime(event?.end_time);
   const formattedPrice = formatPrice(event?.price);
 
-  const rawSiteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "";
-  const siteUrl = rawSiteUrl
-    .replace(/^NEXT_PUBLIC_SITE_URL=/, "")
-    .replace(/\/$/, "");
-
-  const myEventsUrl = `${siteUrl}/my-events`;
-  const subject = "Twoje miejsce na szkoleniu zostało potwierdzone — CSK Booking";
+  const tenant = await resolveEventRegistrationEmailTenantContext(registration.id);
+  const brand = operationalEmailBrand(tenant, "Twoje miejsce na szkoleniu zostało potwierdzone");
+  const subject = brand.subject;
+  const myEventsUrl = operationalEmailHistoryUrl(tenant, "events");
   const safeDisplayName = escapeHtml(displayName);
   const safeEventTitle = escapeHtml(event?.title ?? "-");
   const safeFormattedDate = escapeHtml(formattedDate);
@@ -96,7 +93,7 @@ export async function sendConfirmedPlaceEmail(
       <div style="max-width:620px;margin:0 auto;padding:32px 20px;">
         <div style="border:1px solid #27272a;background:#18181b;border-radius:18px;padding:32px;">
           <p style="margin:0 0 18px 0;color:#22c55e;font-size:12px;letter-spacing:4px;text-transform:uppercase;font-weight:bold;">
-            CSK Booking
+            ${brand.headerHtml}
           </p>
 
           <h1 style="margin:0 0 16px 0;font-size:28px;line-height:1.25;color:#ffffff;">
@@ -141,14 +138,14 @@ export async function sendConfirmedPlaceEmail(
         </div>
 
         <p style="margin:18px 0 0 0;text-align:center;font-size:12px;color:#71717a;">
-          Centrum Szkolenia Krutla · CSK Booking
+          ${brand.footerHtml}
         </p>
       </div>
     </div>
   `;
 
   const text = `
-CSK Booking — Twoje miejsce na szkoleniu zostało potwierdzone
+${brand.headerText}
 
 Cześć ${displayName},
 
@@ -165,8 +162,7 @@ ${myEventsUrl}
 
 Przyjedź kilka minut wcześniej, aby spokojnie przejść formalności przed szkoleniem.
 
-Centrum Szkolenia Krutla
-CSK Booking
+${brand.footerText}
   `;
 
   await new Resend(resendApiKey).emails.send({

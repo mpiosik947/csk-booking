@@ -1,3 +1,4 @@
+import { resolveReservationEmailTenantContext, operationalEmailBrand, operationalEmailActionUrl } from "@/lib/server/operational-email";
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { Resend } from "resend";
@@ -253,12 +254,7 @@ export async function POST(request: Request) {
     const endTime = reservation.end_time?.trim() || "-";
     const laneName = lane.name?.trim() || "-";
 
-    const rawSiteUrl =
-      process.env.NEXT_PUBLIC_SITE_URL ?? new URL(request.url).origin;
-    const siteUrl = rawSiteUrl
-      .replace(/^NEXT_PUBLIC_SITE_URL=/, "")
-      .replace(/\/$/, "");
-    const checkInUrl = `${siteUrl}/check-in/${checkInToken}`;
+    const checkInUrl = operationalEmailActionUrl("check-in", checkInToken);
 
     const safeDisplayName = escapeHtml(displayName);
     const safeFormattedDate = escapeHtml(formattedDate);
@@ -268,13 +264,15 @@ export async function POST(request: Request) {
     const safeFormattedPrice = escapeHtml(formattedPrice);
     const safeCheckInUrl = escapeEmailHref(checkInUrl);
 
-    const subject = "Potwierdzenie rezerwacji — CSK Booking";
+    const tenant = await resolveReservationEmailTenantContext(reservationId);
+    const brand = operationalEmailBrand(tenant, "Potwierdzenie rezerwacji");
+    const subject = brand.subject;
     const html = `
       <div style="margin:0;padding:0;background:#09090b;font-family:Arial,Helvetica,sans-serif;color:#ffffff;">
         <div style="max-width:620px;margin:0 auto;padding:32px 20px;">
           <div style="border:1px solid #27272a;background:#18181b;border-radius:18px;padding:32px;">
             <p style="margin:0 0 18px 0;color:#22c55e;font-size:12px;letter-spacing:4px;text-transform:uppercase;font-weight:bold;">
-              CSK Booking
+              ${brand.headerHtml}
             </p>
 
             <h1 style="margin:0 0 16px 0;font-size:28px;line-height:1.25;color:#ffffff;">
@@ -325,14 +323,14 @@ export async function POST(request: Request) {
           </div>
 
           <p style="margin:18px 0 0 0;text-align:center;font-size:12px;color:#71717a;">
-            Centrum Szkolenia Krutla · CSK Booking
+            ${brand.footerHtml}
           </p>
         </div>
       </div>
     `;
 
     const text = `
-CSK Booking — potwierdzenie rezerwacji
+${brand.headerText}
 
 Cześć ${displayName},
 
@@ -350,8 +348,7 @@ ${checkInUrl}
 Przyjedź kilka minut wcześniej, aby spokojnie przejść formalności przed wizytą.
 W przypadku pierwszej wizyty pracownik może poprosić o okazanie wymaganych uprawnień do wglądu.
 
-Centrum Szkolenia Krutla
-CSK Booking
+${brand.footerText}
     `;
 
     const resend = new Resend(configuration.resendApiKey);
