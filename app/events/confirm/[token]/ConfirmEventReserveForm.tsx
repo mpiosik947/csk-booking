@@ -69,7 +69,10 @@ export default function ConfirmEventReserveForm({
       const message = getEventConfirmationResponseMessage(code, response.ok);
 
       if (response.ok) {
-        setState({ status: "success", message });
+        const notification = result && typeof result === "object" && "notification" in result ? result.notification : null;
+        const emailWarning = notification === "sent" || notification === "already_sent" ? ""
+          : " Nie udało się potwierdzić wysłania wiadomości email. Twoje miejsce pozostaje potwierdzone; nie przyjmuj go ponownie. W razie potrzeby skontaktuj się z obsługą.";
+        setState({ status: "success", message: message + emailWarning });
         return;
       }
 

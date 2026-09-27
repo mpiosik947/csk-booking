@@ -27,6 +27,9 @@ create temporary table expected_function_acl(
 ) on commit drop;
 
 insert into expected_function_acl values
+  ('public.claim_event_reserve_acceptance_email_v1(uuid)','D',false,false,true),
+  ('public.complete_event_reserve_acceptance_email_v1(uuid,boolean,text)','D',false,false,true),
+  ('public.purge_event_reserve_acceptance_deliveries_v1()','C',false,false,false),
   ('public.can_authorize_reservation_cancellation_email_core_v1(uuid)','C',false,false,false),
   ('public.get_reservation_cancellation_email_v1(uuid)','C',false,true,false),
   ('public.resolve_operational_email_tenant_context_v1(text,uuid)','D',false,false,true),
@@ -307,8 +310,8 @@ begin
     and procedure.proname<>'csk_sec002_default_acl_probe';
 
   perform pg_temp.record_result(1,'Complete public function inventory',
-    (select pg_catalog.count(*)=172 from pg_temp.expected_function_acl)
-    and v_actual_count=172
+    (select pg_catalog.count(*)=175 from pg_temp.expected_function_acl)
+    and v_actual_count=175
     and not exists(
       select 1 from pg_temp.expected_function_acl expected
       where pg_catalog.to_regprocedure(expected.signature) is null
@@ -363,7 +366,7 @@ begin
       where pg_catalog.has_function_privilege('service_role',expected.signature,'EXECUTE')
         is distinct from expected.service_role_execute
     )
-    and (select pg_catalog.count(*)=7 from pg_temp.expected_function_acl where service_role_execute),
+    and (select pg_catalog.count(*)=9 from pg_temp.expected_function_acl where service_role_execute),
     'service_role retains only five explicitly intended server, entitlement and rollback grants.');
 
   perform pg_temp.record_result(6,'Trigger functions and internal helpers are isolated',
@@ -412,7 +415,7 @@ begin
     'Future functions created by postgres receive no client or PUBLIC EXECUTE.');
 
   perform pg_temp.record_result(8,'Application function creator scope is exact',
-    (select pg_catalog.count(*)=172
+    (select pg_catalog.count(*)=175
       from pg_catalog.pg_proc procedure
       join pg_catalog.pg_namespace namespace on namespace.oid=procedure.pronamespace
       join pg_catalog.pg_roles owner_role on owner_role.oid=procedure.proowner

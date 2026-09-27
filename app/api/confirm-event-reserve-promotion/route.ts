@@ -10,10 +10,7 @@ import {
   isConfirmEventReserveResult,
   parseConfirmEventReservePayload,
 } from "@/lib/server/event-reserve-confirmation-contract";
-import {
-  sendConfirmedPlaceEmail,
-  type ConfirmedRegistration,
-} from "@/lib/server/event-reserve-confirmation-email";
+import { retryEventAcceptanceEmail } from "@/lib/server/event-acceptance-delivery";
 
 function getAuthenticatedSupabaseClient(accessToken: string) {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -147,37 +144,16 @@ export async function POST(request: Request) {
       );
     }
 
-    const { data: registrationData, error: registrationError } = await supabase
-      .from("event_registrations")
-      .select(
-        `
-          id,
-          customer_email,
-          customer_name,
-          events (
-            title,
-            event_date,
-            start_time,
-            end_time,
-            location,
-            price
-          )
-        `
-      )
-      .eq("id", rpcData.registration_id)
-      .eq("user_id", authResult.user.id)
-      .maybeSingle();
-
-    if (!registrationError && registrationData) {
-      await sendConfirmedPlaceEmail(
-        registrationData as unknown as ConfirmedRegistration
-      ).catch(() => null);
-    }
+    // The authorized RPC already committed BOTH the seat and pending receipt.
+    // A notification failure must not misreport a failed business operation.
+    const notification = await retryEventAcceptanceEmail(rpcData.registration_id!)
+      .catch(() => "uncertain" as const);
 
     return NextResponse.json({
       ok: true,
       code: rpcData.code,
       message: getConfirmEventReserveMessage(rpcData.code),
+      notification,
     });
   } catch {
     console.error("Event reserve confirmation endpoint failed");

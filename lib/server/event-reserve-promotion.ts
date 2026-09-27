@@ -4,6 +4,7 @@ import { resolveEventEmailTenantContext, operationalEmailBrand, operationalEmail
 import { Resend } from "resend";
 import { escapeEmailHref, escapeHtml } from "./email-html";
 import { createClient } from "@supabase/supabase-js";
+import { eventInvitationKey } from "./event-invitation-key";
 
 type EventRecord = {
   id: string;
@@ -237,8 +238,8 @@ function formatPrice(price?: number | null) {
   return `${price.toFixed(2)} zł`;
 }
 
-// Obecna promocja może ponownie wygenerować tokeny przy ponownym wywołaniu.
-// Idempotencja zostanie wzmocniona w osobnym etapie.
+// The DB reuses an unexpired invitation token; provider keys track that invitation,
+// not the rotating delivery claim. Marker failure remains an uncertain outcome.
 export async function promoteEventReserve(
   eventId: string,
   expectedTenantId?: string
@@ -311,7 +312,8 @@ export async function promoteEventReserve(
         !isCompletedPromotion(data) ||
         data.registration_id !== promotion.registration_id ||
         data.success !== success ||
-        !data.claim_cleared
+        !data.claim_cleared ||
+        (success && !data.email_sent_recorded)
       ) {
         logPromotionFailure(
           "complete_rpc",
@@ -417,7 +419,7 @@ export async function promoteEventReserve(
     const eventItem = eventData as EventRecord;
     const tenant = await resolveEventEmailTenantContext(eventId);
     if (tenant.tenantId !== eventItem.tenant_id) throw new Error("Operational email context unavailable");
-    const brand = operationalEmailBrand(tenant, "Zwolniło się miejsce na szkoleniu");
+    const brand = operationalEmailBrand(tenant, "Zwolniło się miejsce");
     const registrationIds = preparedPromotions.map(
       (promotion) => promotion.registration_id
     );
@@ -478,6 +480,15 @@ export async function promoteEventReserve(
       const safeLocation = escapeHtml(eventItem.location ?? "-");
       const safeFormattedPrice = escapeHtml(formattedPrice);
       const safeConfirmUrl = escapeEmailHref(confirmUrl);
+      const expiry = new Date(promotion.promotion_token_expires_at);
+      if (!Number.isFinite(expiry.getTime()) || expiry.getTime() <= Date.now()) {
+        failedCount += 1;
+        failureReasons.add("invitation_expired");
+        await completePromotion(promotion, false, "unexpected_error");
+        continue;
+      }
+      const expiresAt = new Intl.DateTimeFormat("pl-PL", { dateStyle: "short", timeStyle: "short", timeZone: "Europe/Warsaw" }).format(expiry);
+      const safeExpiresAt = escapeHtml(expiresAt);
 
       const subject = brand.subject;
       const html = `
@@ -506,7 +517,7 @@ export async function promoteEventReserve(
                 </p>
                 <a href="${safeConfirmUrl}" style="display:inline-block;padding:12px 16px;border-radius:10px;background:#22c55e;color:#052e16;text-decoration:none;font-weight:bold;font-size:14px;">Potwierdź udział</a>
               </div>
-              <p style="margin:0 0 14px 0;font-size:14px;line-height:1.6;color:#a1a1aa;">Link jest ważny przez 24 godziny. Samo otrzymanie tej wiadomości nie gwarantuje miejsca — decyduje pierwsze skuteczne potwierdzenie.</p>
+              <p style="margin:0 0 14px 0;font-size:14px;line-height:1.6;color:#a1a1aa;">Link jest ważny do ${safeExpiresAt} (czas polski). Samo otrzymanie tej wiadomości nie gwarantuje miejsca — decyduje pierwsze skuteczne potwierdzenie.</p>
               <p style="margin:0;font-size:14px;line-height:1.6;color:#a1a1aa;">Jeżeli nie chcesz brać udziału w szkoleniu, zignoruj tę wiadomość.</p>
             </div>
             <p style="margin:18px 0 0 0;text-align:center;font-size:12px;color:#71717a;">${brand.footerHtml}</p>
@@ -529,7 +540,7 @@ Płatność: ${formattedPrice}, płatność na miejscu
 Potwierdź udział:
 ${confirmUrl}
 
-Link jest ważny przez 24 godziny. Samo otrzymanie tej wiadomości nie gwarantuje miejsca — decyduje pierwsze skuteczne potwierdzenie.
+Link jest ważny do ${expiresAt} (czas polski). Samo otrzymanie tej wiadomości nie gwarantuje miejsca — decyduje pierwsze skuteczne potwierdzenie.
 
 ${brand.footerText}
       `;
@@ -537,14 +548,14 @@ ${brand.footerText}
       let sendError: unknown = null;
 
       try {
-        const { error: emailError } = await resend.emails.send({
+        const { data: sentData, error: emailError } = await resend.emails.send({
           from,
           to: registration.customer_email,
           subject,
           html,
           text,
-        });
-        sendError = emailError;
+        }, { idempotencyKey: eventInvitationKey(tenant.tenantId, registration.id, promotion.promotion_token) });
+        sendError = emailError || (!sentData?.id ? { code: "email_provider_error" } : null);
       } catch (error) {
         sendError = error;
       }
@@ -558,12 +569,10 @@ ${brand.footerText}
         continue;
       }
 
-      emailsSent += 1;
-
       if (!(await completePromotion(promotion, true, null))) {
         failedCount += 1;
-        failureReasons.add("complete_failed");
-      }
+        failureReasons.add("delivery_uncertain");
+      } else emailsSent += 1;
     }
 
     if (failedCount > 0) {

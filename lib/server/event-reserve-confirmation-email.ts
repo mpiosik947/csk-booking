@@ -57,12 +57,13 @@ function formatPrice(price?: number | null) {
 }
 
 export async function sendConfirmedPlaceEmail(
-  registration: ConfirmedRegistration
+  registration: ConfirmedRegistration,
+  idempotencyKey: string
 ) {
   const { resendApiKey, from } = getOperationalEmailSenderConfiguration();
 
   if (!resendApiKey || !from || !registration.customer_email) {
-    return;
+    throw new Error("Receipt configuration unavailable");
   }
 
   const eventRelation = registration.events;
@@ -165,11 +166,11 @@ Przyjedź kilka minut wcześniej, aby spokojnie przejść formalności przed szk
 ${brand.footerText}
   `;
 
-  await new Resend(resendApiKey).emails.send({
+  return new Resend(resendApiKey).emails.send({
     from,
     to: registration.customer_email,
     subject,
     html,
     text,
-  });
+  }, { idempotencyKey });
 }
