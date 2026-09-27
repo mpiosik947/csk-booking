@@ -126,7 +126,7 @@ async function attachLocalOnlyNetworkGuard(page: Page) {
 
 async function loginAsAdmin(page: Page) {
   const forbidden = await attachLocalOnlyNetworkGuard(page);
-  await page.goto("/login");
+  await page.goto("/login?redirectTo=%2Fdashboard");
   await page.getByLabel("E-mail").fill(adminEmail);
   await page.getByLabel("Hasło").fill(password);
   await page.getByRole("button", { name: "Zaloguj się" }).click();
@@ -741,7 +741,7 @@ test.describe.serial("local admin lane-family creation", () => {
       }
     }
 
-    await page.goto("/login");
+    await page.goto("/login?redirectTo=%2Fdashboard");
     await page.getByLabel("E-mail").fill(userEmail);
     await page.getByLabel("Hasło").fill(password);
     await page.getByRole("button", { name: "Zaloguj się" }).click();

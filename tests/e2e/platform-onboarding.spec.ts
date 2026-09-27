@@ -36,7 +36,7 @@ test("platform onboarding is private, explicit, responsive and separate from ten
     expect(denied.error).not.toBeNull();
     expect(sql(`select public.operator_bootstrap_platform_admin_v1('${users[0]}');`).trim()).toBe("assigned");
     expect(sql(`select public.operator_bootstrap_platform_admin_v1('${users[0]}');`).trim()).toBe("already_assigned");
-    await page.goto("/login"); await page.getByLabel("E-mail").fill(platformEmail); await page.getByLabel("Hasło").fill(password);
+    await page.goto("/login?redirectTo=%2Fdashboard"); await page.getByLabel("E-mail").fill(platformEmail); await page.getByLabel("Hasło").fill(password);
     await page.getByRole("button", { name: "Zaloguj się" }).click(); await expect(page).toHaveURL(/\/dashboard$/);
     await page.goto("/platform-admin"); await expect(page.getByRole("heading", { name: "Obiekty i onboarding" })).toBeVisible();
     await page.getByLabel("Nazwa", { exact: true }).fill(`Synthetic ${run}`);
@@ -57,7 +57,7 @@ test("platform onboarding is private, explicit, responsive and separate from ten
     const tenantContext = await browser.newContext({ baseURL });
     try {
       const tenantPage = await tenantContext.newPage();
-      await tenantPage.goto("/login"); await tenantPage.getByLabel("E-mail").fill(tenantEmail); await tenantPage.getByLabel("Hasło").fill(password);
+      await tenantPage.goto("/login?redirectTo=%2Fdashboard"); await tenantPage.getByLabel("E-mail").fill(tenantEmail); await tenantPage.getByLabel("Hasło").fill(password);
       await tenantPage.getByRole("button", { name: "Zaloguj się" }).click(); await expect(tenantPage).toHaveURL(/\/dashboard$/);
       await tenantPage.goto(`/tenant-setup/${slug}`);
       await expect(tenantPage.getByRole("heading", { name: "Ustawienia publiczne" })).toBeVisible();
@@ -81,7 +81,7 @@ test("platform onboarding is private, explicit, responsive and separate from ten
     const settingsContext = await browser.newContext({ baseURL });
     try {
       const settingsPage = await settingsContext.newPage();
-      await settingsPage.goto("/login");
+      await settingsPage.goto("/login?redirectTo=%2Fdashboard");
       await settingsPage.getByLabel("E-mail").fill(tenantEmail);
       await settingsPage.getByLabel("Hasło").fill(password);
       await settingsPage.getByRole("button", { name: "Zaloguj się" }).click();

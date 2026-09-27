@@ -133,7 +133,7 @@ test('missing, malformed, wrong type and external next fail closed; ordinary log
   const created = await admin.auth.admin.createUser({ email, password, email_confirm: true });
   if (created.error || !created.data.user) throw new Error('Local fixture failed');
   try {
-    await page.goto('/login');
+    await page.goto('/login?redirectTo=%2Fdashboard');
     await page.getByLabel('E-mail').fill(email);
     await page.getByLabel('Hasło').fill(password);
     await page.getByRole('button', { name: 'Zaloguj się', exact: true }).click();

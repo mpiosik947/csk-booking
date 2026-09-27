@@ -20,7 +20,7 @@ test("tenant admin settings are isolated, responsive, and visibility is presenta
       select '${tenant}',id,'active' from public.saas_plans where plan_key='current_full_v1';
       insert into public.tenant_memberships(tenant_id,user_id,role,status) values('${tenant}','${user.id}','admin','active');
       insert into public.tenant_public_profiles(tenant_id,display_name,city,is_public,public_slug) values('${tenant}','Testowa Strzelnica','Testowo',true,'${publicSlug}');`);
-    await page.goto("/login"); await page.getByLabel("E-mail").fill(email); await page.getByLabel("Hasło").fill(password);
+    await page.goto("/login?redirectTo=%2Fdashboard"); await page.getByLabel("E-mail").fill(email); await page.getByLabel("Hasło").fill(password);
     await page.getByRole("button",{name:"Zaloguj się"}).click(); await expect(page).toHaveURL(/\/dashboard$/u);
     await page.goto(`/t/${slug}/admin/settings`); await expect(page.getByRole("heading",{name:"Ustawienia publiczne"})).toBeVisible();
     await page.getByLabel("Adres").fill("Testowa 10"); await page.getByLabel("Telefon").fill("+48 123 456 789");

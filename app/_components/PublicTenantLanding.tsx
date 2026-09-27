@@ -3,6 +3,7 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 import type { PublicTenantLanding as PublicTenantLandingData } from "@/lib/server/public-tenant-directory";
 import { PLATFORM_BASE_URL } from "@/lib/platform-domain";
+import PublicAuthControls from "./PublicAuthControls";
 
 function LandingLink({ href, className, children, preview, label }: { href: string; className?: string; children: ReactNode; preview: boolean; label?: string }) {
   return preview ? <span className={className} aria-disabled="true">{children}</span>
@@ -40,7 +41,6 @@ export function PublicTenantLanding({ tenant, preview = false, customDomain = fa
   const bookingHref = `${customDomain ? PLATFORM_BASE_URL : ""}/t/${tenant.tenantSlug}/booking`;
   const eventsHref = `${customDomain ? PLATFORM_BASE_URL : ""}/t/${tenant.tenantSlug}/events`;
   const publicBase = customDomain ? "" : `/${tenant.publicSlug}`;
-  const platformBase = customDomain ? PLATFORM_BASE_URL : "";
   const hasInformation = tenant.showInstructor || tenant.showPricing || tenant.showAbout || tenant.showContact || (tenant.showRegulations && tenant.regulationsPath);
   const rows = [
     { visible: tenant.showPricing, title: "Cennik", description: "Sprawdź ceny i dostępne opcje", href: `${publicBase}/cennik` },
@@ -72,7 +72,7 @@ export function PublicTenantLanding({ tenant, preview = false, customDomain = fa
       </div>}
       <nav aria-label="Konto" className="my-6 flex flex-wrap items-center justify-center gap-x-4 gap-y-3 border-y border-[#30372c] py-4 text-sm text-[#b7bbb1] md:text-base">
         <Icon name="user" className="h-5 w-5 text-[#aab58f]" />
-        {[["/login", "Zaloguj się"], ["/register", "Rejestracja"], ["/account", "Moje konto"]].map(([path, label]) => <LandingLink key={path} preview={preview} href={`${platformBase}${path}`} className="inline-flex min-h-11 items-center font-semibold text-[#d7c895] underline-offset-4 hover:underline">{label}</LandingLink>)}
+        <PublicAuthControls variant="tenant" returnPath={`/${tenant.publicSlug}`} preview={preview} customDomain={customDomain} />
       </nav>
       {hasInformation && <section aria-label="Informacje o obiekcie">
         <h2 className="mb-3 text-xs font-bold tracking-[0.2em] text-[#858c7f]">INFORMACJE</h2>

@@ -27,7 +27,7 @@ test("tenant admin modules use scoped contracts and legacy URLs hand off to CSK"
       `insert into public.profiles(id,user_id,email,role,verification_status) select id,id,email,'user','verified' from auth.users u where u.id='${data.user.id}' and not exists(select 1 from public.profiles p where p.user_id=u.id); update public.profiles set role='admin' where user_id='${data.user.id}'; insert into public.tenant_memberships(tenant_id,user_id,role,status) values ('${CSK_ID}','${data.user.id}','admin','active') on conflict (tenant_id,user_id) do update set role=excluded.role,status=excluded.status; select 'MEMBERSHIP_OK=' || count(*) from public.tenant_memberships where tenant_id='${CSK_ID}' and user_id='${data.user.id}' and role='admin' and status='active'`], { encoding: "utf8" });
     if (!/MEMBERSHIP_OK=1\b/u.test(updateResult)) throw new Error("Local C2-A membership fixture not created");
 
-    await page.goto("/login");
+    await page.goto("/login?redirectTo=%2Fdashboard");
     await page.getByLabel("E-mail").fill(email);
     await page.getByLabel("Hasło").fill(password);
     await page.getByRole("button", { name: "Zaloguj się" }).click();

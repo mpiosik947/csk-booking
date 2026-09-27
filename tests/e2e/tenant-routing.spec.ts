@@ -53,7 +53,7 @@ test("authenticated tenant owner routes use scoped readers while global account/
   if (error || !data.user) throw new Error(`Cannot create local Phase 1 user: ${error?.message}`);
 
   try {
-    await page.goto("/login");
+    await page.goto("/login?redirectTo=%2Fdashboard");
     await page.getByLabel("E-mail").fill(email);
     await page.getByLabel("Hasło").fill(password);
     await page.getByRole("button", { name: "Zaloguj się" }).click();

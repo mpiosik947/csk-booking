@@ -189,7 +189,7 @@ async function guardLocalRequests(page: Page) {
 }
 
 async function login(page: Page) {
-  await page.goto("/login");
+  await page.goto("/login?redirectTo=%2Fdashboard");
   await page.getByLabel("E-mail").fill(email);
   await page.getByLabel("Hasło").fill(password);
   await page.getByRole("button", { name: "Zaloguj się" }).click();

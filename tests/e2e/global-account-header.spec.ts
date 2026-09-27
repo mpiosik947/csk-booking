@@ -24,7 +24,7 @@ for (const named of [true, false]) {
       await page.getByLabel("E-mail").fill(email);
       await page.getByLabel("Hasło").fill(password);
       await page.getByRole("button", { name: "Zaloguj się", exact: true }).click();
-      await expect(page).toHaveURL(/\/dashboard$/);
+      await expect(page).toHaveURL("http://127.0.0.1:3100/");
       for (const path of ["dashboard", "account"]) {
         await page.goto(`/${path}`);
         const header = page.getByTestId("global-account-header");

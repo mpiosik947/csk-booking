@@ -14,6 +14,7 @@ new Function('require', 'exports', code)(name => {
   if (name === 'next/link') return { __esModule: true, default: props => React.createElement('a', props) };
   if (name === 'next/image') return { __esModule: true, default: props => { const clean = { ...props }; delete clean.priority; delete clean.fill; return React.createElement('img', clean); } };
   if (name === '@/lib/platform-domain') return { PLATFORM_BASE_URL: 'https://strzelajtu.pl' };
+  if (name === './PublicAuthControls') return { __esModule: true, default: ({ preview, customDomain, returnPath }) => preview ? React.createElement('span', { 'aria-disabled': true }, 'Zaloguj się') : React.createElement('a', { href: `${customDomain ? 'https://strzelajtu.pl' : ''}/login?redirectTo=${encodeURIComponent(returnPath)}` }, 'Zaloguj się') };
   return require(name);
 }, compiled.exports);
 const flags = ['showBooking', 'showEvents', 'showInstructor', 'showPricing', 'showAbout', 'showRegulations', 'showContact'];
@@ -38,7 +39,7 @@ test('canonical and custom domain links retain public selectors and platform ope
     assert.ok(normal.includes(`href="/public-range/${suffix}"`));
     assert.ok(custom.includes(`href="/${suffix}"`));
   }
-  assert.ok(custom.includes('href="https://strzelajtu.pl/login"'));
+  assert.ok(custom.includes('href="https://strzelajtu.pl/login?redirectTo=%2Fpublic-range"'));
 });
 test('preview remains inert and has no clickable links', () => {
   const html = render(tenant, { preview: true });

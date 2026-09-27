@@ -1,4 +1,5 @@
 import PlatformBrand from "@/app/_components/PlatformBrand";
+import PublicAuthControls from "@/app/_components/PublicAuthControls";
 import DirectorySearchInput from "@/app/_components/DirectorySearchInput";
 import Image from "next/image";
 import Link from "next/link";
@@ -41,12 +42,7 @@ export default async function Home({
           <div className="flex flex-col items-center justify-between gap-4 sm:flex-row sm:text-left">
             <PlatformBrand />
             <nav aria-label="Konto StrzelajTu.pl" className="flex items-center gap-3">
-              <Link href="/login" className="rounded-xl border border-[#556333] px-4 py-3 text-sm font-semibold text-[#F4F3EE] transition hover:border-[#7A8D36] hover:bg-[#182019]">
-                Zaloguj się
-              </Link>
-              <Link href="/register" className="rounded-xl border border-[#697A2F] bg-[#303B1C] px-4 py-3 text-sm font-semibold text-[#F4F3EE] transition hover:bg-[#435225]">
-                Załóż konto
-              </Link>
+              <PublicAuthControls />
             </nav>
           </div>
           <h1 className="mx-auto mt-7 max-w-3xl text-[26px] font-bold leading-tight text-[#f5f1e8] sm:text-[42px]">
@@ -126,13 +122,7 @@ export default async function Home({
 
         <footer className="mt-8 flex flex-col flex-wrap items-center justify-center gap-x-5 gap-y-2 text-xs text-[#8f968b] sm:flex-row sm:text-sm">
           <div className="flex items-center justify-center gap-2 sm:contents">
-          <span>Masz konto w StrzelajTu.pl?</span>
-          <Link href="/login" className="font-semibold text-[#a4b778] underline-offset-4 hover:underline">
-            Zaloguj się
-          </Link>
-          <Link href="/register" className="font-semibold text-[#a4b778] underline-offset-4 hover:underline">
-            Załóż konto
-          </Link>
+          <PublicAuthControls variant="footer" />
           </div>
           <span aria-hidden="true" className="hidden text-[#596055] sm:inline">•</span>
           <div className="flex items-center justify-center gap-5 sm:contents">
