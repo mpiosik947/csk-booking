@@ -34,9 +34,27 @@ export default function ContinuityPanel() {
     if (busy || !window.confirm("Anulować to istniejące zobowiązanie?")) return;
     setBusy(true); setMessage("");
     try {
-      const { error } = await supabase.rpc("cancel_continuity_resource_v1", { p_kind: resource.kind, p_resource_id: resource.id });
+      const { data, error } = await supabase.rpc("cancel_continuity_resource_v1", { p_kind: resource.kind, p_resource_id: resource.id });
       if (error) setMessage(error.code === "55000" ? "Anulowanie jest niedostępne ze względu na termin lub stan zobowiązania." : "Nie można anulować tego zobowiązania.");
-      else { setMessage("Anulowano. Nie utworzono nowego zobowiązania ani promocji z listy rezerwowej."); await load(); }
+      else {
+        await load();
+        setMessage("Anulowano. Nie utworzono nowego zobowiązania ani promocji z listy rezerwowej.");
+        // The business RPC has completed. Email is a separate best-effort step.
+        if (resource.kind === "reservation" && data?.changed === true) {
+          try {
+            const { data: { session } } = await supabase.auth.getSession();
+            if (!session?.access_token) throw new Error("session unavailable");
+            const response = await fetch("/api/send-reservation-cancellation", {
+              method: "POST",
+              headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
+              body: JSON.stringify({ reservationId: resource.id }),
+            });
+            if (!response.ok) throw new Error("delivery unavailable");
+          } catch {
+            setMessage("Rezerwacja została anulowana, ale nie udało się wysłać wiadomości e-mail.");
+          }
+        }
+      }
     } catch { setMessage("Nie udało się potwierdzić anulowania. Odśwież historię przed ponowną próbą."); }
     finally { setBusy(false); }
   }

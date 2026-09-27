@@ -1,9 +1,7 @@
 ﻿import { NextResponse } from "next/server";
-import { resolveReservationEmailTenantContext, operationalEmailBrand } from "@/lib/server/operational-email";
+import { resolveReservationEmailTenantContext, operationalEmailBrand, operationalEmailHistoryUrl } from "@/lib/server/operational-email";
 import { Resend } from "resend";
 import { createClient } from "@supabase/supabase-js";
-import { getProfileDisplayName } from "../../../lib/profile-display-name";
-import { isCancelledReservationStatus } from "../../../lib/reservation-status";
 import {
   deliverConfirmationEmail,
   getConfirmationEmailConfiguration,
@@ -16,31 +14,20 @@ import {
 import {
   verifyAuthUser,
 } from "@/lib/server/auth-user-verification";
-import { escapeHtml } from "@/lib/server/email-html";
+import { escapeEmailHref, escapeHtml } from "@/lib/server/email-html";
 
 type ReservationCancellationPayload = {
   reservationId?: unknown;
 };
 
-type OwnerProfile = {
-  first_name: string | null;
-  last_name: string | null;
-  full_name: string | null;
-  email: string | null;
-};
-
-type ReservationRecord = {
-  id: string;
-  tenant_id: string;
-  user_id: string;
-  customer_name: string | null;
-  customer_email: string | null;
+type CancellationEmailData = {
+  recipient_email: string | null;
+  customer_name: string;
   reservation_date: string;
   start_time: string;
   end_time: string;
-  reservation_status: string | null;
-  lane_id: string | null;
-  shooting_lanes: { name: string | null } | { name: string | null }[] | null;
+  lane_name: string;
+  cancelled_by: "user" | "admin";
 };
 
 const UUID_PATTERN =
@@ -66,16 +53,6 @@ function getAuthenticatedSupabaseClient(accessToken: string) {
       },
     },
   });
-}
-
-function getLaneName(reservation: ReservationRecord) {
-  const lanes = reservation.shooting_lanes;
-
-  if (Array.isArray(lanes)) {
-    return lanes[0]?.name?.trim() || "Brak osi";
-  }
-
-  return lanes?.name?.trim() || "Brak osi";
 }
 
 function formatDate(date?: string) {
@@ -199,99 +176,37 @@ export async function POST(request: Request) {
       );
     }
 
-    const { data: reservationData, error: reservationError } = await supabase
-      .from("reservations")
-      .select(
-        `
-        id,
-        tenant_id,
-        user_id,
-        customer_name,
-        customer_email,
-        reservation_date,
-        start_time,
-        end_time,
-        reservation_status,
-        lane_id,
-        shooting_lanes (
-          name
-        )
-      `
-      )
-      .eq("id", reservationId)
-      .maybeSingle();
-
-    if (reservationError) {
-      console.error("Reservation cancellation reservation read failed", {
-        code: reservationError.code,
-      });
-      return jsonError("internal_error", 500);
-    }
-
-    if (!reservationData) {
-      return jsonError("not_found", 404);
-    }
-
-    const reservation = reservationData as ReservationRecord;
-    const isOwner = reservation.user_id === user.id;
-    const { data: operatorRole, error: operatorRoleError } = await supabase.rpc(
-      "get_my_tenant_role_v1", { p_tenant_id: reservation.tenant_id }
+    // JWT-authorized, resource-bound and cancelled-only. Never service-role reads.
+    const { data: reservationData, error: reservationError } = await supabase.rpc(
+      "get_reservation_cancellation_email_v1", { p_reservation_id: reservationId }
     );
-    if (operatorRoleError) return jsonError("internal_error", 500);
-    const isStaff = operatorRole === "admin" || operatorRole === "employee";
-
-    if (!isOwner && !isStaff) {
-      return jsonError("forbidden", 403);
-    }
-
-    if (!isCancelledReservationStatus(reservation.reservation_status)) {
-      return jsonError("invalid_status", 409);
-    }
-
-    const ownerProfileResult = isStaff
-      ? await supabase.rpc("get_reservation_customer_profiles_v1", {
-          p_reservation_ids: [reservation.id],
-        })
-      : await supabase
-          .from("profiles")
-          .select("first_name, last_name, full_name, email")
-          .eq("user_id", user.id)
-          .maybeSingle();
-    const ownerProfileError = ownerProfileResult.error;
-
-    if (ownerProfileError) {
-      console.error("Reservation cancellation recipient read failed", {
-        code: ownerProfileError.code,
-      });
+    if (reservationError) {
+      if (reservationError.code === "42501") return jsonError("not_found", 404);
+      console.error("Reservation cancellation continuity read failed", { code: reservationError.code });
       return jsonError("internal_error", 500);
     }
-
-    const ownerProfile = (isStaff
-      ? ((ownerProfileResult.data ?? [])[0] ?? null)
-      : ownerProfileResult.data) as OwnerProfile | null;
-    const customerEmail =
-      reservation.customer_email?.trim() ||
-      ownerProfile?.email?.trim() ||
-      (isOwner ? user.email?.trim() : "") ||
-      "";
-
+    if (!reservationData) return jsonError("not_found", 404);
+    const reservation = reservationData as CancellationEmailData;
+    if (!["user", "admin"].includes(reservation.cancelled_by) ||
+        typeof reservation.customer_name !== "string" ||
+        typeof reservation.reservation_date !== "string" ||
+        typeof reservation.start_time !== "string" ||
+        typeof reservation.end_time !== "string" ||
+        typeof reservation.lane_name !== "string") {
+      return jsonError("internal_error", 500);
+    }
+    const customerEmail = typeof reservation.recipient_email === "string"
+      ? reservation.recipient_email.trim() : "";
     if (!customerEmail || !EMAIL_PATTERN.test(customerEmail)) {
       console.error("Reservation cancellation recipient unavailable");
       return jsonError("delivery_failed", 502);
     }
-
-    const profileDisplayName = ownerProfile?.full_name?.trim() ||
-      (ownerProfile ? getProfileDisplayName(ownerProfile, "") : "");
-    const customerName =
-      reservation.customer_name?.trim() ||
-      profileDisplayName ||
-      reservation.customer_email?.trim() ||
-      "Kliencie";
+    const customerName = reservation.customer_name;
     const reservationDate = reservation.reservation_date;
     const startTime = reservation.start_time;
     const endTime = reservation.end_time;
-    const laneName = getLaneName(reservation);
-    const cancelledBy: "user" | "admin" = isOwner ? "user" : "admin";
+    const laneName = reservation.lane_name;
+    const cancelledBy = reservation.cancelled_by;
 
     const displayName = customerName;
     const formattedDate = formatDate(reservationDate);
@@ -307,7 +222,10 @@ export async function POST(request: Request) {
         : "Twoja rezerwacja została anulowana.";
 
     const tenant = await resolveReservationEmailTenantContext(reservationId);
-    const brand = operationalEmailBrand(tenant, "Anulowanie rezerwacji");
+    const brand = operationalEmailBrand(tenant, "Rezerwacja anulowana");
+    const reservationsUrl = operationalEmailHistoryUrl(tenant, "reservations");
+    const safeReservationsUrl = escapeEmailHref(reservationsUrl);
+    const safeTenantName = escapeHtml(tenant.displayName);
     const subject = brand.subject;
 
     const html = `
@@ -319,7 +237,7 @@ export async function POST(request: Request) {
             </p>
 
             <h1 style="margin:0 0 16px 0;font-size:28px;line-height:1.25;color:#ffffff;">
-              Anulowanie rezerwacji
+              Rezerwacja anulowana
             </h1>
 
             <p style="margin:0 0 18px 0;font-size:16px;line-height:1.6;color:#d4d4d8;">
@@ -327,6 +245,12 @@ export async function POST(request: Request) {
             </p>
 
             <div style="margin:24px 0;padding:18px;border:1px solid #3f3f46;border-radius:14px;background:#09090b;">
+              <p style="margin:0 0 10px 0;font-size:15px;color:#d4d4d8;">
+                <strong style="color:#ffffff;">Obiekt:</strong> ${safeTenantName}
+              </p>
+              <p style="margin:0 0 10px 0;font-size:15px;color:#d4d4d8;">
+                <strong style="color:#ffffff;">Status:</strong> Anulowana
+              </p>
               <p style="margin:0 0 10px 0;font-size:15px;color:#d4d4d8;">
                 <strong style="color:#ffffff;">Data:</strong> ${safeFormattedDate}
               </p>
@@ -337,6 +261,8 @@ export async function POST(request: Request) {
                 <strong style="color:#ffffff;">Oś:</strong> ${safeLaneName}
               </p>
             </div>
+
+            <p style="margin:24px 0;"><a href="${safeReservationsUrl}" style="color:#d9f99d;font-weight:bold;">Moje rezerwacje</a></p>
 
             <p style="margin:0;font-size:14px;line-height:1.6;color:#a1a1aa;">
               W przypadku pytań skontaktuj się z obsługą obiektu.
@@ -357,9 +283,13 @@ Cześć ${displayName},
 
 ${cancelledByText}
 
+Obiekt: ${tenant.displayName}
+Status: Anulowana
 Data: ${formattedDate}
 Godzina: ${startTime ?? "-"} - ${endTime ?? "-"}
 Oś: ${laneName ?? "-"}
+
+Moje rezerwacje: ${reservationsUrl}
 
 W przypadku pytań skontaktuj się z obsługą obiektu.
 

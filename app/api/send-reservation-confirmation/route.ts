@@ -1,4 +1,4 @@
-import { resolveReservationEmailTenantContext, operationalEmailBrand, operationalEmailActionUrl } from "@/lib/server/operational-email";
+import { resolveReservationEmailTenantContext, operationalEmailBrand, operationalEmailActionUrl, operationalEmailHistoryUrl } from "@/lib/server/operational-email";
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { Resend } from "resend";
@@ -266,6 +266,9 @@ export async function POST(request: Request) {
 
     const tenant = await resolveReservationEmailTenantContext(reservationId);
     const brand = operationalEmailBrand(tenant, "Potwierdzenie rezerwacji");
+    const reservationsUrl = operationalEmailHistoryUrl(tenant, "reservations");
+    const safeReservationsUrl = escapeEmailHref(reservationsUrl);
+    const safeTenantName = escapeHtml(tenant.displayName);
     const subject = brand.subject;
     const html = `
       <div style="margin:0;padding:0;background:#09090b;font-family:Arial,Helvetica,sans-serif;color:#ffffff;">
@@ -285,6 +288,12 @@ export async function POST(request: Request) {
 
             <div style="margin:24px 0;padding:18px;border:1px solid #3f3f46;border-radius:14px;background:#09090b;">
               <p style="margin:0 0 10px 0;font-size:15px;color:#d4d4d8;">
+                <strong style="color:#ffffff;">Obiekt:</strong> ${safeTenantName}
+              </p>
+              <p style="margin:0 0 10px 0;font-size:15px;color:#d4d4d8;">
+                <strong style="color:#ffffff;">Status:</strong> Potwierdzona
+              </p>
+              <p style="margin:0 0 10px 0;font-size:15px;color:#d4d4d8;">
                 <strong style="color:#ffffff;">Data:</strong> ${safeFormattedDate}
               </p>
               <p style="margin:0 0 10px 0;font-size:15px;color:#d4d4d8;">
@@ -297,6 +306,8 @@ export async function POST(request: Request) {
                 <strong style="color:#ffffff;">Płatność:</strong> ${safeFormattedPrice}, płatność na miejscu
               </p>
             </div>
+
+            <p style="margin:24px 0;"><a href="${safeReservationsUrl}" style="color:#d9f99d;font-weight:bold;">Moje rezerwacje</a></p>
 
             <div style="margin:24px 0;padding:18px;border:1px solid #365314;border-radius:14px;background:#13210d;">
               <p style="margin:0 0 12px 0;font-size:15px;line-height:1.6;color:#d9f99d;">
@@ -336,10 +347,14 @@ Cześć ${displayName},
 
 Twoja rezerwacja została przyjęta.
 
+Obiekt: ${tenant.displayName}
+Status: Potwierdzona
 Data: ${formattedDate}
 Godzina: ${startTime} - ${endTime}
 Oś: ${laneName}
 Płatność: ${formattedPrice}, płatność na miejscu
+
+Moje rezerwacje: ${reservationsUrl}
 
 Szybki check-in:
 Pokaż ten link lub kod QR obsłudze podczas wizyty. Obsługa potwierdzi obecność w systemie.

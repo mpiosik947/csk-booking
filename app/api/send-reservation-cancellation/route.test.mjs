@@ -1,147 +1,94 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { readFileSync } from "node:fs";
 import test from "node:test";
+import vm from "node:vm";
+import ts from "typescript";
+import { operationalEmailBrand, operationalEmailHistoryUrl } from "../../../lib/server/operational-email-core.ts";
+import { escapeHtml, escapeEmailHref } from "../../../lib/server/email-html.ts";
 
-const routeUrl = new URL("./route.ts", import.meta.url);
-
-async function readRoute() {
-  return readFile(routeUrl, "utf8");
+const source = readFileSync(new URL("./route.ts", import.meta.url), "utf8");
+const reservationId = "11111111-1111-4111-8111-111111111111";
+function handler({ denied = false, unavailable = false, cancelledBy = "user" } = {}) {
+  const calls = { resolver: 0, sent: [], rpc: [] };
+  const client = {
+    auth: { getUser: async () => ({ data: { user: { id: reservationId } }, error: null }) },
+    rpc: async (name, args) => {
+      calls.rpc.push([name, args]);
+      if (name === "get_reservation_cancellation_email_v1") return {
+        data: denied || unavailable ? null : { recipient_email: "fixture@example.invalid", customer_name: "Synthetic",
+          reservation_date: "2026-10-20", start_time: "10:00", end_time: "11:00", lane_name: "Lane B", cancelled_by: cancelledBy },
+        error: denied ? { code: "42501" } : null,
+      };
+      return { data: { code: "ready" }, error: null };
+    },
+  };
+  const deps = {
+    "next/server": { NextResponse: { json: (data, options) => Response.json(data, options) } },
+    "@supabase/supabase-js": { createClient: () => client },
+    "resend": { Resend: class { emails = { send: async (mail) => { calls.sent.push(mail); return { data: { id: "synthetic" }, error: null }; } }; } },
+    "@/lib/server/operational-email": { operationalEmailBrand, operationalEmailHistoryUrl,
+      resolveReservationEmailTenantContext: async id => {
+        assert.equal(id, reservationId); calls.resolver++;
+        return { displayName: "Synthetic Range B", tenantSlug: "synthetic-b", publicSlug: "synthetic-range-b" };
+      } },
+    "@/lib/server/confirmation-email-delivery": {
+      getConfirmationEmailConfiguration: () => ({ resendApiKey: "fixture", from: "fixture@example.invalid" }),
+      getConfirmationServiceRoleClient: () => client,
+      deliverConfirmationEmail: async ({ prepare, send }) => {
+        await prepare(); await send("stable-fixture-key"); return { ok: true, code: "sent", status: 200 };
+      },
+    },
+    "@/lib/server/confirmation-email-rate-limit": {
+      getConfirmationRateLimitSecret: () => "fixture",
+      checkConfirmationEmailRateLimit: async () => ({ kind: "allowed" }),
+    },
+    "@/lib/server/auth-user-verification": { verifyAuthUser: async read => ({ ok: true, user: (await read()).data.user }) },
+    "@/lib/server/email-html": { escapeHtml, escapeEmailHref },
+  };
+  const exports = {};
+  vm.runInNewContext(ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText, {
+    exports, require: name => { assert.ok(deps[name], "Unexpected dependency " + name); return deps[name]; },
+    process: { env: { NEXT_PUBLIC_SUPABASE_URL: "https://fixture.invalid", NEXT_PUBLIC_SUPABASE_ANON_KEY: "fixture" } },
+    console: { error() {} }, Response,
+  });
+  return { calls, run: body => exports.POST(new Request("https://strzelajtu.pl/api/send-reservation-cancellation", {
+    method: "POST", headers: { authorization: "Bearer synthetic" }, body: JSON.stringify(body),
+  })) };
 }
-
-test("caller JWT owns all business reads while service role is internal-only", async () => {
-  const source = await readRoute();
-
-  assert.match(source, /function getAuthenticatedSupabaseClient\(accessToken: string\)/u);
-  assert.match(source, /Authorization: `Bearer \$\{accessToken\}`/u);
-  assert.match(source, /getAuthenticatedSupabaseClient\(accessToken\)/u);
-  assert.match(source, /getConfirmationServiceRoleClient\(configuration\)/u);
-  assert.doesNotMatch(
-    source,
-    /completionClient\s*\.from\((?:"reservations"|"profiles"|"shooting_lanes")\)/u
-  );
+for (const actor of ["foreign-admin", "foreign-employee", "foreign-user", "inactive-member"]) {
+  test(actor + ": denied DB authority stops before resolver/render/provider", async () => {
+    const h = handler({ denied: true });
+    assert.equal((await h.run({ reservationId })).status, 404);
+    assert.equal(h.calls.resolver, 0); assert.equal(h.calls.sent.length, 0);
+  });
+}
+test("missing resource fails before resolver/provider", async () => {
+  const h = handler({ unavailable: true });
+  assert.equal((await h.run({ reservationId })).status, 404);
+  assert.equal(h.calls.resolver, 0); assert.equal(h.calls.sent.length, 0);
 });
-
-test("auth and limiter precede scoped reads and delivery", async () => {
-  const source = await readRoute();
-  const authIndex = source.indexOf("supabase.auth.getUser(accessToken)");
-  const limiterIndex = source.indexOf("checkConfirmationEmailRateLimit({");
-  const reservationIndex = source.indexOf('.from("reservations")');
-  const accessGateIndex = source.indexOf("if (!isOwner && !isStaff)");
-  const statusGateIndex = source.indexOf(
-    "if (!isCancelledReservationStatus(reservation.reservation_status))"
-  );
-  const profileRpcIndex = source.indexOf(
-    'supabase.rpc("get_reservation_customer_profiles_v1"'
-  );
-  const htmlIndex = source.indexOf("const html = `");
-  const deliveryIndex = source.indexOf("deliverConfirmationEmail({");
-  const prepareIndex = source.indexOf(
-    'supabase.rpc("prepare_confirmation_email"'
-  );
-
-  for (const [name, index] of [
-    ["auth", authIndex],
-    ["limiter", limiterIndex],
-    ["reservation lookup", reservationIndex],
-    ["ownership/role gate", accessGateIndex],
-    ["status gate", statusGateIndex],
-    ["profile RPC", profileRpcIndex],
-    ["HTML", htmlIndex],
-    ["delivery", deliveryIndex],
-    ["claim", prepareIndex],
-  ]) {
-    assert.notEqual(index, -1, `${name} should exist`);
-  }
-
-  assert.ok(authIndex < limiterIndex);
-  assert.ok(limiterIndex < reservationIndex);
-  assert.ok(reservationIndex < accessGateIndex);
-  assert.ok(accessGateIndex < statusGateIndex);
-  assert.ok(statusGateIndex < profileRpcIndex);
-  assert.ok(profileRpcIndex < htmlIndex);
-  assert.ok(htmlIndex < deliveryIndex);
-  assert.ok(deliveryIndex < prepareIndex);
+for (const extra of [{ tenant_id: reservationId }, { tenantSlug: "csk" }, { public_slug: "csk-krutla" }, { recipient_email: "evil@example.invalid" }]) {
+  test("forged selector denied " + Object.keys(extra)[0], async () => {
+    const h = handler();
+    assert.equal((await h.run({ reservationId, ...extra })).status, 400);
+    assert.equal(h.calls.rpc.length, 0); assert.equal(h.calls.sent.length, 0);
+  });
+}
+for (const actor of ["user", "admin", "employee"]) test(actor + ": authorized reader supplies recipient before tenant renderer", async () => {
+  const h = handler({ cancelledBy: actor === "user" ? "user" : "admin" });
+  assert.equal((await h.run({ reservationId })).status, 200);
+  assert.equal(h.calls.resolver, 1); assert.equal(h.calls.sent.length, 1);
+  const mail = h.calls.sent[0];
+  assert.equal(mail.to, "fixture@example.invalid");
+  assert.equal(mail.subject, "StrzelajTu.pl / Synthetic Range B — Rezerwacja anulowana");
+  assert.match(mail.html, /https:\/\/strzelajtu.pl\/t\/synthetic-b\/my-reservations/);
+  assert.doesNotMatch(mail.html, /CSK|csk-krutla/);
+  assert.deepEqual(JSON.parse(JSON.stringify(h.calls.rpc[0])), ["get_reservation_cancellation_email_v1", { p_reservation_id: reservationId }]);
 });
-
-test("request, authorization, rate-limit and delivery responses are controlled", async () => {
-  const source = await readRoute();
-
-  assert.match(source, /Object\.keys\(parsedBody\)\.length !== 1/u);
-  assert.match(source, /!\("reservationId" in parsedBody\)/u);
-  assert.match(source, /return jsonError\("unauthorized", 401\)/u);
-  assert.match(source, /return jsonError\("forbidden", 403\)/u);
-  assert.match(source, /return jsonError\("invalid_status", 409\)/u);
-  assert.match(source, /code: "rate_limited"/u);
-  assert.match(source, /"Retry-After": String\(rateLimit\.retryAfterSeconds\)/u);
-  assert.match(source, /"Cache-Control": "no-store"/u);
-  assert.match(source, /\{ ok: outcome\.ok, code: outcome\.code \}/u);
-  assert.doesNotMatch(source, /details:\s*\w+Error/u);
-  assert.doesNotMatch(source, /message:\s*\w+Error/u);
-});
-
-test("recipient and content come only from trusted reservation/profile records", async () => {
-  const source = await readRoute();
-  const parsedPayload = source.match(
-    /type ReservationCancellationPayload = \{([\s\S]*?)\};/u
-  )?.[1];
-
-  assert.match(parsedPayload ?? "", /reservationId\?: unknown/u);
-  assert.doesNotMatch(parsedPayload ?? "", /email|recipient|subject|html|text/iu);
-  assert.match(
-    source,
-    /const customerEmail =\s*reservation\.customer_email\?\.trim\(\)\s*\|\|\s*ownerProfile\?\.email\?\.trim\(\)/u
-  );
-  assert.match(source, /to: customerEmail/u);
-  assert.doesNotMatch(source, /to:\s*body\./u);
-});
-
-test("cancellation uses the shared atomic delivery contract without retry", async () => {
-  const source = await readRoute();
-
-  assert.match(source, /deliverConfirmationEmail\(\{/u);
-  assert.match(source, /p_message_type: "reservation_cancellation"/u);
-  assert.match(source, /p_record_id: reservationId/u);
-  assert.match(source, /\{ idempotencyKey \}/u);
-  assert.match(
-    source,
-    /completionClient\.rpc\("complete_confirmation_email", input\)/u
-  );
-  assert.equal(source.match(/deliverConfirmationEmail\(\{/gu)?.length, 1);
-  assert.equal(source.match(/resend\.emails\.send\(/gu)?.length, 1);
-  assert.doesNotMatch(source, /setTimeout|while\s*\(/u);
-});
-
-test("dynamic HTML remains escaped and plain text remains plain", async () => {
-  const source = await readRoute();
-  for (const value of [
-    "displayName",
-    "formattedDate",
-    "startTime",
-    "endTime",
-    "laneName",
-  ]) {
-    assert.match(
-      source,
-      new RegExp(`const safe[A-Za-z]+ = escapeHtml\\(${value}\\)`)
-    );
-  }
-
-  const html = source.match(/const html = `([\s\S]*?)`;/u)?.[1] ?? "";
-  assert.ok(html.length > 0);
-  assert.deepEqual(
-    [...html.matchAll(/\$\{([^}]+)\}/gu)]
-      .map((match) => match[1])
-      .filter(
-        (interpolation) =>
-          !interpolation.startsWith("safe") &&
-          interpolation !== "cancelledByText" &&
-          !["brand.headerHtml", "brand.footerHtml"].includes(interpolation)
-      ),
-    []
-  );
-  assert.doesNotMatch(html, /href=/u);
-
-  const plainText = source.match(/const text = `([\s\S]*?)`;/u)?.[1] ?? "";
-  assert.match(plainText, /\$\{displayName\}/u);
-  assert.doesNotMatch(plainText, /safeDisplayName/u);
+test("no broad business reads or new business writes, and JWT precedes resource RPC", () => {
+  assert.doesNotMatch(source, /\.from\(|\.insert\(|\.update\(|get_my_tenant_role_v1|profiles\.role/);
+  assert.ok(source.indexOf("supabase.auth.getUser(accessToken)") < source.indexOf('"get_reservation_cancellation_email_v1"'));
+  assert.ok(source.indexOf("if (reservationError)") < source.indexOf("await resolveReservationEmailTenantContext"));
+  assert.match(source, /p_message_type: "reservation_cancellation"/);
+  assert.match(source, /\{ idempotencyKey \}/);
 });

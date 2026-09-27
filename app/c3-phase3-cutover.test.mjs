@@ -55,6 +55,7 @@ test("calendar feed and cancellation email authorize from resolved resource tena
   assert.match(calendar, /resolvePublicTenantContext\(supabase, requestedSlug\)/);
   assert.match(calendar, /get_my_tenant_role_v1/);
   assert.equal((calendar.match(/\.eq\("tenant_id", tenant\.value\.tenantId\)/g) ?? []).length, 4);
-  assert.match(email, /p_tenant_id: reservation\.tenant_id/);
+  assert.match(email, /"get_reservation_cancellation_email_v1", \{ p_reservation_id: reservationId \}/);
+  assert.doesNotMatch(email, /p_tenant_id|\.from\("reservations"\)/);
   assert.doesNotMatch(email, /\.select\("user_id, role"\)/);
 });
