@@ -12,7 +12,7 @@ import {
   getConfirmationRateLimitSecret,
 } from "@/lib/server/confirmation-email-rate-limit";
 import { verifyAuthUser } from "@/lib/server/auth-user-verification";
-import { escapeEmailHref, escapeHtml } from "@/lib/server/email-html";
+import { operationalEmailLayout } from "@/lib/server/operational-email-layout";
 
 type ReservationConfirmationPayload = {
   reservationId?: unknown;
@@ -256,89 +256,31 @@ export async function POST(request: Request) {
 
     const checkInUrl = operationalEmailActionUrl("check-in", checkInToken);
 
-    const safeDisplayName = escapeHtml(displayName);
-    const safeFormattedDate = escapeHtml(formattedDate);
-    const safeStartTime = escapeHtml(startTime);
-    const safeEndTime = escapeHtml(endTime);
-    const safeLaneName = escapeHtml(laneName);
-    const safeFormattedPrice = escapeHtml(formattedPrice);
-    const safeCheckInUrl = escapeEmailHref(checkInUrl);
 
     const tenant = await resolveReservationEmailTenantContext(reservationId);
     const brand = operationalEmailBrand(tenant, "Potwierdzenie rezerwacji");
     const reservationsUrl = operationalEmailHistoryUrl(tenant, "reservations");
-    const safeReservationsUrl = escapeEmailHref(reservationsUrl);
-    const safeTenantName = escapeHtml(tenant.displayName);
     const subject = brand.subject;
-    const html = `
-      <div style="margin:0;padding:0;background:#09090b;font-family:Arial,Helvetica,sans-serif;color:#ffffff;">
-        <div style="max-width:620px;margin:0 auto;padding:32px 20px;">
-          <div style="border:1px solid #27272a;background:#18181b;border-radius:18px;padding:32px;">
-            <p style="margin:0 0 18px 0;color:#22c55e;font-size:12px;letter-spacing:4px;text-transform:uppercase;font-weight:bold;">
-              ${brand.headerHtml}
-            </p>
-
-            <h1 style="margin:0 0 16px 0;font-size:28px;line-height:1.25;color:#ffffff;">
-              Potwierdzenie rezerwacji
-            </h1>
-
-            <p style="margin:0 0 18px 0;font-size:16px;line-height:1.6;color:#d4d4d8;">
-              Cześć ${safeDisplayName}, Twoja rezerwacja została przyjęta.
-            </p>
-
-            <div style="margin:24px 0;padding:18px;border:1px solid #3f3f46;border-radius:14px;background:#09090b;">
-              <p style="margin:0 0 10px 0;font-size:15px;color:#d4d4d8;">
-                <strong style="color:#ffffff;">Obiekt:</strong> ${safeTenantName}
-              </p>
-              <p style="margin:0 0 10px 0;font-size:15px;color:#d4d4d8;">
-                <strong style="color:#ffffff;">Status:</strong> Potwierdzona
-              </p>
-              <p style="margin:0 0 10px 0;font-size:15px;color:#d4d4d8;">
-                <strong style="color:#ffffff;">Data:</strong> ${safeFormattedDate}
-              </p>
-              <p style="margin:0 0 10px 0;font-size:15px;color:#d4d4d8;">
-                <strong style="color:#ffffff;">Godzina:</strong> ${safeStartTime} - ${safeEndTime}
-              </p>
-              <p style="margin:0 0 10px 0;font-size:15px;color:#d4d4d8;">
-                <strong style="color:#ffffff;">Oś:</strong> ${safeLaneName}
-              </p>
-              <p style="margin:0;font-size:15px;color:#d4d4d8;">
-                <strong style="color:#ffffff;">Płatność:</strong> ${safeFormattedPrice}, płatność na miejscu
-              </p>
-            </div>
-
-            <p style="margin:24px 0;"><a href="${safeReservationsUrl}" style="color:#d9f99d;font-weight:bold;">Moje rezerwacje</a></p>
-
-            <div style="margin:24px 0;padding:18px;border:1px solid #365314;border-radius:14px;background:#13210d;">
-              <p style="margin:0 0 12px 0;font-size:15px;line-height:1.6;color:#d9f99d;">
-                <strong style="color:#ffffff;">Szybki check-in:</strong><br />
-                Pokaż ten link lub kod QR obsłudze podczas wizyty. Obsługa potwierdzi obecność w systemie.
-              </p>
-
-              <a href="${safeCheckInUrl}" style="display:inline-block;padding:12px 16px;border-radius:10px;background:#22c55e;color:#052e16;text-decoration:none;font-weight:bold;font-size:14px;">
-                Otwórz check-in
-              </a>
-
-              <p style="margin:12px 0 0 0;font-size:12px;line-height:1.5;color:#a3e635;word-break:break-all;">
-                ${safeCheckInUrl}
-              </p>
-            </div>
-
-            <p style="margin:0 0 14px 0;font-size:14px;line-height:1.6;color:#a1a1aa;">
-              Przyjedź kilka minut wcześniej, aby spokojnie przejść formalności przed wizytą.
-            </p>
-
-            <p style="margin:0;font-size:14px;line-height:1.6;color:#a1a1aa;">
-              W przypadku pierwszej wizyty pracownik może poprosić o okazanie wymaganych uprawnień do wglądu.
-            </p>
-          </div>
-
-          <p style="margin:18px 0 0 0;text-align:center;font-size:12px;color:#71717a;">
-            ${brand.footerHtml}
-          </p>
-        </div>
-      </div>
-    `;
+    const html = operationalEmailLayout({
+      tenantDisplayName: tenant.displayName,
+      title: "Potwierdzenie rezerwacji",
+      intro: `Cześć ${displayName}, Twoja rezerwacja została przyjęta.`,
+      details: [
+        { label: "Obiekt", value: tenant.displayName },
+        { label: "Status", value: "Potwierdzona" },
+        { label: "Data", value: formattedDate },
+        { label: "Godzina", value: `${startTime} - ${endTime}` },
+        { label: "Oś", value: laneName },
+        { label: "Płatność", value: `${formattedPrice}, płatność na miejscu` },
+      ],
+      actions: [{ label: "Moje rezerwacje", url: reservationsUrl },
+      { label: "Otwórz check-in", url: checkInUrl, description: "Szybki check-in: Pokaż ten link lub kod QR obsłudze podczas wizyty. Obsługa potwierdzi obecność w systemie." },
+      ],
+      notes: [
+        "Przyjedź kilka minut wcześniej, aby spokojnie przejść formalności przed wizytą.",
+        "W przypadku pierwszej wizyty pracownik może poprosić o okazanie wymaganych uprawnień do wglądu.",
+      ],
+    });
 
     const text = `
 ${brand.headerText}

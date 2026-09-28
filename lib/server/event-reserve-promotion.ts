@@ -2,7 +2,7 @@ import "server-only";
 import { resolveEventEmailTenantContext, operationalEmailBrand, operationalEmailActionUrl, getOperationalEmailSenderConfiguration } from "./operational-email";
 
 import { Resend } from "resend";
-import { escapeEmailHref, escapeHtml } from "./email-html";
+import { operationalEmailLayout } from "./operational-email-layout";
 import { createClient } from "@supabase/supabase-js";
 import { eventInvitationKey } from "./event-invitation-key";
 
@@ -472,14 +472,6 @@ export async function promoteEventReserve(
 
       const confirmUrl = operationalEmailActionUrl("events/confirm", promotion.promotion_token);
       const displayName = registration.customer_name?.trim() || "Uczestniku";
-      const safeDisplayName = escapeHtml(displayName);
-      const safeEventTitle = escapeHtml(eventItem.title ?? "-");
-      const safeFormattedDate = escapeHtml(formattedDate);
-      const safeFormattedStartTime = escapeHtml(formattedStartTime);
-      const safeFormattedEndTime = escapeHtml(formattedEndTime);
-      const safeLocation = escapeHtml(eventItem.location ?? "-");
-      const safeFormattedPrice = escapeHtml(formattedPrice);
-      const safeConfirmUrl = escapeEmailHref(confirmUrl);
       const expiry = new Date(promotion.promotion_token_expires_at);
       if (!Number.isFinite(expiry.getTime()) || expiry.getTime() <= Date.now()) {
         failedCount += 1;
@@ -488,42 +480,26 @@ export async function promoteEventReserve(
         continue;
       }
       const expiresAt = new Intl.DateTimeFormat("pl-PL", { dateStyle: "short", timeStyle: "short", timeZone: "Europe/Warsaw" }).format(expiry);
-      const safeExpiresAt = escapeHtml(expiresAt);
 
       const subject = brand.subject;
-      const html = `
-        <div style="margin:0;padding:0;background:#09090b;font-family:Arial,Helvetica,sans-serif;color:#ffffff;">
-          <div style="max-width:620px;margin:0 auto;padding:32px 20px;">
-            <div style="border:1px solid #27272a;background:#18181b;border-radius:18px;padding:32px;">
-              <p style="margin:0 0 18px 0;color:#22c55e;font-size:12px;letter-spacing:4px;text-transform:uppercase;font-weight:bold;">
-                ${brand.headerHtml}
-              </p>
-              <h1 style="margin:0 0 16px 0;font-size:28px;line-height:1.25;color:#ffffff;">
-                Zwolniło się miejsce na szkoleniu
-              </h1>
-              <p style="margin:0 0 18px 0;font-size:16px;line-height:1.6;color:#d4d4d8;">
-                Cześć ${safeDisplayName}, na szkoleniu z Twojej listy rezerwowej pojawiła się możliwość potwierdzenia udziału.
-              </p>
-              <div style="margin:24px 0;padding:18px;border:1px solid #3f3f46;border-radius:14px;background:#09090b;">
-                <p style="margin:0 0 10px 0;font-size:15px;color:#d4d4d8;"><strong style="color:#ffffff;">Szkolenie:</strong> ${safeEventTitle}</p>
-                <p style="margin:0 0 10px 0;font-size:15px;color:#d4d4d8;"><strong style="color:#ffffff;">Data:</strong> ${safeFormattedDate}</p>
-                <p style="margin:0 0 10px 0;font-size:15px;color:#d4d4d8;"><strong style="color:#ffffff;">Godzina:</strong> ${safeFormattedStartTime} - ${safeFormattedEndTime}</p>
-                <p style="margin:0 0 10px 0;font-size:15px;color:#d4d4d8;"><strong style="color:#ffffff;">Miejsce:</strong> ${safeLocation}</p>
-                <p style="margin:0;font-size:15px;color:#d4d4d8;"><strong style="color:#ffffff;">Płatność:</strong> ${safeFormattedPrice}, płatność na miejscu</p>
-              </div>
-              <div style="margin:24px 0;padding:18px;border:1px solid #365314;border-radius:14px;background:#13210d;">
-                <p style="margin:0 0 12px 0;font-size:15px;line-height:1.6;color:#d9f99d;">
-                  Kliknij przycisk poniżej, aby potwierdzić udział. Miejsce otrzyma pierwsza osoba z listy rezerwowej, która skutecznie potwierdzi udział.
-                </p>
-                <a href="${safeConfirmUrl}" style="display:inline-block;padding:12px 16px;border-radius:10px;background:#22c55e;color:#052e16;text-decoration:none;font-weight:bold;font-size:14px;">Potwierdź udział</a>
-              </div>
-              <p style="margin:0 0 14px 0;font-size:14px;line-height:1.6;color:#a1a1aa;">Link jest ważny do ${safeExpiresAt} (czas polski). Samo otrzymanie tej wiadomości nie gwarantuje miejsca — decyduje pierwsze skuteczne potwierdzenie.</p>
-              <p style="margin:0;font-size:14px;line-height:1.6;color:#a1a1aa;">Jeżeli nie chcesz brać udziału w szkoleniu, zignoruj tę wiadomość.</p>
-            </div>
-            <p style="margin:18px 0 0 0;text-align:center;font-size:12px;color:#71717a;">${brand.footerHtml}</p>
-          </div>
-        </div>
-      `;
+      const html = operationalEmailLayout({
+        tenantDisplayName: tenant.displayName,
+        title: "Zwolniło się miejsce na szkoleniu",
+        intro: `Cześć ${displayName}, na szkoleniu z Twojej listy rezerwowej pojawiła się możliwość potwierdzenia udziału.`,
+        details: [
+          { label: "Szkolenie", value: eventItem.title ?? "-" },
+          { label: "Data", value: formattedDate },
+          { label: "Godzina", value: `${formattedStartTime} - ${formattedEndTime}` },
+          { label: "Miejsce", value: eventItem.location ?? "-" },
+          { label: "Płatność", value: `${formattedPrice}, płatność na miejscu` },
+        ],
+        actions: [{ label: "Potwierdź udział", url: confirmUrl, description: "Kliknij przycisk poniżej, aby potwierdzić udział. Miejsce otrzyma pierwsza osoba z listy rezerwowej, która skutecznie potwierdzi udział." },
+        ],
+        notes: [
+          `Link jest ważny do ${expiresAt} (czas polski). Samo otrzymanie tej wiadomości nie gwarantuje miejsca — decyduje pierwsze skuteczne potwierdzenie.`,
+          "Jeżeli nie chcesz brać udziału w szkoleniu, zignoruj tę wiadomość.",
+        ],
+      });
       const text = `
 ${brand.headerText}
 

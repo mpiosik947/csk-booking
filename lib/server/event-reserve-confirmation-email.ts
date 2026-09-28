@@ -2,7 +2,7 @@ import "server-only";
 import { resolveEventRegistrationEmailTenantContext, operationalEmailBrand, operationalEmailHistoryUrl, getOperationalEmailSenderConfiguration } from "./operational-email";
 
 import { Resend } from "resend";
-import { escapeEmailHref, escapeHtml } from "./email-html";
+import { operationalEmailLayout } from "./operational-email-layout";
 
 export type ConfirmedEvent = {
   title: string | null;
@@ -80,70 +80,24 @@ export async function sendConfirmedPlaceEmail(
   const brand = operationalEmailBrand(tenant, "Twoje miejsce na szkoleniu zostało potwierdzone");
   const subject = brand.subject;
   const myEventsUrl = operationalEmailHistoryUrl(tenant, "events");
-  const safeDisplayName = escapeHtml(displayName);
-  const safeEventTitle = escapeHtml(event?.title ?? "-");
-  const safeFormattedDate = escapeHtml(formattedDate);
-  const safeFormattedStartTime = escapeHtml(formattedStartTime);
-  const safeFormattedEndTime = escapeHtml(formattedEndTime);
-  const safeLocation = escapeHtml(event?.location ?? "-");
-  const safeFormattedPrice = escapeHtml(formattedPrice);
-  const safeMyEventsUrl = escapeEmailHref(myEventsUrl);
 
-  const html = `
-    <div style="margin:0;padding:0;background:#09090b;font-family:Arial,Helvetica,sans-serif;color:#ffffff;">
-      <div style="max-width:620px;margin:0 auto;padding:32px 20px;">
-        <div style="border:1px solid #27272a;background:#18181b;border-radius:18px;padding:32px;">
-          <p style="margin:0 0 18px 0;color:#22c55e;font-size:12px;letter-spacing:4px;text-transform:uppercase;font-weight:bold;">
-            ${brand.headerHtml}
-          </p>
-
-          <h1 style="margin:0 0 16px 0;font-size:28px;line-height:1.25;color:#ffffff;">
-            Twoje miejsce zostało potwierdzone
-          </h1>
-
-          <p style="margin:0 0 18px 0;font-size:16px;line-height:1.6;color:#d4d4d8;">
-            Cześć ${safeDisplayName}, Twoje miejsce na szkoleniu zostało potwierdzone.
-          </p>
-
-          <div style="margin:24px 0;padding:18px;border:1px solid #3f3f46;border-radius:14px;background:#09090b;">
-            <p style="margin:0 0 10px 0;font-size:15px;color:#d4d4d8;">
-              <strong style="color:#ffffff;">Szkolenie:</strong> ${safeEventTitle}
-            </p>
-            <p style="margin:0 0 10px 0;font-size:15px;color:#d4d4d8;">
-              <strong style="color:#ffffff;">Data:</strong> ${safeFormattedDate}
-            </p>
-            <p style="margin:0 0 10px 0;font-size:15px;color:#d4d4d8;">
-              <strong style="color:#ffffff;">Godzina:</strong> ${safeFormattedStartTime} - ${safeFormattedEndTime}
-            </p>
-            <p style="margin:0 0 10px 0;font-size:15px;color:#d4d4d8;">
-              <strong style="color:#ffffff;">Miejsce:</strong> ${safeLocation}
-            </p>
-            <p style="margin:0;font-size:15px;color:#d4d4d8;">
-              <strong style="color:#ffffff;">Płatność:</strong> ${safeFormattedPrice}, płatność na miejscu
-            </p>
-          </div>
-
-          <div style="margin:24px 0;padding:18px;border:1px solid #365314;border-radius:14px;background:#13210d;">
-            <p style="margin:0 0 12px 0;font-size:15px;line-height:1.6;color:#d9f99d;">
-              Szczegóły zapisu znajdziesz w panelu uczestnika.
-            </p>
-
-            <a href="${safeMyEventsUrl}" style="display:inline-block;padding:12px 16px;border-radius:10px;background:#22c55e;color:#052e16;text-decoration:none;font-weight:bold;font-size:14px;">
-              Moje szkolenia
-            </a>
-          </div>
-
-          <p style="margin:0;font-size:14px;line-height:1.6;color:#a1a1aa;">
-            Przyjedź kilka minut wcześniej, aby spokojnie przejść formalności przed szkoleniem.
-          </p>
-        </div>
-
-        <p style="margin:18px 0 0 0;text-align:center;font-size:12px;color:#71717a;">
-          ${brand.footerHtml}
-        </p>
-      </div>
-    </div>
-  `;
+  const html = operationalEmailLayout({
+    tenantDisplayName: tenant.displayName,
+    title: "Twoje miejsce zostało potwierdzone",
+    intro: `Cześć ${displayName}, Twoje miejsce na szkoleniu zostało potwierdzone.`,
+    details: [
+      { label: "Szkolenie", value: event?.title ?? "-" },
+      { label: "Data", value: formattedDate },
+      { label: "Godzina", value: `${formattedStartTime} - ${formattedEndTime}` },
+      { label: "Miejsce", value: event?.location ?? "-" },
+      { label: "Płatność", value: `${formattedPrice}, płatność na miejscu` },
+    ],
+    actions: [{ label: "Moje szkolenia", url: myEventsUrl, description: "Szczegóły zapisu znajdziesz w panelu uczestnika." },
+    ],
+    notes: [
+      "Przyjedź kilka minut wcześniej, aby spokojnie przejść formalności przed szkoleniem.",
+    ],
+  });
 
   const text = `
 ${brand.headerText}

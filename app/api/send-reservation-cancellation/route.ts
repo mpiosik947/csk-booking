@@ -14,7 +14,7 @@ import {
 import {
   verifyAuthUser,
 } from "@/lib/server/auth-user-verification";
-import { escapeEmailHref, escapeHtml } from "@/lib/server/email-html";
+import { operationalEmailLayout } from "@/lib/server/operational-email-layout";
 
 type ReservationCancellationPayload = {
   reservationId?: unknown;
@@ -210,11 +210,6 @@ export async function POST(request: Request) {
 
     const displayName = customerName;
     const formattedDate = formatDate(reservationDate);
-    const safeDisplayName = escapeHtml(displayName);
-    const safeFormattedDate = escapeHtml(formattedDate);
-    const safeStartTime = escapeHtml(startTime);
-    const safeEndTime = escapeHtml(endTime);
-    const safeLaneName = escapeHtml(laneName);
 
     const cancelledByText =
       cancelledBy === "admin"
@@ -224,57 +219,25 @@ export async function POST(request: Request) {
     const tenant = await resolveReservationEmailTenantContext(reservationId);
     const brand = operationalEmailBrand(tenant, "Rezerwacja anulowana");
     const reservationsUrl = operationalEmailHistoryUrl(tenant, "reservations");
-    const safeReservationsUrl = escapeEmailHref(reservationsUrl);
-    const safeTenantName = escapeHtml(tenant.displayName);
     const subject = brand.subject;
 
-    const html = `
-      <div style="margin:0;padding:0;background:#09090b;font-family:Arial,Helvetica,sans-serif;color:#ffffff;">
-        <div style="max-width:620px;margin:0 auto;padding:32px 20px;">
-          <div style="border:1px solid #27272a;background:#18181b;border-radius:18px;padding:32px;">
-            <p style="margin:0 0 18px 0;color:#ef4444;font-size:12px;letter-spacing:4px;text-transform:uppercase;font-weight:bold;">
-              ${brand.headerHtml}
-            </p>
-
-            <h1 style="margin:0 0 16px 0;font-size:28px;line-height:1.25;color:#ffffff;">
-              Rezerwacja anulowana
-            </h1>
-
-            <p style="margin:0 0 18px 0;font-size:16px;line-height:1.6;color:#d4d4d8;">
-              Cześć ${safeDisplayName}, ${cancelledByText}
-            </p>
-
-            <div style="margin:24px 0;padding:18px;border:1px solid #3f3f46;border-radius:14px;background:#09090b;">
-              <p style="margin:0 0 10px 0;font-size:15px;color:#d4d4d8;">
-                <strong style="color:#ffffff;">Obiekt:</strong> ${safeTenantName}
-              </p>
-              <p style="margin:0 0 10px 0;font-size:15px;color:#d4d4d8;">
-                <strong style="color:#ffffff;">Status:</strong> Anulowana
-              </p>
-              <p style="margin:0 0 10px 0;font-size:15px;color:#d4d4d8;">
-                <strong style="color:#ffffff;">Data:</strong> ${safeFormattedDate}
-              </p>
-              <p style="margin:0 0 10px 0;font-size:15px;color:#d4d4d8;">
-                <strong style="color:#ffffff;">Godzina:</strong> ${safeStartTime} - ${safeEndTime}
-              </p>
-              <p style="margin:0;font-size:15px;color:#d4d4d8;">
-                <strong style="color:#ffffff;">Oś:</strong> ${safeLaneName}
-              </p>
-            </div>
-
-            <p style="margin:24px 0;"><a href="${safeReservationsUrl}" style="color:#d9f99d;font-weight:bold;">Moje rezerwacje</a></p>
-
-            <p style="margin:0;font-size:14px;line-height:1.6;color:#a1a1aa;">
-              W przypadku pytań skontaktuj się z obsługą obiektu.
-            </p>
-          </div>
-
-          <p style="margin:18px 0 0 0;text-align:center;font-size:12px;color:#71717a;">
-            ${brand.footerHtml}
-          </p>
-        </div>
-      </div>
-    `;
+    const html = operationalEmailLayout({
+      tenantDisplayName: tenant.displayName,
+      title: "Rezerwacja anulowana",
+      intro: `Cześć ${displayName}, ${cancelledByText}`,
+      details: [
+        { label: "Obiekt", value: tenant.displayName },
+        { label: "Status", value: "Anulowana" },
+        { label: "Data", value: formattedDate },
+        { label: "Godzina", value: `${startTime} - ${endTime}` },
+        { label: "Oś", value: laneName },
+      ],
+      actions: [{ label: "Moje rezerwacje", url: reservationsUrl },
+      ],
+      notes: [
+        "W przypadku pytań skontaktuj się z obsługą obiektu.",
+      ],
+    });
 
     const text = `
 ${brand.headerText}

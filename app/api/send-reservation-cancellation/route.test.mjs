@@ -4,7 +4,7 @@ import test from "node:test";
 import vm from "node:vm";
 import ts from "typescript";
 import { operationalEmailBrand, operationalEmailHistoryUrl } from "../../../lib/server/operational-email-core.ts";
-import { escapeHtml, escapeEmailHref } from "../../../lib/server/email-html.ts";
+import { operationalEmailLayout } from "../../../lib/server/operational-email-layout.ts";
 
 const source = readFileSync(new URL("./route.ts", import.meta.url), "utf8");
 const reservationId = "11111111-1111-4111-8111-111111111111";
@@ -43,7 +43,7 @@ function handler({ denied = false, unavailable = false, cancelledBy = "user" } =
       checkConfirmationEmailRateLimit: async () => ({ kind: "allowed" }),
     },
     "@/lib/server/auth-user-verification": { verifyAuthUser: async read => ({ ok: true, user: (await read()).data.user }) },
-    "@/lib/server/email-html": { escapeHtml, escapeEmailHref },
+    "@/lib/server/operational-email-layout": { operationalEmailLayout },
   };
   const exports = {};
   vm.runInNewContext(ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText, {

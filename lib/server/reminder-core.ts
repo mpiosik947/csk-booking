@@ -1,6 +1,6 @@
 import { timingSafeEqual } from 'node:crypto';
 import { PLATFORM_BASE_URL } from '../platform-domain.ts';
-import { escapeHtml } from './email-html.ts';
+import { operationalEmailLayout } from './operational-email-layout.ts';
 import { buildOperationalEmailSubject } from './operational-email-core.ts';
 
 export type ReminderPayload = {
@@ -28,7 +28,18 @@ export function reminderContent(p: ReminderPayload) {
     `Obiekt: ${p.display_name}`, ...(p.location ? [`${booking ? 'Oś/stanowisko' : 'Miejsce'}: ${p.location}`] : [])];
   const subject = buildOperationalEmailSubject({tenantDisplayName:p.display_name,notificationLabel:label});
   return {subject, text:['StrzelajTu.pl',p.display_name,label,...rows,href].join('\n'),
-    html:`<h1>StrzelajTu.pl</h1><h2>${escapeHtml(p.display_name)}</h2><h3>${label}</h3>${rows.map(r=>`<p>${escapeHtml(r)}</p>`).join('')}<p><a href="${escapeHtml(href)}">${booking?'Moje rezerwacje':'Moje wydarzenia'}</a></p>`};
+    html: operationalEmailLayout({
+      tenantDisplayName: p.display_name,
+      title: label,
+      intro: p.title,
+      details: [
+        { label: 'Data', value: p.date },
+        { label: 'Godzina', value: `${p.start.slice(0,5)}–${p.end.slice(0,5)} (Europe/Warsaw)` },
+        { label: 'Obiekt', value: p.display_name },
+        ...(p.location ? [{ label: booking ? 'Oś/stanowisko' : 'Miejsce', value: p.location }] : []),
+      ],
+      actions: [{ label: booking ? 'Moje rezerwacje' : 'Moje wydarzenia', url: href }],
+    })};
 }
 export async function runReminders(deps: {
   rpc: (name:string,args?:Record<string,unknown>)=>Promise<Result>;

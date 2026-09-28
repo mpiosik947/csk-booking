@@ -12,7 +12,7 @@ import {
   getConfirmationRateLimitSecret,
 } from "@/lib/server/confirmation-email-rate-limit";
 import { verifyAuthUser } from "@/lib/server/auth-user-verification";
-import { escapeEmailHref, escapeHtml } from "@/lib/server/email-html";
+import { operationalEmailLayout } from "@/lib/server/operational-email-layout";
 
 type EventRegistrationConfirmationPayload = {
   registrationId?: unknown;
@@ -265,82 +265,30 @@ export async function POST(request: Request) {
     const location = event.location?.trim() || "-";
 
 
-    const safeDisplayName = escapeHtml(displayName);
-    const safeEventTitle = escapeHtml(eventTitle);
-    const safeFormattedDate = escapeHtml(formattedDate);
-    const safeStartTime = escapeHtml(startTime);
-    const safeEndTime = escapeHtml(endTime);
-    const safeLocation = escapeHtml(location);
-    const safeFormattedStatus = escapeHtml(formattedStatus);
-    const safeFormattedPrice = escapeHtml(formattedPrice);
 
     const tenant = await resolveEventRegistrationEmailTenantContext(registrationId);
     const brand = operationalEmailBrand(tenant, "Potwierdzenie zapisu na szkolenie");
     const subject = brand.subject;
     const myEventsUrl = operationalEmailHistoryUrl(tenant, "events");
-    const safeMyEventsUrl = escapeEmailHref(myEventsUrl);
-    const html = `
-      <div style="margin:0;padding:0;background:#09090b;font-family:Arial,Helvetica,sans-serif;color:#ffffff;">
-        <div style="max-width:620px;margin:0 auto;padding:32px 20px;">
-          <div style="border:1px solid #27272a;background:#18181b;border-radius:18px;padding:32px;">
-            <p style="margin:0 0 18px 0;color:#22c55e;font-size:12px;letter-spacing:4px;text-transform:uppercase;font-weight:bold;">
-              ${brand.headerHtml}
-            </p>
-
-            <h1 style="margin:0 0 16px 0;font-size:28px;line-height:1.25;color:#ffffff;">
-              Potwierdzenie zapisu na szkolenie
-            </h1>
-
-            <p style="margin:0 0 18px 0;font-size:16px;line-height:1.6;color:#d4d4d8;">
-              Cześć ${safeDisplayName}, Twój zapis na szkolenie został przyjęty.
-            </p>
-
-            <div style="margin:24px 0;padding:18px;border:1px solid #3f3f46;border-radius:14px;background:#09090b;">
-              <p style="margin:0 0 10px 0;font-size:15px;color:#d4d4d8;">
-                <strong style="color:#ffffff;">Szkolenie:</strong> ${safeEventTitle}
-              </p>
-              <p style="margin:0 0 10px 0;font-size:15px;color:#d4d4d8;">
-                <strong style="color:#ffffff;">Data:</strong> ${safeFormattedDate}
-              </p>
-              <p style="margin:0 0 10px 0;font-size:15px;color:#d4d4d8;">
-                <strong style="color:#ffffff;">Godzina:</strong> ${safeStartTime} - ${safeEndTime}
-              </p>
-              <p style="margin:0 0 10px 0;font-size:15px;color:#d4d4d8;">
-                <strong style="color:#ffffff;">Miejsce:</strong> ${safeLocation}
-              </p>
-              <p style="margin:0 0 10px 0;font-size:15px;color:#d4d4d8;">
-                <strong style="color:#ffffff;">Status:</strong> ${safeFormattedStatus}
-              </p>
-              <p style="margin:0;font-size:15px;color:#d4d4d8;">
-                <strong style="color:#ffffff;">Płatność:</strong> ${safeFormattedPrice}, płatność na miejscu
-              </p>
-            </div>
-
-            <div style="margin:24px 0;padding:18px;border:1px solid #365314;border-radius:14px;background:#13210d;">
-              <p style="margin:0 0 12px 0;font-size:15px;line-height:1.6;color:#d9f99d;">
-                Szczegóły swojego zapisu znajdziesz w panelu uczestnika.
-              </p>
-
-              <a href="${safeMyEventsUrl}" style="display:inline-block;padding:12px 16px;border-radius:10px;background:#22c55e;color:#052e16;text-decoration:none;font-weight:bold;font-size:14px;">
-                Moje szkolenia
-              </a>
-            </div>
-
-            <p style="margin:0 0 14px 0;font-size:14px;line-height:1.6;color:#a1a1aa;">
-              Przyjedź kilka minut wcześniej, aby spokojnie przejść formalności przed szkoleniem.
-            </p>
-
-            <p style="margin:0;font-size:14px;line-height:1.6;color:#a1a1aa;">
-              W przypadku pierwszej wizyty pracownik może poprosić o okazanie wymaganych uprawnień do wglądu.
-            </p>
-          </div>
-
-          <p style="margin:18px 0 0 0;text-align:center;font-size:12px;color:#71717a;">
-            ${brand.footerHtml}
-          </p>
-        </div>
-      </div>
-    `;
+    const html = operationalEmailLayout({
+      tenantDisplayName: tenant.displayName,
+      title: "Potwierdzenie zapisu na szkolenie",
+      intro: `Cześć ${displayName}, Twój zapis na szkolenie został przyjęty.`,
+      details: [
+        { label: "Szkolenie", value: eventTitle },
+        { label: "Data", value: formattedDate },
+        { label: "Godzina", value: `${startTime} - ${endTime}` },
+        { label: "Miejsce", value: location },
+        { label: "Płatność", value: `${formattedPrice}, płatność na miejscu` },
+        { label: "Status", value: formattedStatus },
+      ],
+      actions: [{ label: "Moje szkolenia", url: myEventsUrl, description: "Szczegóły swojego zapisu znajdziesz w panelu uczestnika." },
+      ],
+      notes: [
+        "Przyjedź kilka minut wcześniej, aby spokojnie przejść formalności przed szkoleniem.",
+        "W przypadku pierwszej wizyty pracownik może poprosić o okazanie wymaganych uprawnień do wglądu.",
+      ],
+    });
 
     const text = `
 ${brand.headerText}

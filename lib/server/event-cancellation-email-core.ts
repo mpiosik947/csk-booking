@@ -1,5 +1,5 @@
 import { operationalEmailBrand, operationalEmailHistoryUrl, type OperationalEmailTenantContext } from "./operational-email-core.ts";
-import { escapeHtml, escapeEmailHref } from "./email-html.ts";
+import { operationalEmailLayout } from "./operational-email-layout.ts";
 
 export function cancellationEmailContent(tenant: OperationalEmailTenantContext, event: {
   title: string | null; event_date: string | null; start_time: string | null; end_time: string | null;
@@ -12,7 +12,18 @@ export function cancellationEmailContent(tenant: OperationalEmailTenantContext, 
     `Obiekt: ${tenant.displayName}`];
   return { subject: brand.subject,
     text: `${brand.headerText}\n\n${lines.join("\n")}\n\nMoje szkolenia: ${url}`,
-    html: `<div style="background:#11150f;color:#eee;padding:24px;font-family:Arial,sans-serif"><h2>${brand.headerHtml}</h2>${lines.map(line => `<p>${escapeHtml(line)}</p>`).join("")}<a style="color:#eab308" href="${escapeEmailHref(url)}">Moje szkolenia</a></div>` };
+    html: operationalEmailLayout({
+      tenantDisplayName: tenant.displayName,
+      title: "Zapis na wydarzenie anulowany",
+      intro: lines[0],
+      details: [
+        { label: "Wydarzenie", value: event.title ?? "-" },
+        { label: "Data", value: event.event_date ?? "-" },
+        { label: "Godzina", value: `${event.start_time?.slice(0, 5) ?? "-"}–${event.end_time?.slice(0, 5) ?? "-"}` },
+        { label: "Obiekt", value: tenant.displayName },
+      ],
+      actions: [{ label: "Moje szkolenia", url }],
+    }) };
 }
 
 type RpcResult = { data: unknown; error: unknown };
