@@ -14,6 +14,7 @@ new Function('require', 'exports', code)(name => {
   if (name === 'next/link') return { __esModule: true, default: props => React.createElement('a', props) };
   if (name === 'next/image') return { __esModule: true, default: props => { const clean = { ...props }; delete clean.priority; delete clean.fill; return React.createElement('img', clean); } };
   if (name === '@/lib/platform-domain') return { PLATFORM_BASE_URL: 'https://strzelajtu.pl' };
+  if (name === './TenantActionTiles') return { __esModule: true, default: () => null };
   if (name === './PublicAuthControls') return { __esModule: true, default: ({ preview, customDomain, returnPath }) => preview ? React.createElement('span', { 'aria-disabled': true }, 'Zaloguj się') : React.createElement('a', { href: `${customDomain ? 'https://strzelajtu.pl' : ''}/login?redirectTo=${encodeURIComponent(returnPath)}` }, 'Zaloguj się') };
   return require(name);
 }, compiled.exports);

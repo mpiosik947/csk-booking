@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 import type { PublicTenantLanding as PublicTenantLandingData } from "@/lib/server/public-tenant-directory";
 import { PLATFORM_BASE_URL } from "@/lib/platform-domain";
 import PublicAuthControls from "./PublicAuthControls";
+import TenantActionTiles from "./TenantActionTiles";
 
 function LandingLink({ href, className, children, preview, label }: { href: string; className?: string; children: ReactNode; preview: boolean; label?: string }) {
   return preview ? <span className={className} aria-disabled="true">{children}</span>
@@ -74,6 +75,7 @@ export function PublicTenantLanding({ tenant, preview = false, customDomain = fa
         <Icon name="user" className="h-5 w-5 text-[#aab58f]" />
         <PublicAuthControls variant="tenant" returnPath={`/${tenant.publicSlug}`} preview={preview} customDomain={customDomain} />
       </nav>
+      <TenantActionTiles tenantSlug={tenant.tenantSlug} disabled={preview || customDomain} />
       {hasInformation && <section aria-label="Informacje o obiekcie">
         <h2 className="mb-3 text-xs font-bold tracking-[0.2em] text-[#858c7f]">INFORMACJE</h2>
         <div data-testid="information-rows" className="space-y-2">
