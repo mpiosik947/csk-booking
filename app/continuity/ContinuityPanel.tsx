@@ -40,18 +40,18 @@ export default function ContinuityPanel() {
         await load();
         setMessage("Anulowano. Nie utworzono nowego zobowiązania ani promocji z listy rezerwowej.");
         // The business RPC has completed. Email is a separate best-effort step.
-        if (resource.kind === "reservation" && data?.changed === true) {
+        if (data?.changed === true) {
           try {
             const { data: { session } } = await supabase.auth.getSession();
             if (!session?.access_token) throw new Error("session unavailable");
-            const response = await fetch("/api/send-reservation-cancellation", {
+            const response = await fetch(resource.kind === "reservation" ? "/api/send-reservation-cancellation" : "/api/send-event-cancellation", {
               method: "POST",
               headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
-              body: JSON.stringify({ reservationId: resource.id }),
+              body: JSON.stringify(resource.kind === "reservation" ? { reservationId: resource.id } : { registrationId: resource.id }),
             });
             if (!response.ok) throw new Error("delivery unavailable");
           } catch {
-            setMessage("Rezerwacja została anulowana, ale nie udało się wysłać wiadomości e-mail.");
+            setMessage("Zobowiązanie zostało anulowane, ale nie udało się wysłać wiadomości e-mail.");
           }
         }
       }

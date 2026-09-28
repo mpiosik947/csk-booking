@@ -6,6 +6,8 @@ import {
   verifyAuthUser,
 } from "@/lib/server/auth-user-verification";
 import { tenantResourceMatches } from "@/lib/server/tenant-resource-scope";
+import { sendEventCancellationReceipt } from "@/lib/server/event-cancellation-email";
+import { attemptCancellationReceipt } from "@/lib/server/event-cancellation-email-core";
 
 type CancellationPayload = {
   registrationId?: unknown;
@@ -216,6 +218,10 @@ export async function POST(request: Request) {
       newStatus: rpcData.new_status,
       freedParticipantPlace: rpcData.freed_participant_place,
     };
+
+    if (rpcData.new_status === "cancelled") {
+      await attemptCancellationReceipt(() => sendEventCancellationReceipt(supabase, rpcData.registration_id));
+    }
 
     const shouldPromoteReserve =
       rpcData.changed === true &&
