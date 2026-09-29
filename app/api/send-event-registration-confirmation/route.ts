@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { requireEventDispatchLease } from "@/lib/server/event-positive-email";
 import { resolveEventRegistrationEmailTenantContext, operationalEmailBrand, operationalEmailHistoryUrl } from "@/lib/server/operational-email";
 import { createClient } from "@supabase/supabase-js";
 import { Resend } from "resend";
@@ -320,7 +321,8 @@ ${brand.footerText}
           p_message_type: "event_registration_confirmation",
           p_record_id: registrationId,
         }),
-      send: async (idempotencyKey) => {
+      send: async (idempotencyKey, claimId) => {
+        await requireEventDispatchLease(completionClient, claimId, "registration");
         return resend.emails.send(
           {
             from: configuration.from,

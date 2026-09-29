@@ -1,4 +1,6 @@
 import "server-only";
+import { createClient } from "@supabase/supabase-js";
+import { requireEventDispatchLease } from "./event-positive-email";
 import { resolveEventRegistrationEmailTenantContext, operationalEmailBrand, operationalEmailHistoryUrl, getOperationalEmailSenderConfiguration } from "./operational-email";
 
 import { Resend } from "resend";
@@ -58,7 +60,8 @@ function formatPrice(price?: number | null) {
 
 export async function sendConfirmedPlaceEmail(
   registration: ConfirmedRegistration,
-  idempotencyKey: string
+  idempotencyKey: string,
+  claimId: string
 ) {
   const { resendApiKey, from } = getOperationalEmailSenderConfiguration();
 
@@ -120,6 +123,10 @@ Przyjedź kilka minut wcześniej, aby spokojnie przejść formalności przed szk
 ${brand.footerText}
   `;
 
+  const db = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+  await requireEventDispatchLease(db, claimId, "acceptance");
   return new Resend(resendApiKey).emails.send({
     from,
     to: registration.customer_email,

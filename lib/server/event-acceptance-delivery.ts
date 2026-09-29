@@ -21,7 +21,7 @@ export async function retryEventAcceptanceEmail(registrationId: string) {
         .eq("registration_status", "registered").is("pii_anonymized_at", null).maybeSingle();
       const event = Array.isArray(data?.events) ? data.events[0] : data?.events;
       if (error || !data || !event || event.tenant_id !== claim.tenant_id) throw new Error("Receipt unavailable");
-      return sendConfirmedPlaceEmail(data as unknown as ConfirmedRegistration, claim.idempotency_key);
+      return sendConfirmedPlaceEmail(data as unknown as ConfirmedRegistration, claim.idempotency_key, claim.claim_id);
     },
     complete: async (claimId, success, providerId) => await db.rpc("complete_event_reserve_acceptance_email_v1", {
       p_claim_id: claimId, p_success: success, p_provider_message_id: providerId,

@@ -316,6 +316,30 @@ export default function AdminEventsPage({ tenantId, tenantSlug }: Readonly<{ ten
   const [editSubmitting, setEditSubmitting] = useState(false);
 
   const canManageEvents = userRole === "admin" || userRole === "pracownik";
+  // C2B cancellation controller start
+  const [wholeCancellationBusy, setWholeCancellationBusy] = useState<string | null>(null);
+  const [wholeCancellationDone, setWholeCancellationDone] = useState<Record<string, boolean>>({});
+  async function cancelWholeEvent(eventId: string) {
+    if (!canManageEvents || wholeCancellationBusy) return;
+    const retry = wholeCancellationDone[eventId] === true;
+    if (!retry && !window.confirm("Nieodwracalnie anulować wydarzenie? Uczestnicy i osoby z listy rezerwowej zostaną powiadomieni. Tej operacji nie można cofnąć.")) return;
+    setWholeCancellationBusy(eventId);
+    try {
+      const { data } = await supabase.auth.getSession();
+      const response = await fetch("/api/cancel-event", {
+        method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${data.session?.access_token ?? ""}` },
+        body: JSON.stringify({ eventId, retry }),
+      });
+      const result = await response.json();
+      if (!response.ok || result.code !== "cancelled") throw new Error("Unavailable");
+      setWholeCancellationDone(current => ({ ...current, [eventId]: true }));
+      setToggleMessage({ kind: "success", message: `Wydarzenie anulowane. Wysłano w tej partii: ${result.delivery?.sent ?? 0}. Kolejne powiadomienia można przetworzyć przyciskiem ponowienia.` });
+      void loadEvents();
+    } catch {
+      setToggleMessage({ kind: "error", message: "Nie udało się potwierdzić wyniku. Odśwież listę i ponów operację — powtórzenie nie utworzy nowych powiadomień." });
+    } finally { setWholeCancellationBusy(null); }
+  }
+  // C2B cancellation controller end
 
   useEffect(() => {
     if (!createConfirmation || createSubmitting) {
@@ -2183,6 +2207,15 @@ export default function AdminEventsPage({ tenantId, tenantSlug }: Readonly<{ ten
                           Pokaż zapisanych
                         </button>
 
+                        {/* C2B cancellation action start */}
+                        {canManageEvents && (
+                          <button type="button" disabled={wholeCancellationBusy !== null}
+                            onClick={() => void cancelWholeEvent(event.id)}
+                            className="rounded-xl border border-[#744545] px-4 py-3 text-sm font-semibold text-[#e0a0a0] disabled:opacity-60">
+                            {wholeCancellationBusy === event.id ? "Przetwarzanie…" : wholeCancellationDone[event.id] ? "Ponów / przetwórz kolejne powiadomienia" : "Anuluj wydarzenie"}
+                          </button>
+                        )}
+                        {/* C2B cancellation action end */}
                         {canManageEvents && (
                           <button
                             type="button"

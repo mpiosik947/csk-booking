@@ -2,6 +2,7 @@ import "server-only";
 import { resolveEventEmailTenantContext, operationalEmailBrand, operationalEmailActionUrl, getOperationalEmailSenderConfiguration } from "./operational-email";
 
 import { Resend } from "resend";
+import { requireEventDispatchLease } from "./event-positive-email";
 import { operationalEmailLayout } from "./operational-email-layout";
 import { createClient } from "@supabase/supabase-js";
 import { eventInvitationKey } from "./event-invitation-key";
@@ -524,6 +525,7 @@ ${brand.footerText}
       let sendError: unknown = null;
 
       try {
+        await requireEventDispatchLease(supabase, promotion.claim_id, "promotion");
         const { data: sentData, error: emailError } = await resend.emails.send({
           from,
           to: registration.customer_email,

@@ -8,6 +8,11 @@ import { renderAdminVisual } from '../tests/fixtures/admin-visual-render.mjs';
 const files = ['app/admin/_components/AdminShell.tsx', 'app/admin/calendar/_components/CalendarToolbar.tsx',
   'app/admin/calendar/_components/DayCalendar.tsx', 'app/admin/events/page.tsx', 'app/admin/lane-blocks/page.tsx'];
 function withoutPresentation(source) {
+  // C2B's independently tested additive controls are outside the old visual-only checkpoint.
+  // Every pre-existing function and JSX node must still match HEAD.
+  source = source
+    .replace(/\/\/ C2B cancellation controller start[\s\S]*?\/\/ C2B cancellation controller end/g, '')
+    .replace(/[ \t]*\{\/\* C2B cancellation action start \*\/\}[\s\S]*?\{\/\* C2B cancellation action end \*\/\}\r?\n/g, '');
   const tree = ts.createSourceFile('component.tsx', source.replace(/\r\n/g, '\n'), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
   const result = ts.transform(tree, [context => node => {
     const visit = n => ts.isJsxAttribute(n) && ['className', 'data-testid'].includes(n.name.getText())

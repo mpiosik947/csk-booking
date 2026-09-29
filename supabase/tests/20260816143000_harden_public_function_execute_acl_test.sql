@@ -222,6 +222,16 @@ insert into expected_function_acl values
   ('public.admin_set_lane_block_active__saas9d3a_core(uuid,boolean)','A',false,false,false),
   ('public.admin_update_lane_block__saas9d3a_core(uuid,uuid,date,time without time zone,time without time zone,text,boolean)','A',false,false,false);
 
+-- C2B adds seven explicit contracts; no existing permission expectation changes.
+insert into pg_temp.expected_function_acl values
+ ('public.guard_event_cancellation_v1()','E',false,false,false),
+ ('public.guard_cancelled_event_registration_v1()','E',false,false,false),
+ ('public.admin_cancel_event_v1(uuid)','C',false,true,false),
+ ('public.claim_event_cancellation_batch_v1(uuid)','C',false,true,false),
+ ('public.complete_event_cancellation_email_v1(uuid,boolean,text)','D',false,false,true),
+ ('public.purge_event_cancellation_deliveries_v1()','C',false,false,false),
+ ('public.check_event_email_dispatch_lease_v1(uuid,text)','D',false,false,true);
+
 create function pg_temp.call_admin_configuration(p_user_id uuid)
 returns jsonb
 language plpgsql
@@ -321,8 +331,8 @@ begin
     and procedure.proname<>'csk_sec002_default_acl_probe';
 
   perform pg_temp.record_result(1,'Complete public function inventory',
-    (select pg_catalog.count(*)=186 from pg_temp.expected_function_acl)
-    and v_actual_count=186
+    (select pg_catalog.count(*)=193 from pg_temp.expected_function_acl)
+    and v_actual_count=193
     and not exists(
       select 1 from pg_temp.expected_function_acl expected
       where pg_catalog.to_regprocedure(expected.signature) is null
@@ -368,7 +378,7 @@ begin
       where pg_catalog.has_function_privilege('authenticated',expected.signature,'EXECUTE')
         is distinct from expected.authenticated_execute
     )
-    and (select pg_catalog.count(*)=93 from pg_temp.expected_function_acl where authenticated_execute),
+    and (select pg_catalog.count(*)=95 from pg_temp.expected_function_acl where authenticated_execute),
     'authenticated has exactly 85 independently authorized RPC grants after tenant content.');
 
   perform pg_temp.record_result(5,'Exact service_role ACL matrix',
@@ -377,18 +387,18 @@ begin
       where pg_catalog.has_function_privilege('service_role',expected.signature,'EXECUTE')
         is distinct from expected.service_role_execute
     )
-    and (select pg_catalog.count(*)=14 from pg_temp.expected_function_acl where service_role_execute),
+    and (select pg_catalog.count(*)=16 from pg_temp.expected_function_acl where service_role_execute),
     'service_role retains only five explicitly intended server, entitlement and rollback grants.');
 
   perform pg_temp.record_result(6,'Trigger functions and internal helpers are isolated',
-    (select pg_catalog.count(*)=15 from pg_temp.expected_function_acl where category='E')
+    (select pg_catalog.count(*)=17 from pg_temp.expected_function_acl where category='E')
     and not exists(
       select 1 from pg_temp.expected_function_acl expected
       where expected.category='E' and (
         expected.anon_execute or expected.authenticated_execute or expected.service_role_execute
       )
     )
-    and (select pg_catalog.count(distinct trigger_record.tgfoid)=15
+    and (select pg_catalog.count(distinct trigger_record.tgfoid)=17
       from pg_catalog.pg_trigger trigger_record
       where not trigger_record.tgisinternal
         and exists(
@@ -426,7 +436,7 @@ begin
     'Future functions created by postgres receive no client or PUBLIC EXECUTE.');
 
   perform pg_temp.record_result(8,'Application function creator scope is exact',
-    (select pg_catalog.count(*)=186
+    (select pg_catalog.count(*)=193
       from pg_catalog.pg_proc procedure
       join pg_catalog.pg_namespace namespace on namespace.oid=procedure.pronamespace
       join pg_catalog.pg_roles owner_role on owner_role.oid=procedure.proowner

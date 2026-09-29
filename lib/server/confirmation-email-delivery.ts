@@ -37,7 +37,7 @@ type CompletionInput = {
 
 type DeliveryDependencies = {
   prepare: () => Promise<RpcCallResult>;
-  send: (idempotencyKey: string) => Promise<ProviderSendResult>;
+  send: (idempotencyKey: string, claimId: string) => Promise<ProviderSendResult>;
   complete: (input: CompletionInput) => Promise<RpcCallResult>;
 };
 
@@ -246,7 +246,7 @@ export async function deliverConfirmationEmail({
   let providerResult: ProviderSendResult;
 
   try {
-    providerResult = await send(ready.idempotencyKey);
+    providerResult = await send(ready.idempotencyKey, ready.claimId);
   } catch (error) {
     providerResult = { data: null, error };
   }
