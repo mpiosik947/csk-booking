@@ -100,7 +100,7 @@ begin
   perform pg_temp.rcp1_check('definer owner search_path unchanged',exists(select 1 from pg_proc where oid='public.get_reservation_customer_profiles_v1(uuid[])'::regprocedure and prosecdef and proowner='postgres'::regrole and proconfig=array['search_path=pg_catalog, public, pg_temp'] and provolatile='s'));
   perform pg_temp.rcp1_check('exact EXECUTE ACL unchanged',exists(select 1 from pg_proc where oid='public.get_reservation_customer_profiles_v1(uuid[])'::regprocedure and proacl::text='{postgres=X/postgres,authenticated=X/postgres}'));
   perform pg_temp.rcp1_check('anon and service_role cannot execute',not has_function_privilege('anon','public.get_reservation_customer_profiles_v1(uuid[])','EXECUTE') and not has_function_privilege('service_role','public.get_reservation_customer_profiles_v1(uuid[])','EXECUTE'));
-  perform pg_temp.rcp1_check('definer inventory unchanged',(select count(*)=122 from pg_proc where pronamespace='public'::regnamespace and prosecdef));
+  perform pg_temp.rcp1_check('definer inventory unchanged',(select count(*)=127 from pg_proc where pronamespace='public'::regnamespace and prosecdef));
 end;
 $test$;
 select case when passed then 'ok - ' else 'not ok - ' end||name from rcp1_results;

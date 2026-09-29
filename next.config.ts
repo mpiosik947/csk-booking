@@ -116,6 +116,10 @@ const nextConfig: NextConfig = {
         headers: PRIVATE_NO_STORE_HEADERS,
       },
       {
+        source: "/t/:slug/instructor/:path*",
+        headers: PRIVATE_NO_STORE_HEADERS,
+      },
+      {
         source: "/t/:slug/:path(my-reservations|my-events)",
         headers: PRIVATE_NO_STORE_HEADERS,
       },

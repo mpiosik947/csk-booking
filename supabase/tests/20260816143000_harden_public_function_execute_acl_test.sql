@@ -224,6 +224,12 @@ insert into expected_function_acl values
 
 -- C2B adds seven explicit contracts; no existing permission expectation changes.
 insert into pg_temp.expected_function_acl values
+ ('public.instructor_event_revision_v1(uuid)','A',false,false,false),
+ ('public.admin_list_tenant_instructors_v1(uuid,integer,integer)','C',false,true,false),
+ ('public.admin_create_event_with_instructors_v1(uuid,text,text,date,time without time zone,time without time zone,text,numeric,integer,uuid[],uuid[])','C',false,true,false),
+ ('public.admin_update_event_with_instructors_v1(uuid,uuid,text,text,date,time without time zone,time without time zone,text,numeric,integer,uuid[],uuid[],jsonb,text)','C',false,true,false),
+ ('public.get_my_instructor_events_v1(uuid,text,uuid,integer,integer)','C',false,true,false),
+ ('public.get_instructor_event_participants_v1(uuid,text,integer,integer)','C',false,true,false),
  ('public.admin_list_available_event_instructors_v1(uuid,integer,integer)','C',false,true,false),
  ('public.admin_set_event_instructors_v1(uuid,uuid[],text)','C',false,true,false),
  ('public.guard_event_cancellation_v1()','E',false,false,false),
@@ -333,8 +339,8 @@ begin
     and procedure.proname<>'csk_sec002_default_acl_probe';
 
   perform pg_temp.record_result(1,'Complete public function inventory',
-    (select pg_catalog.count(*)=195 from pg_temp.expected_function_acl)
-    and v_actual_count=195
+    (select pg_catalog.count(*)=201 from pg_temp.expected_function_acl)
+    and v_actual_count=201
     and not exists(
       select 1 from pg_temp.expected_function_acl expected
       where pg_catalog.to_regprocedure(expected.signature) is null
@@ -380,8 +386,8 @@ begin
       where pg_catalog.has_function_privilege('authenticated',expected.signature,'EXECUTE')
         is distinct from expected.authenticated_execute
     )
-    and (select pg_catalog.count(*)=97 from pg_temp.expected_function_acl where authenticated_execute),
-    'authenticated has exactly 97 independently authorized RPC grants including instructor assignment management.');
+    and (select pg_catalog.count(*)=102 from pg_temp.expected_function_acl where authenticated_execute),
+    'authenticated has exactly 102 independently authorized RPC grants including scoped instructor workflow.');
 
   perform pg_temp.record_result(5,'Exact service_role ACL matrix',
     not exists(
@@ -438,7 +444,7 @@ begin
     'Future functions created by postgres receive no client or PUBLIC EXECUTE.');
 
   perform pg_temp.record_result(8,'Application function creator scope is exact',
-    (select pg_catalog.count(*)=195
+    (select pg_catalog.count(*)=201
       from pg_catalog.pg_proc procedure
       join pg_catalog.pg_namespace namespace on namespace.oid=procedure.pronamespace
       join pg_catalog.pg_roles owner_role on owner_role.oid=procedure.proowner

@@ -129,8 +129,8 @@ test("event status filter has safe empty states and preserves V2 management RPCs
   assert.match(source, /Brak minionych szkoleń\./);
   assert.match(source, /Brak nieaktywnych szkoleń\./);
   assert.match(source, /Brak szkoleń\./);
-  assert.match(source, /"admin_create_event_v3"/);
-  assert.match(source, /"admin_update_event_v3"/);
+  assert.match(source, /"admin_create_event_with_instructors_v1"/);
+  assert.match(source, /"admin_update_event_with_instructors_v1"/);
   assert.match(source, /"admin_set_event_active_v3"/);
 });
 
@@ -280,11 +280,11 @@ test("create, edit, and toggle use only hierarchy-aware V2 RPCs while public eve
 
   assert.match(openCreateConfirmation, /buildCreateEventPayload\(form\.value\)/);
   assert.doesNotMatch(openCreateConfirmation, /\.rpc\("admin_create_event_v2", payload\)/);
-  assert.match(confirmCreateEvent, /"admin_create_event_v3"/);
+  assert.match(confirmCreateEvent, /"admin_create_event_with_instructors_v1"/);
   assert.doesNotMatch(confirmCreateEvent, /\.from\("events"\)\.insert\(/);
   assert.doesNotMatch(confirmCreateEvent, /error\.message/);
   assert.match(saveEditedEvent, /buildUpdateEventPayload\(eventId, form\.value\)/);
-  assert.match(saveEditedEvent, /"admin_update_event_v3"/);
+  assert.match(saveEditedEvent, /"admin_update_event_with_instructors_v1"/);
   assert.doesNotMatch(saveEditedEvent, /\.from\("events"\)[\s\S]*\.update\(/);
   assert.doesNotMatch(saveEditedEvent, /error\.message/);
   assert.match(toggleEvent, /buildSetEventActivePayload\(eventId, targetStatus\)/);
@@ -294,8 +294,8 @@ test("create, edit, and toggle use only hierarchy-aware V2 RPCs while public eve
   assert.doesNotMatch(adminSource, /["']admin_create_event["']/);
   assert.doesNotMatch(adminSource, /["']admin_update_event["']/);
   assert.doesNotMatch(adminSource, /["']admin_set_event_active["']/);
-  assert.equal((adminSource.match(/admin_create_event_v3/g) ?? []).length, 1);
-  assert.equal((adminSource.match(/admin_update_event_v3/g) ?? []).length, 1);
+  assert.equal((adminSource.match(/admin_create_event_with_instructors_v1/g) ?? []).length, 1);
+  assert.equal((adminSource.match(/admin_update_event_with_instructors_v1/g) ?? []).length, 1);
   assert.equal((adminSource.match(/admin_set_event_active_v3/g) ?? []).length, 1);
   assert.match(
     adminSource,
@@ -538,7 +538,7 @@ test("edit form preserves assigned inactive lanes and saves only through admin_u
   assert.match(saveEditedEvent, /validateEventRpcResult\(data\)/);
   assert.match(saveEditedEvent, /result\.ok && result\.value\.event_id !== eventId/);
   assert.match(saveEditedEvent, /getEventManagementMessage\(/);
-  assert.match(saveEditedEvent, /"admin_update_event_v3"/);
+  assert.match(saveEditedEvent, /"admin_update_event_with_instructors_v1"/);
   assert.doesNotMatch(saveEditedEvent, /\.from\("events"\)[\s\S]*\.update\(/);
   assert.match(saveEditedEvent, /result\.value\.code === "updated"[\s\S]*void loadEvents\(\)[\s\S]*resetEditingState\(\)/);
   assert.match(saveEditedEvent, /result\.value\.code === "no_change"[\s\S]*resetEditingState\(\)/);
@@ -563,10 +563,11 @@ test("create confirmation validates once and executes only the approved snapshot
   assert.match(source, /const \[createConfirmation, setCreateConfirmation\] =/);
   assert.match(openCreateConfirmation, /validateEventForm\(\{/);
   assert.match(openCreateConfirmation, /laneIds: createLaneIds/);
-  assert.match(openCreateConfirmation, /setCreateConfirmation\(\{ payload, lanes: selectedLanes \}\)/);
+  assert.match(openCreateConfirmation, /setCreateConfirmation\(\{ payload, lanes: selectedLanes, instructorIds: \[\.\.\.createInstructorIds\] \}\)/);
   assert.doesNotMatch(confirmCreateEvent, /validateEventForm\(/);
   assert.doesNotMatch(confirmCreateEvent, /buildCreateEventPayload\(/);
-  assert.match(confirmCreateEvent, /const \{ payload, lanes \} = createConfirmation/);
+  assert.match(confirmCreateEvent, /const \{ payload, lanes, instructorIds \} = createConfirmation/);
+  assert.match(confirmCreateEvent, /p_instructor_user_ids: instructorIds/);
   assert.match(confirmCreateEvent, /createSubmittingRef\.current/);
   assert.match(confirmCreateEvent, /validateEventRpcResult\(data\)/);
   assert.match(confirmCreateEvent, /getEventManagementMessage\(/);
@@ -646,7 +647,7 @@ test("event hierarchy presentation keeps dormant resources out and prepares acti
   assert.match(source, /HierarchyResourceLabel/);
   assert.match(source, /isPosition: lane\.isPosition/);
   assert.doesNotMatch(source, /Oś 100 m — Stanowisko 1/);
-  assert.equal((source.match(/admin_create_event_v3/g) ?? []).length, 1);
-  assert.equal((source.match(/admin_update_event_v3/g) ?? []).length, 1);
+  assert.equal((source.match(/admin_create_event_with_instructors_v1/g) ?? []).length, 1);
+  assert.equal((source.match(/admin_update_event_with_instructors_v1/g) ?? []).length, 1);
   assert.equal((source.match(/admin_set_event_active_v3/g) ?? []).length, 1);
 });

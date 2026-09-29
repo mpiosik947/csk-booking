@@ -10,7 +10,7 @@ test("selected Events route mounts tenant staff UI without legacy RPC branches",
   assert.match(shell, /route\.kind === "staff" && route\.path === "admin\/events"/);
   assert.match(shell, /<AdminEventsPage tenantId=\{tenantId\} tenantSlug=\{slug\}/);
   assert.match(page, /"admin_list_events_v2"/);
-  for (const rpc of ["admin_list_event_registrations_v2", "admin_create_event_v3", "admin_update_event_v3", "admin_set_event_active_v3", "approve_event_registration_v2", "mark_event_registration_paid_v2"]) {
+  for (const rpc of ["admin_list_event_registrations_v2", "admin_create_event_with_instructors_v1", "admin_update_event_with_instructors_v1", "admin_set_event_active_v3", "approve_event_registration_v2", "mark_event_registration_paid_v2"]) {
     assert.ok(page.includes(`"${rpc}"`), `${rpc} not selected`);
   }
   assert.match(page, /await supabase\.rpc\("get_my_tenant_role_v1", \{ p_tenant_id: tenantId \}\)/);

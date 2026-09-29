@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import InstructorSelector from "./InstructorSelector";
+import { assignmentError, eventEditRevision, parseInstructorOptions, type InstructorOption } from "@/lib/admin/events/instructor-assignments";
 import { HierarchyResourceLabel } from "../_components/HierarchyResourcePresentation";
 import {
   buildCreateEventPayload,
@@ -47,6 +49,7 @@ type CreateFormMessage = Pick<EventManagementMessage, "message" | "kind">;
 type CreateConfirmationSnapshot = {
   payload: CreateEventRpcPayload;
   lanes: AdminEventLane[];
+  instructorIds: string[];
 };
 
 function formatConfirmationDate(value: string) {
@@ -316,6 +319,33 @@ export default function AdminEventsPage({ tenantId, tenantSlug }: Readonly<{ ten
   const [editSubmitting, setEditSubmitting] = useState(false);
 
   const canManageEvents = userRole === "admin" || userRole === "pracownik";
+  const [instructorOptions, setInstructorOptions] = useState<InstructorOption[]>([]);
+  const [instructorsReady, setInstructorsReady] = useState(false);
+  const [instructorsError, setInstructorsError] = useState(false);
+  const [createInstructorIds, setCreateInstructorIds] = useState<string[]>([]);
+  const [editInstructorIds, setEditInstructorIds] = useState<string[]>([]);
+  const [assignmentRevision, setAssignmentRevision] = useState<string | null>(null);
+  const [eventRevision, setEventRevision] = useState<ReturnType<typeof eventEditRevision> | null>(null);
+  const [editInstructorError, setEditInstructorError] = useState(false);
+  const instructorRequest = useRef(0);
+  useEffect(() => {
+    if (!canManageEvents) return;
+    let active = true;
+    async function load() {
+      setInstructorsReady(false); setInstructorsError(false); setInstructorOptions([]);
+      try {
+        const options: InstructorOption[] = [];
+        for (let offset = 0; offset <= 100000; offset += 100) {
+          const response = await supabase.rpc("admin_list_tenant_instructors_v1", { p_tenant_id: tenantId, p_limit: 100, p_offset: offset });
+          if (response.error) throw response.error;
+          const batch = parseInstructorOptions(response.data); options.push(...batch);
+          if (batch.length < 100) break;
+        }
+        if (active) { setInstructorOptions(options); setInstructorsReady(true); setInstructorsError(false); }
+      } catch { if (active) setInstructorsError(true); }
+    }
+    void load(); return () => { active = false; };
+  }, [canManageEvents, tenantId]);
   // C2B cancellation controller start
   const [wholeCancellationBusy, setWholeCancellationBusy] = useState<string | null>(null);
   const [wholeCancellationDone, setWholeCancellationDone] = useState<Record<string, boolean>>({});
@@ -636,7 +666,8 @@ export default function AdminEventsPage({ tenantId, tenantSlug }: Readonly<{ ten
     );
 
     setCreateMessage(null);
-    setCreateConfirmation({ payload, lanes: selectedLanes });
+    if (!instructorsReady || instructorsError) { setCreateMessage({ kind: "error", message: "Najpierw wczytaj listę instruktorów." }); return; }
+    setCreateConfirmation({ payload, lanes: selectedLanes, instructorIds: [...createInstructorIds] });
   }
 
   function closeCreateConfirmation() {
@@ -656,7 +687,7 @@ export default function AdminEventsPage({ tenantId, tenantSlug }: Readonly<{ ten
       return;
     }
 
-    const { payload, lanes } = createConfirmation;
+    const { payload, lanes, instructorIds } = createConfirmation;
     const laneNames = new Map(
       lanes.map((lane) => [lane.id, lane.displayName])
     );
@@ -666,13 +697,13 @@ export default function AdminEventsPage({ tenantId, tenantSlug }: Readonly<{ ten
 
     try {
       const { data, error } = await supabase.rpc(
-        "admin_create_event_v3",
-        { ...payload, p_tenant_id: tenantId }
+        "admin_create_event_with_instructors_v1",
+        { ...payload, p_tenant_id: tenantId, p_instructor_user_ids: instructorIds }
       );
 
       if (error) {
         setCreateMessage(
-          getEventManagementMessage({ code: "invalid_rpc_response" })
+          { kind: "error", message: assignmentError(error.code) }
         );
         return;
       }
@@ -697,6 +728,7 @@ export default function AdminEventsPage({ tenantId, tenantSlug }: Readonly<{ ten
       setPrice("");
       setMaxParticipants("10");
       setCreateLaneIds([]);
+      setCreateInstructorIds([]);
       setCreateConfirmation(null);
       void loadEvents();
     } catch {
@@ -729,7 +761,7 @@ export default function AdminEventsPage({ tenantId, tenantSlug }: Readonly<{ ten
     });
   }
 
-  function startEditing(event: AdminEvent) {
+  async function startEditing(event: AdminEvent) {
     if (editSubmittingRef.current) {
       return;
     }
@@ -740,6 +772,9 @@ export default function AdminEventsPage({ tenantId, tenantSlug }: Readonly<{ ten
     }
 
     setEditingEventId(event.id);
+    const request = ++instructorRequest.current;
+    setAssignmentRevision(null); setEditInstructorError(false); setEditInstructorIds([]);
+    setEventRevision(eventEditRevision(event));
     setEditTitle(event.title);
     setEditDescription(event.description ?? "");
     setEditEventDate(event.event_date);
@@ -755,9 +790,17 @@ export default function AdminEventsPage({ tenantId, tenantSlug }: Readonly<{ ten
     editInitialInactiveLaneIdsRef.current = initialInactiveLaneIds;
     setEditInitialInactiveLaneIds(initialInactiveLaneIds);
     setEditMessage(null);
+    try {
+      const response = await supabase.rpc("admin_list_available_event_instructors_v1", { p_event_id: event.id });
+      if (response.error || typeof response.data?.revision !== "string" || !Array.isArray(response.data?.active_user_ids)) throw Error("Lookup failed");
+      if (request === instructorRequest.current) {
+        setAssignmentRevision(response.data.revision); setEditInstructorIds(response.data.active_user_ids);
+      }
+    } catch { if (request === instructorRequest.current) setEditInstructorError(true); }
   }
 
   function resetEditingState() {
+    ++instructorRequest.current; setAssignmentRevision(null); setEventRevision(null); setEditInstructorIds([]);
     setEditingEventId("");
     setEditTitle("");
     setEditDescription("");
@@ -834,19 +877,21 @@ export default function AdminEventsPage({ tenantId, tenantSlug }: Readonly<{ ten
         (lane) => [lane.id, lane.displayName]
       )
     );
+    if (!assignmentRevision || !eventRevision || editInstructorError) { setEditMessage({ kind: "error", message: "Najpierw wczytaj aktualną obsadę." }); return; }
     editSubmittingRef.current = true;
     setEditSubmitting(true);
     setEditMessage(null);
 
     try {
       const { data, error } = await supabase.rpc(
-        "admin_update_event_v3",
-        { ...payload.value, p_tenant_id: tenantId }
+        "admin_update_event_with_instructors_v1",
+        { ...payload.value, p_tenant_id: tenantId, p_instructor_user_ids: editInstructorIds,
+          p_expected_event_revision: eventRevision, p_expected_assignment_revision: assignmentRevision }
       );
 
       if (error) {
         setEditMessage(
-          getEventManagementMessage({ code: "invalid_rpc_response" })
+          { kind: "error", message: assignmentError(error.code) }
         );
         return;
       }
@@ -1478,6 +1523,7 @@ export default function AdminEventsPage({ tenantId, tenantSlug }: Readonly<{ ten
             </div>
 
             <div className="grid gap-6">
+              <InstructorSelector options={instructorOptions} selected={createInstructorIds} onChange={setCreateInstructorIds} disabled={createSubmitting} loading={!instructorsReady && !instructorsError} error={instructorsError} />
               <EventFormSection title="Podstawowe informacje">
               <div>
                 <label className="mb-2 block text-sm font-semibold text-zinc-200">
@@ -2075,6 +2121,7 @@ export default function AdminEventsPage({ tenantId, tenantSlug }: Readonly<{ ten
                       )}
                     </div>
 
+                    <InstructorSelector options={instructorOptions} selected={editInstructorIds} onChange={setEditInstructorIds} disabled={editSubmitting} loading={!assignmentRevision && !editInstructorError} error={editInstructorError || instructorsError} />
                     <div className="rounded-xl border border-[#30372c] bg-[#191e19] p-4 text-sm text-[#a9ada4]">
                       <p className="font-semibold">
                         Wolnych miejsc nie edytujesz ręcznie

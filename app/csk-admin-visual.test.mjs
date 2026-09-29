@@ -21,9 +21,20 @@ function withoutPresentation(source) {
   }]);
   const text = ts.createPrinter().printFile(result.transformed[0]); result.dispose(); return text;
 }
-for (const file of files) test(`${file}: only presentation attributes changed`, () => {
+for (const file of files.filter(file => file !== 'app/admin/events/page.tsx')) test(`${file}: only presentation attributes changed`, () => {
   const baseline = execFileSync('git', ['show', `HEAD:${file}`], { encoding: 'utf8' });
   assert.equal(withoutPresentation(readFileSync(file, 'utf8')), withoutPresentation(baseline));
+});
+// Events now intentionally adds the independently tested atomic instructor workflow.
+// Keep the actual shell render checks below; a whole-file "presentation only"
+// comparison is no longer a valid contract for this operational page.
+test('events retains its approved shell and has no direct event/assignment table writes', () => {
+  const source = readFileSync('app/admin/events/page.tsx', 'utf8');
+  assert.match(source, /data-testid="admin-panel"/);
+  assert.match(source, /bg-\[#141814\]/);
+  assert.match(source, /admin_create_event_with_instructors_v1/);
+  assert.match(source, /admin_update_event_with_instructors_v1/);
+  assert.doesNotMatch(source, /\.from\(["'](?:events|event_instructors)["']\)/);
 });
 for (const moduleName of ['dashboard','calendar','reservations','events','lane-blocks','settings']) {
   test(`${moduleName}: real component renders without DB or auth access`, () => {

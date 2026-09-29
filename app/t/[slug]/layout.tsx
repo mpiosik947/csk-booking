@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { getPublicRouteContext } from "@/lib/server/tenant-route-context";
+import { getPublicRouteContext, getStaffRouteContext } from "@/lib/server/tenant-route-context";
 
 export const dynamic = "force-dynamic";
 
@@ -14,6 +14,7 @@ export default async function TenantLayout({
   const { slug } = await params;
   const context = await getPublicRouteContext(slug);
   if (!context.ok) notFound();
+  const instructor = await getStaffRouteContext(slug, ["instructor"]);
 
   return (
     <div data-testid="tenant-shell" className="min-h-screen w-full flex-1 bg-[#090b09] text-[#e8ebe4]">
@@ -24,6 +25,7 @@ export default async function TenantLayout({
         <Link href={`/t/${context.value.slug}`} className="text-[#d7c895] underline-offset-4 hover:underline">
           {context.value.name}
         </Link>
+        {instructor.ok && <Link prefetch={false} href={`/t/${slug}/instructor/events`} className="text-[#d7c895] underline">Moje szkolenia — instruktor</Link>}
       </nav>
       {children}
     </div>
