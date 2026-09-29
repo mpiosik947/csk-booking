@@ -812,7 +812,7 @@ test("calendar read model requests hierarchy metadata without adding database wr
   assert.doesNotMatch(routeSource, /(?:laneRequest|reservationRequest|blockRequest|eventRequest)\.delete\(/);
 });
 
-test("instructor calendar remains available without querying or emitting reservations", async () => {
+test("instructor calendar is denied before operational queries; defensive reservation masking remains", async () => {
   const [routeSource, feedSource] = await Promise.all([
     readFile(new URL("../../api/admin/calendar-feed/route.ts", import.meta.url), "utf8"),
     readFile(new URL("../../../lib/admin/calendar/feed.ts", import.meta.url), "utf8"),
@@ -820,7 +820,7 @@ test("instructor calendar remains available without querying or emitting reserva
 
   assert.match(
     routeSource,
-    /if \(role !== "instruktor" && query\.types\.includes\("reservation"\)\)/
+    /if \(!role \|\| role === "instruktor"\)[\s\S]*?return jsonError\("forbidden"/
   );
   assert.match(
     feedSource,

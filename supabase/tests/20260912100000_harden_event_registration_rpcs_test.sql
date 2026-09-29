@@ -113,7 +113,7 @@ begin
   result:=pg_temp.as_actor_json('authenticated',admin_a,format('select public.admin_list_event_registrations_v1(%L,null,null,1,50)',event_a));
   perform pg_temp.ok(25,'admin participant list works in own tenant',result->>'code'='ok' and jsonb_array_length(result->'items')>=3,'admin participant list failed');
   perform pg_temp.ok(26,'participant DTO remains bounded',not exists(select 1 from jsonb_array_elements(result->'items') item cross join lateral jsonb_object_keys(item) key where key not in('id','customer_name','customer_email','customer_phone','registration_status','payment_status','created_at')),'participant DTO expanded');
-  perform pg_temp.ok(27,'instructor retains current own-tenant participant scope',(pg_temp.as_actor_json('authenticated',instructor_a,format('select public.admin_list_event_registrations_v1(%L,null,null,1,50)',event_a)))->>'code'='ok','instructor scope regressed');
+  perform pg_temp.ok(27,'instructor broad participant scope denied',(pg_temp.as_actor_json('authenticated',instructor_a,format('select public.admin_list_event_registrations_v1(%L,null,null,1,50)',event_a)))->>'code'='not_allowed','instructor broad access reopened');
   perform pg_temp.ok(28,'ordinary user and admin cross-tenant participant reads are denied',(pg_temp.as_actor_json('authenticated',user_a,format('select public.admin_list_event_registrations_v1(%L,null,null,1,50)',event_a)))->>'code'='not_allowed' and (pg_temp.as_actor_json('authenticated',admin_a,format('select public.admin_list_event_registrations_v1(%L,null,null,1,50)',event_b)))->>'code'='not_allowed','participant IDOR allowed');
 
   result:=pg_temp.as_actor_json('anon',null,format('select public.get_public_event_list_v3(%L,%L,''upcoming'',1,50)',csk,marker));

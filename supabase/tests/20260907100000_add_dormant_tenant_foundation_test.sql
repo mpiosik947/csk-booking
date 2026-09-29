@@ -314,7 +314,7 @@ begin
           'tenant_memberships', 'shooting_lanes', 'reservations', 'lane_blocks',
           'events', 'event_lanes', 'event_registrations', 'email_deliveries',
           'audit_logs', 'tenant_public_profiles', 'tenant_public_pricing_items', 'tenant_user_admin_notes', 'tenant_user_verifications',
-          'tenant_plan_assignments','platform_audit_logs','external_settlement_records','tenant_domains'
+          'tenant_plan_assignments','platform_audit_logs','external_settlement_records','tenant_domains','event_instructors'
         )
     ),
     'Tenant ownership must not spread outside the approved phased scope.');

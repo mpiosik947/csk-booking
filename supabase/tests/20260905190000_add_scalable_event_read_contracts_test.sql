@@ -167,10 +167,10 @@ begin
   v_repeat:=pg_temp.call_json('authenticated',v_admin,pg_catalog.format('select public.admin_list_events_v2(%L,%L,%L,%L,1,20)',v_tenant,v_marker,'inactive','nearest'));
   perform pg_temp.record_result(14,'Admin inactive filter is backend authoritative',v_repeat#>>'{pagination,total}'='1','Exactly one fixture event is inactive.');
   perform pg_temp.record_result(15,'Admin list denies ordinary user',(pg_temp.call_json('authenticated',v_user,pg_catalog.format('select public.admin_list_events_v2(%L,%L,%L,%L,1,20)',v_tenant,v_marker,'all','nearest')))->>'code'='not_allowed','Role check must fail closed.');
-  perform pg_temp.record_result(16,'Existing employee and instructor event access is unchanged',
+  perform pg_temp.record_result(16,'Employee event access preserved; broad instructor access closed',
     (pg_temp.call_json('authenticated',v_employee,pg_catalog.format('select public.admin_list_events_v2(%L,%L,%L,%L,1,20)',v_tenant,v_marker,'all','nearest')))->>'code'='ok'
-    and (pg_temp.call_json('authenticated',v_instructor,pg_catalog.format('select public.admin_list_events_v2(%L,%L,%L,%L,1,20)',v_tenant,v_marker,'all','nearest')))->>'code'='ok',
-    'EVENTS-8B must not silently alter the established /admin/events route matrix.');
+    and (pg_temp.call_json('authenticated',v_instructor,pg_catalog.format('select public.admin_list_events_v2(%L,%L,%L,%L,1,20)',v_tenant,v_marker,'all','nearest')))->>'code'='not_allowed',
+    'INSTRUCTOR-1A closes only broad instructor metadata access.');
 
   v_participants:=pg_temp.call_json('authenticated',v_admin,pg_catalog.format('select public.admin_list_event_registrations_v1(%L,%L,%L,1,50)',v_event,null,null));
   perform pg_temp.record_result(17,'Participant list paginates 5000 rows',v_participants#>>'{pagination,total}'='5001' and pg_catalog.jsonb_array_length(v_participants->'items')=50,'Large participant list plus owner row must stay bounded.');
@@ -180,10 +180,10 @@ begin
   v_repeat:=pg_temp.call_json('authenticated',v_admin,pg_catalog.format('select public.admin_list_event_registrations_v1(%L,%L,%L,2,50)',v_event,null,'paid_on_site'));
   perform pg_temp.record_result(20,'Participant payment filter and stable page work',v_repeat#>>'{pagination,total}'='2500' and pg_catalog.jsonb_array_length(v_repeat->'items')=50 and (select pg_catalog.bool_and(item->>'payment_status'='paid_on_site') from pg_catalog.jsonb_array_elements(v_repeat->'items') item),'Second filtered page must contain only paid_on_site rows.');
   perform pg_temp.record_result(21,'Participant DTO contains only operational fields',not exists(select 1 from pg_catalog.jsonb_array_elements(v_participants->'items') item cross join lateral pg_catalog.jsonb_object_keys(item) key_name where key_name not in('id','customer_name','customer_email','customer_phone','registration_status','payment_status','created_at')),'No profile, token or internal delivery state may be returned.');
-  perform pg_temp.record_result(22,'Participant list denies ordinary users without changing SEC-008',
+  perform pg_temp.record_result(22,'Participant list denies ordinary users and instructors under SEC-008',
     (pg_temp.call_json('authenticated',v_user,pg_catalog.format('select public.admin_list_event_registrations_v1(%L,null,null,1,50)',v_event)))->>'code'='not_allowed'
-    and (pg_temp.call_json('authenticated',v_instructor,pg_catalog.format('select public.admin_list_event_registrations_v1(%L,null,null,1,50)',v_event)))->>'code'='ok',
-    'Ordinary users are denied; deferred instructor access remains unchanged.');
+    and (pg_temp.call_json('authenticated',v_instructor,pg_catalog.format('select public.admin_list_event_registrations_v1(%L,null,null,1,50)',v_event)))->>'code'='not_allowed',
+    'Ordinary users and instructors must both be denied broad participant access.');
 
   v_my:=pg_temp.call_json('authenticated',v_user,'select public.get_my_event_registrations_v1(''upcoming'',null,1,20)');
   perform pg_temp.record_result(23,'My events upcoming is owner-scoped and paginated',v_my#>>'{pagination,total}'='50' and pg_catalog.jsonb_array_length(v_my->'items')=20,'Only the caller own 50 upcoming rows are visible.');

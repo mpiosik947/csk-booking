@@ -101,7 +101,8 @@ export async function GET(request: Request) {
 
     const role = parseCalendarFeedRole(roleData === "employee" ? "pracownik"
       : roleData === "instructor" ? "instruktor" : roleData);
-    if (!role) {
+    // Instructor membership alone must not expose tenant-wide operational feeds.
+    if (!role || role === "instruktor") {
       return jsonError("forbidden", "Brak uprawnień do kalendarza.", 403);
     }
 
@@ -136,7 +137,7 @@ export async function GET(request: Request) {
     }
 
     let reservations: CalendarReservationRow[] = [];
-    if (role !== "instruktor" && query.types.includes("reservation")) {
+    if (query.types.includes("reservation")) {
       let reservationRequest = supabase
         .from("reservations")
         .select(getReservationSelectColumns(role))

@@ -121,7 +121,7 @@ begin
   result:=pg_temp.as_actor_json('authenticated',admin_a,format('select public.admin_list_events_v2(%L,%L,''all'',''nearest'',1,50)',csk,marker));
   perform pg_temp.ok(23,'admin list returns own active tenant events',result->>'code'='ok' and jsonb_array_length(result->'items')>=3,'admin list failed');
   perform pg_temp.ok(24,'admin list exposes zero Tenant B events',not exists(select 1 from jsonb_array_elements(result->'items') item where item->>'id'=event_b::text),'Tenant B event leaked');
-  perform pg_temp.ok(25,'instructor retains read-only admin-list scope',(pg_temp.as_actor_json('authenticated',instructor_a,format('select public.admin_list_events_v2(%L,%L,''all'',''nearest'',1,50)',csk,marker)))->>'code'='ok','instructor read scope regressed');
+  perform pg_temp.ok(25,'instructor broad admin-list scope denied',(pg_temp.as_actor_json('authenticated',instructor_a,format('select public.admin_list_events_v2(%L,%L,''all'',''nearest'',1,50)',csk,marker)))->>'code'='not_allowed','instructor broad metadata access reopened');
   perform pg_temp.ok(26,'ordinary and no-membership users cannot list',(pg_temp.as_actor_json('authenticated',user_a,format('select public.admin_list_events_v2(%L,null,''all'',''nearest'',1,20)',csk)))->>'code'='not_allowed' and (pg_temp.as_actor_json('authenticated',no_member_admin,format('select public.admin_list_events_v2(%L,null,''all'',''nearest'',1,20)',csk)))->>'code'='not_allowed','admin list role bypass remains');
 
   update public.tenants set status='dormant' where id=csk;
@@ -138,7 +138,7 @@ begin
   result:=pg_temp.as_actor_json('anon',null,format('select public.get_public_event_list_v3(%L,%L,''upcoming'',1,50)',csk,marker));
   perform pg_temp.ok(30,'public events remain available and PII-free',result->>'code'='ok' and result::text !~* 'customer|user_id|registration_id|token|admin_note|phone|email','public event contract regressed');
   perform pg_temp.ok(31,'event compatibility defaults are retired',(select count(*)=0 from information_schema.columns where table_schema='public' and table_name in('events','event_lanes') and column_name='tenant_id' and column_default is not null),'compatibility default remains');
-  perform pg_temp.ok(32,'SECURITY DEFINER inventory reflects PRODUCT-10B public readers',(select count(*)=120 from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.prosecdef),'definer inventory drifted');
+  perform pg_temp.ok(32,'SECURITY DEFINER inventory reflects PRODUCT-10B public readers',(select count(*)=122 from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.prosecdef),'definer inventory drifted');
 end;$tests$;
 
 select case when passed then 'ok ' else 'not ok ' end||test_order||' - '||test_name||case when passed then '' else E'\n# '||result end from test_results order by test_order;
