@@ -2,6 +2,8 @@ import { timingSafeEqual } from 'node:crypto';
 import { PLATFORM_BASE_URL } from '../platform-domain.ts';
 import { operationalEmailLayout } from './operational-email-layout.ts';
 import { buildOperationalEmailSubject } from './operational-email-core.ts';
+import { boundedOperation, HANDLER_BUDGET_MS, PROVIDER_TIMEOUT_MS, DB_OPERATION_TIMEOUT_MS,
+  MAX_CLAIMS_PER_RUN, FINISH_MARGIN_MS, DELIVERY_BUDGET_MS } from './reminder-budget.ts';
 
 export type ReminderPayload = {
   kind: 'booking_reminder_24h' | 'event_reminder_24h'; occurrence_id: string;
@@ -42,31 +44,44 @@ export function reminderContent(p: ReminderPayload) {
     })};
 }
 export async function runReminders(deps: {
-  rpc: (name:string,args?:Record<string,unknown>)=>Promise<Result>;
-  send:(payload:ReminderPayload,content:ReturnType<typeof reminderContent>)=>Promise<{id?:string}>;
+  rpc: (name:string,args?:Record<string,unknown>,signal?:AbortSignal)=>Promise<Result>;
+  send:(payload:ReminderPayload,content:ReturnType<typeof reminderContent>,signal?:AbortSignal)=>Promise<{id?:string}>;
+  now?:()=>number;
+  startedAt?:number;
 }) {
+  const now=deps.now ?? (()=>performance.now());
+  const deadline=(deps.startedAt ?? now())+HANDLER_BUDGET_MS;
+  const enough=(required:number)=>deadline-now()>=required+FINISH_MARGIN_MS;
+  const rpc=(name:string,args?:Record<string,unknown>)=>boundedOperation(
+    signal=>deps.rpc(name,args,signal),DB_OPERATION_TIMEOUT_MS);
   const counts = {sent:0,skipped:0,failed:0,uncertain:0};
-  const discovery = await deps.rpc('discover_reminders_v1');
+  if(!enough(DB_OPERATION_TIMEOUT_MS)) return counts;
+  const discovery = await rpc('discover_reminders_v1');
   if(discovery.error) throw Error('Reminder discovery failed');
-  const claimed = await deps.rpc('claim_reminders_v1');
-  if(claimed.error || !Array.isArray(claimed.data) || claimed.data.length>25) throw Error('Reminder claim failed');
+  // Claim the batch only when ALL its work fits; never preclaim a large backlog.
+  if(!enough(DB_OPERATION_TIMEOUT_MS+MAX_CLAIMS_PER_RUN*DELIVERY_BUDGET_MS)) return counts;
+  const claimed = await rpc('claim_reminders_v1');
+  if(claimed.error || !Array.isArray(claimed.data) || claimed.data.length>MAX_CLAIMS_PER_RUN) throw Error('Reminder claim failed');
   for(const value of claimed.data) {
+    // Unexpected scheduling stalls leave a finite DB lease, not a send after deadline.
+    if(!enough(DELIVERY_BUDGET_MS)) break;
     const claim=value as Claim;
     if(!claim || !uuid.test(claim.claim_id) || !uuid.test(claim.occurrence_id)) throw Error('Invalid reminder claim');
     let providerId:string|null=null;
     try {
       // Last authoritative check, immediately before rendering and external send.
-      const checked=await deps.rpc('final_check_reminder_v1',{p_claim_id:claim.claim_id});
+      const checked=await rpc('final_check_reminder_v1',{p_claim_id:claim.claim_id});
       if(checked.error) {counts.uncertain++;continue;}
       if(!checked.data) {counts.skipped++;continue;}
       const payload=checked.data as ReminderPayload;
       if(payload.occurrence_id!==claim.occurrence_id || payload.idempotency_key!==claim.idempotency_key) throw Error('Claim mismatch');
       const content=reminderContent(payload);
-      const sent=await deps.send(payload,content);
+      if(!enough(PROVIDER_TIMEOUT_MS+DB_OPERATION_TIMEOUT_MS)) break;
+      const sent=await boundedOperation(signal=>deps.send(payload,content,signal),PROVIDER_TIMEOUT_MS);
       if(typeof sent.id==='string' && /^[A-Za-z0-9_-]{1,128}$/.test(sent.id)) providerId=sent.id;
     } catch { /* No provider/body/recipient/secret error logging. */ }
     try {
-      const result=await deps.rpc('complete_reminder_v1',{p_claim_id:claim.claim_id,p_success:providerId!==null,p_provider_message_id:providerId});
+      const result=await rpc('complete_reminder_v1',{p_claim_id:claim.claim_id,p_success:providerId!==null,p_provider_message_id:providerId});
       if(result.error || result.data!==true) counts.uncertain++;
       else if(providerId) counts.sent++; else counts.failed++;
     } catch {counts.uncertain++;}
