@@ -88,7 +88,7 @@ begin
  select e,a,who,'Visible name','hidden@example.invalid','private',s from unnest(array[u,ad,em,pn,su],array['registered','approved','reserve','cancelled','participant']) as x(who,s);
  result:=pg_temp.iactor(i,format('select public.get_instructor_event_participants_v1(%L)',e));
  perform pg_temp.iok('scoped participants allow registered approved only',result->>'total'='2');
- perform pg_temp.iok('minimal participant DTO',not exists(select 1 from jsonb_array_elements(result->'items')x cross join lateral jsonb_object_keys(x)k where k not in ('registration_id','display_name','registration_status')));
+ perform pg_temp.iok('minimal participant DTO',not exists(select 1 from jsonb_array_elements(result->'items')x cross join lateral jsonb_object_keys(x)k where k not in ('registration_id','display_name','registration_status','attendance_status','attendance_version')));
  perform pg_temp.iok('reserve separate read only',pg_temp.iactor(i,format('select public.get_instructor_event_participants_v1(%L,''reserve'')',e))->>'total'='1');
  perform pg_temp.iok('pagination after scope',jsonb_array_length(pg_temp.iactor(i,format('select public.get_instructor_event_participants_v1(%L,''participants'',1,0)',e))->'items')=1);
  perform pg_temp.iok('assigned detail allow',pg_temp.iactor(i,format('select public.get_my_instructor_events_v1(%L,''upcoming'',%L)',a,e))->>'total'='1');
@@ -141,7 +141,7 @@ begin
   perform pg_temp.iok('update ACL '||r,pg_temp.iactor(ad,format(edit_sql,array[i],rev,ar),r)->>'error'='42501');
  end loop;
  perform pg_temp.iok('private revision not callable',pg_temp.iactor(ad,format('select public.instructor_event_revision_v1(%L)',e))->>'error'='42501');
- perform pg_temp.iok('exact workflow definer delta',(select count(*)=127 from pg_proc where pronamespace='public'::regnamespace and prosecdef));
+ perform pg_temp.iok('exact workflow definer delta',(select count(*)=128 from pg_proc where pronamespace='public'::regnamespace and prosecdef));
  perform pg_temp.iok('five new definers have exact owner searchpath ACL',
   (select count(*)=5 and bool_and(pg_get_userbyid(p.proowner)='postgres'
     and p.proconfig=array['search_path=pg_catalog, public, pg_temp']::text[]

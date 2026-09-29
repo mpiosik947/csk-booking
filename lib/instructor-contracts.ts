@@ -6,6 +6,8 @@ export type InstructorEvent = {
 export type InstructorParticipant = {
   registration_id: string; display_name: string;
   registration_status: "registered" | "approved" | "reserve";
+  attendance_status: "unmarked" | "present" | "no_show";
+  attendance_version: number;
 };
 export type InstructorPage<T> = { items: T[]; total: number };
 const record = (value: unknown): value is Record<string, unknown> => !!value && typeof value === "object" && !Array.isArray(value);
@@ -23,6 +25,9 @@ export function parseInstructorEvent(value: unknown): InstructorEvent {
 }
 export function parseInstructorParticipant(value: unknown): InstructorParticipant {
   if (!record(value) || typeof value.registration_id !== "string" || typeof value.display_name !== "string" ||
-    !["registered", "approved", "reserve"].includes(String(value.registration_status))) throw Error("Invalid instructor participant");
-  return { registration_id: value.registration_id, display_name: value.display_name, registration_status: value.registration_status as InstructorParticipant["registration_status"] };
+    !["registered", "approved", "reserve"].includes(String(value.registration_status)) ||
+    !["unmarked", "present", "no_show"].includes(String(value.attendance_status)) ||
+    !Number.isSafeInteger(value.attendance_version) || (value.attendance_version as number)<0) throw Error("Invalid instructor participant");
+  return { registration_id: value.registration_id, display_name: value.display_name, registration_status: value.registration_status as InstructorParticipant["registration_status"],
+    attendance_status: value.attendance_status as InstructorParticipant["attendance_status"], attendance_version: value.attendance_version as number };
 }

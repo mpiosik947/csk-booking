@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import type { InstructorEvent, InstructorPage, InstructorParticipant } from "@/lib/instructor-contracts";
 import { supabase } from "@/lib/supabase";
+import AttendanceControls from "./AttendanceControls";
 
 type Data = { events?: InstructorPage<InstructorEvent>; event?: InstructorEvent; participants?: InstructorPage<InstructorParticipant> | null };
 const labels = { upcoming: "Nadchodzące", past: "Zakończone", cancelled: "Anulowane" };
@@ -13,6 +14,7 @@ export default function InstructorEvents({ slug, eventId }: { slug: string; even
   const [reload, setReload] = useState(0);
   const [data, setData] = useState<Data | null>(null);
   const [error, setError] = useState(false);
+  const [attendanceMessage, setAttendanceMessage] = useState("");
   useEffect(() => {
     let controller: AbortController | undefined;
     let active = true;
@@ -52,6 +54,7 @@ export default function InstructorEvents({ slug, eventId }: { slug: string; even
   return <section className="min-w-0 rounded-2xl border border-[#343d2e] bg-[#141814] p-4 sm:p-6">
     <h1 className="text-2xl font-semibold">{eventId ? "Szczegóły szkolenia" : "Moje szkolenia"}</h1>
     <p className="mt-2 text-sm text-[#adb3a4]">Panel instruktora · tylko przypisane szkolenia</p>
+    {attendanceMessage && <p role="alert" className="mt-3 text-sm">{attendanceMessage}</p>}
     <nav aria-label={eventId ? "Sekcje szkolenia" : "Zakres szkoleń"} className="my-4 flex flex-wrap gap-2">
       {!eventId ? Object.entries(labels).map(([key,label]) => <button className={control} key={key} aria-pressed={scope === key} onClick={() => { setData(null); setScope(key as keyof typeof labels); setPage(0); }}>{label}</button>) : <>
         <button className={control} aria-pressed={section === "participants"} onClick={() => { setData(null); setSection("participants"); setPage(0); }}>Uczestnicy</button>
@@ -67,8 +70,11 @@ export default function InstructorEvents({ slug, eventId }: { slug: string; even
       {data.event && <><h2 className="mt-4 text-xl font-semibold [overflow-wrap:anywhere]">{data.event.title}</h2>
         <h3 className="mt-4 font-semibold">Informacje</h3><p>{data.event.event_date} · {data.event.start_time.slice(0,5)}–{data.event.end_time.slice(0,5)}</p>
         <p className="[overflow-wrap:anywhere]">{data.event.location}</p><p>{labels[data.event.status]}</p><p className="mt-3 whitespace-pre-wrap [overflow-wrap:anywhere]">{data.event.description}</p>
-        <h3 className="mt-6 font-semibold">{section === "reserve" ? "Lista rezerwowa — tylko odczyt" : "Uczestnicy"}</h3>
-        {data.participants === null ? <p>Dane uczestników są niedostępne: szkolenie anulowane lub upłynął okres dostępu.</p> : <ul className="mt-3 space-y-2">{data.participants?.items.map(row => <li key={row.registration_id} className="rounded-xl border border-[#343d2e] p-3 [overflow-wrap:anywhere]">{row.display_name}<span className="block text-sm text-[#adb3a4]">{row.registration_status === "reserve" ? "Rezerwa" : row.registration_status === "approved" ? "Zatwierdzony" : "Zapisany"}</span></li>)}{data.participants?.items.length === 0 && <li>Brak osób w tej sekcji.</li>}</ul>}
+        <h3 className="mt-6 font-semibold">{section === "reserve" ? "Lista rezerwowa — tylko odczyt" : "Lista obecności"}</h3>
+        {section === "participants" && <p className="mt-2 text-sm text-[#adb3a4]">Zmiany od 2 godzin przed rozpoczęciem do 24 godzin po zakończeniu. Dostęp i czas sprawdza serwer.</p>}
+        {data.participants === null ? <p>Dane uczestników są niedostępne: szkolenie anulowane lub upłynął okres dostępu.</p> : <ul className="mt-3 space-y-2">{data.participants?.items.map(row => <li key={row.registration_id} className="rounded-xl border border-[#343d2e] p-3 [overflow-wrap:anywhere]">{row.display_name}<span className="block text-sm text-[#adb3a4]">{row.registration_status === "reserve" ? "Rezerwa" : row.registration_status === "approved" ? "Zatwierdzony" : "Zapisany"}</span>
+          <AttendanceControls row={row} onRefresh={message => { setAttendanceMessage(message ?? ""); setReload(v => v+1); }} />
+        </li>)}{data.participants?.items.length === 0 && <li>Brak osób w tej sekcji.</li>}</ul>}
       </>}
     </>}
     <div className="mt-5 flex flex-wrap gap-2"><button className={control} disabled={page === 0 || !data} onClick={() => { setData(null); setPage(v=>v-1); }}>Poprzednia</button>

@@ -27,6 +27,9 @@ create temporary table expected_function_acl(
 ) on commit drop;
 
 insert into expected_function_acl values
+  ('public.guard_event_attendance_v1()','E',false,false,false),
+  ('public.event_attendance_window_v1(timestamp with time zone,timestamp with time zone,timestamp with time zone)','A',false,false,false),
+  ('public.set_event_registration_attendance_v1(uuid,text,bigint)','C',false,true,false),
   ('public.track_reminder_schedule_v1()','E',false,false,false),
   ('public.reminder_source_v1(text,uuid)','A',false,false,false),
   ('public.discover_reminders_v1()','D',false,false,true),
@@ -339,8 +342,8 @@ begin
     and procedure.proname<>'csk_sec002_default_acl_probe';
 
   perform pg_temp.record_result(1,'Complete public function inventory',
-    (select pg_catalog.count(*)=201 from pg_temp.expected_function_acl)
-    and v_actual_count=201
+    (select pg_catalog.count(*)=204 from pg_temp.expected_function_acl)
+    and v_actual_count=204
     and not exists(
       select 1 from pg_temp.expected_function_acl expected
       where pg_catalog.to_regprocedure(expected.signature) is null
@@ -386,8 +389,8 @@ begin
       where pg_catalog.has_function_privilege('authenticated',expected.signature,'EXECUTE')
         is distinct from expected.authenticated_execute
     )
-    and (select pg_catalog.count(*)=102 from pg_temp.expected_function_acl where authenticated_execute),
-    'authenticated has exactly 102 independently authorized RPC grants including scoped instructor workflow.');
+    and (select pg_catalog.count(*)=103 from pg_temp.expected_function_acl where authenticated_execute),
+    'authenticated has exactly 103 independently authorized RPC grants including scoped instructor workflow.');
 
   perform pg_temp.record_result(5,'Exact service_role ACL matrix',
     not exists(
@@ -399,14 +402,14 @@ begin
     'service_role retains only five explicitly intended server, entitlement and rollback grants.');
 
   perform pg_temp.record_result(6,'Trigger functions and internal helpers are isolated',
-    (select pg_catalog.count(*)=17 from pg_temp.expected_function_acl where category='E')
+    (select pg_catalog.count(*)=18 from pg_temp.expected_function_acl where category='E')
     and not exists(
       select 1 from pg_temp.expected_function_acl expected
       where expected.category='E' and (
         expected.anon_execute or expected.authenticated_execute or expected.service_role_execute
       )
     )
-    and (select pg_catalog.count(distinct trigger_record.tgfoid)=17
+    and (select pg_catalog.count(distinct trigger_record.tgfoid)=18
       from pg_catalog.pg_trigger trigger_record
       where not trigger_record.tgisinternal
         and exists(
@@ -423,7 +426,7 @@ begin
             and not trigger_record.tgisinternal
         )
     ),
-    'All eleven trigger functions are bound and have no client EXECUTE.');
+    'All eighteen trigger functions are bound and have no client EXECUTE.');
 
   perform pg_temp.record_result(7,'postgres function defaults are fail closed',
     not exists(
@@ -444,7 +447,7 @@ begin
     'Future functions created by postgres receive no client or PUBLIC EXECUTE.');
 
   perform pg_temp.record_result(8,'Application function creator scope is exact',
-    (select pg_catalog.count(*)=201
+    (select pg_catalog.count(*)=204
       from pg_catalog.pg_proc procedure
       join pg_catalog.pg_namespace namespace on namespace.oid=procedure.pronamespace
       join pg_catalog.pg_roles owner_role on owner_role.oid=procedure.proowner
