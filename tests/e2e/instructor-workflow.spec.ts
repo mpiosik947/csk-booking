@@ -19,6 +19,8 @@ for(const width of [375,430,1440])test(`scoped instructor reader ${width}: secti
   await page.goto(`http://instructor.test/?eventId=${id}`);
   await expect(page.getByRole('listitem').filter({hasText:'Uczestnik testowy'})).toBeVisible();
   await expect(page.getByRole('button',{name:'Obecny',exact:true})).toBeVisible();
+  await expect(page.getByRole('link',{name:'Pobierz CSV',exact:true})).toHaveAttribute('href',`/api/instructor/synthetic-b/events/${id}/attendance/csv`);
+  await expect(page.getByRole('link',{name:'Drukuj listę',exact:true})).toHaveAttribute('href',`/api/instructor/synthetic-b/events/${id}/attendance/print`);
   expect(await page.evaluate(()=>document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
   await page.screenshot({path:info.outputPath(`attendance-${width}.png`),fullPage:true});
   await page.getByRole('button',{name:'Lista rezerwowa',exact:true}).click();
@@ -30,6 +32,7 @@ for(const width of [375,430,1440])test(`scoped instructor reader ${width}: secti
   denied=true;
   await page.getByRole('button',{name:'Odśwież',exact:true}).click();
   await expect(page.getByRole('alert')).toBeVisible();
+  await expect(page.getByRole('link',{name:'Pobierz CSV',exact:true})).toHaveCount(0);
   await expect(page.getByRole('listitem').filter({hasText:'Osoba rezerwowa'})).toHaveCount(0);
   await page.goBack();
 });

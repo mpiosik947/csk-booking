@@ -71,6 +71,12 @@ export default function InstructorEvents({ slug, eventId }: { slug: string; even
         <h3 className="mt-4 font-semibold">Informacje</h3><p>{data.event.event_date} · {data.event.start_time.slice(0,5)}–{data.event.end_time.slice(0,5)}</p>
         <p className="[overflow-wrap:anywhere]">{data.event.location}</p><p>{labels[data.event.status]}</p><p className="mt-3 whitespace-pre-wrap [overflow-wrap:anywhere]">{data.event.description}</p>
         <h3 className="mt-6 font-semibold">{section === "reserve" ? "Lista rezerwowa — tylko odczyt" : "Lista obecności"}</h3>
+        {data.event.participants_available && data.participants && <div className="mt-3">
+          <div className="flex flex-wrap gap-2">
+            <a className={control} href={`/api/instructor/${slug}/events/${data.event.id}/attendance/csv`}>Pobierz CSV</a>
+            <a className={control} href={`/api/instructor/${slug}/events/${data.event.id}/attendance/print`} target="_blank" rel="noopener noreferrer">Drukuj listę</a>
+          </div><p className="mt-2 text-sm text-[#adb3a4]">CSV i wydruk: zapisani i zatwierdzeni, bez rezerwy. Limit 100 osób. Każde pobranie wymaga aktualnego dostępu.</p>
+        </div>}
         {section === "participants" && <p className="mt-2 text-sm text-[#adb3a4]">Zmiany od 2 godzin przed rozpoczęciem do 24 godzin po zakończeniu. Dostęp i czas sprawdza serwer.</p>}
         {data.participants === null ? <p>Dane uczestników są niedostępne: szkolenie anulowane lub upłynął okres dostępu.</p> : <ul className="mt-3 space-y-2">{data.participants?.items.map(row => <li key={row.registration_id} className="rounded-xl border border-[#343d2e] p-3 [overflow-wrap:anywhere]">{row.display_name}<span className="block text-sm text-[#adb3a4]">{row.registration_status === "reserve" ? "Rezerwa" : row.registration_status === "approved" ? "Zatwierdzony" : "Zapisany"}</span>
           <AttendanceControls row={row} onRefresh={message => { setAttendanceMessage(message ?? ""); setReload(v => v+1); }} />

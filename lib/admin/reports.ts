@@ -673,7 +673,7 @@ function neutralizeCsvFormula(value: string) {
   return /^[\u0000-\u0020]*[=+\-@]/u.test(value) ? `'${value}` : value;
 }
 
-function quoteCsvCell(value: string | number) {
+export function quoteCsvCell(value: string | number) {
   const safe = neutralizeCsvFormula(String(value));
   return `"${safe.replaceAll('"', '""')}"`;
 }
