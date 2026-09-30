@@ -141,7 +141,7 @@ begin
   perform pg_temp.iok('update ACL '||r,pg_temp.iactor(ad,format(edit_sql,array[i],rev,ar),r)->>'error'='42501');
  end loop;
  perform pg_temp.iok('private revision not callable',pg_temp.iactor(ad,format('select public.instructor_event_revision_v1(%L)',e))->>'error'='42501');
- perform pg_temp.iok('exact workflow definer delta',(select count(*)=128 from pg_proc where pronamespace='public'::regnamespace and prosecdef));
+ perform pg_temp.iok('exact workflow definer delta',(select count(*)=132 from pg_proc where pronamespace='public'::regnamespace and prosecdef));
  perform pg_temp.iok('five new definers have exact owner searchpath ACL',
   (select count(*)=5 and bool_and(pg_get_userbyid(p.proowner)='postgres'
     and p.proconfig=array['search_path=pg_catalog, public, pg_temp']::text[]

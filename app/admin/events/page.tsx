@@ -346,6 +346,23 @@ export default function AdminEventsPage({ tenantId, tenantSlug }: Readonly<{ ten
     }
     void load(); return () => { active = false; };
   }, [canManageEvents, tenantId]);
+  const [instructorMailBusy, setInstructorMailBusy] = useState<string | null>(null);
+  async function processInstructorEmails(eventId: string) {
+    if (!canManageEvents || instructorMailBusy) return;
+    setInstructorMailBusy(eventId);
+    try {
+      const { data } = await supabase.auth.getSession();
+      const response = await fetch("/api/send-instructor-emails", {
+        method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${data.session?.access_token ?? ""}` },
+        body: JSON.stringify({ eventId }),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error("Unavailable");
+      setToggleMessage({ kind: "success", message: `Powiadomienia instruktorów: potwierdzono wysyłkę ${result.delivery?.sent ?? 0} w tej partii. Pozostałe można przetworzyć przyciskiem ponowienia.` });
+    } catch {
+      setToggleMessage({ kind: "error", message: "Zmiana szkolenia jest zapisana. Nie potwierdzono wysyłki powiadomień instruktorów. Możesz ponowić przetwarzanie bez zmiany przypisań." });
+    } finally { setInstructorMailBusy(null); }
+  }
   // C2B cancellation controller start
   const [wholeCancellationBusy, setWholeCancellationBusy] = useState<string | null>(null);
   const [wholeCancellationDone, setWholeCancellationDone] = useState<Record<string, boolean>>({});
@@ -363,6 +380,7 @@ export default function AdminEventsPage({ tenantId, tenantSlug }: Readonly<{ ten
       const result = await response.json();
       if (!response.ok || result.code !== "cancelled") throw new Error("Unavailable");
       setWholeCancellationDone(current => ({ ...current, [eventId]: true }));
+      await processInstructorEmails(eventId);
       setToggleMessage({ kind: "success", message: `Wydarzenie anulowane. Wysłano w tej partii: ${result.delivery?.sent ?? 0}. Kolejne powiadomienia można przetworzyć przyciskiem ponowienia.` });
       void loadEvents();
     } catch {
@@ -719,6 +737,8 @@ export default function AdminEventsPage({ tenantId, tenantSlug }: Readonly<{ ten
         return;
       }
 
+      if (result.value.event_id) await processInstructorEmails(result.value.event_id);
+
       setTitle("");
       setDescription("");
       setEventDate("");
@@ -915,12 +935,14 @@ export default function AdminEventsPage({ tenantId, tenantSlug }: Readonly<{ ten
       }
 
       if (result.value.code === "updated") {
+        await processInstructorEmails(eventId);
         void loadEvents();
         resetEditingState();
         return;
       }
 
       if (result.value.code === "no_change") {
+        await processInstructorEmails(eventId);
         resetEditingState();
       }
     } catch {
@@ -2254,6 +2276,13 @@ export default function AdminEventsPage({ tenantId, tenantSlug }: Readonly<{ ten
                           Pokaż zapisanych
                         </button>
 
+                        {canManageEvents && (
+                          <button type="button" disabled={instructorMailBusy !== null}
+                            onClick={() => void processInstructorEmails(event.id)}
+                            className="rounded-xl border border-[#536143] px-4 py-3 text-sm font-semibold text-[#d7c895] disabled:opacity-60">
+                            {instructorMailBusy === event.id ? "Przetwarzanie…" : "Ponów powiadomienia instruktorów"}
+                          </button>
+                        )}
                         {/* C2B cancellation action start */}
                         {canManageEvents && (
                           <button type="button" disabled={wholeCancellationBusy !== null}

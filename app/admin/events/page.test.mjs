@@ -580,7 +580,11 @@ test("create confirmation validates once and executes only the approved snapshot
   assert.match(confirmCreateEvent, /setCreateConfirmation\(null\)/);
   assert.match(confirmCreateEvent, /void loadEvents\(\)/);
   assert.match(confirmCreateEvent, /finally \{[\s\S]*createSubmittingRef\.current = false[\s\S]*setCreateSubmitting\(false\)/);
-  assert.doesNotMatch(confirmCreateEvent, /error\.message|event_id|conflict_lane_id/);
+  // Canonical event ID is used only for the authorized 1F delivery action, never UX error text.
+  const instructorDispatch = 'if (result.value.event_id) await processInstructorEmails(result.value.event_id);';
+  assert.ok(confirmCreateEvent.includes(instructorDispatch));
+  assert.ok(confirmCreateEvent.indexOf('result.value.code !== "created"') < confirmCreateEvent.indexOf(instructorDispatch));
+  assert.doesNotMatch(confirmCreateEvent.replace(instructorDispatch, ""), /error\.message|event_id|conflict_lane_id/);
   assert.ok(confirmCreateEvent.indexOf('result.value.code !== "created"') < confirmCreateEvent.indexOf("setTitle(\"\")"));
 });
 

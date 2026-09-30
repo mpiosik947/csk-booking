@@ -169,11 +169,11 @@ begin
     (v_tenant,v_attempt_cancelled,v_owner,v_lane,'[TEST][SEC-015] Owner','sec015-owner@example.invalid','000',current_date+103,time '08:00',time '09:00',60,10,'cancelled','pay_on_site','planned',1,v_price,'mon_thu','[TEST][SEC-015] Lane','[TEST]',10,10,'PLN',pg_catalog.gen_random_uuid()),
     (v_tenant,v_confirmed,v_owner,v_lane,'[TEST][SEC-015] Owner','sec015-owner@example.invalid','000',current_date+104,time '08:00',time '09:00',60,10,'confirmed','pay_on_site','planned',1,v_price,'mon_thu','[TEST][SEC-015] Lane','[TEST]',10,10,'PLN',pg_catalog.gen_random_uuid());
 
-  perform pg_temp.record_result(1,'Message type constraint includes exactly eight types after PRODUCT-10G-C2B',
+  perform pg_temp.record_result(1,'Message type constraint includes exactly eleven types after INSTRUCTOR-1F',
     (select pg_catalog.regexp_replace(pg_catalog.pg_get_constraintdef(c.oid),'\s','','g')=
-      'CHECK((message_type=ANY(ARRAY[''event_registration_confirmation''::text,''reservation_confirmation''::text,''reservation_cancellation''::text,''event_reserve_acceptance_confirmation''::text,''event_registration_cancellation''::text,''booking_reminder_24h''::text,''event_reminder_24h''::text,''event_cancellation''::text])))'
+      'CHECK((message_type=ANY(ARRAY[''event_registration_confirmation''::text,''reservation_confirmation''::text,''reservation_cancellation''::text,''event_reserve_acceptance_confirmation''::text,''event_registration_cancellation''::text,''booking_reminder_24h''::text,''event_reminder_24h''::text,''event_cancellation''::text,''instructor_assignment''::text,''instructor_removal''::text,''instructor_event_cancellation''::text])))'
      from pg_catalog.pg_constraint c where c.conrelid='public.email_deliveries'::regclass and c.conname='email_deliveries_message_type_check'),
-    'Closed allowlist adds only the approved event-wide cancellation type.');
+    'Closed allowlist adds only the three approved instructor notification types.');
 
   perform pg_temp.record_result(2,'Prepare RPC signature has no overload',
     pg_catalog.to_regprocedure('public.prepare_confirmation_email(text,uuid)') is not null
