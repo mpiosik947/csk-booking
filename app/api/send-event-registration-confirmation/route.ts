@@ -326,6 +326,7 @@ ${brand.footerText}
         return resend.emails.send(
           {
             from: configuration.from,
+            replyTo: configuration.replyTo,
             to: recipientEmail,
             subject,
             html,

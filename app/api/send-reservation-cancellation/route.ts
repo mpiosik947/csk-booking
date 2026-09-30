@@ -270,6 +270,7 @@ ${brand.footerText}
         resend.emails.send(
           {
             from: configuration.from,
+            replyTo: configuration.replyTo,
             to: customerEmail,
             subject,
             html,

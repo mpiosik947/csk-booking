@@ -6,7 +6,7 @@ import { eventWideCancellationContent } from "./event-wide-cancellation-core";
 
 /** Exactly one bounded batch per explicit staff request; never discovers unrelated events. */
 export async function sendEventCancellationBatch(actor: SupabaseClient, eventId: string) {
-  const { from, resendApiKey } = getOperationalEmailSenderConfiguration();
+  const { from, resendApiKey, replyTo } = getOperationalEmailSenderConfiguration();
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL, key = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!from || !resendApiKey || !url || !key) throw new Error("Unavailable");
   const { data: claims, error } = await actor.rpc("claim_event_cancellation_batch_v1", { p_event_id: eventId });
@@ -27,7 +27,7 @@ export async function sendEventCancellationBatch(actor: SupabaseClient, eventId:
       const tenant = await resolveEventRegistrationEmailTenantContext(claim.registration_id);
       if (tenant.tenantId !== claim.tenant_id) throw new Error("Unavailable");
       const options = { idempotencyKey: claim.idempotency_key, signal: AbortSignal.timeout(10000) };
-      const response = await resend.emails.send({ from, to: data.customer_email, ...eventWideCancellationContent(tenant, event) }, options);
+      const response = await resend.emails.send({ from, to: data.customer_email, ...eventWideCancellationContent(tenant, event), replyTo }, options);
       if (!response.error && response.data?.id) providerId = response.data.id;
     } catch { /* No body, recipient or provider error payload logging. */ }
     const done = await db.rpc("complete_event_cancellation_email_v1", {

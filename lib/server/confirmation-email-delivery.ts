@@ -55,6 +55,7 @@ type ReadyPreparation = {
 export type ConfirmationEmailConfiguration = {
   resendApiKey: string;
   from: string;
+  replyTo?: string;
   supabaseUrl: string;
   serviceRoleKey: string;
 };
@@ -198,7 +199,7 @@ function completionSucceeded(value: unknown, expectedCode: "sent" | "failed") {
 export function getConfirmationEmailConfiguration(
   environment: NodeJS.ProcessEnv = process.env
 ): ConfirmationEmailConfiguration | null {
-  const { resendApiKey, from } = getOperationalEmailSenderConfiguration(environment);
+  const { resendApiKey, from, replyTo } = getOperationalEmailSenderConfiguration(environment);
   const supabaseUrl = environment.NEXT_PUBLIC_SUPABASE_URL?.trim();
   const serviceRoleKey = environment.SUPABASE_SERVICE_ROLE_KEY?.trim();
 
@@ -206,7 +207,7 @@ export function getConfirmationEmailConfiguration(
     return null;
   }
 
-  return { resendApiKey, from, supabaseUrl, serviceRoleKey };
+  return { resendApiKey, from, supabaseUrl, serviceRoleKey, ...(replyTo ? { replyTo } : {}) };
 }
 
 export function getConfirmationServiceRoleClient(

@@ -363,7 +363,7 @@ export async function promoteEventReserve(
     }
 
     try {
-      const { resendApiKey, from } = getOperationalEmailSenderConfiguration();
+      const { resendApiKey, from, replyTo } = getOperationalEmailSenderConfiguration();
 
     if (!resendApiKey || !from) {
       await failPreparedPromotions("email_provider_error");
@@ -532,6 +532,7 @@ ${brand.footerText}
           subject,
           html,
           text,
+          replyTo,
         }, { idempotencyKey: eventInvitationKey(tenant.tenantId, registration.id, promotion.promotion_token) });
         sendError = emailError || (!sentData?.id ? { code: "email_provider_error" } : null);
       } catch (error) {

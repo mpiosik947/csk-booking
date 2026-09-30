@@ -7,7 +7,7 @@ import { resolveEventRegistrationEmailTenantContext, getOperationalEmailSenderCo
 export async function sendEventCancellationReceipt(actor: SupabaseClient, registrationId: string) {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  const { from, resendApiKey } = getOperationalEmailSenderConfiguration();
+  const { from, resendApiKey, replyTo } = getOperationalEmailSenderConfiguration();
   if (!url || !key || !from || !resendApiKey) return "pending" as const;
   const db = createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } });
   return deliverEventCancellation(registrationId, {
@@ -23,7 +23,7 @@ export async function sendEventCancellationReceipt(actor: SupabaseClient, regist
       const tenant = await resolveEventRegistrationEmailTenantContext(claim.registration_id);
       if (tenant.tenantId !== claim.tenant_id) throw new Error("Receipt unavailable");
       return new Resend(resendApiKey).emails.send({ from, to: data.customer_email,
-        ...cancellationEmailContent(tenant, event) }, { idempotencyKey: claim.idempotency_key });
+        ...cancellationEmailContent(tenant, event), replyTo }, { idempotencyKey: claim.idempotency_key });
     },
     complete: async (claim, success, providerId) => await db.rpc("complete_event_registration_cancellation_email_v1", {
       p_claim_id: claim, p_success: success, p_provider_message_id: providerId,

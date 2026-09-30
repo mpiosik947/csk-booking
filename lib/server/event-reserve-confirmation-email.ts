@@ -63,7 +63,7 @@ export async function sendConfirmedPlaceEmail(
   idempotencyKey: string,
   claimId: string
 ) {
-  const { resendApiKey, from } = getOperationalEmailSenderConfiguration();
+  const { resendApiKey, from, replyTo } = getOperationalEmailSenderConfiguration();
 
   if (!resendApiKey || !from || !registration.customer_email) {
     throw new Error("Receipt configuration unavailable");
@@ -133,5 +133,6 @@ ${brand.footerText}
     subject,
     html,
     text,
+    replyTo,
   }, { idempotencyKey });
 }

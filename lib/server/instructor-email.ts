@@ -7,7 +7,7 @@ import { deliverInstructorEmailBatch } from "./instructor-email-core";
 export async function sendInstructorEmailBatch(actor: SupabaseClient, eventId: string) {
   const authorized = await actor.rpc("authorize_instructor_email_batch_v1", { p_event_id: eventId });
   if (authorized.error || authorized.data !== true) throw new Error("Unavailable");
-  const { from, resendApiKey } = getOperationalEmailSenderConfiguration();
+  const { from, resendApiKey, replyTo } = getOperationalEmailSenderConfiguration();
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL, key = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!from || !resendApiKey || !url || !key) throw new Error("Unavailable");
   const db = createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } });
@@ -26,7 +26,7 @@ export async function sendInstructorEmailBatch(actor: SupabaseClient, eventId: s
     tenant: resolveEventEmailTenantContext,
     send: async (to, content, idempotencyKey) => {
       const options = { idempotencyKey, signal: AbortSignal.timeout(10000) };
-      const result = await resend.emails.send({ from, to, ...content }, options);
+      const result = await resend.emails.send({ from, to, ...content, replyTo }, options);
       return !result.error && result.data?.id ? result.data.id : null;
     },
     complete: async (claim, success, providerId) => {
