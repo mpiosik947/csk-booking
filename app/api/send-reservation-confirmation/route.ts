@@ -19,7 +19,7 @@ type ReservationConfirmationPayload = {
 };
 
 type ReservationRow = {
-  lane_id: string;
+  lane_name: string | null;
   customer_name: string | null;
   reservation_date: string;
   start_time: string;
@@ -27,10 +27,6 @@ type ReservationRow = {
   price: number | null;
   reservation_status: string;
   check_in_token: string | null;
-};
-
-type LaneRow = {
-  name: string | null;
 };
 
 const UUID_PATTERN =
@@ -187,13 +183,7 @@ export async function POST(request: Request) {
     }
 
     const { data: reservationData, error: reservationError } = await supabase
-      .from("reservations")
-      .select(
-        "lane_id,customer_name,reservation_date,start_time,end_time,price,reservation_status,check_in_token"
-      )
-      .eq("id", reservationId)
-      .eq("user_id", user.id)
-      .maybeSingle();
+      .rpc("read_owned_booking_confirmation_v1", { p_reservation_id: reservationId });
 
     if (reservationError) {
       console.error("Reservation confirmation reservation read failed", {
@@ -222,22 +212,6 @@ export async function POST(request: Request) {
       return jsonError("internal_error", 500);
     }
 
-    const { data: laneData, error: laneError } = await supabase
-      .from("shooting_lanes")
-      .select("name")
-      .eq("id", reservation.lane_id)
-      .maybeSingle();
-
-    if (laneError) {
-      console.error("Reservation confirmation lane read failed", {
-        code: laneError.code,
-      });
-      return jsonError("internal_error", 500);
-    }
-
-    if (!laneData) {
-      return jsonError("not_found", 404);
-    }
 
     const recipientEmail = user.email?.trim();
 
@@ -246,13 +220,12 @@ export async function POST(request: Request) {
       return jsonError("delivery_failed", 502);
     }
 
-    const lane = laneData as LaneRow;
     const displayName = reservation.customer_name?.trim() || "Kliencie";
     const formattedDate = formatDate(reservation.reservation_date);
     const formattedPrice = formatPrice(reservation.price);
     const startTime = reservation.start_time?.trim() || "-";
     const endTime = reservation.end_time?.trim() || "-";
-    const laneName = lane.name?.trim() || "-";
+    const laneName = reservation.lane_name?.trim() || "-";
 
     const checkInUrl = operationalEmailActionUrl("check-in", checkInToken);
 

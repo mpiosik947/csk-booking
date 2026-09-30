@@ -20,7 +20,6 @@ type EventRegistrationConfirmationPayload = {
 };
 
 type EventRegistrationRow = {
-  event_id: string;
   customer_name: string | null;
   registration_status: string;
 };
@@ -205,11 +204,7 @@ export async function POST(request: Request) {
     }
 
     const { data: registrationData, error: registrationError } = await supabase
-      .from("event_registrations")
-      .select("event_id,customer_name,registration_status")
-      .eq("id", registrationId)
-      .eq("user_id", user.id)
-      .maybeSingle();
+      .rpc("read_owned_event_confirmation_v1", { p_registration_id: registrationId });
 
     if (registrationError) {
       console.error("Event registration confirmation registration read failed", {
@@ -231,22 +226,6 @@ export async function POST(request: Request) {
       return jsonError("invalid_status", 409);
     }
 
-    const { data: eventData, error: eventError } = await supabase
-      .from("events")
-      .select("title,event_date,start_time,end_time,location,price")
-      .eq("id", registration.event_id)
-      .maybeSingle();
-
-    if (eventError) {
-      console.error("Event registration confirmation event read failed", {
-        code: eventError.code,
-      });
-      return jsonError("internal_error", 500);
-    }
-
-    if (!eventData) {
-      return jsonError("not_found", 404);
-    }
 
     const recipientEmail = user.email?.trim();
 
@@ -255,7 +234,7 @@ export async function POST(request: Request) {
       return jsonError("delivery_failed", 502);
     }
 
-    const event = eventData as EventRow;
+    const event = registrationData as EventRow;
     const displayName = registration.customer_name?.trim() || "Uczestniku";
     const formattedDate = formatDate(event.event_date);
     const formattedPrice = formatPrice(event.price);
