@@ -124,6 +124,8 @@ begin
 
   insert into public.tenants(id,name,slug,status)
   values(v_tenant_b,'[TEST][SAAS-9C-2] Tenant B','saas9c2-'||pg_catalog.left(v_run,16),'dormant');
+  insert into public.tenant_public_profiles(tenant_id,display_name,city,public_slug,is_public)
+  values(v_tenant_b,'Synthetic B','City','saas9c2-public-'||pg_catalog.left(v_run,16),true);
   insert into public.tenant_memberships(tenant_id,user_id,role,status)
   values(v_tenant_b,v_user_a,'user','active');
 

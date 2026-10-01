@@ -270,6 +270,7 @@ begin
       join pg_catalog.pg_namespace namespace on namespace.oid=procedure.pronamespace
       where namespace.nspname='public' and procedure.prosecdef
         and procedure.proname like '%tenant%'
+        and procedure.proname not in ('platform_create_tenant_bundle_v2','platform_get_tenant_onboarding_readiness_v2','tenant_setup_get_lane_configuration_v1','tenant_setup_create_lane_family_v1','tenant_setup_set_lane_configuration_v1')
         and procedure.proname <> 'resolve_operational_email_tenant_context_v1'
         and procedure.proname <> 'admin_list_tenant_instructors_v1'
         and procedure.proname not in ('admin_get_tenant_content_v1','admin_update_tenant_content_v1','get_public_tenant_content_v1')
@@ -315,7 +316,7 @@ begin
           'tenant_memberships', 'shooting_lanes', 'reservations', 'lane_blocks',
           'events', 'event_lanes', 'event_registrations', 'email_deliveries',
           'audit_logs', 'tenant_public_profiles', 'tenant_public_pricing_items', 'tenant_user_admin_notes', 'tenant_user_verifications',
-          'tenant_plan_assignments','platform_audit_logs','external_settlement_records','tenant_domains','event_instructors'
+          'platform_tenant_creation_requests','tenant_plan_assignments','platform_audit_logs','external_settlement_records','tenant_domains','event_instructors'
         )
     ),
     'Tenant ownership must not spread outside the approved phased scope.');
