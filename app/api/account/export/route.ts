@@ -7,7 +7,7 @@ import {
 } from "@/lib/server/auth-user-verification";
 
 function jsonError(
-  code: "invalid_request" | "unauthorized" | "auth_unavailable" | "internal_error",
+  code: "invalid_request" | "unauthorized" | "auth_unavailable" | "internal_error" | "export_too_large",
   status: number,
   message: string
 ) {
@@ -61,9 +61,12 @@ export async function GET(request: Request) {
       );
     }
 
-    const { data, error } = await supabase.rpc("export_my_data_v1");
+    const { data, error } = await supabase.rpc("export_my_data_v3").abortSignal(AbortSignal.timeout(20_000));
 
     if (error) {
+      if (error.code === "54000") {
+        return jsonError("export_too_large", 413, "Pełny eksport przekracza limit jednorazowego pobrania. Skontaktuj się z obsługą w sprawie bezpiecznego przekazania danych.");
+      }
       console.error("Account export RPC failed", { code: error.code });
       return jsonError("internal_error", 500, "Nie udało się przygotować eksportu.");
     }
@@ -73,7 +76,11 @@ export async function GET(request: Request) {
       return jsonError("internal_error", 500, "Nie udało się przygotować eksportu.");
     }
 
-    return new Response(JSON.stringify(data, null, 2), {
+    const body = JSON.stringify(data);
+    if (Buffer.byteLength(body, "utf8") > 2_097_152) {
+      return jsonError("export_too_large", 413, "Pełny eksport przekracza limit jednorazowego pobrania. Skontaktuj się z obsługą w sprawie bezpiecznego przekazania danych.");
+    }
+    return new Response(body, {
       status: 200,
       headers: {
         "Content-Type": "application/json; charset=utf-8",

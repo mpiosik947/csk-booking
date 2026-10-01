@@ -11,7 +11,7 @@ test("owner export is authenticated, parameterless and returns a JSON attachment
 
   assert.match(source, /export async function GET\(request: Request\)/u);
   assert.match(source, /verifyAuthUser/u);
-  assert.match(source, /supabase\.rpc\("export_my_data_v1"\)/u);
+  assert.match(source, /supabase\.rpc\("export_my_data_v3"\)/u);
   assert.match(source, /url\.searchParams\.keys\(\)/u);
   assert.match(source, /Content-Disposition/u);
   assert.match(source, /csk-booking-my-data\.json/u);

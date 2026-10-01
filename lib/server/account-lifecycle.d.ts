@@ -37,7 +37,22 @@ export type AccountExportV2Payload = AccountExportBase & {
 
 export type AccountExportPayload =
   | AccountExportV1Payload
-  | AccountExportV2Payload;
+  | AccountExportV2Payload
+  | AccountExportV3Payload;
+
+export type AccountExportV3Payload = AccountExportBase & {
+  export_version: 3;
+  tenant_relationships: AccountExportTenantRelationship[];
+  event_instructors: Array<Record<string, unknown>>;
+  email_deliveries: Array<Record<string, unknown>>;
+  reminder_schedules: Array<Record<string, unknown>>;
+  reminder_occurrences: Array<Record<string, unknown>>;
+  platform_admin: { status: "active" | "suspended"; created_at: string } | null;
+  platform_audit_history: Array<Record<string, unknown>>;
+  audit_history: Array<Record<string, unknown>>;
+  external_settlements: Array<Record<string, unknown>>;
+  tenant_domain_requests: Array<Record<string, unknown>>;
+};
 
 export function isAccountExportPayload(
   value: unknown
