@@ -1,3 +1,4 @@
+import Link from "next/link";
 import Image from "next/image";
 
 export default function TermsPage() {
@@ -37,7 +38,7 @@ export default function TermsPage() {
             </p>
           </a>
 
-          <a
+          <Link
             href="/privacy"
             className="rounded-2xl border border-[#30372c] bg-[#191e19] p-5 transition hover:border-[#d7c895] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d7c895] focus-visible:ring-offset-2 focus-visible:ring-offset-[#141814]"
           >
@@ -47,7 +48,7 @@ export default function TermsPage() {
             <p className="text-sm leading-6 text-[#a9ada4]">
               Informacje o przetwarzaniu danych osobowych użytkowników systemu.
             </p>
-          </a>
+          </Link>
         </div>
 
         <div
@@ -246,12 +247,12 @@ export default function TermsPage() {
                 danych osobowych.
               </p>
 
-              <a
+              <Link
                 href="/privacy"
                 className="mt-4 inline-flex min-h-11 items-center rounded-xl bg-[#536143] px-5 py-3 text-sm font-semibold text-[#f2efe4] transition hover:bg-[#78865f] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d7c895] focus-visible:ring-offset-2 focus-visible:ring-offset-[#191e19]"
               >
                 Przejdź do Polityki prywatności / RODO
-              </a>
+              </Link>
             </div>
           </section>
         </div>
@@ -260,40 +261,40 @@ export default function TermsPage() {
           aria-label="Nawigacja dokumentu"
           className="mt-8 flex flex-col gap-3 border-t border-[#30372c] pt-6 sm:flex-row sm:flex-wrap"
         >
-          <a
+          <Link
             href="/"
             className="inline-flex min-h-11 items-center justify-center rounded-xl border border-[#30372c] px-5 py-3 text-center text-sm font-semibold text-[#d7c895] transition hover:border-[#d7c895] hover:bg-[#191e19] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d7c895] focus-visible:ring-offset-2 focus-visible:ring-offset-[#141814]"
           >
             ← Powrót do strony głównej
-          </a>
+          </Link>
 
-          <a
+          <Link
             href="/register"
             className="inline-flex min-h-11 items-center justify-center rounded-xl border border-[#30372c] px-5 py-3 text-center text-sm font-semibold text-[#a9ada4] transition hover:border-[#d7c895] hover:text-[#d7c895] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d7c895] focus-visible:ring-offset-2 focus-visible:ring-offset-[#141814]"
           >
             ← Wróć do rejestracji
-          </a>
+          </Link>
 
-          <a
+          <Link
             href="/dashboard"
             className="inline-flex min-h-11 items-center justify-center rounded-xl border border-[#30372c] px-5 py-3 text-center text-sm font-semibold text-[#a9ada4] transition hover:border-[#d7c895] hover:text-[#d7c895] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d7c895] focus-visible:ring-offset-2 focus-visible:ring-offset-[#141814]"
           >
             Panel klienta
-          </a>
+          </Link>
 
-          <a
+          <Link
             href="/privacy"
             className="inline-flex min-h-11 items-center justify-center rounded-xl border border-[#30372c] px-5 py-3 text-center text-sm font-semibold text-[#a9ada4] transition hover:border-[#d7c895] hover:text-[#d7c895] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d7c895] focus-visible:ring-offset-2 focus-visible:ring-offset-[#141814]"
           >
             Polityka prywatności / RODO
-          </a>
+          </Link>
 
-          <a
+          <Link
             href="/booking"
             className="inline-flex min-h-11 items-center justify-center rounded-xl bg-[#536143] px-5 py-3 text-center text-sm font-semibold text-[#f2efe4] transition hover:bg-[#78865f] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d7c895] focus-visible:ring-offset-2 focus-visible:ring-offset-[#141814]"
           >
             Przejdź do rezerwacji
-          </a>
+          </Link>
         </nav>
       </article>
     </main>

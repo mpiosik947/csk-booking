@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import {
   EVENT_REGISTRATION_STATUS,
@@ -458,19 +459,19 @@ export default function MyEventsPage({ tenantId, tenantSlug }: { tenantId: strin
             </p>
 
             <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:justify-center">
-              <a
+              <Link
                 href="/login"
                 className="inline-flex min-h-12 items-center justify-center rounded-xl bg-[#536143] px-5 py-3 font-semibold text-[#f2efe4] transition hover:bg-[#78865f] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d7c895] focus-visible:ring-offset-2 focus-visible:ring-offset-[#2a1b1b]"
               >
                 Zaloguj się
-              </a>
+              </Link>
 
-              <a
+              <Link
                 href="/register"
                 className="inline-flex min-h-12 items-center justify-center rounded-xl border border-[#744545] px-5 py-3 font-semibold text-[#e0a0a0] transition hover:bg-[#382323] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#e0a0a0] focus-visible:ring-offset-2 focus-visible:ring-offset-[#2a1b1b]"
               >
                 Utwórz konto
-              </a>
+              </Link>
             </div>
           </div>
         )}
@@ -780,12 +781,12 @@ export default function MyEventsPage({ tenantId, tenantSlug }: { tenantId: strin
           aria-label="Nawigacja szkoleń"
           className="mt-8 flex flex-col gap-3 border-t border-[#30372c] pt-6 sm:flex-row"
         >
-          <a
+          <Link
             href="/dashboard"
             className="inline-flex min-h-12 items-center justify-center rounded-xl border border-[#30372c] px-5 py-3 text-center text-sm font-semibold text-[#a9ada4] transition hover:border-[#536143] hover:text-[#f2efe4] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d7c895] focus-visible:ring-offset-2 focus-visible:ring-offset-[#141814]"
           >
             ← Panel klienta
-          </a>
+          </Link>
 
           <a
             href={`/t/${tenantSlug}/events`}

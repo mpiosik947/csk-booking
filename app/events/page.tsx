@@ -496,12 +496,12 @@ export default function EventsPage({ tenantId, tenantSlug }: { tenantId: string;
                 Zaloguj się, aby się zapisać
               </a>
 
-              <a
+              <Link
                 href="/register"
                 className="min-h-12 rounded-xl border border-[#30372c] bg-[#141814] px-5 py-3 text-center font-semibold text-[#f2efe4] transition hover:border-[#78865f] hover:bg-[#191e19] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#c5a861] focus-visible:ring-offset-2 focus-visible:ring-offset-[#191e19]"
               >
                 Załóż konto
-              </a>
+              </Link>
             </div>
           ) : isFull ? (
             <button
