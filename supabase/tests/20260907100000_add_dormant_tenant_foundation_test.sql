@@ -270,7 +270,7 @@ begin
       join pg_catalog.pg_namespace namespace on namespace.oid=procedure.pronamespace
       where namespace.nspname='public' and procedure.prosecdef
         and procedure.proname like '%tenant%'
-        and procedure.proname not in ('platform_create_tenant_bundle_v2','platform_get_tenant_onboarding_readiness_v2','tenant_setup_get_lane_configuration_v1','tenant_setup_create_lane_family_v1','tenant_setup_set_lane_configuration_v1')
+        and procedure.proname not in ('platform_list_active_plans_v1','platform_get_tenant_onboarding_detail_v1','platform_create_tenant_bundle_v2','platform_get_tenant_onboarding_readiness_v2','tenant_setup_get_lane_configuration_v1','tenant_setup_create_lane_family_v1','tenant_setup_set_lane_configuration_v1')
         and procedure.proname <> 'resolve_operational_email_tenant_context_v1'
         and procedure.proname <> 'admin_list_tenant_instructors_v1'
         and procedure.proname not in ('admin_get_tenant_content_v1','admin_update_tenant_content_v1','get_public_tenant_content_v1')
