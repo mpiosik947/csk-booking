@@ -37,11 +37,6 @@ export default function PlatformTenants() {
     } catch { setMessage("Nie udało się połączyć. Odśwież stan przed ponowną próbą."); }
     finally { setBusy(false); }
   }
-  async function create(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault(); const form = new FormData(event.currentTarget);
-    await mutate("platform_create_tenant_v1", { p_name: form.get("name"), p_city: form.get("city"),
-      p_tenant_slug: form.get("tenant_slug"), p_public_slug: form.get("public_slug") });
-  }
   async function lookup(event: FormEvent<HTMLFormElement>) {
     event.preventDefault(); setAccount(null); setBusy(true);
     try {
@@ -57,13 +52,7 @@ export default function PlatformTenants() {
     description="Zarządzanie konfiguracją platformy nie daje dostępu do rezerwacji ani danych klientów obiektu.">
     <Link href="/account" className="underline">Moje konto</Link>
     {message && <p role="status" className="my-4 rounded-lg border border-[#807144] p-4">{message}</p>}
-    <form onSubmit={create} className="my-6 grid gap-3 rounded-xl border border-[#394131] p-4 sm:grid-cols-2">
-      <h2 className="text-xl font-bold sm:col-span-2">Utwórz draft — bez planu i publikacji</h2>
-      {[["name", "Nazwa"], ["city", "Miejscowość"], ["tenant_slug", "Stały identyfikator techniczny"], ["public_slug", "Publiczny identyfikator URL"]].map(([name, label]) =>
-        <label key={name} className="grid gap-1">{label}<input name={name} required maxLength={name.includes("slug") ? 63 : 120}
-          pattern={name.includes("slug") ? "[a-z0-9]+(-[a-z0-9]+)*" : undefined} className={control} /></label>)}
-      <button disabled={busy} className={control}>Utwórz draft</button>
-    </form>
+    <Link href="/platform-admin/tenants/new" className="my-6 inline-flex min-h-12 items-center rounded-lg border border-[#626b55] px-4 py-2">Dodaj nową strzelnicę</Link>
     <div className="grid gap-4">
       {items.map(tenant => <section key={tenant.id} className="min-w-0 rounded-xl border border-[#48523c] p-4">
         <h2 className="break-words text-xl font-bold">{tenant.name}</h2>
@@ -72,6 +61,7 @@ export default function PlatformTenants() {
         <p>Plan: {tenant.plan_key ?? "Nieprzypisany"} · Utworzono: {new Date(tenant.created_at).toLocaleDateString("pl-PL")}</p>
         <p className="my-2">Gotowość: {Object.values(tenant.readiness).every(Boolean) ? "Kompletna" : Object.entries(tenant.readiness).filter(([, ready]) => !ready).map(([key]) => ({ identity_ready: "nazwa", slug_ready: "identyfikatory", settings_ready: "ustawienia", plan_ready: "plan", admin_ready: "admin" })[key] ?? key).join(", ")}</p>
         <div className="flex flex-wrap gap-2">
+          <Link className={control} href={`/platform-admin/tenants/${tenant.id}`}>Bieżący stan obiektu</Link>
           <Link className={control} href={`/platform-admin/tenants/${tenant.id}/preview`}>Prywatny podgląd</Link>
           <Link className={control} href={`/tenant-setup/${tenant.tenant_slug}`}>Ustawienia (wymagany tenant admin)</Link>
           <button disabled={busy} className={control} onClick={() => { setSelected(selected === tenant.id ? null : tenant.id); setAccount(null); }}>Konfiguruj</button>
@@ -89,6 +79,7 @@ export default function PlatformTenants() {
           </>}
           <p>Aktywacja nie publikuje obiektu. Zawieszenie wyłącza nowy biznes, ale zachowuje historię i obsługę istniejących zobowiązań.</p>
           <div className="flex flex-wrap gap-2">
+
             {(tenant.status === "dormant" || tenant.status === "suspended") && <button disabled={busy} className={control} onClick={() => void mutate("platform_set_tenant_state_v1", { p_tenant_id: tenant.id, p_action: "activate" })}>Aktywuj po sprawdzeniu gotowości</button>}
             {tenant.status === "active" && <><button disabled={busy} className={control} onClick={() => void mutate("platform_set_tenant_state_v1", { p_tenant_id: tenant.id, p_action: tenant.is_public ? "unpublish" : "publish" })}>{tenant.is_public ? "Wycofaj publikację" : "Opublikuj"}</button><button disabled={busy} className={control} onClick={() => { if (window.confirm("Zawiesić nowy biznes tego obiektu i wycofać publikację?")) void mutate("platform_set_tenant_state_v1", { p_tenant_id: tenant.id, p_action: "suspend" }); }}>Zawieś</button></>}
           </div>
