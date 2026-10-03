@@ -33,7 +33,7 @@ begin
  perform pg_temp.ok('about blocks saved',out->>'about_offer'='Oferta' and out->>'description'='Opis główny');
  perform pg_temp.ok('contact saved',out->>'public_address'='Testowa 1');
  perform pg_temp.ok('map saved without embed',out->>'public_map_url'='https://www.openstreetmap.org/');
- perform pg_temp.ok('stale writer fails',pg_temp.denied(aa,format('select public.admin_update_tenant_content_v1(%L,%L::jsonb,%L::jsonb,%L::timestamptz)','tcm-test-a',(s-array['updated_at','feature_access','about_offer','about_audience','public_map_url','pricing_items'])::text,c::text,(old_stamp::timestamptz-interval '1 second')::text),'40001'));
+ perform pg_temp.ok('stale writer fails',pg_temp.denied(aa,format('select public.admin_update_tenant_content_v1(%L,%L::jsonb,%L::jsonb,%L::timestamptz)','tcm-test-a',(s-array['updated_at','feature_access','about_offer','about_audience','public_map_url','pricing_items'])::text,c::text,(old_stamp::timestamptz-interval '1 second')::text),'PT409'));
  perform pg_temp.ok('tenant B unchanged',not exists(select 1 from public.tenant_public_pricing_items where tenant_id=b));
  c:=c||jsonb_build_object('pricing_items',out->'pricing_items');
  for role_name in select unnest(array['employee','instructor','user','global']) loop
