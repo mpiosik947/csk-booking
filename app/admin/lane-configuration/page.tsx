@@ -474,7 +474,7 @@ function ConfigurationDetailsDialog({
   );
 }
 
-export default function AdminLaneConfigurationPage({ tenantId, tenantSlug }: Readonly<{ tenantId: string; tenantSlug: string }>) {
+export default function AdminLaneConfigurationPage({ tenantId, tenantSlug, dormantSetup = false }: Readonly<{ tenantId: string; tenantSlug: string; dormantSetup?: boolean }>) {
   const [snapshot, setSnapshot] = useState<AdminLaneConfigurationSnapshot | null>(
     null
   );
@@ -509,17 +509,19 @@ export default function AdminLaneConfigurationPage({ tenantId, tenantSlug }: Rea
       return;
     }
 
-    const { data: roleData, error: roleError } = await supabase.rpc("get_my_tenant_role_v1", { p_tenant_id: tenantId });
-    if (requestId !== requestRef.current) return;
-    if (roleError || roleData !== "admin") {
-      setSnapshot(null);
-      setAccessDenied(true);
-      setLoading(false);
-      return;
-    }
+    if (!dormantSetup) {
+      const { data: roleData, error: roleError } = await supabase.rpc("get_my_tenant_role_v1", { p_tenant_id: tenantId });
+      if (requestId !== requestRef.current) return;
+      if (roleError || roleData !== "admin") {
+        setSnapshot(null);
+        setAccessDenied(true);
+        setLoading(false);
+        return;
+      }
 
+    }
     const { data, error } = await supabase.rpc(
-      "admin_get_lane_booking_configuration_v3",
+      dormantSetup ? "tenant_setup_get_lane_configuration_v1" : "admin_get_lane_booking_configuration_v3",
       { p_tenant_id: tenantId }
     );
     if (requestId !== requestRef.current) return;
@@ -541,7 +543,7 @@ export default function AdminLaneConfigurationPage({ tenantId, tenantSlug }: Rea
     } finally {
       setLoading(false);
     }
-  }, [tenantId]);
+  }, [tenantId, dormantSetup]);
 
   useEffect(() => {
     const timeoutId = window.setTimeout(() => {
@@ -649,13 +651,13 @@ export default function AdminLaneConfigurationPage({ tenantId, tenantSlug }: Rea
       acknowledgeFutureObligations: boolean
     ) => {
       const { data, error } = await supabase.rpc(
-        "admin_set_lane_booking_family_configuration_v3",
+        dormantSetup ? "tenant_setup_set_lane_configuration_v1" : "admin_set_lane_booking_family_configuration_v3",
         {
           p_tenant_id: tenantId,
           p_root_lane_id: rootLaneId,
           p_expected_version: expectedVersion,
           p_resources: payload,
-          p_acknowledge_future_obligations: acknowledgeFutureObligations,
+          ...(dormantSetup ? {} : { p_acknowledge_future_obligations: acknowledgeFutureObligations }),
         }
       );
       if (error) {
@@ -664,7 +666,7 @@ export default function AdminLaneConfigurationPage({ tenantId, tenantSlug }: Rea
       }
       return parseLaneConfigurationWriteResult(data);
     },
-    [tenantId]
+    [tenantId, dormantSetup]
   );
 
   const completeEditor = useCallback(
@@ -681,7 +683,7 @@ export default function AdminLaneConfigurationPage({ tenantId, tenantSlug }: Rea
   const createLaneFamily = useCallback(
     async (payload: LaneFamilyCreateWritePayload) => {
       const { data, error } = await supabase.rpc(
-        "admin_create_lane_booking_family_v2",
+        dormantSetup ? "tenant_setup_create_lane_family_v1" : "admin_create_lane_booking_family_v2",
         { p_family: payload, p_tenant_id: tenantId }
       );
       if (error) {
@@ -690,7 +692,7 @@ export default function AdminLaneConfigurationPage({ tenantId, tenantSlug }: Rea
       }
       return parseLaneFamilyCreateResult(data);
     },
-    [tenantId]
+    [tenantId, dormantSetup]
   );
 
   const completeCreation = useCallback(
@@ -744,7 +746,7 @@ export default function AdminLaneConfigurationPage({ tenantId, tenantSlug }: Rea
             {loading ? "Odświeżanie…" : "Odśwież"}
           </button>
           <Link
-            href={`/t/${tenantSlug}/admin`}
+            href={dormantSetup ? `/tenant-setup/${tenantSlug}` : `/t/${tenantSlug}/admin`}
             className="inline-flex min-h-11 items-center justify-center rounded-xl border border-[#3d4638] px-4 py-2 text-sm font-semibold text-[#c7cbbf] transition hover:bg-[#1d211b] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d7c895]"
           >
             ← Wróć do panelu

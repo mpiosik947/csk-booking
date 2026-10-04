@@ -388,7 +388,7 @@ function parseResource(value: unknown): LaneConfigurationResource {
   };
 }
 
-function hasCompleteActiveSalesConfiguration(
+export function hasCompleteActiveSalesConfiguration(
   resource: LaneConfigurationResource,
   maxPeopleOnline = resource.max_people_online
 ) {

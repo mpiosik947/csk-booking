@@ -1,4 +1,5 @@
-﻿"use client";
+"use client";
+import { isDormantTenant, type DormantTenant } from "@/lib/setup-discovery";
 import PlatformBrand from "@/app/_components/PlatformBrand";
 import GlobalAccountHeader from "@/app/_components/GlobalAccountHeader";
 
@@ -53,6 +54,9 @@ export default function DashboardPage() {
   const [emailConfirmed, setEmailConfirmed] = useState(false);
   const [tenants, setTenants] = useState<TenantAccess[]>([]);
   const [tenantLoadFailed, setTenantLoadFailed] = useState(false);
+  const [dormant, setDormant] = useState<DormantTenant[]>([]);
+  const [dormantFailed, setDormantFailed] = useState(false);
+  const [platformAdmin, setPlatformAdmin] = useState(false);
 
   useEffect(() => {
     async function loadUser() {
@@ -113,17 +117,21 @@ export default function DashboardPage() {
       }
 
 
-      const { data: tenantRows, error: tenantError } = await supabase.rpc(
-        "get_my_active_tenants_v1"
-      );
-      if (tenantError || !Array.isArray(tenantRows) || !tenantRows.every(isTenantAccess)) {
-        setTenantLoadFailed(true);
-        setTenants([]);
-      } else {
-        setTenantLoadFailed(false);
-        setTenants(tenantRows);
-      }
-
+      const [activeResult, dormantResult, paResult] = await Promise.allSettled([
+        supabase.rpc("get_my_active_tenants_v1"),
+        supabase.rpc("get_my_dormant_admin_tenants_v1"),
+        supabase.rpc("is_platform_admin_v1"),
+      ]);
+      const active = activeResult.status === "fulfilled" ? activeResult.value : null;
+      if (!active || active.error || !Array.isArray(active.data) || !active.data.every(isTenantAccess)) {
+        setTenantLoadFailed(true); setTenants([]);
+      } else { setTenantLoadFailed(false); setTenants(active.data); }
+      const setup = dormantResult.status === "fulfilled" ? dormantResult.value : null;
+      if (!setup || setup.error || !Array.isArray(setup.data) || !setup.data.every(isDormantTenant)) {
+        setDormantFailed(true); setDormant([]);
+      } else { setDormantFailed(false); setDormant(setup.data); }
+      const pa = paResult.status === "fulfilled" ? paResult.value : null;
+      setPlatformAdmin(!!pa && !pa.error && pa.data === true);
       setLoading(false);
     }
 
@@ -255,6 +263,26 @@ export default function DashboardPage() {
           </div>
         )}
 
+        {platformAdmin && <section aria-label="Administracja platformą" className="mt-8">
+          <Link href="/platform-admin" className="block rounded-2xl border border-[#806a32] bg-[#20251d] p-5 focus-visible:ring-2 focus-visible:ring-[#F5A900]">
+            <h2 className="text-xl font-bold">Panel głównego administratora</h2>
+            <p className="mt-2 text-sm">Zarządzanie strzelnicami i onboardingiem obiektów</p>
+            <span className="mt-4 block font-semibold text-[#e1c477]">Przejdź do Platform Admin</span>
+          </Link>
+        </section>}
+        {dormantFailed && <p role="alert" className="mt-6 rounded-xl border border-[#744545] p-4">Nie udało się pobrać obiektów w przygotowaniu. Odśwież stronę i spróbuj ponownie.</p>}
+        {dormant.length > 0 && <section aria-labelledby="setup-locations-heading" className="mt-8">
+          <h2 id="setup-locations-heading" className="text-xl font-semibold">Obiekty w przygotowaniu</h2>
+          <div className="mt-4 grid gap-4 sm:grid-cols-2">
+            {dormant.map(tenant => <article key={tenant.tenant_id} className="min-w-0 rounded-2xl border border-[#806a32] bg-[#20251d] p-5 [overflow-wrap:anywhere]">
+              <span className="text-sm text-[#e1c477]">W przygotowaniu</span>
+              <h3 className="mt-2 text-2xl font-bold">{tenant.display_name}</h3>
+              {tenant.city && <p className="mt-2">{tenant.city}</p>}
+              <p className="mt-2 text-sm text-[#A6ADA5]">Dokończ konfigurację przed aktywacją obiektu.</p>
+              <Link href={`/tenant-setup/${tenant.tenant_slug}`} className="mt-4 inline-flex min-h-11 items-center rounded-xl bg-[#697A2F] px-4 py-3 font-semibold focus-visible:ring-2 focus-visible:ring-[#F5A900]">Dokończ konfigurację</Link>
+            </article>)}
+          </div>
+        </section>}
         <section aria-labelledby="locations-heading" className="mt-8">
           <h2
             id="locations-heading"
