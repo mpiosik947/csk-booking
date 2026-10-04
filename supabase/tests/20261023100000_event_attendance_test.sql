@@ -115,7 +115,7 @@ begin
  perform pg_temp.ok('cancel event',(select cancelled_at is not null from public.events where id=e));
  perform pg_temp.ok('cancelled event denies admin',pg_temp.actor(ad,format('select public.set_event_registration_attendance_v1(%L,''present'',3)',r))->>'error'='42501');
  perform pg_temp.ok('audit minimal',not exists(select 1 from public.audit_logs l cross join lateral jsonb_object_keys(l.details) k where l.action='event_attendance_changed' and l.tenant_id=a and k not in ('event_id','old_status','new_status')));
- perform pg_temp.ok('definer exact delta',(select count(*)=143 from pg_proc where pronamespace='public'::regnamespace and prosecdef));
+ perform pg_temp.ok('definer exact delta',(select count(*)=145 from pg_proc where pronamespace='public'::regnamespace and prosecdef));
 end;$test$;
 select 'ok - '||name from attendance_results;
 select count(*) as assertions from attendance_results;

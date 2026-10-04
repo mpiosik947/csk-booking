@@ -89,8 +89,8 @@ begin
  values(price,lane,'mon_thu',1,2,'Synthetic',10,1,true);
  insert into public.reservations(id,user_id,tenant_id,lane_id,customer_name,customer_email,customer_phone,reservation_date,start_time,end_time,duration_minutes,price,reservation_status,payment_status,attendance_status,shooters_count,pricing_rule_id,pricing_day_group_snapshot,lane_name_snapshot,pricing_label_snapshot,price_per_hour_snapshot,total_price,currency_code,creation_request_id)
  values(booking,stranger,t,lane,'Synthetic','synthetic@example.invalid','000',current_date+7,time '10:00',time '11:00',60,10,'confirmed','pay_on_site','planned',1,price,'mon_thu','Synthetic','Synthetic',10,10,'PLN',gen_random_uuid());
- perform pg_temp.assert_true('downgrade explicit writer allowed',pg_temp.rpc(pa,format('select to_jsonb(public.platform_set_tenant_plan_v1(%L,%L))',t,'booking_only_v1'))->>'state'='00000');
- perform pg_temp.assert_true('downgrade gates events but preserves booking',public.tenant_has_feature_v1(t,'booking') and not public.tenant_has_feature_v1(t,'events'));
+ perform pg_temp.assert_true('unsafe downgrade via v1 denied',pg_temp.rpc(pa,format('select to_jsonb(public.platform_set_tenant_plan_v1(%L,%L))',t,'booking_only_v1'))->>'state'='55000');
+ perform pg_temp.assert_true('unsafe denial preserves booking and events access',public.tenant_has_feature_v1(t,'booking') and public.tenant_has_feature_v1(t,'events'));
  perform pg_temp.assert_true('downgrade preserves existing resources',exists(select 1 from public.events where id=e) and exists(select 1 from public.event_registrations where id=registration) and exists(select 1 from public.reservations where id=booking));
  perform pg_temp.assert_true('downgrade preserves owner history',(pg_temp.rpc(stranger,'select public.get_my_continuity_v1(1,null)')->'value'->>'total')::int=2);
  perform pg_temp.assert_true('downgrade preserves cancellation eligibility',not exists(select 1 from jsonb_array_elements(pg_temp.rpc(stranger,'select public.get_my_continuity_v1(1,null)')->'value'->'items') item where not (item->>'can_cancel')::boolean));
