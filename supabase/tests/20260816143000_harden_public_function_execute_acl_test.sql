@@ -27,6 +27,7 @@ create temporary table expected_function_acl(
 ) on commit drop;
 
 insert into expected_function_acl values
+  ('public.get_my_dormant_admin_tenants_v1()','B',false,true,false),
   ('public.export_my_data_v3()','B',false,true,false),
   ('public.read_owned_event_confirmation_v1(uuid)','C',false,true,false),
   ('public.read_owned_booking_confirmation_v1(uuid)','C',false,true,false),
@@ -368,8 +369,8 @@ begin
     and procedure.proname<>'csk_sec002_default_acl_probe';
 
   perform pg_temp.record_result(1,'Complete public function inventory',
-    (select pg_catalog.count(*)=230 from pg_temp.expected_function_acl)
-    and v_actual_count=230
+    (select pg_catalog.count(*)=231 from pg_temp.expected_function_acl)
+    and v_actual_count=231
     and not exists(
       select 1 from pg_temp.expected_function_acl expected
       where pg_catalog.to_regprocedure(expected.signature) is null
@@ -385,7 +386,7 @@ begin
           where pg_catalog.to_regprocedure(expected.signature)=procedure.oid
         )
     ),
-    'The exact 230-function ONBOARD-1B-R1 inventory has no missing or unexpected signature.');
+    'The exact 231-function ONBOARD-1C-R3 inventory has no missing or unexpected signature.');
 
   perform pg_temp.record_result(2,'PUBLIC executes no public function',
     not exists(
@@ -415,8 +416,8 @@ begin
       where pg_catalog.has_function_privilege('authenticated',expected.signature,'EXECUTE')
         is distinct from expected.authenticated_execute
     )
-    and (select pg_catalog.count(*)=114 from pg_temp.expected_function_acl where authenticated_execute),
-    'authenticated has exactly 114 independently authorized RPC grants including narrow instructor email authorization.');
+    and (select pg_catalog.count(*)=115 from pg_temp.expected_function_acl where authenticated_execute),
+    'authenticated has exactly 115 independently authorized RPC grants including narrow instructor email authorization.');
 
   perform pg_temp.record_result(5,'Exact service_role ACL matrix',
     not exists(
@@ -473,7 +474,7 @@ begin
     'Future functions created by postgres receive no client or PUBLIC EXECUTE.');
 
   perform pg_temp.record_result(8,'Application function creator scope is exact',
-    (select pg_catalog.count(*)=230
+    (select pg_catalog.count(*)=231
       from pg_catalog.pg_proc procedure
       join pg_catalog.pg_namespace namespace on namespace.oid=procedure.pronamespace
       join pg_catalog.pg_roles owner_role on owner_role.oid=procedure.proowner
