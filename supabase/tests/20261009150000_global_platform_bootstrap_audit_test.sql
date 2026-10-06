@@ -15,6 +15,14 @@ create function pg_temp.reject_bootstrap_audit() returns trigger language plpgsq
  if new.action='platform_admin_bootstrapped' then raise exception 'synthetic audit failure'; end if;
  return new;
 end;$$;
+
+-- Separate owner fixture preserves ownership while the original actor changes role/status.
+create function pg_temp.pam_keeper(t uuid) returns void language plpgsql as $keeper$
+declare u uuid:=md5(t::text||':pam1b-test-keeper')::uuid;
+begin
+ insert into auth.users(id,email,email_confirmed_at) values(u,u||'@example.invalid',now()) on conflict(id) do nothing;
+ insert into public.tenant_memberships(tenant_id,user_id,role,status) values(t,u,'admin','active') on conflict(tenant_id,user_id) do nothing;
+end;$keeper$;
 do $test$
 declare u uuid:=gen_random_uuid(); bad uuid:=gen_random_uuid(); t uuid:=gen_random_uuid();
  r text; s text; baseline_role text; before_memberships bigint;
@@ -31,7 +39,8 @@ begin
   perform pg_temp.ok(r||' direct RPC denied',s::boolean);
  end loop;
  foreach r in array array['admin','employee','user'] loop
-  insert into public.tenant_memberships(tenant_id,user_id,role,status) values(t,u,r,'active')
+  perform pg_temp.pam_keeper(t);
+ insert into public.tenant_memberships(tenant_id,user_id,role,status) values(t,u,r,'active')
   on conflict(tenant_id,user_id) do update set role=excluded.role;
   perform set_config('request.jwt.claim.sub',u::text,true);
   perform set_config('request.jwt.claims',jsonb_build_object('sub',u,'role','authenticated')::text,true);

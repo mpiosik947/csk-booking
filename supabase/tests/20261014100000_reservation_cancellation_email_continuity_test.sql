@@ -16,6 +16,14 @@ begin
  return jsonb_build_object('state','00000','value',result);
 exception when others then reset role; return jsonb_build_object('state',sqlstate);
 end;$$;
+
+-- Separate owner fixture preserves ownership while the original actor changes role/status.
+create function pg_temp.pam_keeper(t uuid) returns void language plpgsql as $keeper$
+declare u uuid:=md5(t::text||':pam1b-test-keeper')::uuid;
+begin
+ insert into auth.users(id,email,email_confirmed_at) values(u,u||'@example.invalid',now()) on conflict(id) do nothing;
+ insert into public.tenant_memberships(tenant_id,user_id,role,status) values(t,u,'admin','active') on conflict(tenant_id,user_id) do nothing;
+end;$keeper$;
 do $$
 declare a uuid:=gen_random_uuid(); b uuid:=gen_random_uuid(); owner_a uuid:=gen_random_uuid();
  owner_b uuid:=gen_random_uuid(); staff_a uuid:=gen_random_uuid(); outsider uuid:=gen_random_uuid();
@@ -46,7 +54,8 @@ begin
   update public.tenants set status=tenant_state where id=a;
   foreach member_role in array array['owner','admin','employee'] loop
    actor:=case when member_role='owner' then owner_a else staff_a end;
-   if member_role<>'owner' then update public.tenant_memberships set role=member_role where tenant_id=a and user_id=staff_a; end if;
+   if member_role<>'owner' then perform pg_temp.pam_keeper(a);
+ update public.tenant_memberships set role=member_role where tenant_id=a and user_id=staff_a; end if;
    update public.reservations set reservation_status='confirmed' where id=booking;
    result:=pg_temp.call_email(actor,format('select public.get_reservation_cancellation_email_v1(%L)',booking));
    perform pg_temp.assert_email(tenant_state||' '||member_role||' un-cancelled read denied',result->>'state'='42501');
@@ -99,12 +108,15 @@ begin
   update public.tenant_memberships set role=member_role where tenant_id=a and user_id=staff_a;
   result:=pg_temp.call_email(owner_b,format('select public.get_reservation_cancellation_email_v1(%L)',booking));
   perform pg_temp.assert_email('foreign user '||member_role||' reader denied',result->>'state'='42501');
-  update public.tenant_memberships set tenant_id=b where user_id=staff_a;
+  perform pg_temp.pam_keeper(b);
+  delete from public.tenant_memberships where tenant_id=a and user_id=staff_a;
+  insert into public.tenant_memberships(tenant_id,user_id,role,status) values(b,staff_a,member_role,'active');
   result:=pg_temp.call_email(staff_a,format('select public.get_reservation_cancellation_email_v1(%L)',booking));
   perform pg_temp.assert_email('cross tenant '||member_role||' reader denied',result->>'state'='42501');
   result:=pg_temp.call_email(staff_a,format('select public.prepare_confirmation_email(%L,%L)','reservation_cancellation',booking));
   perform pg_temp.assert_email('cross tenant '||member_role||' claim denied',result->'value'->>'code'='not_found');
-  update public.tenant_memberships set tenant_id=a where user_id=staff_a;
+  delete from public.tenant_memberships where tenant_id=b and user_id=staff_a;
+  insert into public.tenant_memberships(tenant_id,user_id,role,status) values(a,staff_a,member_role,'active');
  end loop;
  update public.tenant_memberships set role='admin' where user_id=staff_a;
  foreach member_status in array array['pending','suspended'] loop

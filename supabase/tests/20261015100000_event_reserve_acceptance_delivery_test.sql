@@ -17,6 +17,14 @@ exception when others then reset role; return jsonb_build_object('state',sqlstat
 create function pg_temp.reject_receipt() returns trigger language plpgsql as $$begin
  if new.message_type='event_reserve_acceptance_confirmation' then raise exception 'synthetic insert failure'; end if;
  return new; end;$$;
+
+-- Separate owner fixture preserves ownership while the original actor changes role/status.
+create function pg_temp.pam_keeper(t uuid) returns void language plpgsql as $keeper$
+declare u uuid:=md5(t::text||':pam1b-test-keeper')::uuid;
+begin
+ insert into auth.users(id,email,email_confirmed_at) values(u,u||'@example.invalid',now()) on conflict(id) do nothing;
+ insert into public.tenant_memberships(tenant_id,user_id,role,status) values(t,u,'admin','active') on conflict(tenant_id,user_id) do nothing;
+end;$keeper$;
 do $$
 declare a uuid:=gen_random_uuid(); b uuid:=gen_random_uuid(); ua uuid:=gen_random_uuid(); ub uuid:=gen_random_uuid();
  staff uuid:=gen_random_uuid(); ea uuid:=gen_random_uuid(); eb uuid:=gen_random_uuid(); ra uuid:=gen_random_uuid(); rb uuid:=gen_random_uuid();
@@ -57,6 +65,7 @@ begin
  perform pg_temp.check_acceptance('unknown registration no send',r->'value'->>'code'='not_found');
  r:=pg_temp.invoke_acceptance(staff,'authenticated',format('select public.confirm_event_reserve_promotion(%L)',tb));
  perform pg_temp.check_acceptance('admin A cannot accept user B seat',r->>'state'='42501');
+ perform pg_temp.pam_keeper(a);
  update public.tenant_memberships set role='employee' where user_id=staff;
  r:=pg_temp.invoke_acceptance(staff,'authenticated',format('select public.confirm_event_reserve_promotion(%L)',tb));
  perform pg_temp.check_acceptance('employee A cannot accept user B seat',r->>'state'='42501');

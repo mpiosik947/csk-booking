@@ -12,6 +12,14 @@ declare result jsonb; begin
 exception when others then reset role; return jsonb_build_object('state',sqlstate,'error',sqlerrm); end;$$;
 create function pg_temp.reject_c2b() returns trigger language plpgsql as $$begin
  if new.message_type='event_cancellation' then raise exception 'Synthetic failure'; end if; return new; end;$$;
+
+-- Separate owner fixture preserves ownership while the original actor changes role/status.
+create function pg_temp.pam_keeper(t uuid) returns void language plpgsql as $keeper$
+declare u uuid:=md5(t::text||':pam1b-test-keeper')::uuid;
+begin
+ insert into auth.users(id,email,email_confirmed_at) values(u,u||'@example.invalid',now()) on conflict(id) do nothing;
+ insert into public.tenant_memberships(tenant_id,user_id,role,status) values(t,u,'admin','active') on conflict(tenant_id,user_id) do nothing;
+end;$keeper$;
 do $$
 declare a uuid:=gen_random_uuid(); b uuid:=gen_random_uuid(); staff uuid:=gen_random_uuid();
  u uuid:=gen_random_uuid(); ea uuid:=gen_random_uuid(); eb uuid:=gen_random_uuid(); r jsonb; n integer; state text; rec record;
@@ -36,7 +44,8 @@ begin
  r:=pg_temp.invoke_c2b(staff,format('select public.admin_cancel_event_v1(%L)',eb));
  perform pg_temp.check_c2b('cross tenant denied',r->>'state'='42501');
  foreach state in array array['user','instructor'] loop
-  update public.tenant_memberships set role=state where tenant_id=a and user_id=staff;
+  perform pg_temp.pam_keeper(a);
+ update public.tenant_memberships set role=state where tenant_id=a and user_id=staff;
   r:=pg_temp.invoke_c2b(staff,format('select public.admin_cancel_event_v1(%L)',ea));
   perform pg_temp.check_c2b(state||' denied',r->>'state'='42501');
  end loop;

@@ -12,6 +12,14 @@ create function pg_temp.denied(uid uuid,q text,code text default '42501') return
 create function pg_temp.save(uid uuid,slug text,s jsonb,c jsonb) returns jsonb language sql as $$
  select pg_temp.run(uid,format('select public.admin_update_tenant_content_v1(%L,%L::jsonb,%L::jsonb,%L::timestamptz)',slug,
  (s-array['updated_at','feature_access','about_offer','about_audience','public_map_url','pricing_items'])::text,c::text,s->>'updated_at'));$$;
+
+-- Separate owner fixture preserves ownership while the original actor changes role/status.
+create function pg_temp.pam_keeper(t uuid) returns void language plpgsql as $keeper$
+declare u uuid:=md5(t::text||':pam1b-test-keeper')::uuid;
+begin
+ insert into auth.users(id,email,email_confirmed_at) values(u,u||'@example.invalid',now()) on conflict(id) do nothing;
+ insert into public.tenant_memberships(tenant_id,user_id,role,status) values(t,u,'admin','active') on conflict(tenant_id,user_id) do nothing;
+end;$keeper$;
 do $$
 declare a uuid:=gen_random_uuid();b uuid:=gen_random_uuid();aa uuid:=gen_random_uuid();ab uuid:=gen_random_uuid();u uuid;
  s jsonb;out jsonb;c jsonb;item jsonb;raw jsonb;old_stamp text;bid uuid;role_name text;status_name text;
@@ -43,7 +51,8 @@ begin
   perform pg_temp.ok(role_name||' writer denied',pg_temp.denied(u,format('select public.admin_update_tenant_content_v1(%L,%L::jsonb,%L::jsonb,%L::timestamptz)','tcm-test-a',(out-array['updated_at','feature_access','about_offer','about_audience','public_map_url','pricing_items'])::text,c::text,out->>'updated_at')));
  end loop;
  for status_name in select unnest(array['pending','suspended']) loop
-  update public.tenant_memberships set status=status_name where tenant_id=a and user_id=aa;
+  perform pg_temp.pam_keeper(a);
+ update public.tenant_memberships set status=status_name where tenant_id=a and user_id=aa;
   perform pg_temp.ok(status_name||' membership denied',pg_temp.denied(aa,$q$select public.admin_get_tenant_content_v1('tcm-test-a')$q$));
  end loop;
  update public.tenant_memberships set status='active' where tenant_id=a and user_id=aa;

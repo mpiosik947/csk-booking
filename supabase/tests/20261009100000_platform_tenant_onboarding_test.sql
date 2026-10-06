@@ -22,6 +22,14 @@ exception when others then
  perform set_config('request.jwt.claims','{}',true); perform set_config('request.jwt.claim.sub','',true);
  return jsonb_build_object('state',sqlstate,'test_error',sqlerrm);
 end;$$;
+
+-- Separate owner fixture preserves ownership while the original actor changes role/status.
+create function pg_temp.pam_keeper(t uuid) returns void language plpgsql as $keeper$
+declare u uuid:=md5(t::text||':pam1b-test-keeper')::uuid;
+begin
+ insert into auth.users(id,email,email_confirmed_at) values(u,u||'@example.invalid',now()) on conflict(id) do nothing;
+ insert into public.tenant_memberships(tenant_id,user_id,role,status) values(t,u,'admin','active') on conflict(tenant_id,user_id) do nothing;
+end;$keeper$;
 do $test$
 declare pa uuid:=gen_random_uuid(); ta uuid:=gen_random_uuid(); stranger uuid:=gen_random_uuid();
  t uuid; result jsonb; call text; role_name text; slug text:='onboard-'||substr(gen_random_uuid()::text,1,8);
@@ -126,6 +134,7 @@ begin
  perform pg_temp.assert_true('Admin A cannot read draft B settings',pg_temp.rpc(ta,format('select public.admin_get_tenant_public_settings_v1(%L)',slug||'-b'))->>'state'='42501');
  perform pg_temp.assert_true('Admin A cannot staff-read B',pg_temp.rpc(ta,format('select public.get_my_continuity_v1(1,%L)',other_tenant))->>'state'='42501');
  foreach role_name in array array['employee','instructor','user'] loop
+ perform pg_temp.pam_keeper(t);
  update public.tenant_memberships set role=role_name where tenant_id=t and user_id=ta;
  perform pg_temp.assert_true(role_name||' platform write denied',pg_temp.rpc(ta,format('select to_jsonb(public.platform_set_tenant_plan_v1(%L,%L))',t,'current_full_v1'))->>'state'='42501');
  call:=format('select to_jsonb(public.record_external_settlement_v1(%L,%L,%L,5,%L,%L,%L))','external_reconciliation','reservation',booking,'PLN','synthetic-role',gen_random_uuid());

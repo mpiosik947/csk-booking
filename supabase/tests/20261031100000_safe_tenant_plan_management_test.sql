@@ -21,6 +21,14 @@ exception when others then
  perform set_config('request.jwt.claims','{}',true); perform set_config('request.jwt.claim.sub','',true);
  return jsonb_build_object('state',sqlstate,'test_error',sqlerrm);
 end;$$;
+
+-- Separate owner fixture preserves ownership while the original actor changes role/status.
+create function pg_temp.pam_keeper(t uuid) returns void language plpgsql as $keeper$
+declare u uuid:=md5(t::text||':pam1b-test-keeper')::uuid;
+begin
+ insert into auth.users(id,email,email_confirmed_at) values(u,u||'@example.invalid',now()) on conflict(id) do nothing;
+ insert into public.tenant_memberships(tenant_id,user_id,role,status) values(t,u,'admin','active') on conflict(tenant_id,user_id) do nothing;
+end;$keeper$;
 do $test$
 declare pa uuid:=gen_random_uuid(); other_user uuid:=gen_random_uuid(); t uuid; p jsonb; r jsonb; q text; request_id uuid:=gen_random_uuid(); e uuid:=gen_random_uuid(); reg uuid:=gen_random_uuid(); lane uuid:=gen_random_uuid(); price_id uuid:=gen_random_uuid(); reservation_id uuid:=gen_random_uuid(); d uuid; challenge jsonb; before_flags jsonb;
 begin
@@ -80,6 +88,7 @@ begin
  update public.events set event_date=current_date+10 where id=e;
  perform pg_temp.assert_true('future instructor assignment blocks',pg_temp.rpc(pa,format('select public.platform_get_tenant_plan_change_preview_v1(%L,%L)',t,'booking_only_v1'))->'value'->'blockers' @> '[{"code":"INSTRUCTORS_ACTIVE"}]');
  update public.events set event_date=current_date-10 where id=e;
+ perform pg_temp.pam_keeper(t);
  update public.tenant_memberships set role='employee' where tenant_id=t and user_id=other_user;
  perform pg_temp.assert_true('active employee blocks',pg_temp.rpc(pa,format('select public.platform_get_tenant_plan_change_preview_v1(%L,%L)',t,'booking_only_v1'))->'value'->'blockers' @> '[{"code":"STAFF_ACTIVE"}]');
  update public.tenant_memberships set status='suspended' where tenant_id=t and user_id=other_user;

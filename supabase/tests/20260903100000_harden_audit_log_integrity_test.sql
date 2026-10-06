@@ -263,7 +263,8 @@ begin
                    or procedure.proname in ('tenant_draft_create_lane_family_core_v1','tenant_draft_set_lane_configuration_core_v1')
                    or procedure.proname='_apply_tenant_user_verification_v1'
                    or procedure.proname='operator_bootstrap_platform_admin_v1'
-                   or procedure.proname='operator_verify_tenant_domain_v1')
+                   or procedure.proname='operator_verify_tenant_domain_v1'
+                   or procedure.proname='platform_tenant_admin_mutation_core_v1')
                   and not pg_catalog.has_function_privilege('public',procedure.oid,'EXECUTE')
                   and not pg_catalog.has_function_privilege('anon',procedure.oid,'EXECUTE')
                   and not pg_catalog.has_function_privilege('authenticated',procedure.oid,'EXECUTE')
@@ -277,7 +278,7 @@ begin
     and pg_catalog.strpos(pg_catalog.lower(pg_catalog.pg_get_functiondef(procedure.oid)),'insert into')>0;
 
   perform pg_temp.record_result(17,'All current audit writers are trusted database functions',
-    v_writer_count=33 and v_untrusted_writer_count=0,
+    v_writer_count=34 and v_untrusted_writer_count=0,
     'Oczekiwano 20 zaufanych writerów po dodaniu tenant public settings: SECURITY DEFINER albo zamknięte nieklienckie cores/helpers, owner=postgres, auth.uid() i explicit search_path.');
 
   perform pg_temp.record_result(18,'All fixture remains transaction-scoped',

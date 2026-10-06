@@ -29,6 +29,14 @@ exception when others then
  perform set_config('request.jwt.claim.sub','',true);
  return sqlstate;
 end;$f$;
+
+-- Separate owner fixture preserves ownership while the original actor changes role/status.
+create function pg_temp.pam_keeper(t uuid) returns void language plpgsql as $keeper$
+declare u uuid:=md5(t::text||':pam1b-test-keeper')::uuid;
+begin
+ insert into auth.users(id,email,email_confirmed_at) values(u,u||'@example.invalid',now()) on conflict(id) do nothing;
+ insert into public.tenant_memberships(tenant_id,user_id,role,status) values(t,u,'admin','active') on conflict(tenant_id,user_id) do nothing;
+end;$keeper$;
 do $test$
 declare
  t uuid:=gen_random_uuid(); b uuid:=gen_random_uuid(); u uuid:=gen_random_uuid();
@@ -63,7 +71,8 @@ begin
    perform pg_temp.check_result(kind||' tenant admin/global user override',pg_temp.call_cancel(u,call_sql),'ALLOW');
    update public.event_registrations set registration_status='registered' where id=r;
    update public.reservations set reservation_status='confirmed' where id=booking;
-   update public.tenant_memberships set role='employee' where tenant_id=t and user_id=u;
+   perform pg_temp.pam_keeper(t);
+ update public.tenant_memberships set role='employee' where tenant_id=t and user_id=u;
    perform pg_temp.check_result(kind||' employee/global user override',pg_temp.call_cancel(u,call_sql),'ALLOW');
    update public.event_registrations set registration_status='registered' where id=r;
    update public.reservations set reservation_status='confirmed' where id=booking;
@@ -121,7 +130,7 @@ begin
    select 1 from unnest(array['anon','authenticated','service_role']) role_name
    cross join unnest(array['public.cancel_reservation__saas9d1_core(uuid)','public.cancel_event_registration__saas9d2a_core(uuid)']) signature
    where has_function_privilege(role_name,signature,'EXECUTE')) then 'PASS' else 'FAIL' end,'PASS');
- perform pg_temp.check_result('SECURITY DEFINER unchanged',case when (select count(*) from pg_proc where pronamespace='public'::regnamespace and prosecdef)=145 then 'PASS' else 'FAIL' end,'PASS');
+ perform pg_temp.check_result('SECURITY DEFINER unchanged',case when (select count(*) from pg_proc where pronamespace='public'::regnamespace and prosecdef)=151 then 'PASS' else 'FAIL' end,'PASS');
 end;$test$;
 select '1..'||(count(*)+1) from results;
 select 'ok '||n||' - '||label from results order by n;
