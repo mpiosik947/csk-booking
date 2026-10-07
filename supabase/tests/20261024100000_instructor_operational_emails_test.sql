@@ -164,7 +164,7 @@ begin
  r:=pg_temp.actor(j,'select public.anonymize_my_account_v1()');
  perform pg_temp.ok('suspended privacy deletes pending/failed obligations',r->>'ok'='true' and not exists(select 1 from public.email_deliveries where recipient_user_id=j));
  perform pg_temp.ok('suspended privacy preserves closed event',exists(select 1 from public.events where id=e and cancelled_at is not null));
- perform pg_temp.ok('exact definer delta',(select count(*)=156 from pg_proc where pronamespace='public'::regnamespace and prosecdef));
+ perform pg_temp.ok('exact definer delta',(select count(*)=157 from pg_proc where pronamespace='public'::regnamespace and prosecdef));
  perform pg_temp.ok('new definer metadata',not exists(select 1 from pg_proc where proname in ('authorize_instructor_email_batch_v1','claim_instructor_email_batch_v1','read_instructor_email_attempt_v1','complete_instructor_email_v1') and (proowner<>'postgres'::regrole or not prosecdef or proconfig<>array['search_path=pg_catalog, public, pg_temp'])));
 end;$$;
 select case when passed then 'ok - ' else 'not ok - ' end||name from i1f_results;
