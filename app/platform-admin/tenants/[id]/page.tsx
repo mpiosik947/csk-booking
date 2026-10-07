@@ -12,5 +12,5 @@ export default async function TenantDetailPage({ params }: { params: Promise<{ i
   const { data, error } = await client.rpc("platform_get_tenant_onboarding_detail_v1", { p_tenant_id: id });
   if (error && classifyError(error).kind === "denied") notFound();
   if (!error && data === null) notFound();
-  return <TenantDetail id={id} actorId={auth.user.id} initial={error ? null : readDetail(data, id)} />;
+  return <TenantDetail key={`${auth.user.id}:${id}`} id={id} actorId={auth.user.id} initial={error ? null : readDetail(data, id)} />;
 }

@@ -1,14 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import AdminShell from "../admin/_components/AdminShell";
 import TenantDomains from "./TenantDomains";
 
 type Tenant = { id: string; name: string; tenant_slug: string; public_slug: string; city: string;
   status: string; is_public: boolean; plan_key: string | null; created_at: string; readiness: Record<string, boolean> };
-type Account = { user_id: string; email: string };
 const control = "min-h-12 rounded-lg border border-[#626b55] bg-[#161c14] px-3 py-2 disabled:opacity-40";
 
 export default function PlatformTenants() {
@@ -18,7 +17,6 @@ export default function PlatformTenants() {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [selected, setSelected] = useState<string | null>(null);
-  const [account, setAccount] = useState<Account | null>(null);
   const load = useCallback(async () => {
     try {
     const { data, error } = await supabase.rpc("platform_list_tenants_v1", { p_page: page });
@@ -37,17 +35,6 @@ export default function PlatformTenants() {
     } catch { setMessage("Nie udało się połączyć. Odśwież stan przed ponowną próbą."); }
     finally { setBusy(false); }
   }
-  async function lookup(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault(); setAccount(null); setBusy(true);
-    try {
-      const email = new FormData(event.currentTarget).get("email");
-      const { data, error } = await supabase.rpc("platform_lookup_initial_admin_v1", { p_email: email });
-      if (error || !data || typeof data.user_id !== "string" || typeof data.email !== "string")
-        setMessage("Nie znaleziono możliwego do przypisania, potwierdzonego konta.");
-      else setAccount(data);
-    } catch { setMessage("Nie udało się wyszukać konta. Spróbuj ponownie."); }
-    finally { setBusy(false); }
-  }
   return <AdminShell eyebrow="StrzelajTu.pl · Platforma" title="Obiekty i onboarding"
     description="Zarządzanie konfiguracją platformy nie daje dostępu do rezerwacji ani danych klientów obiektu.">
     <Link href="/account" className="underline">Moje konto</Link>
@@ -61,22 +48,14 @@ export default function PlatformTenants() {
         <p>Plan: {tenant.plan_key ?? "Nieprzypisany"} · Utworzono: {new Date(tenant.created_at).toLocaleDateString("pl-PL")}</p>
         <p className="my-2">Gotowość: {Object.values(tenant.readiness).every(Boolean) ? "Kompletna" : Object.entries(tenant.readiness).filter(([, ready]) => !ready).map(([key]) => ({ identity_ready: "nazwa", slug_ready: "identyfikatory", settings_ready: "ustawienia", plan_ready: "plan", admin_ready: "admin" })[key] ?? key).join(", ")}</p>
         <div className="flex flex-wrap gap-2">
-          <Link className={control} href={`/platform-admin/tenants/${tenant.id}`}>Bieżący stan obiektu</Link>
+          <Link className={control} href={`/platform-admin/tenants/${tenant.id}`}>Zarządzaj obiektem</Link>
           <Link className={control} href={`/platform-admin/tenants/${tenant.id}/preview`}>Prywatny podgląd</Link>
           <Link className={control} href={`/tenant-setup/${tenant.tenant_slug}`}>Ustawienia (wymagany tenant admin)</Link>
-          <button disabled={busy} className={control} onClick={() => { setSelected(selected === tenant.id ? null : tenant.id); setAccount(null); }}>Konfiguruj</button>
+          <button disabled={busy} className={control} onClick={() => { setSelected(selected === tenant.id ? null : tenant.id); }}>Konfiguruj</button>
         </div>
         {selected === tenant.id && <div className="mt-4 space-y-4">
           <TenantDomains tenantId={tenant.id} />
-          <form onSubmit={event => { event.preventDefault(); const plan = new FormData(event.currentTarget).get("plan"); void mutate("platform_set_tenant_plan_v1", { p_tenant_id: tenant.id, p_plan_key: plan }); }} className="flex flex-wrap gap-2">
-            <label className="grid gap-1">Jawny wybór planu<select required name="plan" defaultValue="" className={control}>
-              <option value="" disabled>Wybierz</option><option>booking_only_v1</option><option>current_full_v1</option></select></label>
-            <button className={control} disabled={busy}>Przypisz / zmień plan</button>
-          </form>
-          {tenant.status === "dormant" && <>
-            <form onSubmit={lookup} className="flex flex-wrap gap-2"><label className="grid gap-1">Dokładny e-mail istniejącego pierwszego admina<input type="email" name="email" required className={control} /></label><button disabled={busy} className={control}>Znajdź konto</button></form>
-            {account && <p>{account.email} <button disabled={busy} className={control} onClick={() => void mutate("platform_assign_initial_admin_v1", { p_tenant_id: tenant.id, p_user_id: account.user_id })}>Przypisz pierwszego admina</button></p>}
-          </>}
+          <p>Planem i administratorami zarządzaj na stronie <Link className="underline" href={`/platform-admin/tenants/${tenant.id}`}>szczegółów obiektu</Link>.</p>
           <p>Aktywacja nie publikuje obiektu. Zawieszenie wyłącza nowy biznes, ale zachowuje historię i obsługę istniejących zobowiązań.</p>
           <div className="flex flex-wrap gap-2">
 
