@@ -272,7 +272,7 @@ begin
         and procedure.proname like '%tenant%'
         and procedure.proname not in ('platform_list_active_plans_v1','platform_get_tenant_onboarding_detail_v1','platform_create_tenant_bundle_v2','platform_get_tenant_onboarding_readiness_v2','tenant_setup_get_lane_configuration_v1','tenant_setup_create_lane_family_v1','tenant_setup_set_lane_configuration_v1')
         and procedure.proname <> 'get_my_dormant_admin_tenants_v1'
-        and procedure.proname not in ('platform_get_tenant_delete_eligibility_v1','guard_tenant_archive_state_v1','guard_archived_tenant_write_v1','platform_get_tenant_archive_preview_v1','platform_archive_tenant_v1','platform_restore_archived_tenant_v1')
+        and procedure.proname not in ('platform_lookup_tenant_admin_candidate_v1','platform_get_tenant_delete_eligibility_v1','guard_tenant_archive_state_v1','guard_archived_tenant_write_v1','platform_get_tenant_archive_preview_v1','platform_archive_tenant_v1','platform_restore_archived_tenant_v1')
         and procedure.proname not in ('guard_tenant_admin_lifecycle_v1','platform_get_tenant_admin_management_v1','platform_add_tenant_admin_v1','platform_reactivate_tenant_admin_v1','platform_demote_tenant_admin_v1','platform_suspend_tenant_admin_v1')
         and procedure.proname not in ('platform_get_tenant_plan_change_preview_v1','platform_change_tenant_plan_v2')
         and procedure.proname <> 'resolve_operational_email_tenant_context_v1'

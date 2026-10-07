@@ -123,7 +123,7 @@ begin
  result:=pg_temp.iactor(employee,'select public.anonymize_my_account_v1()');
  perform pg_temp.iok('actor anonymization allowed',result->>'ok'='true');
  perform pg_temp.iok('actor references cleared',not exists(select 1 from public.event_instructors where assigned_by=employee or unassigned_by=employee));
- perform pg_temp.iok('definer exact delta',(select count(*)=157 from pg_proc where pronamespace='public'::regnamespace and prosecdef));
+ perform pg_temp.iok('definer exact delta',(select count(*)=158 from pg_proc where pronamespace='public'::regnamespace and prosecdef));
  perform pg_temp.iok('new RPC metadata and ACL',not exists(select 1 from pg_proc where proname in ('admin_list_available_event_instructors_v1','admin_set_event_instructors_v1') and (proowner<>'postgres'::regrole or not prosecdef or proconfig<>array['search_path=pg_catalog, public, pg_temp'] or proacl::text<>'{postgres=X/postgres,authenticated=X/postgres}')));
 end;
 $test$;
