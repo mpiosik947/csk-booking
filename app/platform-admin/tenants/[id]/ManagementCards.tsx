@@ -24,6 +24,7 @@ export function CandidateSummary({ candidate }: { candidate: Candidate }) {
   const m = candidate.membership;
   return <div className="space-y-3"><p className="break-all">Konto: <strong>{candidate.email}</strong></p><p>{m.exists ? `Rola: ${roleLabels[m.role]} · Status: ${memberLabels[m.status]}` : "Brak członkostwa w tym obiekcie."}</p>
     {m.exists && m.role === "admin" && m.status === "active" && <p>Użytkownik jest już administratorem</p>}
+    {m.exists && m.role === "admin" && m.status === "suspended" && <p>Administrator jest zawieszony. Możesz go reaktywować. Usunięcie uprawnień będzie dostępne po potwierdzonej reaktywacji i odświeżeniu danych.</p>}
     {m.exists && m.status === "pending" && <p>Członkostwo oczekuje na rozstrzygnięcie. Operacja jest niedostępna.</p>}
     {m.exists && m.status === "suspended" && m.role !== "admin" && <p>Członkostwo jest zawieszone. Awans jest niedostępny.</p>}
     {m.exists && m.status === "active" && m.role === "employee" && <p className="text-amber-100">Awans zastąpi rolę pracownika rolą administratora obiektu. Potwierdź zmianę roli.</p>}

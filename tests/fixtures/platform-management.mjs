@@ -29,8 +29,21 @@ export function response(f, name, args) {
   }
   const operations={platform_add_tenant_admin_v1:'add',platform_reactivate_tenant_admin_v1:'reactivate',platform_demote_tenant_admin_v1:'demote',platform_suspend_tenant_admin_v1:'suspend'};
   if(operations[name]){
+    if(operations[name]==='demote'&&(f.candidate.membership.role!=='admin'||f.candidate.membership.status!=='active')){
+      throw Object.assign(new Error('NOT_ACTIVE_TENANT_ADMIN'),{code:'55000'});
+    }
     const role=operations[name]==='demote'?'user':'admin',status=operations[name]==='suspend'?'suspended':'active';
+    if(operations[name]==='reactivate'){
+      const admin=f.admins.admins.find(a=>a.user_id===args.p_user_id);
+      if(admin)admin.membership_status='active';
+      f.admins.active_admin_count=f.admins.admins.filter(a=>a.membership_status==='active').length;
+    }
     f.candidate.membership={exists:true,role,status};return {code:'changed',user_id:args.p_user_id,role,status};
   }
   throw Error(`Unexpected RPC ${name}`);
+}
+
+export function rpcResponse(f,name,args){
+  try{return {data:response(f,name,args),error:null};}
+  catch(error){if(!error.code)throw error;return {data:null,error:{code:error.code,message:error.message}};}
 }

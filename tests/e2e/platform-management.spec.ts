@@ -1,6 +1,6 @@
 import {test,expect,type Page} from '@playwright/test';
 import {startManagementBrowser} from '../fixtures/platform-management-browser.mjs';
-import {fixture,response,tenantId,email,userId,readerNames} from '../fixtures/platform-management.mjs';
+import {fixture,rpcResponse,tenantId,email,userId,readerNames} from '../fixtures/platform-management.mjs';
 
 type Call={name:string;args:Record<string,unknown>};
 type Model=ReturnType<typeof fixture>;
@@ -16,7 +16,7 @@ async function mount(page:Page,f=fixture(),override?:(call:Call,f:Model)=>unknow
    expect(req.method()).toBe('POST');const call={name:url.pathname.slice(5),args:req.postDataJSON()};calls.push(call);
    const overridden=await override?.(call,f);
    if(overridden==='abort'){await route.abort();return;}
-   await route.fulfill({json:overridden??{data:response(f,call.name,call.args),error:null}});return;
+   await route.fulfill({json:overridden??rpcResponse(f,call.name,call.args)});return;
   }
   if(url.origin!==server.url||!['/','/app.js','/style.css'].includes(url.pathname))unexpected.push(req.url());
   await route.continue();
@@ -49,9 +49,10 @@ for(const [role,status,label,warning]of [[null,null,'Dodaj jako administratora',
   const write=h.calls.find(c=>c.name===(role==='admin'?'platform_reactivate_tenant_admin_v1':'platform_add_tenant_admin_v1'))!;expect(write.args.p_expected_state).toEqual(role?{role,status}:null);expect(write.args.p_user_id).toBe(userId);expect(write.args.p_request_id).toMatch(/^[0-9a-f-]{36}$/);expect(h.errors).toEqual([]);
  });
 }
-for(const [role,status,text]of [['admin','active','Użytkownik jest już administratorem'],['user','suspended','Członkostwo jest zawieszone. Awans jest niedostępny.'],['user','pending','Członkostwo oczekuje na rozstrzygnięcie. Operacja jest niedostępna.']] as const){
+for(const [role,status,text]of [['admin','active','Użytkownik jest już administratorem'],['user','suspended','Członkostwo jest zawieszone. Awans jest niedostępny.'],['user','pending','Członkostwo oczekuje na rozstrzygnięcie. Operacja jest niedostępna.'],['admin','pending','Członkostwo oczekuje na rozstrzygnięcie. Operacja jest niedostępna.']] as const){
  test(`candidate ${role}/${status} cannot be silently added`,async({page})=>{
   const f=fixture();Object.assign(f.candidate.membership,{exists:true,role,status});await mount(page,f);await lookup(page);await expect(page.getByText(text,{exact:true})).toBeVisible();await expect(page.getByRole('button',{name:/^(Dodaj jako administratora|Awansuj do administratora|Reaktywuj administratora)$/})).toHaveCount(0);
+  if(status==='pending')await expect(page.getByRole('button',{name:/^(Usuń uprawnienia administratora|Zawieś administratora)$/})).toHaveCount(0);
  });
 }
 for(const [action,rpc,warning]of [['Usuń uprawnienia administratora','platform_demote_tenant_admin_v1','Użytkownik pozostanie członkiem obiektu, ale straci uprawnienia administratora.'],['Zawieś administratora','platform_suspend_tenant_admin_v1','Konto utraci dostęp administratora tego obiektu.']] as const){
@@ -59,6 +60,33 @@ for(const [action,rpc,warning]of [['Usuń uprawnienia administratora','platform_
   const f=fixture();Object.assign(f.candidate.membership,{exists:true,role:'admin',status:'active'});const h=await mount(page,f);await page.getByRole('button',{name:`Zarządzaj uprawnieniami: ${email}`}).click();await page.getByRole('button',{name:action,exact:true}).click();await expect(page.getByRole('dialog').getByText(warning,{exact:false})).toBeVisible();await confirm(page);await expect(page.getByRole('dialog')).toHaveCount(0);expect(h.calls.find(c=>c.name===rpc)?.args.p_expected_state).toEqual({role:'admin',status:'active'});expect(h.calls.some(c=>c.name==='platform_lookup_tenant_admin_candidate_v1')).toBe(true);
  });
 }
+test('suspended admin only offers reactivation; active actions require canonical refresh and fresh lookup',async({page})=>{
+ const f=fixture();Object.assign(f.candidate.membership,{exists:true,role:'admin',status:'suspended'});f.admins.admins[0].membership_status='suspended';
+ let reads=0,release:()=>void=()=>{};
+ const h=await mount(page,f,async call=>{if(call.name==='platform_get_tenant_admin_management_v1'&&++reads===2)await new Promise<void>(resolve=>release=resolve);});
+ await lookup(page);const admins=section(page,'Administratorzy obiektu');
+ await expect(admins.getByRole('button',{name:'Reaktywuj administratora',exact:true})).toBeVisible();
+ await expect(admins.getByRole('button',{name:/^(Usuń uprawnienia administratora|Zawieś administratora|Dodaj jako administratora)$/})).toHaveCount(0);
+ await expect(admins.getByText('Administrator jest zawieszony.',{exact:false})).toBeVisible();
+ await admins.getByRole('button',{name:'Reaktywuj administratora',exact:true}).click();await confirm(page);
+ await expect.poll(()=>reads).toBe(2);await expect(page.getByRole('button',{name:'Odśwież stan',exact:true})).toBeDisabled();await expect(admins.getByRole('button',{name:'Usuń uprawnienia administratora',exact:true})).toHaveCount(0);
+ release();await expect(page.getByRole('button',{name:'Odśwież stan',exact:true})).toBeEnabled();await expect(admins).toContainText('Status: Aktywny');
+ await expect(admins.getByRole('button',{name:'Usuń uprawnienia administratora',exact:true})).toHaveCount(0);
+ await lookup(page);await expect(admins.getByRole('button',{name:'Usuń uprawnienia administratora',exact:true})).toBeVisible();await expect(admins.getByRole('button',{name:'Zawieś administratora',exact:true})).toBeVisible();
+ expect(h.calls.filter(c=>c.name==='platform_reactivate_tenant_admin_v1')).toHaveLength(1);expect(h.calls.filter(c=>c.name==='platform_demote_tenant_admin_v1')).toHaveLength(0);expect(h.errors).toEqual([]);
+});
+test('stale demotion denial refreshes suspended state, hides demotion and never exposes raw DB errors',async({page})=>{
+ const f=fixture();Object.assign(f.candidate.membership,{exists:true,role:'admin',status:'active'});
+ const h=await mount(page,f,(call,model)=>{if(call.name==='platform_demote_tenant_admin_v1'){
+  Object.assign(model.candidate.membership,{status:'suspended'});model.admins.admins[0].membership_status='suspended';
+  // Inject the stable denial; this is a UI fallback scenario, not a DB race simulation.
+  return {data:null,error:{code:'55000',message:'NOT_ACTIVE_TENANT_ADMIN',details:'PRIVATE SQL stack'}};
+ }});
+ await lookup(page);await page.getByRole('button',{name:'Usuń uprawnienia administratora',exact:true}).click();await confirm(page);
+ await expect(page.getByRole('dialog')).toHaveCount(0);await expect(page.getByText('Ta operacja wymaga aktywnego administratora. Odśwież dane użytkownika.',{exact:true})).toBeVisible();
+ await expect(page.getByRole('button',{name:'Usuń uprawnienia administratora',exact:true})).toHaveCount(0);await expect(page.getByRole('button',{name:'Reaktywuj administratora',exact:true})).toBeVisible();await expect(page.locator('body')).not.toContainText(/55000|NOT_ACTIVE_TENANT_ADMIN|PRIVATE|SQL stack/);
+ expect(h.f.candidate.membership).toEqual({exists:true,role:'admin',status:'suspended'});expect(h.calls.filter(c=>c.name==='platform_demote_tenant_admin_v1')).toHaveLength(1);expect(h.calls.filter(c=>c.name==='platform_get_tenant_admin_management_v1')).toHaveLength(2);expect(h.calls.filter(c=>c.name==='platform_lookup_tenant_admin_candidate_v1')).toHaveLength(2);expect(h.errors).toEqual([]);
+});
 test('uncertain retry keeps request ID and payload; repeated submit sends once',async({page})=>{
  let n=0,release:()=>void=()=>{};
  const h=await mount(page,fixture(),async call=>{if(call.name==='platform_add_tenant_admin_v1'&&++n===1){await new Promise<void>(resolve=>release=resolve);return 'abort';}});

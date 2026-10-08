@@ -7,13 +7,13 @@ import ts from 'typescript';
 import {createClient} from '@supabase/supabase-js';
 import {ManagementSession,adminRpc} from '../lib/platform-management-session.ts';
 import {readCandidate,readAdmins,readPlanPreview,readLifecycle,readEligibility,expectedState,candidateActions,managementError,noticeLabel,fallback} from '../lib/platform-management.ts';
-import {fixture,response,tenantId,actorId,userId,email,readerNames} from './fixtures/platform-management.mjs';
+import {fixture,response,rpcResponse,tenantId,actorId,userId,email,readerNames} from './fixtures/platform-management.mjs';
 
 function harness(override=()=>undefined) {
  const f=fixture(),calls=[];
  const session=new ManagementSession(tenantId,async(name,args)=>{
    calls.push({name,args:structuredClone(args)});
-   const result=await override(name,args,f);return result??{data:structuredClone(response(f,name,args)),error:null};
+   const result=await override(name,args,f);return result??structuredClone(rpcResponse(f,name,args));
  },f.detail,randomUUID);
  return {session,f,calls};
 }
@@ -30,7 +30,7 @@ test('projections bind tenant/email, reject unknown states and discard PII',()=>
  assert.equal(readPlanPreview(f.preview,tenantId,'wrong-plan'),null);
  assert.equal(readEligibility({...f.eligibility,eligibility:{can_hard_delete:true}},tenantId),null);
 });
-for(const [role,status,actions]of[[null,null,['add']],['user','active',['add']],['employee','active',['add']],['instructor','active',['add']],['admin','active',['demote','suspend']],['admin','suspended',['reactivate','demote']],['user','suspended',[]],['employee','suspended',[]],['instructor','suspended',[]],['admin','pending',[]],['user','pending',[]]]){
+for(const [role,status,actions]of[[null,null,['add']],['user','active',['add']],['employee','active',['add']],['instructor','active',['add']],['admin','active',['demote','suspend']],['admin','suspended',['reactivate']],['user','suspended',[]],['employee','suspended',[]],['instructor','suspended',[]],['admin','pending',[]],['user','pending',[]]]){
  test(`R1 expected state and actions: ${role}/${status}`,async()=>{
   const h=harness();h.f.candidate.membership={exists:role!==null,role,status};await h.session.refresh();await h.session.findCandidate(email);
   const parsed=h.session.snapshot().candidate.data;
@@ -41,13 +41,52 @@ for(const [role,status,actions]of[[null,null,['add']],['user','active',['add']],
   }
  });
 }
-for(const [action,role,status]of[['add',null,null],['add','user','active'],['add','employee','active'],['add','instructor','active'],['reactivate','admin','suspended'],['demote','admin','active'],['demote','admin','suspended'],['suspend','admin','active']]){
+for(const [action,role,status]of[['add',null,null],['add','user','active'],['add','employee','active'],['add','instructor','active'],['reactivate','admin','suspended'],['demote','admin','active'],['suspend','admin','active']]){
  test(`admin writer shape, receipt, canonical refresh: ${action}/${role}/${status}`,async()=>{
   const h=harness();h.f.candidate.membership={exists:!!role,role,status};await h.session.refresh();await h.session.findCandidate(email);h.session.prepareAdmin(action);await h.session.confirm();
   const call=h.calls.find(c=>c.name===adminRpc[action]);assert.deepEqual(Object.keys(call.args).sort(),['p_expected_state','p_request_id','p_tenant_id','p_user_id']);assert.equal(call.args.p_user_id,userId);assert.equal(call.args.p_tenant_id,tenantId);assert.match(call.args.p_request_id,/^[0-9a-f-]{36}$/);assert.deepEqual(call.args.p_expected_state,role?{role,status}:null);
   assert.equal(h.session.snapshot().attempt,null);for(const name of readerNames)assert.equal(h.calls.filter(c=>c.name===name).length,2);
  });
 }
+for(const status of ['suspended','pending']){
+ test(`real-contract mock denies direct demotion of admin/${status} without changing state`,()=>{
+  const f=fixture();f.candidate.membership={exists:true,role:'admin',status};f.admins.admins[0].membership_status=status;
+  const before=structuredClone(f),result=rpcResponse(f,adminRpc.demote,{p_tenant_id:tenantId,p_user_id:userId,p_expected_state:{role:'admin',status},p_request_id:randomUUID()});
+  assert.deepEqual(result,{data:null,error:{code:'55000',message:'NOT_ACTIVE_TENANT_ADMIN'}});assert.deepEqual(f,before);
+  const mapped=managementError({...result.error,details:'PRIVATE SQL stack'});
+  assert.equal(mapped.kind,'rejected');assert.equal(mapped.message,'Ta operacja wymaga aktywnego administratora. Odśwież dane użytkownika.');assert.doesNotMatch(mapped.message,/55000|NOT_ACTIVE_TENANT_ADMIN|PRIVATE|SQL/);
+ });
+}
+test('reactivation waits for canonical admin refresh and fresh R1 before allowing active actions',async()=>{
+ let reads=0,release,started;const refreshing=new Promise(resolve=>started=resolve);
+ const h=harness(async name=>{if(name==='platform_get_tenant_admin_management_v1'&&++reads===2){started();await new Promise(resolve=>release=resolve);}});
+ h.f.candidate.membership={exists:true,role:'admin',status:'suspended'};h.f.admins.admins[0].membership_status='suspended';
+ await h.session.refresh();await h.session.findCandidate(email);h.session.prepareAdmin('reactivate');const confirmation=h.session.confirm();await refreshing;
+ assert.equal(h.session.snapshot().busy,true);assert.equal(h.session.snapshot().admins.data,null);assert.equal(h.session.snapshot().candidate.data,null);
+ h.session.prepareAdmin('demote');assert.equal(h.session.snapshot().attempt,null);assert.equal(h.calls.filter(c=>c.name===adminRpc.demote).length,0);
+ release();await confirmation;
+ assert.equal(h.session.snapshot().admins.data.admins[0].membership_status,'active');assert.equal(h.session.snapshot().candidate.data,null);
+ h.session.prepareAdmin('demote');assert.equal(h.session.snapshot().attempt,null);
+ await h.session.findCandidate(email);assert.deepEqual(candidateActions(h.session.snapshot().candidate.data),['demote','suspend']);
+ h.session.prepareAdmin('demote');assert.deepEqual(h.session.snapshot().attempt.payload.p_expected_state,{role:'admin',status:'active'});
+ assert.equal(h.calls.filter(c=>c.name===adminRpc.reactivate).length,1);assert.equal(h.calls.filter(c=>c.name==='platform_get_tenant_admin_management_v1').length,2);assert.equal(h.calls.filter(c=>c.name===adminRpc.demote).length,0);
+});
+test('reactivation receipt alone cannot enable demotion when canonical reader fails',async()=>{
+ let reads=0;const h=harness(name=>name==='platform_get_tenant_admin_management_v1'&&++reads===2?{data:null,error:{code:'XX000',message:'PRIVATE'}}:undefined);
+ h.f.candidate.membership={exists:true,role:'admin',status:'suspended'};await h.session.refresh();await h.session.findCandidate(email);h.session.prepareAdmin('reactivate');await h.session.confirm();
+ assert.equal(h.session.snapshot().admins.data,null);await h.session.findCandidate(email);assert.equal(h.session.snapshot().candidate.data,null);h.session.prepareAdmin('demote');assert.equal(h.session.snapshot().attempt,null);assert.equal(h.calls.filter(c=>c.name===adminRpc.demote).length,0);
+});
+test('NOT_ACTIVE_TENANT_ADMIN after an active lookup refreshes suspension without retry or optimistic mutation',async()=>{
+ let rejectedState;
+ // Inject the stable rejection to test defensive UI handling; real expected-state
+ // conflicts also have their separate PT409 regression above/below.
+ const h=harness((name,args,f)=>{if(name===adminRpc.demote){f.candidate.membership.status='suspended';f.admins.admins[0].membership_status='suspended';rejectedState=structuredClone(f);return {data:null,error:{code:'55000',message:'NOT_ACTIVE_TENANT_ADMIN',details:'PRIVATE SQL stack'}};}});
+ h.f.candidate.membership={exists:true,role:'admin',status:'active'};await h.session.refresh();await h.session.findCandidate(email);h.session.prepareAdmin('demote');await h.session.confirm();
+ assert.deepEqual(h.f,rejectedState);assert.equal(h.session.snapshot().attempt,null);assert.equal(h.session.snapshot().message,'Ta operacja wymaga aktywnego administratora. Odśwież dane użytkownika.');
+ assert.deepEqual(h.session.snapshot().candidate.data.membership,{exists:true,role:'admin',status:'suspended'});assert.equal(h.session.snapshot().admins.data.admins[0].membership_status,'suspended');assert.deepEqual(candidateActions(h.session.snapshot().candidate.data),['reactivate']);
+ assert.equal(h.calls.filter(c=>c.name===adminRpc.demote).length,1);assert.equal(h.calls.filter(c=>c.name==='platform_get_tenant_admin_management_v1').length,2);assert.equal(h.calls.filter(c=>c.name==='platform_lookup_tenant_admin_candidate_v1').length,2);
+ h.session.prepareAdmin('demote');await h.session.confirm();assert.equal(h.calls.filter(c=>c.name===adminRpc.demote).length,1);
+});
 test('list selection must re-read R1, wrong account and unavailable reader cannot mutate',async()=>{
  const h=harness();await h.session.refresh();h.session.prepareAdmin('demote');assert.equal(h.session.snapshot().attempt,null);
  await h.session.findCandidate(email,actorId);assert.equal(h.session.snapshot().candidate.data,null);h.session.prepareAdmin('add');assert.equal(h.session.snapshot().attempt,null);
