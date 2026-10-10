@@ -153,6 +153,14 @@ test('actual Supabase SDK serializes management writes as POST with the approved
 });
 
 const read=path=>readFileSync(new URL(`../${path}`,import.meta.url),'utf8');
+test('real tenant route scopes the component lifetime to actor and tenant',()=>{
+ assert.ok(read('app/platform-admin/tenants/[id]/page.tsx').includes('key={`${auth.user.id}:${id}`}'));
+ assert.match(read('app/platform-admin/tenants/[id]/TenantDetail.tsx'),/session\.invalidate\(\)/);
+ const b=new ManagementSession(actorId,async()=>({data:null,error:null}),null,randomUUID);
+ assert.equal(b.snapshot().preview.data,null);assert.equal(b.snapshot().lifecycle.data,null);
+ assert.equal(b.snapshot().candidate.data,null);assert.equal(b.snapshot().attempt,null);
+ assert.equal(b.snapshot().target,'');assert.equal(b.snapshot().email,'');
+});
 for(const [role,pa,loggedIn,allow]of[['PA',true,true,true],['tenant admin',false,true,false],['employee',false,true,false],['instructor',false,true,false],['user',false,true,false],['anon',false,false,false],['combined PA + tenant admin',true,true,true]]){
  test(`actual server guard role matrix: ${role}`,async()=>{
   const exports={},calls=[],client={auth:{getUser:async()=>({data:{user:loggedIn?{id:actorId}:null},error:null})},rpc:async(name,args)=>{calls.push({name,args});return {data:pa,error:null};}};

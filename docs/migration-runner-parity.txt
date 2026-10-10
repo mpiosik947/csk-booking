@@ -1,0 +1,38 @@
+MANDATORY PRE-DEPLOYMENT GATE FOR COMPLEX DATABASE MIGRATIONS
+
+Before requesting production authorization, run RUNNER-PARITY APPLY TEST:
+fresh isolated canonical local baseline + pinned official Supabase CLI db push
++ actual candidate bytes + no harness-added BEGIN/COMMIT. Require exit 0,
+exact migration ledger, expected schema/ACL delta and scratch cleanup.
+
+Run from the repository root:
+npm run test:db:runner-parity -- <disposable-baseline-db> <migration-filename.sql> <evidence-directory>
+
+The baseline database must exist in the local supabase_db_csk-booking container
+on port 54322, with the canonical prior migration chain, no application sessions
+and synthetic data only. Supported names: migration_baseline_<16 hex digits>
+or the isolated sbr2_/sbr3_ fixtures. The command clones it, executes the same
+official CLI apply path with an explicit loopback db-url, verifies the ledger,
+and drops its clone. Never provide production connection strings or --linked.
+The caller must also remove the disposable baseline and any fixture databases.
+
+The command is a required apply gate, not a replacement for focused/full SQL,
+schema/ACL comparison, data-preservation, failure-injection, locking and
+concurrency proofs appropriate to the migration. Retain the CLI version, exact
+candidate hash and output report in the production preflight evidence.
+
+Report CANONICAL REPLAY and RUNNER-PARITY APPLY separately. Canonical replay may
+use a documented harness transaction, but must not serve as runner-parity proof.
+db push --dry-run validates migration selection/order only, not execution.
+
+CLI 2.109.1 splits SQL into statements and executes them plus the ledger insert
+in one implicitly transactional batch. It does not supply an explicit BEGIN.
+Top-level LOCK TABLE needs a transaction-block context; SYNTB-001 obtains the
+same locks inside DO, retaining them until the batch ends. Do not add COMMIT:
+it can persist schema changes before a later failure or ledger insertion.
+Verify these properties again if the pinned CLI/execution path changes.
+
+References (the same path is used for --linked and --db-url):
+https://github.com/supabase/cli/blob/v2.109.1/apps/cli/src/legacy/commands/db/push/push.handler.ts
+https://github.com/supabase/cli/blob/v2.109.1/apps/cli-go/internal/db/push/push.go
+https://github.com/supabase/cli/blob/v2.109.1/apps/cli-go/pkg/migration/file.go

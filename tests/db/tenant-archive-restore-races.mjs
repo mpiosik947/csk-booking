@@ -60,18 +60,18 @@ async function race(label,x,first,second,expect) {
 function check(label,passed,evidence) {results.push({label,pass:passed,evidence});if(!passed)throw Error(label);console.log('PASS '+label);}
 try {
   const x=setup('restore');sql('begin;'+life(x,'archive')+'commit;');
-  await race('restore vs stale activation',x,life(x,'restore',1),activate(x),r=>r.exitB!==0&&/PT409: TENANT_REVISION_STALE/.test(r.errB)&&r.outA.includes('"contender_waiting": true')&&r.state.status==='dormant'&&!r.state.public&&r.state.revision===2);
-  const fresh=sql('begin;'+activate(x)+'commit;');
-  check('fresh committed post-restore activation',state(x).status==='active'&&state(x).revision===3&&!state(x).public,fresh);
+  await race('restore vs stale activation',x,life(x,'restore',state(x).revision),activate(x),r=>r.exitB!==0&&/PT409: TENANT_REVISION_STALE/.test(r.errB)&&r.outA.includes('"contender_waiting": true')&&r.state.status==='dormant'&&!r.state.public&&r.state.revision>x.revision);
+  const restoredRevision=state(x).revision;const fresh=sql('begin;'+activate(x)+'commit;');
+  check('fresh committed post-restore activation',state(x).status==='active'&&state(x).revision>restoredRevision&&!state(x).public,fresh);
   const y=setup('restore');sql('begin;'+life(y,'archive')+'commit;');
   const first=`select 1 from public.tenants where id='${y.tenant}' for no key update;${actor(y.pa,`do $proof$ begin begin perform public.platform_set_tenant_state_v1('${y.tenant}','activate');raise exception 'UNEXPECTED_ACTIVATION';exception when sqlstate '55000' then raise notice 'EXPECTED_INVALID_TRANSITION';end;end;$proof$`)}`;
-  await race('activation lock first while archived',y,first,life(y,'restore',1),r=>r.errA.includes('EXPECTED_INVALID_TRANSITION')&&r.exitB!==0&&/55P03/.test(r.errB)&&r.state.status==='archived'&&!r.state.public);
-  sql('begin;'+life(y,'restore',1)+'commit;');check('restore safely retries after invalid activation',state(y).status==='dormant'&&!state(y).public,state(y));
+  await race('activation lock first while archived',y,first,life(y,'restore',state(y).revision),r=>r.errA.includes('EXPECTED_INVALID_TRANSITION')&&r.exitB!==0&&/55P03/.test(r.errB)&&r.state.status==='archived'&&!r.state.public);
+  sql('begin;'+life(y,'restore',state(y).revision)+'commit;');check('restore safely retries after invalid activation',state(y).status==='dormant'&&!state(y).public,state(y));
   for(const kind of ['archive','restore','plan','admin','activation','publication','domain','reservation','registration','replay']) {
     const z=setup(kind);const request=randomUUID();const archive=life(z,'archive',z.revision,request);
     const second=kind==='archive'?life(z,'archive'):kind==='restore'?life(z,'restore'):kind==='replay'?archive:
       kind==='activation'?activate(z):kind==='publication'?actor(z.pa,`select public.platform_set_tenant_state_v1('${z.tenant}','publish')`):
-      kind==='plan'?actor(z.pa,`select public.platform_change_tenant_plan_v2('${z.tenant}','booking_only_v1','1','${randomUUID()}')`):
+      kind==='plan'?actor(z.pa,`select public.platform_change_tenant_plan_v2('${z.tenant}','booking_only_v1','${sql(`select revision from public.tenant_plan_assignments where tenant_id='${z.tenant}';`)}','${randomUUID()}')`):
       kind==='admin'?actor(z.pa,`select public.platform_add_tenant_admin_v1('${z.tenant}','${z.user}','{"role":"user","status":"active"}'::jsonb,'${randomUUID()}')`):
       kind==='domain'?actor(z.pa,`select public.platform_manage_tenant_domain_v1('${z.tenant}','activate','${z.domain}')`):
       kind==='reservation'?actor(z.user,`select public.create_reservation_v2('${z.lane}',current_date+7,'12:00',60,1,'${z.request}')`):
@@ -81,7 +81,7 @@ try {
       check(kind+' positive control',kind==='reservation'?positive.includes('"reservations": 1'):kind==='registration'?positive.includes('"registrations": 1'):true,positive);
     }
     await race('archive vs '+kind,z,archive,second,r=>r.state.status==='archived'&&!r.state.public&&!r.state.effective_domain&&r.state.reservations===0&&r.state.registrations===0&&r.state.active_admins===1&&(kind!=='activation'||/PT409: TENANT_REVISION_STALE/.test(r.errB)));
-    if(kind==='replay') {const replay=sql('begin;'+archive+'commit;');check('duplicate retry returns cached result and one audit',state(z).archive_audits===1&&state(z).revision===1,replay);}
+    if(kind==='replay') {const archivedRevision=state(z).revision;const replay=sql('begin;'+archive+'commit;');check('duplicate retry returns cached result and one audit',state(z).archive_audits===1&&state(z).revision===archivedRevision&&archivedRevision>z.revision,replay);}
   }
 } catch(e) {console.error(e.message);process.exitCode=1;}
 finally {fs.writeFileSync(report,JSON.stringify({db,results,productionWrites:0},null,2));}

@@ -30,29 +30,31 @@ begin
  insert into public.tenant_memberships(tenant_id,user_id,role,status) values(t,u,'admin','active') on conflict(tenant_id,user_id) do nothing;
 end;$keeper$;
 do $test$
-declare pa uuid:=gen_random_uuid(); other_user uuid:=gen_random_uuid(); t uuid; p jsonb; r jsonb; q text; request_id uuid:=gen_random_uuid(); e uuid:=gen_random_uuid(); reg uuid:=gen_random_uuid(); lane uuid:=gen_random_uuid(); price_id uuid:=gen_random_uuid(); reservation_id uuid:=gen_random_uuid(); d uuid; challenge jsonb; before_flags jsonb;
+declare pa uuid:=gen_random_uuid(); other_user uuid:=gen_random_uuid(); t uuid; p jsonb; r jsonb; q text; request_id uuid:=gen_random_uuid(); e uuid:=gen_random_uuid(); reg uuid:=gen_random_uuid(); lane uuid:=gen_random_uuid(); price_id uuid:=gen_random_uuid(); reservation_id uuid:=gen_random_uuid(); d uuid; challenge jsonb; before_flags jsonb; initial_revision text; assigned_revision text; before_downgrade bigint; current_revision text;
 begin
  insert into auth.users(id,email)values(pa,pa||'@example.invalid'),(other_user,other_user||'@example.invalid');
  insert into public.platform_admins(user_id,status)values(pa,'active');
  t:=(pg_temp.rpc(pa,format('select to_jsonb(public.platform_create_tenant_v1(%L,%L,%L,%L))','PAM local','pam-local','pam-local-public','Local'))->>'value')::uuid;
  p:=pg_temp.rpc(pa,format('select public.platform_get_tenant_plan_change_preview_v1(%L,%L)',t,'booking_only_v1'));
  perform pg_temp.assert_true('preview allowed',p->>'state'='00000');
- perform pg_temp.assert_true('initial revision',p->'value'->>'revision'='0');
+ initial_revision:=p->'value'->>'revision';
+ perform pg_temp.assert_true('initial revision is tenant-bound',(initial_revision::bigint)=(select lifecycle_revision from public.tenants where id=t) and initial_revision::bigint>0);
  perform pg_temp.assert_true('upgrade allowed',(p->'value'->>'can_apply')::boolean);
  perform pg_temp.assert_true('DTO exact keys',(select array_agg(k order by k) from jsonb_object_keys(p->'value') k)=array['blockers','can_apply','current_plan','features_added','features_removed','revision','target_plan','tenant','warnings']);
- q:=format('select public.platform_change_tenant_plan_v2(%L,%L,%L,%L)',t,'booking_only_v1','0',request_id);
+ q:=format('select public.platform_change_tenant_plan_v2(%L,%L,%L,%L)',t,'booking_only_v1',initial_revision,request_id);
  r:=pg_temp.rpc(pa,q);
  perform pg_temp.assert_true('writer allowed',r->>'state'='00000');
- perform pg_temp.assert_true('revision increment',r->'value'->>'revision'='1');
+ assigned_revision:=r->'value'->>'revision';
+ perform pg_temp.assert_true('revision advances globally',assigned_revision::bigint>initial_revision::bigint);
  perform pg_temp.assert_true('retry same result',pg_temp.rpc(pa,q)=r);
  perform pg_temp.assert_true('audit once',(select count(*)=1 from public.platform_audit_logs where tenant_id=t and action='plan_assigned'));
- perform pg_temp.assert_true('payload conflict',pg_temp.rpc(pa,format('select public.platform_change_tenant_plan_v2(%L,%L,%L,%L)',t,'current_full_v1','1',request_id))->>'state'='22023');
- perform pg_temp.assert_true('stale revision',pg_temp.rpc(pa,format('select public.platform_change_tenant_plan_v2(%L,%L,%L,%L)',t,'current_full_v1','0',gen_random_uuid()))->>'state'='PT409');
+ perform pg_temp.assert_true('payload conflict',pg_temp.rpc(pa,format('select public.platform_change_tenant_plan_v2(%L,%L,%L,%L)',t,'current_full_v1',assigned_revision,request_id))->>'state'='22023');
+ perform pg_temp.assert_true('stale revision',pg_temp.rpc(pa,format('select public.platform_change_tenant_plan_v2(%L,%L,%L,%L)',t,'current_full_v1',initial_revision,gen_random_uuid()))->>'state'='PT409');
  perform pg_temp.assert_true('ordinary user denied',pg_temp.rpc(other_user,q)->>'state'='42501');
  perform pg_temp.assert_true('anon denied',pg_temp.rpc(null,q)->>'state'='42501');
  perform pg_temp.assert_true('current UI v1 same-plan compatible',pg_temp.rpc(pa,format('select to_jsonb(public.platform_set_tenant_plan_v1(%L,%L))',t,'booking_only_v1'))->>'state'='00000');
  perform pg_temp.assert_true('unknown target blocked',not(pg_temp.rpc(pa,format('select public.platform_get_tenant_plan_change_preview_v1(%L,%L)',t,'unknown'))->'value'->>'can_apply')::boolean);
- perform pg_temp.assert_true('upgrade full',pg_temp.rpc(pa,format('select public.platform_change_tenant_plan_v2(%L,%L,%L,%L)',t,'current_full_v1','1',gen_random_uuid()))->>'state'='00000');
+ perform pg_temp.assert_true('upgrade full',pg_temp.rpc(pa,format('select public.platform_change_tenant_plan_v2(%L,%L,%L,%L)',t,'current_full_v1',assigned_revision,gen_random_uuid()))->>'state'='00000');
  perform pg_temp.assert_true('public remains private',not(select is_public from public.tenant_public_profiles where tenant_id=t));
  perform pg_temp.assert_true('safe downgrade', (pg_temp.rpc(pa,format('select public.platform_get_tenant_plan_change_preview_v1(%L,%L)',t,'booking_only_v1'))->'value'->>'can_apply')::boolean);
 
@@ -118,10 +120,12 @@ begin
  perform pg_temp.assert_true('primary custom domain blocks',pg_temp.rpc(pa,format('select public.platform_get_tenant_plan_change_preview_v1(%L,%L)',t,'booking_only_v1'))->'value'->'blockers' @> '[{"code":"CUSTOM_DOMAIN_ACTIVE"}]');
  perform pg_temp.assert_true('v1 cannot bypass custom-domain blocker',pg_temp.rpc(pa,format('select to_jsonb(public.platform_set_tenant_plan_v1(%L,%L))',t,'booking_only_v1'))->>'state'='55000');
  perform pg_temp.rpc(pa,format('select public.platform_manage_tenant_domain_v1(%L,''disable'',%L)',t,d));
+ select revision into before_downgrade from public.tenant_plan_assignments where tenant_id=t;
  before_flags:=(select to_jsonb(public_profile) from public.tenant_public_profiles public_profile where tenant_id=t);
  r:=pg_temp.rpc(pa,format('select to_jsonb(public.platform_set_tenant_plan_v1(%L,%L))',t,'booking_only_v1'));
  perform pg_temp.assert_true('current UI v1 safe allowed downgrade succeeds',r->>'state'='00000');
- perform pg_temp.assert_true('v1 change single audit and revision',(select revision=3 from public.tenant_plan_assignments where tenant_id=t) and (select count(*)=3 from public.platform_audit_logs where tenant_id=t and action in ('plan_assigned','plan_changed')));
+ perform pg_temp.assert_true('v1 change single audit and revision',(select revision>before_downgrade from public.tenant_plan_assignments where tenant_id=t) and (select count(*)=3 from public.platform_audit_logs where tenant_id=t and action in ('plan_assigned','plan_changed')));
+ select revision::text into current_revision from public.tenant_plan_assignments where tenant_id=t;
  perform pg_temp.assert_true('downgrade preserves public profile',before_flags=(select to_jsonb(public_profile) from public.tenant_public_profiles public_profile where tenant_id=t));
  perform pg_temp.assert_true('terminal email history retained after actual v1 downgrade',exists(select 1 from public.email_deliveries where tenant_id=t and last_error_code='retry_exhausted' and attempt_count=3));
  perform pg_temp.assert_true('history retained',exists(select 1 from public.events where id=e) and exists(select 1 from public.event_registrations where id=reg) and exists(select 1 from public.reservations where id=reservation_id));
@@ -144,7 +148,7 @@ begin
  p:=pg_temp.rpc(pa,format('select public.platform_get_tenant_plan_change_preview_v1(%L,%L)',t,'current_full_v1'))->'value';
  perform pg_temp.assert_true('retained show_events public upgrade blocked',p->'blockers' @> '[{"code":"PUBLIC_REEXPOSURE","feature_key":"events"}]');
  perform pg_temp.assert_true('retained custom-domain upgrade blocked',p->'blockers' @> '[{"code":"DOMAIN_REEXPOSURE"}]');
- perform pg_temp.assert_true('upgrade cannot bypass preview',pg_temp.rpc(pa,format('select public.platform_change_tenant_plan_v2(%L,%L,%L,%L)',t,'current_full_v1','3',gen_random_uuid()))->>'state'='55000');
+ perform pg_temp.assert_true('upgrade cannot bypass preview',pg_temp.rpc(pa,format('select public.platform_change_tenant_plan_v2(%L,%L,%L,%L)',t,'current_full_v1',current_revision,gen_random_uuid()))->>'state'='55000');
  perform pg_temp.assert_true('v1 cannot bypass upgrade exposure blocker',pg_temp.rpc(pa,format('select to_jsonb(public.platform_set_tenant_plan_v1(%L,%L))',t,'current_full_v1'))->>'state'='55000');
  perform set_config('app.product10d_test_enforce','off',true);
  update public.tenant_domains set status='disabled',is_primary=false where id=d;
@@ -155,17 +159,17 @@ begin
  perform pg_temp.rpc(pa,format('select to_jsonb(public.platform_set_tenant_state_v1(%L,''suspend''))',t));
  perform pg_temp.assert_true('suspended owner continuity retained',(pg_temp.rpc(other_user,'select public.get_my_continuity_v1(1,null)')->'value'->>'total')::int=2);
  perform pg_temp.assert_true('suspended export allowed',pg_temp.rpc(other_user,'select public.export_my_data_v3()')->>'state'='00000');
- perform pg_temp.assert_true('same plan no-op',pg_temp.rpc(pa,format('select public.platform_change_tenant_plan_v2(%L,%L,%L,%L)',t,'booking_only_v1','3',gen_random_uuid()))->'value'->>'code'='no_change');
+ perform pg_temp.assert_true('same plan no-op',pg_temp.rpc(pa,format('select public.platform_change_tenant_plan_v2(%L,%L,%L,%L)',t,'booking_only_v1',current_revision,gen_random_uuid()))->'value'->>'code'='no_change');
 
  -- General My pages deliberately exclude suspended tenants; continuity is the supported suspended reader.
  perform pg_temp.assert_true('suspended My Events existing not_found contract',pg_temp.rpc(other_user,format('select public.get_my_event_registrations_v2(%L,''history'',null,1,20)',t))->'value'->>'code'='not_found');
  perform pg_temp.assert_true('suspended settlement after downgrade',pg_temp.rpc(other_user,format('select to_jsonb(public.record_external_settlement_v1(''external_reconciliation'',''reservation'',%L,10,''PLN'',''PAM diagnostic'',%L))',reservation_id,gen_random_uuid()))->>'state'='00000');
  perform pg_temp.assert_true('cancelled event continuation after downgrade',pg_temp.rpc(other_user,format('select public.cancel_continuity_resource_v1(''event_registration'',%L)',reg))->'value'->>'changed'='false');
- perform pg_temp.assert_true('unknown target writer denied',pg_temp.rpc(pa,format('select public.platform_change_tenant_plan_v2(%L,''unknown'',''3'',%L)',t,gen_random_uuid()))->>'state'='22023');
- perform pg_temp.assert_true('malformed target writer denied',pg_temp.rpc(pa,format('select public.platform_change_tenant_plan_v2(%L,''BAD!'',''3'',%L)',t,gen_random_uuid()))->>'state'='22023');
+ perform pg_temp.assert_true('unknown target writer denied',pg_temp.rpc(pa,format('select public.platform_change_tenant_plan_v2(%L,''unknown'',%L,%L)',t,(select revision::text from public.tenant_plan_assignments where tenant_id=t),gen_random_uuid()))->>'state'='22023');
+ perform pg_temp.assert_true('malformed target writer denied',pg_temp.rpc(pa,format('select public.platform_change_tenant_plan_v2(%L,''BAD!'',%L,%L)',t,(select revision::text from public.tenant_plan_assignments where tenant_id=t),gen_random_uuid()))->>'state'='22023');
  insert into public.saas_plans(plan_key,status)values('pam_inactive_v1','inactive');
  perform pg_temp.assert_true('inactive target preview blocker',pg_temp.rpc(pa,format('select public.platform_get_tenant_plan_change_preview_v1(%L,''pam_inactive_v1'')',t))->'value'->'blockers' @> '[{"code":"TARGET_PLAN_INACTIVE"}]');
- perform pg_temp.assert_true('inactive target writer denied',pg_temp.rpc(pa,format('select public.platform_change_tenant_plan_v2(%L,''pam_inactive_v1'',''3'',%L)',t,gen_random_uuid()))->>'state'='22023');
+ perform pg_temp.assert_true('inactive target writer denied',pg_temp.rpc(pa,format('select public.platform_change_tenant_plan_v2(%L,''pam_inactive_v1'',%L,%L)',t,(select revision::text from public.tenant_plan_assignments where tenant_id=t),gen_random_uuid()))->>'state'='22023');
  perform set_config('app.product10d_test_enforce','off',true);
  update public.tenants set status='active' where id=t;
  update public.tenant_public_profiles set is_public=true,show_events=false where tenant_id=t;
@@ -175,7 +179,7 @@ begin
  perform pg_temp.assert_true('platform slug still resolves',pg_temp.rpc(null,'select to_jsonb(public.resolve_active_tenant_by_slug_v1(''pam-local''))')->'value'->>'tenant_id'=t::text);
  p:=pg_temp.rpc(pa,format('select public.platform_get_tenant_plan_change_preview_v1(%L,''current_full_v1'')',t))->'value';
  perform pg_temp.assert_true('no-show retained flags allows public upgrade',(p->>'can_apply')::boolean);
- r:=pg_temp.rpc(pa,format('select public.platform_change_tenant_plan_v2(%L,''current_full_v1'',''3'',%L)',t,gen_random_uuid()));
+ r:=pg_temp.rpc(pa,format('select public.platform_change_tenant_plan_v2(%L,''current_full_v1'',%L,%L)',t,(select revision::text from public.tenant_plan_assignments where tenant_id=t),gen_random_uuid()));
  perform pg_temp.assert_true('upgrade after explicit visibility review allowed',r->>'state'='00000');
  r:=pg_temp.rpc(other_user,format('select public.admin_create_event_v3(%L,''Cancellation probe'',null,current_date+12,''10:00'',''11:00'',''Local'',0,10,''{}'')',t));
  e:=(r->'value'->>'event_id')::uuid;
@@ -191,11 +195,11 @@ begin
  perform set_config('app.product10d_test_enforce','off',true);
  update public.tenant_memberships set role='employee' where tenant_id=t and user_id=other_user;
  perform pg_temp.assert_true('employee cannot preview',pg_temp.rpc(other_user,format('select public.platform_get_tenant_plan_change_preview_v1(%L,''booking_only_v1'')',t))->>'state'='42501');
- perform pg_temp.assert_true('employee cannot write',pg_temp.rpc(other_user,format('select public.platform_change_tenant_plan_v2(%L,''current_full_v1'',''4'',%L)',t,gen_random_uuid()))->>'state'='42501');
+ perform pg_temp.assert_true('employee cannot write',pg_temp.rpc(other_user,format('select public.platform_change_tenant_plan_v2(%L,''current_full_v1'',%L,%L)',t,(select revision::text from public.tenant_plan_assignments where tenant_id=t),gen_random_uuid()))->>'state'='42501');
  update public.tenant_memberships set role='instructor' where tenant_id=t and user_id=other_user;
- perform pg_temp.assert_true('instructor cannot write',pg_temp.rpc(other_user,format('select public.platform_change_tenant_plan_v2(%L,''current_full_v1'',''4'',%L)',t,gen_random_uuid()))->>'state'='42501');
+ perform pg_temp.assert_true('instructor cannot write',pg_temp.rpc(other_user,format('select public.platform_change_tenant_plan_v2(%L,''current_full_v1'',%L,%L)',t,(select revision::text from public.tenant_plan_assignments where tenant_id=t),gen_random_uuid()))->>'state'='42501');
  update public.tenant_memberships set role='user' where tenant_id=t and user_id=other_user;
- perform pg_temp.assert_true('user cannot write',pg_temp.rpc(other_user,format('select public.platform_change_tenant_plan_v2(%L,''current_full_v1'',''4'',%L)',t,gen_random_uuid()))->>'state'='42501');
+ perform pg_temp.assert_true('user cannot write',pg_temp.rpc(other_user,format('select public.platform_change_tenant_plan_v2(%L,''current_full_v1'',%L,%L)',t,(select revision::text from public.tenant_plan_assignments where tenant_id=t),gen_random_uuid()))->>'state'='42501');
 
  update public.platform_admins set status='suspended' where user_id=pa;
  perform pg_temp.assert_true('suspended PA denied',pg_temp.rpc(pa,q)->>'state'='42501'); delete from public.platform_admins where user_id=pa; perform pg_temp.assert_true('removed PA denied',pg_temp.rpc(pa,q)->>'state'='42501');

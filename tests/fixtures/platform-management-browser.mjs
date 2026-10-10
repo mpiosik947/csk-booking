@@ -26,7 +26,9 @@ export async function startManagementBrowser() {
     auth:{onAuthStateChange:callback=>{window.testAuthChange=callback;return {data:{subscription:{unsubscribe(){delete window.testAuthChange;}}}};}}
   };`);
   writeFileSync(path.join(folder,'link.js'),`import React from 'react';export default function Link(props){return React.createElement('a',props);}`);
-  writeFileSync(path.join(folder,'entry.js'),`import React from 'react';import {createRoot} from 'react-dom/client';import TenantDetail from './app/platform-admin/tenants/[id]/TenantDetail.tsx';createRoot(document.getElementById('root')).render(React.createElement(TenantDetail,{id:${JSON.stringify(tenantId)},actorId:${JSON.stringify(actorId)},initial:null}));`);
+  // Match the actor + tenant key used by the real server route. Navigation is
+  // exposed only in this isolated harness, never in application runtime code.
+  writeFileSync(path.join(folder,'entry.js'),`import React from 'react';import {createRoot} from 'react-dom/client';import TenantDetail from './app/platform-admin/tenants/[id]/TenantDetail.tsx';const root=createRoot(document.getElementById('root'));const actorId=${JSON.stringify(actorId)};window.testNavigateTenant=id=>root.render(React.createElement(TenantDetail,{key:actorId+':'+id,id,actorId,initial:null}));window.testNavigateTenant(${JSON.stringify(tenantId)});`);
   const webpack=require('next/dist/compiled/webpack/webpack').webpack;
   await new Promise((resolve,reject)=>{
    const compiler=webpack({mode:'development',devtool:false,entry:path.join(folder,'entry.js'),output:{path:folder,filename:'app.js'},resolve:{extensions:['.js','.ts','.tsx'],modules:[path.join(root,'node_modules')],alias:{'@/lib/supabase':path.join(folder,'network.js'),'next/link':path.join(folder,'link.js'),'@':folder}},module:{rules:[{test:/\.tsx?$/,type:'javascript/auto'}]}});

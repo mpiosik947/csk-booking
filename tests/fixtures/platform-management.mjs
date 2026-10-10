@@ -25,7 +25,7 @@ export function response(f, name, args) {
     const status=name==='platform_archive_tenant_v1'?'archived':'dormant';
     for(const k of ['detail','admins','lifecycle','eligibility'])f[k].tenant.status=status;
     f.lifecycle.tenant.is_public=false;f.detail.public_profile.is_public=false;f.lifecycle.revision++;
-    return {tenant_id:tenantId,status,is_public:false,revision:f.lifecycle.revision};
+    return {tenant_id:f.detail.tenant.tenant_id,status,is_public:false,revision:f.lifecycle.revision};
   }
   const operations={platform_add_tenant_admin_v1:'add',platform_reactivate_tenant_admin_v1:'reactivate',platform_demote_tenant_admin_v1:'demote',platform_suspend_tenant_admin_v1:'suspend'};
   if(operations[name]){

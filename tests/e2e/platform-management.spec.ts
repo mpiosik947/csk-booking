@@ -25,8 +25,66 @@ async function mount(page:Page,f=fixture(),override?:(call:Call,f:Model)=>unknow
  return {calls,f,unexpected,errors};
 }
 const section=(page:Page,name:string)=>page.getByRole('region',{name,exact:true});
+const tenantB='a0000000-0000-4000-8000-000000000002';
+function secondTenant(){
+ const f=fixture();
+ for(const key of ['detail','admins','lifecycle','eligibility','preview'] as const){f[key].tenant.tenant_id=tenantB;f[key].tenant.name='Strzelnica B';}
+ f.lifecycle.revision=29;f.preview.revision='31';
+ Object.assign(f.candidate.membership,{exists:true,role:'employee',status:'active'});
+ return f;
+}
+async function navigateTenantB(page:Page){
+ await page.evaluate(id=>(window as unknown as {testNavigateTenant:(id:string)=>void}).testNavigateTenant(id),tenantB);
+ await expect(page.getByRole('heading',{name:'Strzelnica B',exact:true})).toBeVisible();
+ await expect(page.getByRole('button',{name:'Odśwież stan',exact:true})).toBeEnabled();
+}
 async function lookup(page:Page){await page.getByLabel('Dokładny e-mail konta').fill(email);await page.getByRole('button',{name:'Znajdź konto',exact:true}).click();await expect(section(page,'Administratorzy obiektu').getByText(`Konto: ${email}`)).toBeVisible();}
 async function confirm(page:Page){await page.getByRole('dialog').getByRole('button',{name:'Potwierdź operację',exact:true}).click();}
+
+for(const operation of ['plan','lifecycle','admin'] as const){
+ test(`A to B clears ${operation} preview and uncertain request; B submits its own state`,async({page})=>{
+  const b=secondTenant();const writer=operation==='plan'?'platform_change_tenant_plan_v2':operation==='lifecycle'?'platform_archive_tenant_v1':'platform_add_tenant_admin_v1';
+  const h=await mount(page,fixture(),call=>{
+   if(call.args.p_tenant_id===tenantId&&call.name===writer)return 'abort';
+   if(call.args.p_tenant_id===tenantB)return rpcResponse(b,call.name,call.args);
+  });
+  await page.getByLabel('Docelowy plan').selectOption('booking_only_v1');await lookup(page);
+  const action=operation==='plan'?'Zmień plan':operation==='lifecycle'?'Archiwizuj obiekt':'Dodaj jako administratora';
+  await page.getByRole('button',{name:action,exact:true}).click();await confirm(page);
+  await expect(page.getByRole('button',{name:'Ponów tę samą próbę',exact:true})).toBeEnabled();
+  await navigateTenantB(page);
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  await expect(page.getByRole('button',{name:'Sprawdź / ponów tę samą próbę'})).toHaveCount(0);
+  await expect(page.getByLabel('Dokładny e-mail konta')).toHaveValue('');
+  await expect(page.getByLabel('Docelowy plan')).toHaveValue('');
+  await expect(section(page,'Administratorzy obiektu').getByText(`Konto: ${email}`)).toHaveCount(0);
+  if(operation==='plan')await page.getByLabel('Docelowy plan').selectOption('booking_only_v1');
+  if(operation==='admin')await lookup(page);
+  await page.getByRole('button',{name:operation==='admin'?'Awansuj do administratora':action,exact:true}).click();await confirm(page);
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  const writes=h.calls.filter(c=>c.name===writer);expect(writes).toHaveLength(2);
+  expect(writes[0].args.p_tenant_id).toBe(tenantId);expect(writes[1].args.p_tenant_id).toBe(tenantB);
+  const requestKey=operation==='plan'?'p_change_request_id':'p_request_id';expect(writes[1].args[requestKey]).not.toBe(writes[0].args[requestKey]);
+  if(operation==='plan')expect(writes[1].args.p_expected_revision).toBe('31');
+  if(operation==='lifecycle')expect(writes[1].args.p_expected_revision).toBe(29);
+  if(operation==='admin'){expect(writes[0].args.p_expected_state).toBeNull();expect(writes[1].args.p_expected_state).toEqual({role:'employee',status:'active'});}
+  expect(h.unexpected).toEqual([]);expect(h.errors).toEqual([]);
+ });
+}
+
+test('late A plan preview cannot populate B after a keyed tenant switch',async({page})=>{
+ const b=secondTenant();let release:()=>void=()=>{},waiting=false;
+ const h=await mount(page,fixture(),async call=>{
+  if(call.name==='platform_get_tenant_plan_change_preview_v1'&&call.args.p_tenant_id===tenantId){waiting=true;await new Promise<void>(resolve=>release=resolve);}
+  if(call.args.p_tenant_id===tenantB)return rpcResponse(b,call.name,call.args);
+ });
+ await page.getByLabel('Docelowy plan').selectOption('booking_only_v1');await expect.poll(()=>waiting).toBe(true);
+ await navigateTenantB(page);release();
+ await expect(page.getByLabel('Docelowy plan')).toHaveValue('');
+ await page.getByLabel('Docelowy plan').selectOption('booking_only_v1');
+ await page.getByRole('button',{name:'Zmień plan',exact:true}).click();await confirm(page);await expect(page.getByRole('dialog')).toHaveCount(0);
+ expect(h.calls.filter(c=>c.name==='platform_change_tenant_plan_v2').map(c=>[c.args.p_tenant_id,c.args.p_expected_revision])).toEqual([[tenantB,'31']]);expect(h.errors).toEqual([]);
+});
 
 test('plan preview, warnings, blocked apply, keyboard modal, v2 payload and safe network',async({page})=>{
  const h=await mount(page);const plan=section(page,'Plan / pakiet');
