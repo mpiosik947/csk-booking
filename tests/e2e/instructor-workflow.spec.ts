@@ -80,3 +80,53 @@ test('cancelled/expired metadata remains but PII unavailable; logout clears DOM'
   await page.evaluate(()=>window.dispatchEvent(new CustomEvent('fixture-auth',{detail:'SIGNED_OUT'})));
   await expect(page.getByRole('alert')).toBeVisible();await expect(page.getByText(event.title,{exact:true})).toHaveCount(0);
 });
+
+test('session recovery and refresh reauthorize; denial and transport errors stay distinct', async ({page}) => {
+  let status=200, hold=false;
+  let release: (()=>void) | undefined;
+  await page.route('http://instructor.test/**', async route => {
+    if (route.request().url().includes('/api/')) {
+      if (hold) await new Promise<void>(resolve => { release=resolve; });
+      await route.fulfill({status,json:status===200?{event,participants:null}:{error:'unavailable'}});
+    } else await route.fulfill({contentType:'text/html',body:`<html><body><div id="root"></div><script>${bundle}</script></body></html>`});
+  });
+  await page.goto(`http://instructor.test/?eventId=${id}`);
+  await expect(page.getByText(event.title,{exact:true})).toBeVisible();
+  for (const authEvent of ['SIGNED_IN','TOKEN_REFRESHED','USER_UPDATED']) {
+    hold=true;
+    await page.evaluate(event=>window.dispatchEvent(new CustomEvent('fixture-auth',{detail:{
+      event, session:{user:{id:'synthetic-user'},access_token:'synthetic-token-'+event},
+    }})),authEvent);
+    await expect(page.getByRole('status')).toHaveText('Sprawdzanie dostępu…');
+    await expect(page.getByRole('alert')).toHaveCount(0);
+    await expect(page.getByText(event.title,{exact:true})).toHaveCount(0);
+    await expect.poll(()=>typeof release).toBe('function');
+    hold=false;release!();release=undefined;
+    await expect(page.getByText(event.title,{exact:true})).toBeVisible();
+  }
+  status=503;
+  await page.getByRole('button',{name:'Odśwież',exact:true}).click();
+  await expect(page.getByRole('alert')).toHaveText('Nie udało się wczytać danych. Spróbuj ponownie.');
+  await expect(page.getByText(event.title,{exact:true})).toHaveCount(0);
+  status=403;
+  await page.getByRole('button',{name:'Odśwież',exact:true}).click();
+  await expect(page.getByRole('alert')).toHaveText('Brak dostępu do szkoleń w tej lokalizacji.');
+});
+
+test('logout invalidates an in-flight read; its late success cannot restore participant data', async ({page}) => {
+  let release: (()=>void) | undefined;
+  let started=false;
+  await page.route('http://instructor.test/**', async route => {
+    if (route.request().url().includes('/api/')) {
+      started=true;await new Promise<void>(resolve=>{release=resolve;});
+      await route.fulfill({json:{event,participants:{total:1,items:[{registration_id:id,display_name:'Private participant',registration_status:'registered',attendance_status:'unmarked',attendance_version:0}]}}});
+    } else await route.fulfill({contentType:'text/html',body:`<html><body><div id="root"></div><script>${bundle}</script></body></html>`});
+  });
+  await page.goto(`http://instructor.test/?eventId=${id}`);
+  await expect.poll(()=>started).toBe(true);
+  await page.evaluate(()=>window.dispatchEvent(new CustomEvent('fixture-auth',{detail:'SIGNED_OUT'})));
+  release!();
+  await expect(page.getByRole('alert')).toHaveText('Brak dostępu do szkoleń w tej lokalizacji.');
+  await expect(page.getByText('Private participant',{exact:true})).toHaveCount(0);
+  await expect(page.getByText(event.title,{exact:true})).toHaveCount(0);
+});
