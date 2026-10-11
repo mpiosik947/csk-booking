@@ -17,10 +17,6 @@ type ProfileData = {
   full_name: string | null;
   email: string | null;
   phone: string | null;
-  postal_code: string | null;
-  city: string | null;
-  street: string | null;
-  house_number: string | null;
 };
 
 type TenantAccess = {
@@ -89,7 +85,7 @@ export default function DashboardPage() {
       const { data: profile } = await supabase
         .from("profiles")
         .select(
-          "first_name, last_name, full_name, email, phone, postal_code, city, street, house_number"
+          "first_name, last_name, full_name, email, phone"
         )
         .eq("user_id", user.id)
         .single();
@@ -108,11 +104,7 @@ export default function DashboardPage() {
         setFullName(displayedName);
         setProfileComplete(
           hasStructuredProfileName(profileData) &&
-            hasValue(profileData.phone) &&
-            hasValue(profileData.postal_code) &&
-            hasValue(profileData.city) &&
-            hasValue(profileData.street) &&
-            hasValue(profileData.house_number)
+            hasValue(profileData.phone)
         );
       }
 

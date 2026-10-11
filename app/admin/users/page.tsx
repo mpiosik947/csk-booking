@@ -187,10 +187,6 @@ function getMissingFields(profile: Profile) {
   const missing: string[] = [];
   if (!profile.first_name?.trim() || !profile.last_name?.trim()) missing.push("imię i nazwisko");
   if (!profile.phone?.trim()) missing.push("telefon");
-  if (!profile.postal_code?.trim()) missing.push("kod pocztowy");
-  if (!profile.city?.trim()) missing.push("miasto");
-  if (!profile.street?.trim()) missing.push("ulica");
-  if (!profile.house_number?.trim()) missing.push("numer domu");
   return missing;
 }
 

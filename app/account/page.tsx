@@ -100,19 +100,6 @@ function getMessageClass(message: string) {
   return "rounded-xl border border-[#744545] bg-[#2a1b1b] p-4 text-sm font-semibold text-[#e0a0a0]";
 }
 
-function onlyDigits(value: string, maxLength: number) {
-  return value.replace(/\D/g, "").slice(0, maxLength);
-}
-
-function splitPostalCode(postalCode: string | null | undefined) {
-  const digits = onlyDigits(postalCode ?? "", 5);
-
-  return {
-    partOne: digits.slice(0, 2),
-    partTwo: digits.slice(2, 5),
-  };
-}
-
 function CheckboxField({
   checked,
   onChange,
@@ -162,8 +149,7 @@ export default function AccountPage() {
   const [fullName, setFullName] = useState("");
   const [phone, setPhone] = useState("");
 
-  const [postalCodePartOne, setPostalCodePartOne] = useState("");
-  const [postalCodePartTwo, setPostalCodePartTwo] = useState("");
+  const [postalCode, setPostalCode] = useState("");
   const [city, setCity] = useState("");
   const [street, setStreet] = useState("");
   const [houseNumber, setHouseNumber] = useState("");
@@ -278,9 +264,7 @@ export default function AccountPage() {
       setFullName(profileData.full_name ?? metadata.full_name ?? "");
       setPhone(profileData.phone ?? metadata.phone ?? "");
 
-      const postalCodeParts = splitPostalCode(profileData.postal_code);
-      setPostalCodePartOne(postalCodeParts.partOne);
-      setPostalCodePartTwo(postalCodeParts.partTwo);
+      setPostalCode(profileData.postal_code ?? "");
 
       setCity(profileData.city ?? "");
       setStreet(profileData.street ?? "");
@@ -355,20 +339,18 @@ export default function AccountPage() {
       return "Uzupełnij numer telefonu.";
     }
 
-    if (postalCodePartOne.length !== 2 || postalCodePartTwo.length !== 3) {
-      return "Uzupełnij kod pocztowy w formacie XX-XXX.";
-    }
-
-    if (!city.trim()) {
-      return "Uzupełnij miasto.";
-    }
-
-    if (!street.trim()) {
-      return "Uzupełnij ulicę.";
-    }
-
-    if (!houseNumber.trim()) {
-      return "Uzupełnij numer domu.";
+    const limits: [string, number, string][] = [
+      [phone, 32, "Numer telefonu"],
+      [postalCode, 20, "Kod pocztowy"],
+      [city, 120, "Nazwa miejscowości"],
+      [street, 160, "Nazwa ulicy"],
+      [houseNumber, 30, "Numer domu"],
+      [apartmentNumber, 30, "Numer mieszkania"],
+    ];
+    for (const [value, limit, label] of limits) {
+      if (Array.from(value.trim()).length > limit) {
+        return `${label}: maksymalnie ${limit} znaków.`;
+      }
     }
 
     return "";
@@ -397,7 +379,6 @@ export default function AccountPage() {
       return;
     }
 
-    const postalCode = `${postalCodePartOne}-${postalCodePartTwo}`;
     const currentPermissionValues: PermissionValues = {
       permissionSport,
       permissionCollector,
@@ -444,7 +425,7 @@ export default function AccountPage() {
       "update_my_profile_v2",
       {
         p_phone: phone.trim(),
-        p_postal_code: postalCode,
+        p_postal_code: postalCode.trim(),
         p_city: city.trim(),
         p_street: street.trim(),
         p_house_number: houseNumber.trim(),
@@ -776,6 +757,8 @@ export default function AccountPage() {
 
                   <input
                     id="account-phone"
+                    required
+                    maxLength={32}
                     type="tel"
                     value={phone}
                     onChange={(event) => setPhone(event.target.value)}
@@ -906,47 +889,27 @@ export default function AccountPage() {
 
             <section className="rounded-2xl border border-[#303A2D] bg-[#182019] p-4 sm:p-6">
                   <h2 className="mb-4 text-xl font-semibold text-[#F4F3EE]">
-                    Adres
+                    Adres — opcjonalnie
                   </h2>
 
                   <p className="mb-5 text-sm leading-6 text-[#A6ADA5]">
-                    Podaj dane adresowe bez wpisywania przykładowych wartości.
-                    Kod pocztowy wpisz w dwóch polach, zgodnie z formatem
-                    XX-XXX.
+                    Możesz pozostawić pola adresowe puste.
                   </p>
 
                   <div>
-                    <p className="mb-2 block text-sm text-[#A6ADA5]">
-                      Kod pocztowy *
-                    </p>
-
-                    <div className="flex max-w-xs items-center gap-3">
-                      <input
-                        type="text"
-                        inputMode="numeric"
-                        value={postalCodePartOne}
-                        onChange={(event) =>
-                          setPostalCodePartOne(onlyDigits(event.target.value, 2))
-                        }
-                        maxLength={2}
-                        aria-label="Pierwsze dwie cyfry kodu pocztowego"
-                        className="min-h-12 w-20 rounded-xl border border-[#303A2D] bg-[#111712] px-4 py-3 text-center text-[#F4F3EE] outline-none focus-visible:border-[#697A2F] focus-visible:ring-2 focus-visible:ring-[#F5A900] focus-visible:ring-offset-2 focus-visible:ring-offset-[#182019]"
-                      />
-
-                      <span className="text-[#A6ADA5]">-</span>
-
-                      <input
-                        type="text"
-                        inputMode="numeric"
-                        value={postalCodePartTwo}
-                        onChange={(event) =>
-                          setPostalCodePartTwo(onlyDigits(event.target.value, 3))
-                        }
-                        maxLength={3}
-                        aria-label="Ostatnie trzy cyfry kodu pocztowego"
-                        className="min-h-12 w-24 rounded-xl border border-[#303A2D] bg-[#111712] px-4 py-3 text-center text-[#F4F3EE] outline-none focus-visible:border-[#697A2F] focus-visible:ring-2 focus-visible:ring-[#F5A900] focus-visible:ring-offset-2 focus-visible:ring-offset-[#182019]"
-                      />
-                    </div>
+                    <label htmlFor="account-postal-code" className="mb-2 block text-sm text-[#A6ADA5]">
+                      Kod pocztowy (opcjonalnie)
+                    </label>
+                    <input
+                      id="account-postal-code"
+                      type="text"
+                      autoComplete="postal-code"
+                      value={postalCode}
+                      onChange={(event) => setPostalCode(event.target.value)}
+                      maxLength={20}
+                      placeholder="00-000"
+                      className="min-h-12 w-full max-w-xs rounded-xl border border-[#303A2D] bg-[#111712] px-4 py-3 text-[#F4F3EE] outline-none focus-visible:border-[#697A2F] focus-visible:ring-2 focus-visible:ring-[#F5A900] focus-visible:ring-offset-2 focus-visible:ring-offset-[#182019]"
+                    />
                   </div>
 
                   <div className="mt-5">
@@ -954,11 +917,12 @@ export default function AccountPage() {
                       htmlFor="account-city"
                       className="mb-2 block text-sm text-[#A6ADA5]"
                     >
-                      Miasto / miejscowość *
+                      Miasto / miejscowość (opcjonalnie)
                     </label>
 
                     <input
                       id="account-city"
+                      maxLength={120}
                       type="text"
                       value={city}
                       onChange={(event) => setCity(event.target.value)}
@@ -971,11 +935,12 @@ export default function AccountPage() {
                       htmlFor="account-street"
                       className="mb-2 block text-sm text-[#A6ADA5]"
                     >
-                      Ulica *
+                      Ulica (opcjonalnie)
                     </label>
 
                     <input
                       id="account-street"
+                      maxLength={160}
                       type="text"
                       value={street}
                       onChange={(event) => setStreet(event.target.value)}
@@ -983,8 +948,7 @@ export default function AccountPage() {
                     />
 
                     <p className="mt-2 text-xs text-[#A6ADA5]">
-                      Podaj ulicę, numer domu i opcjonalnie numer mieszkania w
-                      osobnych polach poniżej.
+                      Jeśli podajesz adres, wpisz ulicę i numery w osobnych polach.
                     </p>
                   </div>
 
@@ -994,11 +958,12 @@ export default function AccountPage() {
                         htmlFor="account-house-number"
                         className="mb-2 block text-sm text-[#A6ADA5]"
                       >
-                        Numer domu *
+                        Numer domu (opcjonalnie)
                       </label>
 
                       <input
                         id="account-house-number"
+                        maxLength={30}
                         type="text"
                         value={houseNumber}
                         onChange={(event) => setHouseNumber(event.target.value)}
@@ -1011,11 +976,12 @@ export default function AccountPage() {
                         htmlFor="account-apartment-number"
                         className="mb-2 block text-sm text-[#A6ADA5]"
                       >
-                        Numer mieszkania
+                        Numer mieszkania (opcjonalnie)
                       </label>
 
                       <input
                         id="account-apartment-number"
+                        maxLength={30}
                         type="text"
                         value={apartmentNumber}
                         onChange={(event) =>

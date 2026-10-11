@@ -296,10 +296,6 @@ function getMissingFields(profile: Profile | null | undefined) {
 
   if (!profile.full_name) missing.push("imię i nazwisko");
   if (!profile.phone) missing.push("telefon");
-  if (!profile.postal_code) missing.push("kod pocztowy");
-  if (!profile.city) missing.push("miasto");
-  if (!profile.street) missing.push("ulica");
-  if (!profile.house_number) missing.push("numer domu");
 
   return missing;
 }
@@ -310,10 +306,6 @@ function getCompletionPercent(profile: Profile | null | undefined) {
   const fields = [
     profile.full_name,
     profile.phone,
-    profile.postal_code,
-    profile.city,
-    profile.street,
-    profile.house_number,
   ];
 
   const filled = fields.filter((field) => field && field.trim()).length;

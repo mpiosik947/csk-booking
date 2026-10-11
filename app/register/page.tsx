@@ -26,6 +26,8 @@ export default function RegisterPage() {
 
   const [acceptedTerms, setAcceptedTerms] = useState(false);
   const [acceptedPrivacy, setAcceptedPrivacy] = useState(false);
+  const [adultSelfDeclaration, setAdultSelfDeclaration] = useState(false);
+  const [adultDeclarationError, setAdultDeclarationError] = useState(false);
 
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
@@ -34,6 +36,7 @@ export default function RegisterPage() {
 
   async function handleRegister() {
     setMessage("");
+    setAdultDeclarationError(false);
 
     const trimmedFirstName = firstName.trim();
     const trimmedLastName = lastName.trim();
@@ -61,6 +64,12 @@ export default function RegisterPage() {
       return;
     }
 
+    if (!adultSelfDeclaration) {
+      setAdultDeclarationError(true);
+      document.getElementById("register-adult")?.focus();
+      return;
+    }
+
     setLoading(true);
 
     const { data, error } = await supabase.auth.signUp({
@@ -77,6 +86,9 @@ export default function RegisterPage() {
           phone,
           accepted_terms: true,
           accepted_privacy: true,
+          // Self-declaration only, following the existing client metadata pattern.
+          adult_self_declaration: true,
+          adult_self_declaration_at: new Date().toISOString(),
           accepted_terms_at: new Date().toISOString(),
           accepted_privacy_at: new Date().toISOString(),
         },
@@ -104,6 +116,8 @@ export default function RegisterPage() {
     setPassword("");
     setAcceptedTerms(false);
     setAcceptedPrivacy(false);
+    setAdultSelfDeclaration(false);
+    setAdultDeclarationError(false);
   }
 
   function getMessageClass(message: string) {
@@ -338,6 +352,28 @@ export default function RegisterPage() {
                     .
                   </span>
                 </label>
+
+                <label htmlFor="register-adult" className="flex min-h-12 cursor-pointer items-start gap-3 text-sm text-[#A6ADA5]">
+                  <input
+                    id="register-adult"
+                    type="checkbox"
+                    required
+                    checked={adultSelfDeclaration}
+                    onChange={(event) => {
+                      setAdultSelfDeclaration(event.target.checked);
+                      setAdultDeclarationError(false);
+                    }}
+                    aria-invalid={adultDeclarationError}
+                    aria-describedby={adultDeclarationError ? "register-adult-error" : undefined}
+                    className="mt-1 shrink-0 accent-[#697A2F] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F5A900] focus-visible:ring-offset-2 focus-visible:ring-offset-[#182019]"
+                  />
+                  <span>Potwierdzam, że jestem osobą pełnoletnią. (wymagane)</span>
+                </label>
+                {adultDeclarationError && (
+                  <p id="register-adult-error" role="alert" className="text-sm text-[#e0a0a0]">
+                    Potwierdź pełnoletność, aby utworzyć konto.
+                  </p>
+                )}
               </div>
 
               {message && (
