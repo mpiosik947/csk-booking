@@ -26,6 +26,7 @@ export function clearRecovery(response: NextResponse, origin: string) {
 
 export function recoveryClient(request: NextRequest, response: NextResponse) {
   return createServerClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, {
+    cookieOptions: { secure: true },
     cookies: {
       getAll: () => request.cookies.getAll(),
       setAll: values => values.forEach(({ name, value, options }) => response.cookies.set(name, value, options)),

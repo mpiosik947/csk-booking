@@ -13,5 +13,6 @@ if (!supabaseAnonKey) {
 
 export const supabase = createBrowserClient(
   supabaseUrl,
-  supabaseAnonKey
+  supabaseAnonKey,
+  { cookieOptions: { secure: true } }
 );

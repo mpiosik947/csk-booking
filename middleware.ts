@@ -115,6 +115,7 @@ export async function middleware(
       process.env
         .NEXT_PUBLIC_SUPABASE_ANON_KEY!,
       {
+        cookieOptions: { secure: true },
         cookies: {
           getAll() {
             return request.cookies.getAll();

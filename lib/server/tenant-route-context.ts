@@ -18,6 +18,7 @@ export const getTenantRequestClient = cache(async (): Promise<TenantContextClien
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
+      cookieOptions: { secure: true },
       cookies: {
         getAll() {
           return cookieStore.getAll();
