@@ -522,7 +522,7 @@ export default function MyReservationsPage({ tenantId, tenantSlug }: { tenantId:
       <section className="mx-auto max-w-5xl rounded-[2rem] border border-[#30372c] bg-[#141814] p-5 shadow-2xl shadow-black/20 sm:p-8">
         <header>
           <p className="mb-3 text-xs font-semibold uppercase tracking-[0.22em] text-[#858c7f]">
-            CSK Booking
+            StrzelajTu.pl
           </p>
 
           <h1 className="text-3xl font-bold sm:text-4xl">Moje rezerwacje</h1>
@@ -697,7 +697,7 @@ export default function MyReservationsPage({ tenantId, tenantSlug }: { tenantId:
                           <div className="mt-5 flex flex-wrap items-start gap-3">
                             <AddToCalendarButton
                               endpoint={`/api/calendar/reservations/${reservation.id}`}
-                              filename="csk-rezerwacja.ics"
+                              filename="strzelajtu-rezerwacja.ics"
                             />
 
                             {canCancel && (

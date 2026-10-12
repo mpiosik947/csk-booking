@@ -35,7 +35,7 @@ test('real Next/Auth export and delete: multi-tenant instructor, suspended domai
   const auth = (i: number) => ({ Authorization: `Bearer ${tokens[i]}` });
   const response = await request.get('/api/account/export', { headers: auth(0) });
   expect(response.status()).toBe(200); expect(response.headers()['cache-control']).toContain('no-store');
-  expect(response.headers()['content-disposition']).toContain('csk-booking-my-data.json');
+  expect(response.headers()['content-disposition']).toContain('strzelajtu-my-data.json');
   const data = await response.json();
   expect(data.export_version).toBe(3);
   expect(data.reservations).toHaveLength(2); expect(data.event_registrations).toHaveLength(3);
@@ -116,7 +116,7 @@ test('real Next/Auth export and delete: multi-tenant instructor, suspended domai
   await page.goto('/login?redirectTo=%2Faccount'); await page.getByLabel('E-mail').fill(emails[3]); await page.getByLabel('Hasło').fill(password);
   await page.getByRole('button', { name: 'Zaloguj się' }).click(); await expect(page).toHaveURL(/\/account$/);
   const downloadPromise = page.waitForEvent('download'); await page.getByRole('button', { name: /Eksportuj|Pobierz.*dane/i }).click();
-  const download = await downloadPromise; expect(download.suggestedFilename()).toBe('csk-booking-my-data.json');
+  const download = await downloadPromise; expect(download.suggestedFilename()).toBe('strzelajtu-my-data.json');
   const downloaded = JSON.parse(readFileSync((await download.path())!, 'utf8')); expect(downloaded.export_version).toBe(3);
   const normalDelete = await request.post('/api/account/delete', { headers: auth(3), data: { confirmation: 'USUŃ KONTO' } });
   expect(normalDelete.status()).toBe(200); expect(sql(`select count(*) from auth.users where id='${users[3]}';`)).toBe('0');

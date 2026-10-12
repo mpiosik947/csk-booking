@@ -619,7 +619,7 @@ export default function AdminPage({ tenantId, tenantSlug }: Readonly<{ tenantId:
 
   return (
     <AdminShell
-      eyebrow="CSK Booking"
+      eyebrow="StrzelajTu.pl"
       title="Dashboard operacyjny"
       description="Szybki podgląd dzisiejszych wizyt, alertów, płatności i najważniejszych danych operacyjnych strzelnicy."
       badge={

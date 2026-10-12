@@ -536,7 +536,7 @@ export default function AccountPage() {
       const downloadUrl = URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = downloadUrl;
-      link.download = "csk-booking-my-data.json";
+      link.download = "strzelajtu-my-data.json";
       document.body.appendChild(link);
       link.click();
       link.remove();

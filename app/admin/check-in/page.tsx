@@ -1939,7 +1939,7 @@ function CheckInContent({ tenantId, tenantSlug }: Readonly<{ tenantId: string; t
 export default function CheckInPage({ tenantId, tenantSlug }: Readonly<{ tenantId: string; tenantSlug: string }>) {
   return (
     <AdminShell
-      eyebrow="CSK Booking"
+      eyebrow="StrzelajTu.pl"
       title="Check-in i obsługa wizyt"
       description="Obsługa dzisiejszych rezerwacji, obecności, no-show, płatności i weryfikacji klienta podczas pierwszej wizyty."
       actions={

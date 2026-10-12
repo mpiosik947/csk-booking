@@ -252,7 +252,7 @@ export default function AdminReportsPage({ tenantId, tenantSlug }: Readonly<{ te
 
   return (
     <AdminShell
-      eyebrow="CSK Booking"
+      eyebrow="StrzelajTu.pl"
       title="Raport"
       description="Rezerwacje, przychód i szacowane obłożenie osi."
       actions={

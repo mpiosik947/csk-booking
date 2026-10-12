@@ -92,7 +92,7 @@ function formatSelectedDate(date: string) {
 
 function LoadingCalendar() {
   return (
-    <AdminShell eyebrow="CSK Booking" title="Kalendarz obłożenia" description="Planowanie zajętości osi, blokad i wydarzeń.">
+    <AdminShell eyebrow="StrzelajTu.pl" title="Kalendarz obłożenia" description="Planowanie zajętości osi, blokad i wydarzeń.">
       <div role="status" className="animate-pulse rounded-2xl border border-[#30372c] bg-[#151915] p-4 text-[#a9ada4]">Ładowanie kalendarza…</div>
     </AdminShell>
   );
@@ -356,7 +356,7 @@ function AdminCalendarContent({ tenantId, tenantSlug }: Readonly<{ tenantId: str
 
   return (
     <AdminShell
-      eyebrow="CSK Booking"
+      eyebrow="StrzelajTu.pl"
       title="Kalendarz obłożenia"
       description="Planowanie zajętości osi, blokad i wydarzeń."
       badge={

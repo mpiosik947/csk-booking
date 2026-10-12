@@ -97,7 +97,7 @@ const CODE_MESSAGES: Record<string, string> = {
   profile_not_found: "Nie znaleziono profilu użytkownika.",
   profile_incomplete:
     "Profil wymaga uzupełnienia imienia i nazwiska, e-maila oraz telefonu.",
-  profile_rejected: "Konto zostało odrzucone. Skontaktuj się z obsługą CSK.",
+  profile_rejected: "Konto zostało odrzucone. Skontaktuj się z obsługą tej strzelnicy.",
   verification_limit_reached:
     "Konto oczekuje na weryfikację i ma już aktywną rezerwację.",
   invalid_date: "Wybierz prawidłową datę.",
@@ -108,7 +108,7 @@ const CODE_MESSAGES: Record<string, string> = {
   invalid_shooters_count: "Wybierz prawidłową liczbę strzelców.",
   capacity_exceeded: "Liczba strzelców przekracza pojemność osi.",
   contact_required:
-    "Dla większej liczby osób wymagany jest kontakt z obsługą CSK.",
+    "Dla większej liczby osób wymagany jest kontakt z obsługą tej strzelnicy.",
   lane_not_found: "Nie znaleziono wybranej osi.",
   lane_inactive: "Wybrana oś nie jest już aktywna.",
   lane_not_bookable:

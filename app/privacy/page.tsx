@@ -10,10 +10,10 @@ export default function PrivacyPage() {
       <article className="mx-auto max-w-4xl rounded-[2rem] border border-[#30372c] bg-[#141814] p-5 shadow-2xl shadow-black/20 sm:p-8 lg:p-10">
         <header className="mb-8 text-center">
           <Image
-            src="/login-brand.png"
-            alt="Centrum Szkolenia Krutla"
-            width={1536}
-            height={1024}
+            src="/brand/strzelajtu/logo-horizontal.png"
+            alt="StrzelajTu.pl"
+            width={2048}
+            height={682}
             className="mx-auto h-auto w-full max-w-[220px] sm:max-w-[260px]"
             priority
           />
@@ -22,7 +22,7 @@ export default function PrivacyPage() {
           </h1>
           <p className="mt-4 text-left leading-7 text-[#a9ada4] sm:text-center">
             Dokument opisuje kategorie danych i procesy związane z korzystaniem
-            z systemu rezerwacji CSK Booking.
+            z systemu rezerwacji StrzelajTu.pl.
           </p>
           <p className="mt-2 text-sm text-[#858c7f]">
             Ostatnia aktualizacja: 4 września 2026 r.
@@ -271,7 +271,7 @@ export default function PrivacyPage() {
               <p>
                 Dokument może być aktualizowany w przypadku zmian w systemie,
                 sposobie przetwarzania danych lub obowiązujących wymaganiach.
-                Aktualna wersja jest publikowana w systemie CSK Booking.
+                Aktualna wersja jest publikowana w systemie StrzelajTu.pl.
               </p>
             </div>
           </section>

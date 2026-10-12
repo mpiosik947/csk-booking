@@ -299,7 +299,7 @@ test.describe.serial("EVENTS-8C responsive UX", () => {
         status: 200,
         contentType: "text/calendar; charset=utf-8",
         headers: {
-          "Content-Disposition": 'attachment; filename="csk-szkolenie.ics"',
+          "Content-Disposition": 'attachment; filename="strzelajtu-szkolenie.ics"',
           "Cache-Control": "private, no-store",
           "X-Content-Type-Options": "nosniff",
         },
@@ -313,7 +313,7 @@ test.describe.serial("EVENTS-8C responsive UX", () => {
     const downloadPromise = page.waitForEvent("download");
     await page.getByRole("button", { name: "Dodaj do kalendarza" }).click();
     const download = await downloadPromise;
-    expect(download.suggestedFilename()).toBe("csk-szkolenie.ics");
+    expect(download.suggestedFilename()).toBe("strzelajtu-szkolenie.ics");
     expect(calendarRequestWasAuthenticated).toBe(true);
     await page.getByLabel("Status").selectOption("reserve");
     await expect(page.getByRole("button", { name: "Dodaj do kalendarza" })).toHaveCount(0);

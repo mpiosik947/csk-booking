@@ -84,7 +84,7 @@ export async function GET(request: Request) {
       status: 200,
       headers: {
         "Content-Type": "application/json; charset=utf-8",
-        "Content-Disposition": 'attachment; filename="csk-booking-my-data.json"',
+        "Content-Disposition": 'attachment; filename="strzelajtu-my-data.json"',
         "Cache-Control": "no-store, max-age=0",
         "X-Content-Type-Options": "nosniff",
       },

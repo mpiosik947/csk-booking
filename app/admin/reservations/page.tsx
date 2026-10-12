@@ -786,7 +786,7 @@ export default function AdminReservationsPage({ tenantId, tenantSlug }: Readonly
 
   return (
     <AdminShell
-      eyebrow="CSK Booking"
+      eyebrow="StrzelajTu.pl"
       title="Rezerwacje"
       description="Podgląd rezerwacji klientów, statusów płatności i obsługa wizyt."
       actions={

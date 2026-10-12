@@ -536,7 +536,7 @@ export default function EventsPage({ tenantId, tenantSlug }: { tenantId: string;
       <section className="mx-auto max-w-6xl rounded-[2rem] border border-[#30372c] bg-[#141814] p-5 shadow-2xl shadow-black/20 sm:p-8">
         <header className="mb-8 sm:mb-10">
           <p className="mb-3 text-xs font-semibold uppercase tracking-[0.24em] text-[#d7c895] sm:text-sm">
-            CSK BOOKING
+            StrzelajTu.pl
           </p>
 
           <h1 className="text-3xl font-bold text-[#f2efe4] sm:text-4xl">

@@ -257,7 +257,7 @@ export const CREATE_RESERVATION_MESSAGES: Record<
   not_allowed: "To konto nie może tworzyć rezerwacji.",
   profile_not_found: "Nie znaleziono profilu użytkownika.",
   profile_incomplete: "Uzupełnij imię i nazwisko, e-mail oraz telefon w profilu.",
-  profile_rejected: "Konto zostało odrzucone. Skontaktuj się z obsługą CSK.",
+  profile_rejected: "Konto zostało odrzucone. Skontaktuj się z obsługą tej strzelnicy.",
   verification_limit_reached:
     "Konto oczekuje na weryfikację i ma już aktywną rezerwację.",
   invalid_request: "Nieprawidłowe dane rezerwacji.",
@@ -270,7 +270,7 @@ export const CREATE_RESERVATION_MESSAGES: Record<
   invalid_shooters_count: "Wybierz prawidłową liczbę strzelców.",
   capacity_exceeded: "Liczba strzelców przekracza pojemność osi.",
   contact_required:
-    "Dla większej liczby osób wymagany jest kontakt z obsługą CSK.",
+    "Dla większej liczby osób wymagany jest kontakt z obsługą tej strzelnicy.",
   lane_not_found: "Nie znaleziono wybranej osi.",
   lane_inactive: "Wybrana oś nie jest obecnie aktywna.",
   lane_not_bookable:

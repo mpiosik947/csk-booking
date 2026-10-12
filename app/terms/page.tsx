@@ -7,10 +7,10 @@ export default function TermsPage() {
       <article className="mx-auto max-w-4xl rounded-[2rem] border border-[#30372c] bg-[#141814] p-5 shadow-2xl shadow-black/20 sm:p-8 lg:p-10">
         <header className="mb-8 text-center">
           <Image
-            src="/login-brand.png"
-            alt="Centrum Szkolenia Krutla"
-            width={1536}
-            height={1024}
+            src="/brand/strzelajtu/logo-horizontal.png"
+            alt="StrzelajTu.pl"
+            width={2048}
+            height={682}
             className="mx-auto h-auto w-full max-w-[220px] sm:max-w-[260px]"
             priority
           />
@@ -91,8 +91,7 @@ export default function TermsPage() {
 
             <div className="space-y-3 leading-7 text-[#a9ada4]">
               <p>
-                1. Rezerwacja osi odbywa się przez system rezerwacyjny CSK
-                Booking.
+                1. Rezerwacja osi odbywa się przez system rezerwacyjny StrzelajTu.pl.
               </p>
               <p>
                 2. Rezerwacja zostaje potwierdzona automatycznie po wybraniu

@@ -62,7 +62,7 @@ export default function BookingPage({ tenantId, tenantSlug }: { tenantId: string
       <section className="mx-auto max-w-5xl rounded-[2rem] border border-[#30372c] bg-[#141814] p-5 shadow-2xl shadow-black/20 sm:p-8">
         <header>
           <p className="mb-3 text-xs font-semibold uppercase tracking-[0.22em] text-[#d7c895]">
-            CSK BOOKING
+            StrzelajTu.pl
           </p>
           <h1 className="text-3xl font-bold sm:text-4xl">Zarezerwuj oś</h1>
           <p className="mt-3 max-w-3xl leading-7 text-[#a9ada4]">

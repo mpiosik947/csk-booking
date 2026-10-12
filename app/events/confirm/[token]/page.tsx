@@ -17,10 +17,10 @@ export default async function ConfirmEventReservePage({
     <main className="flex min-h-screen items-center bg-[#090b09] px-4 py-6 text-[#f2efe4] sm:px-6 sm:py-8">
       <section className="mx-auto w-full max-w-2xl rounded-[2rem] border border-[#30372c] bg-[#141814] p-6 shadow-2xl shadow-black/20 sm:p-9">
         <Image
-          src="/login-brand.png"
-          alt="Centrum Szkolenia Krutla"
-          width={1536}
-          height={1024}
+          src="/brand/strzelajtu/logo-horizontal.png"
+          alt="StrzelajTu.pl"
+          width={2048}
+          height={682}
           className="mx-auto h-auto w-full max-w-[260px] sm:max-w-[300px]"
           priority
         />
