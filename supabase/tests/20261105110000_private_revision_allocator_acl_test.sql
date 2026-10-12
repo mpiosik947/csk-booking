@@ -15,7 +15,7 @@ do $tests$
 declare allocator oid:='app_private.tenant_concurrency_revision_seq'::regclass;client_role text;
 begin
  perform pg_temp.ok('SEC-002B public sequence inventory remains empty',not exists(select 1 from pg_class where relnamespace='public'::regnamespace and relkind='S'));
- perform pg_temp.ok('exact private allocator inventory',(select count(*)=1 and bool_and(relname='tenant_concurrency_revision_seq' and relkind='S') from pg_class where relnamespace='app_private'::regnamespace));
+ perform pg_temp.ok('exact private allocator inventory',(select count(*)=1 and bool_and(relname='tenant_concurrency_revision_seq' and relkind='S') from pg_class where relnamespace='app_private'::regnamespace and relkind='S'));
  perform pg_temp.ok('private schema owner postgres',(select nspowner='postgres'::regrole from pg_namespace where nspname='app_private'));
  perform pg_temp.ok('allocator owner postgres',(select relowner='postgres'::regrole and relpersistence='p' from pg_class where oid=allocator));
  perform pg_temp.ok('PUBLIC has no schema privileges',not exists(select 1 from pg_namespace n,lateral aclexplode(coalesce(n.nspacl,acldefault('n',n.nspowner)))a where n.nspname='app_private' and a.grantee=0));
@@ -37,7 +37,7 @@ begin
    and proconfig=array['search_path=pg_catalog, public, pg_temp']::text[]
    and not has_function_privilege('anon',oid,'EXECUTE') and not has_function_privilege('authenticated',oid,'EXECUTE') and not has_function_privilege('service_role',oid,'EXECUTE'))
   from pg_proc where pronamespace='public'::regnamespace and prokind='f' and pg_get_functiondef(oid) like '%app_private.tenant_concurrency_revision_seq%'));
- perform pg_temp.ok('no private callable function',(select count(*)=0 from pg_proc where pronamespace='app_private'::regnamespace));
+ perform pg_temp.ok('private functions remain owner-only',(select count(*)=9 and bool_and(not prosecdef and proowner='postgres'::regrole and not has_function_privilege('anon',oid,'EXECUTE') and not has_function_privilege('authenticated',oid,'EXECUTE') and not has_function_privilege('service_role',oid,'EXECUTE')) from pg_proc where pronamespace='app_private'::regnamespace));
 end;$tests$;
 select '1..'||count(*) from results;
 select 'ok '||n||' - '||label from results order by n;

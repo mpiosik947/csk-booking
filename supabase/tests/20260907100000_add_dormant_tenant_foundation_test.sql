@@ -317,7 +317,7 @@ begin
       select 1 from information_schema.columns
       where table_schema = 'public' and column_name = 'tenant_id'
         and table_name not in (
-          'tenant_memberships', 'shooting_lanes', 'reservations', 'lane_blocks',
+          'legal_documents', 'tenant_memberships', 'shooting_lanes', 'reservations', 'lane_blocks',
           'events', 'event_lanes', 'event_registrations', 'email_deliveries',
           'audit_logs', 'tenant_public_profiles', 'tenant_public_pricing_items', 'tenant_user_admin_notes', 'tenant_user_verifications',
           'platform_tenant_lifecycle_requests','platform_admin_management_requests','platform_plan_change_requests','platform_tenant_creation_requests','tenant_plan_assignments','platform_audit_logs','external_settlement_records','tenant_domains','event_instructors'
