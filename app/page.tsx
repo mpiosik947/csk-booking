@@ -2,8 +2,18 @@ import PlatformBrand from "@/app/_components/PlatformBrand";
 import PublicAuthControls from "@/app/_components/PublicAuthControls";
 import DirectorySearchInput from "@/app/_components/DirectorySearchInput";
 import Image from "next/image";
+import type { ReactNode } from "react";
 import Link from "next/link";
 import { getPublicTenantDirectory } from "@/lib/server/public-tenant-directory";
+
+import { getTenantPublicAccess } from "@/lib/server/tenant-public-access";
+import PublicAccessSessionBoundary from "@/app/_components/PublicAccessSessionBoundary";
+
+export const dynamic = "force-dynamic";
+
+function DirectoryCard({ href, className, children }: { href: string | null; className: string; children: ReactNode }) {
+  return href ? <Link href={href} className={className}>{children}</Link> : <article className={className}>{children}</article>;
+}
 
 function SearchIcon() {
   return (
@@ -35,12 +45,14 @@ export default async function Home({
     typeof query === "string" ? query : "",
   );
 
+  const availability = await Promise.all(directory.items.map((tenant) => getTenantPublicAccess(tenant.publicSlug)));
+
   return (
-    <main className="platform-ui min-h-screen bg-[#080B09] px-4 py-8 text-[#F4F3EE] sm:px-6 sm:py-12">
+    <PublicAccessSessionBoundary><main className="platform-ui min-h-screen bg-[#080B09] px-4 py-8 text-[#F4F3EE] sm:px-6 sm:py-12">
       <div className="mx-auto w-full max-w-6xl">
         <header className="text-center">
           <div className="flex flex-col items-center justify-between gap-4 sm:flex-row sm:text-left">
-            <PlatformBrand />
+            <PlatformBrand /><span className="text-xs font-bold tracking-widest text-[#d7c895]">WERSJA TESTOWA</span>
             <nav aria-label="Konto StrzelajTu.pl" className="flex items-center gap-3">
               <PublicAuthControls />
             </nav>
@@ -93,10 +105,12 @@ export default async function Home({
             </div>
           ) : (
             <ul className={`mt-4 grid gap-4 ${directory.items.length === 1 ? "" : "sm:grid-cols-2"}`}>
-              {directory.items.map((tenant) => (
+              {directory.items.map((tenant, index) => {
+                const access = availability[index];
+                return (
                 <li key={tenant.publicSlug} className="min-w-0">
-                  <Link
-                    href={`/${tenant.publicSlug}`}
+                  <DirectoryCard
+                    href={access?.allowed ? `/${tenant.publicSlug}` : null}
                     className="group flex min-h-36 items-center gap-3 rounded-2xl border border-[#4c5b34] bg-[#1a1f19] p-3 transition hover:-translate-y-0.5 hover:border-[#7A8D36] hover:bg-[#222b1a] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#a8b58a] sm:gap-4 sm:p-5"
                   >
                     <span className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-[#556333] bg-[#0f120f] text-xl font-black text-[#a4b778] sm:h-24 sm:w-24">
@@ -109,13 +123,12 @@ export default async function Home({
                         {tenant.name}
                       </span>
                       <span className="mt-2 block text-sm text-[#aeb4a8]">{tenant.city}</span>
+                      {!access?.allowed && <span className="mt-2 block text-sm font-semibold text-[#d7c895]">{access?.state === "coming_soon" ? "Dostępna wkrótce" : "Chwilowo niedostępna"}</span>}
                     </span>
-                    <span className="shrink-0 text-[#9da88b] transition group-hover:translate-x-1">
-                      <ArrowIcon />
-                    </span>
-                  </Link>
+                    {access?.allowed && <span className="shrink-0 text-[#9da88b] transition group-hover:translate-x-1"><ArrowIcon /></span>}
+                  </DirectoryCard>
                 </li>
-              ))}
+              ); })}
             </ul>
           )}
         </section>
@@ -135,6 +148,6 @@ export default async function Home({
           </div>
         </footer>
       </div>
-    </main>
+    </main></PublicAccessSessionBoundary>
   );
 }

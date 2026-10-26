@@ -1,3 +1,4 @@
+import { fetchTenantPublicAccess, publicAccessError } from "@/lib/tenant-public-access";
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import {
@@ -90,6 +91,11 @@ export async function POST(request: Request) {
     }
 
     const tenantSlug = new URL(request.url).searchParams.get("tenant");
+    if (tenantSlug) {
+      const access = await fetchTenantPublicAccess(supabase, tenantSlug);
+      if (!access) return NextResponse.json({ error: "Nie udało się sprawdzić dostępności obiektu." }, { status: 503 });
+      if (!access.allowed) return NextResponse.json({ code: "TENANT_PUBLIC_ACCESS_UNAVAILABLE", error: "Dostępna wkrótce" }, { status: 423 });
+    }
     if (!tenantSlug ||
         !await tenantResourceMatches(supabase, tenantSlug, "shooting_lanes", body.laneId)) {
       return jsonError("invalid_request", 400);
@@ -110,6 +116,8 @@ export async function POST(request: Request) {
     });
 
     if (error) {
+      const unavailable = publicAccessError(error);
+      if (unavailable) return NextResponse.json(unavailable, { status: unavailable.status });
       console.error("Create reservation RPC failed", { code: error.code });
       return jsonError("internal_error", 500);
     }

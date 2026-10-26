@@ -37,7 +37,7 @@ begin
    and proconfig=array['search_path=pg_catalog, public, pg_temp']::text[]
    and not has_function_privilege('anon',oid,'EXECUTE') and not has_function_privilege('authenticated',oid,'EXECUTE') and not has_function_privilege('service_role',oid,'EXECUTE'))
   from pg_proc where pronamespace='public'::regnamespace and prokind='f' and pg_get_functiondef(oid) like '%app_private.tenant_concurrency_revision_seq%'));
- perform pg_temp.ok('private functions remain owner-only',(select count(*)=9 and bool_and(not prosecdef and proowner='postgres'::regrole and not has_function_privilege('anon',oid,'EXECUTE') and not has_function_privilege('authenticated',oid,'EXECUTE') and not has_function_privilege('service_role',oid,'EXECUTE')) from pg_proc where pronamespace='app_private'::regnamespace));
+ perform pg_temp.ok('private functions remain owner-only',(select count(*)=11 and bool_and(not prosecdef and proowner='postgres'::regrole and not has_function_privilege('anon',oid,'EXECUTE') and not has_function_privilege('authenticated',oid,'EXECUTE') and not has_function_privilege('service_role',oid,'EXECUTE')) from pg_proc where pronamespace='app_private'::regnamespace));
 end;$tests$;
 select '1..'||count(*) from results;
 select 'ok '||n||' - '||label from results order by n;

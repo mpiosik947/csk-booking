@@ -156,7 +156,7 @@ begin
     (v_block_b_inactive,v_tenant_b,v_lane_b_active,date '2099-11-04',time '10:00',time '11:00','[TEST] B inactive',false);
 
   perform pg_temp.ok(1,'exactly six booking SELECT policies exist',
-    (select pg_catalog.count(*)=6 from pg_catalog.pg_policies where schemaname='public' and tablename in ('shooting_lanes','reservations','lane_blocks') and cmd='SELECT'),
+    (select pg_catalog.count(*)=8 from pg_catalog.pg_policies where schemaname='public' and tablename in ('shooting_lanes','reservations','lane_blocks') and cmd='SELECT'),
     'Booking policy inventory differs.');
   perform pg_temp.ok(2,'booking policies no longer reference legacy role helpers',
     not exists(select 1 from pg_catalog.pg_policies where schemaname='public' and tablename in ('shooting_lanes','reservations','lane_blocks') and coalesce(qual,'') ~ '\m(is_admin|is_admin_or_employee|is_admin_or_staff)\M'),

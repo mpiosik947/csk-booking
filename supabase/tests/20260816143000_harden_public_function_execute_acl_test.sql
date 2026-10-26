@@ -27,6 +27,10 @@ create temporary table expected_function_acl(
 ) on commit drop;
 
 insert into expected_function_acl values
+  ('public.can_access_tenant_public_business_v1(uuid)','B',true,true,false),
+  ('public.get_public_tenant_access_v1(text)','B',true,true,false),
+  ('public.platform_get_tenant_public_access_v1(uuid)','C',false,true,false),
+  ('public.platform_set_tenant_public_access_v1(uuid,text,text,uuid,uuid)','C',false,true,false),
   ('public.get_published_legal_document_v1(text,uuid,uuid)','B',true,true,false),
   ('public.get_my_legal_requirements_v1(text,uuid)','B',false,true,false),
   ('public.accept_my_account_legal_v1(uuid,jsonb,jsonb)','B',false,true,false),
@@ -396,8 +400,8 @@ begin
     and procedure.proname<>'csk_sec002_default_acl_probe';
 
   perform pg_temp.record_result(1,'Complete public function inventory',
-    (select pg_catalog.count(*)=258 from pg_temp.expected_function_acl)
-    and v_actual_count=258
+    (select pg_catalog.count(*)=262 from pg_temp.expected_function_acl)
+    and v_actual_count=262
     and not exists(
       select 1 from pg_temp.expected_function_acl expected
       where pg_catalog.to_regprocedure(expected.signature) is null
@@ -434,7 +438,7 @@ begin
       where pg_catalog.has_function_privilege('anon',expected.signature,'EXECUTE')
         is distinct from expected.anon_execute
     )
-    and (select pg_catalog.count(*)=15 from pg_temp.expected_function_acl where anon_execute),
+    and (select pg_catalog.count(*)=17 from pg_temp.expected_function_acl where anon_execute),
     'anon can execute only the fifteen intended public readers/policy helpers, including allowlisted tenant content.');
 
   perform pg_temp.record_result(4,'Exact authenticated ACL matrix',
@@ -443,7 +447,7 @@ begin
       where pg_catalog.has_function_privilege('authenticated',expected.signature,'EXECUTE')
         is distinct from expected.authenticated_execute
     )
-    and (select pg_catalog.count(*)=131 from pg_temp.expected_function_acl where authenticated_execute),
+    and (select pg_catalog.count(*)=135 from pg_temp.expected_function_acl where authenticated_execute),
     'authenticated has exactly 131 independently authorized RPC grants including narrow instructor email authorization.');
 
   perform pg_temp.record_result(5,'Exact service_role ACL matrix',
@@ -501,7 +505,7 @@ begin
     'Future functions created by postgres receive no client or PUBLIC EXECUTE.');
 
   perform pg_temp.record_result(8,'Application function creator scope is exact',
-    (select pg_catalog.count(*)=258
+    (select pg_catalog.count(*)=262
       from pg_catalog.pg_proc procedure
       join pg_catalog.pg_namespace namespace on namespace.oid=procedure.pronamespace
       join pg_catalog.pg_roles owner_role on owner_role.oid=procedure.proowner

@@ -1,7 +1,8 @@
+import { getTenantPublicAccess } from "@/lib/server/tenant-public-access";
 import type { Metadata } from "next";
 import { headers } from "next/headers";
 import { notFound } from "next/navigation";
-import { PublicTenantLanding } from "@/app/_components/PublicTenantLanding";
+import { PublicTenantLanding } from "@/app/_components/PublicTenantAvailabilityLanding";
 import { renderPublicTenantSubpage } from "@/app/_components/PublicTenantSubpage";
 import { getPublicTenantLanding } from "@/lib/server/public-tenant-directory";
 import { resolvePublicDomain, tenantCanonical } from "@/lib/server/tenant-domain";
@@ -22,7 +23,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { publicSlug, section } = await context(params);
   const tenant = await getPublicTenantLanding(publicSlug);
   if (!tenant) return {};
-  return { title: `${tenant.name} | StrzelajTu.pl`, alternates: { canonical: await tenantCanonical(publicSlug, section) } };
+  return { robots: (await getTenantPublicAccess(publicSlug))?.state === "live" ? undefined : { index: false, follow: false }, title: `${tenant.name} | StrzelajTu.pl`, alternates: { canonical: await tenantCanonical(publicSlug, section) } };
 }
 export default async function Page({ params }: Props) {
   const { publicSlug, section } = await context(params);

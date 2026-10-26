@@ -11,6 +11,7 @@ import {
   type BookingLane,
   type BookingPricingRule,
 } from "../../lib/public-booking-configuration";
+import { publicAccessError } from "@/lib/tenant-public-access";
 import BookingForm from "./BookingForm";
 
 export default function BookingPage({ tenantId, tenantSlug }: { tenantId: string; tenantSlug: string }) {
@@ -30,7 +31,7 @@ export default function BookingPage({ tenantId, tenantSlug }: { tenantId: string
 
       if (configurationResult.error) {
         setMessage(
-          "Nie udało się pobrać aktualnej konfiguracji rezerwacji. Spróbuj ponownie."
+          publicAccessError(configurationResult.error)?.error ?? "Nie udało się pobrać aktualnej konfiguracji rezerwacji. Spróbuj ponownie."
         );
         setLoading(false);
         return;

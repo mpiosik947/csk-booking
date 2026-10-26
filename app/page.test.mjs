@@ -29,7 +29,7 @@ test("home search is accessible, bounded and server-backed", () => {
 });
 
 test("directory cards use public slug routes and have safe empty/error states", () => {
-  assert.match(source, /href=\{`\/\$\{tenant\.publicSlug\}`\}/u);
+  assert.match(source, /href=\{access\?\.allowed \? `\/\$\{tenant\.publicSlug\}` : null\}/u);
   assert.match(source, /Nie znaleźliśmy strzelnicy/u);
   assert.match(source, /Nie udało się pobrać katalogu/u);
   assert.match(source, /sm:grid-cols-2/u);

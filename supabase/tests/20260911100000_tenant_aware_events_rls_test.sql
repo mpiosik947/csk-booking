@@ -196,12 +196,12 @@ begin
     and pg_temp.as_actor_text('authenticated',v_suspended_admin,pg_catalog.format('public.has_tenant_role_v1(%L,array[''admin'']::text[])',v_csk))='false',
     'Inactive membership authorized privileged access.');
   perform pg_temp.ok(4,'booking RLS policies remain tenant-aware',
-    (select pg_catalog.count(*)=6 from pg_catalog.pg_policies where schemaname='public' and tablename in('shooting_lanes','reservations','lane_blocks'))
+    (select pg_catalog.count(*)=8 from pg_catalog.pg_policies where schemaname='public' and tablename in('shooting_lanes','reservations','lane_blocks'))
     and not exists(select 1 from pg_catalog.pg_policies where schemaname='public' and tablename in('shooting_lanes','reservations','lane_blocks') and coalesce(qual,'') ~ '\m(is_admin|is_admin_or_employee|is_admin_or_staff)\M'),
     '9C-2A/2B policy foundation regressed.');
 
   perform pg_temp.ok(5,'exactly six Events SELECT policies exist',
-    (select pg_catalog.count(*)=6 from pg_catalog.pg_policies where schemaname='public' and tablename in('events','event_lanes','event_registrations') and cmd='SELECT'),
+    (select pg_catalog.count(*)=7 from pg_catalog.pg_policies where schemaname='public' and tablename in('events','event_lanes','event_registrations') and cmd='SELECT'),
     'Events policy inventory differs.');
   perform pg_temp.ok(6,'Events policies no longer trust legacy global role helpers',
     not exists(select 1 from pg_catalog.pg_policies where schemaname='public' and tablename in('events','event_lanes','event_registrations') and coalesce(qual,'') ~ '\m(is_admin|is_admin_or_employee|is_admin_or_staff)\M'),

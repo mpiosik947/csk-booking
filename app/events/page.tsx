@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { publicAccessError } from "@/lib/tenant-public-access";
 import { supabase } from "../../lib/supabase";
 import { reportClientError } from "../../lib/safe-client-error";
 import {
@@ -106,6 +107,7 @@ export default function EventsPage({ tenantId, tenantSlug }: { tenantId: string;
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const [totalEvents, setTotalEvents] = useState(0);
+  const [unavailableMessage, setUnavailableMessage] = useState("");
   const [loadError, setLoadError] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
   const [message, setMessage] = useState("");
@@ -176,6 +178,8 @@ export default function EventsPage({ tenantId, tenantSlug }: { tenantId: string;
       setLoading(false);
 
       if (error) {
+        setUnavailableMessage(publicAccessError(error)?.error ?? "");
+        setEvents([]);
         reportClientError("Public events read failed", error);
         setLoadError(true);
         return;
@@ -830,7 +834,7 @@ export default function EventsPage({ tenantId, tenantSlug }: { tenantId: string;
             role="alert"
             className="rounded-2xl border border-[#744545] bg-[#2a1b1b] p-6 text-[#e0a0a0]"
           >
-            <p>Nie udało się pobrać szkoleń. Spróbuj ponownie później.</p>
+            <p>{unavailableMessage || "Nie udało się pobrać szkoleń. Spróbuj ponownie później."}</p>
             <button
               type="button"
               onClick={() => setReloadKey((current) => current + 1)}

@@ -1,3 +1,6 @@
+import PublicAccessSessionBoundary from "./PublicAccessSessionBoundary";
+import { getTenantPublicAccess } from "@/lib/server/tenant-public-access";
+import TenantComingSoon from "./TenantComingSoon";
 import Image from "next/image";
 import Link from "next/link";
 import { notFound, permanentRedirect } from "next/navigation";
@@ -10,16 +13,18 @@ const titles = { cennik: "Cennik", "o-obiekcie": "O obiekcie", kontakt: "Kontakt
 
 export async function publicSubpageMetadata(slug: string, section: PublicSection): Promise<Metadata> {
   const tenant = await getPublicSubpageTenant(slug, section);
-  return tenant ? { title: `${titles[section]} — ${tenant.name}`, alternates: { canonical: await tenantCanonical(tenant.publicSlug, section) } } : {};
+  return tenant ? { robots: (await getTenantPublicAccess(slug))?.state === "live" ? undefined : { index: false, follow: false }, title: `${titles[section]} — ${tenant.name}`, alternates: { canonical: await tenantCanonical(tenant.publicSlug, section) } } : {};
 }
 
 export async function renderPublicTenantSubpage(slug: string, section: PublicSection, customDomain = false) {
   const tenant = await getPublicSubpageTenant(slug, section);
   if (!tenant) notFound();
   if (slug !== tenant.publicSlug) permanentRedirect(`/${tenant.publicSlug}/${section}`);
+  const access = await getTenantPublicAccess(slug);
+  if (!access?.allowed) return <TenantComingSoon name={tenant.name} unavailable={!access} customDomain={customDomain} />;
   const content = await getPublicTenantContent(tenant.publicSlug);
   const prices = content?.pricing_items ?? null;
-  return <main className="min-h-screen bg-[#090b09] px-4 py-6 text-[#f2efe4] sm:px-6 sm:py-8">
+  const pageContent = <main className="min-h-screen bg-[#090b09] px-4 py-6 text-[#f2efe4] sm:px-6 sm:py-8">
     <article className="mx-auto w-full max-w-[880px] rounded-[2rem] border border-[#30372c] bg-[#141814] p-5 sm:p-8">
       <header className="text-center">
         {tenant.logoPath && <Image src={tenant.logoPath} alt={`Logo ${tenant.name}`} width={1536} height={1024} priority className="mx-auto h-auto w-full max-w-[280px] rounded-xl" />}
@@ -64,4 +69,5 @@ export async function renderPublicTenantSubpage(slug: string, section: PublicSec
       </nav>
     </article>
   </main>;
+  return customDomain ? pageContent : <PublicAccessSessionBoundary>{pageContent}</PublicAccessSessionBoundary>;
 }

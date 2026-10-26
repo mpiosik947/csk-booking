@@ -197,8 +197,8 @@ begin
   perform pg_temp.ok(29, 'later approved RLS remains isolated to approved SAAS-9C tables',
     (select pg_catalog.md5(coalesce(pg_catalog.string_agg(pg_catalog.concat_ws('|',tablename,policyname,cmd,roles::text,qual,with_check),E'\n' order by tablename,policyname),''))='d41d8cd98f00b204e9800998ecf8427e' from pg_catalog.pg_policies where schemaname='public' and tablename not in ('tenant_memberships','shooting_lanes','reservations','lane_blocks','events','event_lanes','event_registrations','audit_logs','profiles','lane_booking_rules','lane_booking_durations','lane_pricing_rules'))
     and (select pg_catalog.count(*)=1 from pg_catalog.pg_policies where schemaname='public' and tablename='tenant_memberships')
-    and (select pg_catalog.count(*)=6 from pg_catalog.pg_policies where schemaname='public' and tablename in ('shooting_lanes','reservations','lane_blocks') and cmd='SELECT')
-    and (select pg_catalog.count(*)=6 from pg_catalog.pg_policies where schemaname='public' and tablename in ('events','event_lanes','event_registrations') and cmd='SELECT')
+    and (select pg_catalog.count(*)=8 from pg_catalog.pg_policies where schemaname='public' and tablename in ('shooting_lanes','reservations','lane_blocks') and cmd='SELECT')
+    and (select pg_catalog.count(*)=7 from pg_catalog.pg_policies where schemaname='public' and tablename in ('events','event_lanes','event_registrations') and cmd='SELECT')
     and (select pg_catalog.count(*)=9 from pg_catalog.pg_policies where schemaname='public' and tablename in ('audit_logs','profiles','lane_booking_rules','lane_booking_durations','lane_pricing_rules') and cmd='SELECT'),
     'RLS changed outside the approved SAAS-9C phases.');
 
@@ -214,7 +214,7 @@ begin
     pg_catalog.md5(replace(replace(pg_catalog.pg_get_functiondef('public.get_my_role()'::pg_catalog.regprocedure),chr(13)||chr(10),chr(10)),chr(13),chr(10)))='eec66d2c695d3892caec4d4242756ed0'
     and pg_catalog.md5(replace(replace(pg_catalog.pg_get_functiondef('public.is_admin()'::pg_catalog.regprocedure),chr(13)||chr(10),chr(10)),chr(13),chr(10)))='d7143dadec70a91da2a1f62bf53bbed8'
     and pg_catalog.md5(replace(replace(pg_catalog.pg_get_functiondef('public.is_admin_or_employee()'::pg_catalog.regprocedure),chr(13)||chr(10),chr(10)),chr(13),chr(10)))='15514f37a714f2592fb496820d2b8277'
-    and pg_catalog.md5(replace(replace(pg_catalog.pg_get_functiondef('public.create_reservation_v2(uuid,date,time without time zone,integer,integer,uuid,text)'::pg_catalog.regprocedure),chr(13)||chr(10),chr(10)),chr(13),chr(10)))='ff1c273379e9ee3af3a1a60d131af81b',
+    and pg_catalog.md5(replace(replace(pg_catalog.pg_get_functiondef('public.create_reservation_v2(uuid,date,time without time zone,integer,integer,uuid,text)'::pg_catalog.regprocedure),chr(13)||chr(10),chr(10)),chr(13),chr(10)))='06b3c00cfa364b432754c2817cf11f95',
     'Critical function fingerprint changed.');
 
   perform pg_temp.ok(32, 'temporarily disabled backfill triggers are enabled',

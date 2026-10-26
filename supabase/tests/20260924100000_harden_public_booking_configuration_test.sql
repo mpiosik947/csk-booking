@@ -23,7 +23,7 @@ declare
   a_count integer;
   b_count integer;
 begin
-  perform pg_temp.ok(1,'wrapper target fingerprint includes PRODUCT-10D entitlement gate',md5(replace(replace(pg_get_functiondef('public.get_public_booking_configuration_v2(uuid)'::regprocedure),E'\r\n',E'\n'),E'\r',E'\n'))='96b419fa86c59606bc6f953abbeac73f');
+  perform pg_temp.ok(1,'wrapper target fingerprint includes PRODUCT-10D entitlement gate',md5(replace(replace(pg_get_functiondef('public.get_public_booking_configuration_v2(uuid)'::regprocedure),E'\r\n',E'\n'),E'\r',E'\n'))='9f587ede4396a7fa08dffd078d4c8d89');
   perform pg_temp.ok(2,'core target fingerprint exact',md5(replace(replace(pg_get_functiondef('public.get_public_booking_configuration_v1__saas9d4e_core(uuid)'::regprocedure),E'\r\n',E'\n'),E'\r',E'\n'))='ff6f0a91a7c8ad66d885e2fd0c5df265');
   perform pg_temp.ok(3,'wrapper is stable postgres SECURITY DEFINER SP1',exists(select 1 from pg_proc p join pg_roles r on r.oid=p.proowner where p.oid='public.get_public_booking_configuration_v2(uuid)'::regprocedure and p.prosecdef and p.provolatile='s' and r.rolname='postgres' and p.proconfig=array['search_path=pg_catalog, public, pg_temp']::text[]));
   perform pg_temp.ok(4,'core is stable postgres SECURITY INVOKER SP1',exists(select 1 from pg_proc p join pg_roles r on r.oid=p.proowner where p.oid='public.get_public_booking_configuration_v1__saas9d4e_core(uuid)'::regprocedure and not p.prosecdef and p.provolatile='s' and r.rolname='postgres' and p.proconfig=array['search_path=pg_catalog, public, pg_temp']::text[]));
@@ -34,7 +34,7 @@ begin
   perform pg_temp.ok(9,'wrapper delegates fail-closed public entitlement and tenant validation',strpos(pg_get_functiondef('public.get_public_booking_configuration_v2(uuid)'::regprocedure),'active_single_tenant_id_v1()')=0 and strpos(pg_get_functiondef('public.get_public_booking_configuration_v2(uuid)'::regprocedure),'get_public_tenant_feature_access_v1')>0);
   perform pg_temp.ok(10,'core filters root tenant',pg_get_functiondef('public.get_public_booking_configuration_v1__saas9d4e_core(uuid)'::regprocedure) ~ 'resource\.tenant_id\s*=\s*p_tenant_id');
   perform pg_temp.ok(11,'core binds parent to resource tenant',pg_get_functiondef('public.get_public_booking_configuration_v1__saas9d4e_core(uuid)'::regprocedure) ~ 'parent\.tenant_id\s*=\s*resource\.tenant_id');
-  perform pg_temp.ok(12,'SECURITY DEFINER count is 100 after PRODUCT-10C public landing',(select count(*)=162 from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.prosecdef));
+  perform pg_temp.ok(12,'SECURITY DEFINER count is 100 after PRODUCT-10C public landing',(select count(*)=166 from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.prosecdef));
   perform pg_temp.ok(13,'compatibility defaults are retired',(select count(*)=0 from information_schema.columns where table_schema='public' and table_name in('shooting_lanes','reservations','lane_blocks','events','event_lanes','event_registrations','email_deliveries') and column_name='tenant_id' and column_default is not null));
   select count(*) into a_count from public.get_public_booking_configuration_v2(tenant_a);
   perform pg_temp.ok(14,'explicit active CSK selector resolves exactly its configuration',a_count=(select count(*) from public.get_public_booking_configuration_v1__saas9d4e_core(tenant_a)));

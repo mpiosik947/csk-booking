@@ -1,6 +1,7 @@
+import { getTenantPublicAccess } from "@/lib/server/tenant-public-access";
 import type { Metadata } from "next";
 import { notFound, permanentRedirect } from "next/navigation";
-import { PublicTenantLanding } from "@/app/_components/PublicTenantLanding";
+import { PublicTenantLanding } from "@/app/_components/PublicTenantAvailabilityLanding";
 import { getPublicTenantLanding } from "@/lib/server/public-tenant-directory";
 import { tenantCanonical } from "@/lib/server/tenant-domain";
 
@@ -13,6 +14,7 @@ export async function generateMetadata({
   const tenant = await getPublicTenantLanding(slug);
   if (!tenant) return {};
   return {
+    robots: (await getTenantPublicAccess(tenant.publicSlug))?.state === "live" ? undefined : { index: false, follow: false },
     title: `${tenant.name} | StrzelajTu.pl`,
     description: tenant.description ?? `Rezerwacje online — ${tenant.name}, ${tenant.city}.`,
     alternates: { canonical: await tenantCanonical(tenant.publicSlug) },

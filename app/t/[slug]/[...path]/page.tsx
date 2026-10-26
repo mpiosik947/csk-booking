@@ -22,6 +22,11 @@ import AdminCheckInPage from "@/app/admin/check-in/page";
 import AdminCalendarPage from "@/app/admin/calendar/page";
 import TenantAdminSettings from "@/app/admin/settings/TenantAdminSettings";
 
+import { getTenantPublicAccess } from "@/lib/server/tenant-public-access";
+import TenantComingSoon from "@/app/_components/TenantComingSoon";
+import PublicAccessSessionBoundary from "@/app/_components/PublicAccessSessionBoundary";
+export const metadata = { robots: { index: false, follow: false } };
+
 export default async function TenantModuleShell({
   params,
 }: Readonly<{ params: Promise<{ slug: string; path: string[] }> }>) {
@@ -32,6 +37,11 @@ export default async function TenantModuleShell({
   // The layout checked the public slug. Recheck here before privileged work.
   const publicContext = await getPublicRouteContext(slug);
   if (!publicContext.ok) notFound();
+
+  if (route.kind === "public") {
+    const access = await getTenantPublicAccess(slug);
+    if (!access?.allowed) return <PublicAccessSessionBoundary><TenantComingSoon name={publicContext.value.name} unavailable={!access} /></PublicAccessSessionBoundary>;
+  }
 
   if (route.kind === "user" || route.kind === "staff") {
     const result = route.kind === "staff"
@@ -58,8 +68,8 @@ export default async function TenantModuleShell({
     );
     if (!hasFeature) notFound();
   }
-  if (route.path === "booking") return <BookingPage tenantId={tenantId} tenantSlug={slug} />;
-  if (route.path === "events") return <EventsPage tenantId={tenantId} tenantSlug={slug} />;
+  if (route.path === "booking") return <PublicAccessSessionBoundary><BookingPage tenantId={tenantId} tenantSlug={slug} /></PublicAccessSessionBoundary>;
+  if (route.path === "events") return <PublicAccessSessionBoundary><EventsPage tenantId={tenantId} tenantSlug={slug} /></PublicAccessSessionBoundary>;
   if (route.path === "my-reservations") return <MyReservationsPage tenantId={tenantId} tenantSlug={slug} />;
   if (route.path === "my-events") return <MyEventsPage tenantId={tenantId} tenantSlug={slug} />;
   if (route.kind === "staff" && route.path === "admin/events") {

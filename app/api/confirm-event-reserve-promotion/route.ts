@@ -1,3 +1,4 @@
+import { publicAccessError } from "@/lib/tenant-public-access";
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import {
@@ -34,6 +35,8 @@ function getAuthenticatedSupabaseClient(accessToken: string) {
 }
 
 function getRpcErrorResponse(error: { code?: string }) {
+  const unavailable = publicAccessError(error);
+  if (unavailable) return NextResponse.json(unavailable, { status: unavailable.status });
   if (error.code === "42501") {
     return NextResponse.json(
       {

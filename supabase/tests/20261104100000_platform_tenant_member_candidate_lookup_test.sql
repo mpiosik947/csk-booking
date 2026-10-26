@@ -167,8 +167,8 @@ begin
  perform pg_temp.ok('stable postgres definer fixed path',(select provolatile='s' and prosecdef and pg_get_userbyid(proowner)='postgres' and proconfig=array['search_path=pg_catalog, public, pg_temp'] from pg_proc where oid='public.platform_lookup_tenant_admin_candidate_v1(uuid,text)'::regprocedure));
  perform pg_temp.ok('authenticated execute only',has_function_privilege('authenticated','public.platform_lookup_tenant_admin_candidate_v1(uuid,text)','EXECUTE') and not has_function_privilege('anon','public.platform_lookup_tenant_admin_candidate_v1(uuid,text)','EXECUTE') and not has_function_privilege('service_role','public.platform_lookup_tenant_admin_candidate_v1(uuid,text)','EXECUTE'));
  perform pg_temp.ok('no PUBLIC execute',not exists(select 1 from pg_proc p cross join lateral aclexplode(p.proacl)a where p.oid='public.platform_lookup_tenant_admin_candidate_v1(uuid,text)'::regprocedure and a.grantee=0));
- perform pg_temp.ok('exact public function delta',(select count(*)=258 from pg_proc where pronamespace='public'::regnamespace and prokind='f'));
- perform pg_temp.ok('exact definer delta',(select count(*)=162 from pg_proc where pronamespace='public'::regnamespace and prosecdef));
+ perform pg_temp.ok('exact public function delta',(select count(*)=262 from pg_proc where pronamespace='public'::regnamespace and prokind='f'));
+ perform pg_temp.ok('exact definer delta',(select count(*)=166 from pg_proc where pronamespace='public'::regnamespace and prosecdef));
 end;$tests$;
 select 'ok '||n||' - '||label from results order by n;
 rollback;
