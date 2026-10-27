@@ -50,6 +50,7 @@ export function Confirmation({ attempt, busy, message, returnFocus, onConfirm, o
   return <dialog ref={dialog} aria-labelledby="management-confirm-title" aria-describedby="management-confirm-body" onCancel={event => { event.preventDefault(); if (!busy) onDismiss(); }} className="m-auto max-h-[90dvh] w-[calc(100%-2rem)] max-w-2xl overflow-y-auto rounded-2xl border border-[#626b55] bg-[#141814] p-5 text-[#f2efe4] backdrop:bg-black/70">
     <h2 id="management-confirm-title" className="mb-4 text-xl font-bold">{actionLabels[attempt.operation]}</h2>
     <div id="management-confirm-body" className="space-y-4 break-words">
+      {attempt.operation === "public-access" && <><p>Obiekt: <strong>{attempt.tenantName}</strong></p>{attempt.payload.p_state === "coming_soon" ? <p>Ustawić obiekt jako „Dostępny wkrótce”? Publiczni użytkownicy nie będą mogli korzystać z rezerwacji ani wydarzeń, ale personel zachowa dostęp wewnętrzny.</p> : <p>Udostępnić obiekt publicznie? Klienci ponownie uzyskają dostęp do publicznych funkcji rezerwacji i wydarzeń, jeśli obiekt jest aktywny i opublikowany.</p>}</>}
       {attempt.preview && <PlanSummary preview={attempt.preview} />}{attempt.candidate && <CandidateSummary candidate={attempt.candidate} />}
       {attempt.operation === "demote" && <p>Użytkownik pozostanie członkiem obiektu, ale straci uprawnienia administratora.</p>}
       {attempt.operation === "suspend" && <p>Konto utraci dostęp administratora tego obiektu. Historia i konto użytkownika pozostaną.</p>}

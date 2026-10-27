@@ -10,6 +10,13 @@ export const roleLabels = { admin: "Administrator", user: "Użytkownik", employe
 export type TenantStatus = keyof typeof tenantLabels;
 export type Role = keyof typeof roleLabels;
 export type MemberStatus = keyof typeof memberLabels;
+export type PublicAccess = { state: "live" | "coming_soon"; revision: string | null };
+export function readPublicAccess(v: unknown): PublicAccess | null {
+  const a = object(v);
+  if (!a || (a.state !== "live" && a.state !== "coming_soon")) return null;
+  if (!uuid(a.revision) && !(a.state === "live" && a.revision === null)) return null;
+  return { state: a.state, revision: a.revision as string | null };
+}
 type Tenant = { tenant_id: string; name: string; status: TenantStatus };
 function tenant(v: unknown, id: string): Tenant | null {
   const t = object(v);
@@ -95,7 +102,8 @@ export const fallback = "Nie udało się wykonać operacji. Odśwież dane i spr
 export const noticeLabel = (code: string, deletion = false) => Object.hasOwn(messages, code) ? messages[code] : (deletion ? "Zależność techniczna blokuje trwałe usunięcie." : "Operacja wymaga sprawdzenia konfiguracji obiektu.");
 export function managementError(error: unknown): { kind: "denied" | "plan-stale" | "member-stale" | "lifecycle-stale" | "rejected" | "uncertain"; message: string } {
   const e = object(error), code = String(e?.code ?? ""), message = String(e?.message ?? "");
-  if (["42501", "PGRST301", "PGRST302", "PGRST303"].includes(code)) return { kind: "denied", message: "Brak dostępu do zarządzania platformą. Zaloguj się ponownie." };
+  if (["401", "403", "42501", "PGRST301", "PGRST302", "PGRST303"].includes(code) || [401, 403].includes(Number(e?.status))) return { kind: "denied", message: "Brak dostępu do zarządzania platformą. Zaloguj się ponownie." };
+  if (code === "PT409" && ["PUBLIC_ACCESS_STATE_CONFLICT", "PUBLIC_ACCESS_REQUEST_CONFLICT", "TENANT_PUBLIC_ACCESS_RETRY"].includes(message)) return { kind: "rejected", message: "Dostępność obiektu zmieniła się lub trwa inna operacja. Sprawdź odświeżony stan i ponownie potwierdź zmianę." };
   if (code === "PT409" && message === "PLAN_STALE") return { kind: "plan-stale", message: "Dane obiektu zmieniły się. Podgląd został odświeżony." };
   if (code === "PT409" && message === "STALE_MEMBERSHIP_STATE") return { kind: "member-stale", message: "Członkostwo zmieniło się. Dane konta zostały odświeżone. Potwierdź nową operację." };
   if (code === "PT409" && message === "TENANT_REVISION_STALE") return { kind: "lifecycle-stale", message: "Status obiektu zmienił się. Dane zostały odświeżone." };

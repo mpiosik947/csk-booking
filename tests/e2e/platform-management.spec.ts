@@ -41,6 +41,72 @@ async function navigateTenantB(page:Page){
 async function lookup(page:Page){await page.getByLabel('Dokładny e-mail konta').fill(email);await page.getByRole('button',{name:'Znajdź konto',exact:true}).click();await expect(section(page,'Administratorzy obiektu').getByText(`Konto: ${email}`)).toBeVisible();}
 async function confirm(page:Page){await page.getByRole('dialog').getByRole('button',{name:'Potwierdź operację',exact:true}).click();}
 
+const publicReader='platform_get_tenant_public_access_v1',publicWriter='platform_set_tenant_public_access_v1';
+const publicSection=(page:Page)=>section(page,'Publiczna dostępność obiektu');
+test('public availability: authoritative state, both confirmations, cancel, single writes and canonical refresh',async({page},testInfo)=>{
+ const h=await mount(page);const card=publicSection(page);
+ await expect(card.getByText('Bieżący stan: LIVE',{exact:true})).toBeVisible();
+ await card.getByRole('button',{name:'Ustaw: Wkrótce',exact:true}).click();
+ await expect(page.getByRole('dialog')).toContainText('personel zachowa dostęp wewnętrzny');
+ await expect(page.getByRole('dialog')).toContainText('Obiekt: Strzelnica testowa');
+ await page.getByRole('dialog').getByRole('button',{name:'Anuluj',exact:true}).click();
+ expect(h.calls.filter(c=>c.name===publicWriter)).toHaveLength(0);
+ await card.getByRole('button',{name:'Ustaw: Wkrótce',exact:true}).click();await confirm(page);
+ await expect(page.getByRole('dialog')).toHaveCount(0);await expect(card.getByText('Bieżący stan: DOSTĘPNA WKRÓTCE',{exact:true})).toBeVisible();
+ await page.screenshot({path:testInfo.outputPath('public-access-coming-soon.png'),fullPage:true});
+ const revision=h.f.publicAccess.revision;
+ await card.getByRole('button',{name:'Ustaw: Aktywna',exact:true}).click();
+ await expect(page.getByRole('dialog')).toContainText('Udostępnić obiekt publicznie?');await confirm(page);
+ await expect(page.getByRole('dialog')).toHaveCount(0);await expect(card.getByText('Bieżący stan: LIVE',{exact:true})).toBeVisible();
+ const writes=h.calls.filter(c=>c.name===publicWriter);expect(writes).toHaveLength(2);
+ expect(writes[0].args).toEqual({p_tenant_id:tenantId,p_state:'coming_soon',p_expected_state:'live',p_expected_revision:null,p_request_id:expect.stringMatching(/^[0-9a-f-]{36}$/)});
+ expect(writes[1].args.p_expected_revision).toBe(revision);expect(writes[1].args.p_state).toBe('live');expect(writes[1].args.p_request_id).not.toBe(writes[0].args.p_request_id);
+ expect(h.unexpected).toEqual([]);expect(h.errors).toEqual([]);
+});
+test('public availability locks loading/double clicks and reports unknown result without optimistic state',async({page})=>{
+ let release:()=>void=()=>{},waiting=false;
+ const h=await mount(page,fixture(),async call=>{if(call.name===publicWriter){waiting=true;await new Promise<void>(resolve=>release=resolve);return 'abort';}});
+ await publicSection(page).getByRole('button',{name:'Ustaw: Wkrótce',exact:true}).click();await confirm(page);
+ await expect.poll(()=>waiting).toBe(true);await expect(page.getByRole('dialog').getByRole('button',{name:'Zapisywanie…',exact:true})).toBeDisabled();
+ await page.getByRole('dialog').getByRole('button',{name:'Zapisywanie…',exact:true}).evaluate(button=>{(button as HTMLButtonElement).click();(button as HTMLButtonElement).click();});
+ expect(h.calls.filter(c=>c.name===publicWriter)).toHaveLength(1);release();
+ await expect(page.getByRole('button',{name:'Ponów tę samą próbę',exact:true})).toBeEnabled();
+ await expect(publicSection(page)).not.toContainText('Bieżący stan:');
+ await expect(publicSection(page)).toContainText('Wynik zmiany dostępności jest niepotwierdzony.');expect(h.errors).toEqual([]);
+});
+for(const code of ['PT409','22023']){
+ test(`public availability ${code} failure re-reads authoritative state`,async({page})=>{
+  const h=await mount(page,fixture(),call=>call.name===publicWriter?{data:null,error:{code,message:code==='PT409'?'PUBLIC_ACCESS_STATE_CONFLICT':'PRIVATE SQL'}}:undefined);
+  await publicSection(page).getByRole('button',{name:'Ustaw: Wkrótce',exact:true}).click();await confirm(page);
+  await expect(page.getByRole('dialog')).toHaveCount(0);await expect(publicSection(page)).toContainText('Bieżący stan: LIVE');
+  expect(h.calls.filter(c=>c.name===publicWriter)).toHaveLength(1);expect(h.calls.filter(c=>c.name===publicReader)).toHaveLength(2);
+  await expect(page.locator('body')).not.toContainText('PRIVATE SQL');
+ });
+}
+test('public availability invalid reader or 403 fails closed',async({page})=>{
+ let denied=false;
+ const h=await mount(page,fixture(),call=>call.name===publicReader?(denied?{data:null,error:{status:403}}:{data:{state:'unknown',revision:null},error:null}):undefined);
+ await expect(publicSection(page).getByRole('alert')).toBeVisible();await expect(publicSection(page).getByRole('button')).toHaveCount(0);
+ expect(h.calls.filter(c=>c.name===publicWriter)).toHaveLength(0);
+ denied=true;await page.getByRole('button',{name:'Odśwież stan',exact:true}).click();
+ await expect(page.getByRole('heading',{name:'Brak dostępu',exact:true})).toBeVisible();await expect(publicSection(page)).toHaveCount(0);
+});
+test('public availability A -> B discards pending confirmation and targets B only',async({page})=>{
+ const b=secondTenant();b.publicAccess={state:'coming_soon',revision:'a0000000-0000-4000-8000-000000000099'};
+ const h=await mount(page,fixture(),call=>call.args.p_tenant_id===tenantB?rpcResponse(b,call.name,call.args):undefined);
+ await publicSection(page).getByRole('button',{name:'Ustaw: Wkrótce',exact:true}).click();await navigateTenantB(page);
+ await expect(page.getByRole('dialog')).toHaveCount(0);await expect(publicSection(page)).toContainText('DOSTĘPNA WKRÓTCE');
+ await publicSection(page).getByRole('button',{name:'Ustaw: Aktywna',exact:true}).click();await confirm(page);await expect(page.getByRole('dialog')).toHaveCount(0);
+ const writes=h.calls.filter(c=>c.name===publicWriter);expect(writes).toHaveLength(1);expect(writes[0].args.p_tenant_id).toBe(tenantB);expect(writes[0].args.p_expected_revision).toBe('a0000000-0000-4000-8000-000000000099');
+ expect(h.f.publicAccess).toEqual({state:'live',revision:null});expect(b.publicAccess.state).toBe('live');
+});
+test('public availability mobile confirmation stays within viewport',async({page},testInfo)=>{
+ await page.setViewportSize({width:390,height:844});await mount(page);await publicSection(page).getByRole('button',{name:'Ustaw: Wkrótce',exact:true}).click();
+ const dialog=page.getByRole('dialog');await expect(dialog).toBeVisible();
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);
+ await page.screenshot({path:testInfo.outputPath('public-access-mobile-confirmation.png')});await page.keyboard.press('Escape');await expect(dialog).toHaveCount(0);
+});
+
 for(const operation of ['plan','lifecycle','admin'] as const){
  test(`A to B clears ${operation} preview and uncertain request; B submits its own state`,async({page})=>{
   const b=secondTenant();const writer=operation==='plan'?'platform_change_tenant_plan_v2':operation==='lifecycle'?'platform_archive_tenant_v1':'platform_add_tenant_admin_v1';

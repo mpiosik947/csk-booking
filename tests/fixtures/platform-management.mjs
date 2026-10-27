@@ -2,10 +2,11 @@ export const tenantId = 'a0000000-0000-4000-8000-000000000001';
 export const actorId = 'b0000000-0000-4000-8000-000000000001';
 export const userId = 'c0000000-0000-4000-8000-000000000001';
 export const email = 'candidate@example.invalid';
-export const readerNames = ['platform_get_tenant_onboarding_detail_v1','platform_list_active_plans_v1','platform_get_tenant_admin_management_v1','platform_get_tenant_archive_preview_v1','platform_get_tenant_delete_eligibility_v1'];
+export const readerNames = ['platform_get_tenant_onboarding_detail_v1','platform_list_active_plans_v1','platform_get_tenant_admin_management_v1','platform_get_tenant_archive_preview_v1','platform_get_tenant_delete_eligibility_v1','platform_get_tenant_public_access_v1'];
 export function fixture() {
   const tenant = {tenant_id:tenantId,name:'Strzelnica testowa',status:'active'};
   return {
+    publicAccess: /** @type {{state: 'live' | 'coming_soon', revision: string | null}} */ ({state:'live',revision:null}),
     detail:{tenant:{...tenant,technical_slug:'local-range'},public_profile:{display_name:'Strzelnica testowa',city:'Testowo',public_slug:'public-range',is_public:true},plan:{plan_key:'current_full_v1',status:'active',assignment_status:'active',enabled_feature_keys:['booking','events']},admins:[{user_id:userId,email}],readiness:{create_ready:true,activation_ready:true,public_ready:false,booking_ready:true,booking_required:true,publication_gate_enforced:false,checks:{admin_ready:true}}},
     plans:[{plan_key:'booking_only_v1',display_name:'Minimum',status:'active',features:[{feature_key:'booking',description:'Booking'}]},{plan_key:'current_full_v1',display_name:'Full',status:'active',features:[{feature_key:'booking',description:'Booking'},{feature_key:'events',description:'Events'}]}],
     admins:{tenant:{...tenant},active_admin_count:1,admins:[{user_id:userId,email,membership_role:'admin',membership_status:'active',updated_at:'2026-10-07T10:00:00Z'}]},
@@ -16,8 +17,12 @@ export function fixture() {
   };
 }
 export function response(f, name, args) {
-  const map = Object.fromEntries(readerNames.map((name,i)=>[name,['detail','plans','admins','lifecycle','eligibility'][i]]));
+  const map = Object.fromEntries(readerNames.map((name,i)=>[name,['detail','plans','admins','lifecycle','eligibility','publicAccess'][i]]));
   if(map[name])return f[map[name]];
+  if(name==='platform_set_tenant_public_access_v1'){
+    f.publicAccess={state:args.p_state,revision:crypto.randomUUID()};
+    return {...f.publicAccess,changed:true};
+  }
   if(name==='platform_get_tenant_plan_change_preview_v1')return {...f.preview,target_plan:{...f.preview.target_plan,plan_key:args.p_target_plan_key}};
   if(name==='platform_lookup_tenant_admin_candidate_v1')return f.candidate;
   if(name==='platform_change_tenant_plan_v2'){f.detail.plan.plan_key=args.p_target_plan_key;return {code:'changed',plan_key:args.p_target_plan_key,revision:'9007199254740994'};}
