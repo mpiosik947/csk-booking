@@ -4,6 +4,7 @@ import { FormEvent, useCallback, useEffect, useState } from "react";
 import AdminShell from "../_components/AdminShell";
 import { supabase } from "../../../lib/supabase";
 import { reportClientError } from "../../../lib/safe-client-error";
+import Link from "next/link";
 
 type PricingItem = { id: string | null; title: string; price: number; currency: string; unit: string; short_description: string | null; display_order: number; is_active: boolean };
 
@@ -81,6 +82,7 @@ export default function AdminSettingsPage({ tenantSlug }: Readonly<{ tenantSlug:
   }
 
   return <AdminShell eyebrow="Administracja" title="Ustawienia publiczne" description="Edytujesz wyłącznie publiczny profil bieżącego obiektu. Przełączniki sterują prezentacją strony i nie zmieniają uprawnień ani dostępności tras rezerwacji.">
+    <Link className="mb-5 inline-flex min-h-11 items-center rounded-lg border border-[#536143] px-4" href={`/t/${tenantSlug}/admin/partners`}>Partnerzy i sponsorzy</Link>
     <div className="mx-auto w-full max-w-5xl text-[#f2efe4]">
       {loading&&<p role="status" className="mt-8">Ładowanie ustawień…</p>}
       {error&&<div role="alert" className="mt-6 rounded-xl border border-[#7a4545] bg-[#2a1b1b] p-4 text-[#efb2b2]">{error} <button type="button" onClick={()=>void load()} className="ml-2 underline">Spróbuj ponownie</button></div>}

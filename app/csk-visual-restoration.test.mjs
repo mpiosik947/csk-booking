@@ -10,14 +10,22 @@ const require = createRequire(import.meta.url);
 const source = readFileSync(new URL('./_components/PublicTenantLanding.tsx', import.meta.url), 'utf8');
 const compiled = { exports: {} };
 const code = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX, esModuleInterop: true } }).outputText;
-new Function('require', 'exports', code)(name => {
+function dependency(name) {
   if (name === 'next/link') return { __esModule: true, default: props => React.createElement('a', props) };
-  if (name === 'next/image') return { __esModule: true, default: props => { const clean = { ...props }; delete clean.priority; delete clean.fill; return React.createElement('img', clean); } };
+  if (name === 'next/image') return { __esModule: true, default: props => { const clean = { ...props }; delete clean.priority; delete clean.fill; delete clean.unoptimized; return React.createElement('img', clean); } };
+  if (name === '@/lib/tenant-partners') return require('../lib/tenant-partners.ts');
+  if (name === './TenantPartners') {
+    const output = { exports: {} };
+    const partnerCode = ts.transpileModule(readFileSync(new URL('./_components/TenantPartners.tsx', import.meta.url), 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX, esModuleInterop: true } }).outputText;
+    new Function('require', 'exports', partnerCode)(dependency, output.exports);
+    return output.exports;
+  }
   if (name === '@/lib/platform-domain') return { PLATFORM_BASE_URL: 'https://strzelajtu.pl' };
   if (name === './TenantActionTiles') return { __esModule: true, default: () => null };
   if (name === './PublicAuthControls') return { __esModule: true, default: ({ preview, customDomain, returnPath }) => preview ? React.createElement('span', { 'aria-disabled': true }, 'Zaloguj się') : React.createElement('a', { href: `${customDomain ? 'https://strzelajtu.pl' : ''}/login?redirectTo=${encodeURIComponent(returnPath)}` }, 'Zaloguj się') };
   return require(name);
-}, compiled.exports);
+}
+new Function('require', 'exports', code)(dependency, compiled.exports);
 const flags = ['showBooking', 'showEvents', 'showInstructor', 'showPricing', 'showAbout', 'showRegulations', 'showContact'];
 const tenant = { tenantSlug: 'test-range', publicSlug: 'public-range', name: 'Test Range', city: 'City', logoPath: '/logo.png', description: 'Public description', regulationsPath: '/terms', socialLinks: {}, ...Object.fromEntries(flags.map(f => [f, true])) };
 const render = (data = tenant, props = {}) => renderToStaticMarkup(React.createElement(compiled.exports.PublicTenantLanding, { tenant: data, ...props }));
@@ -55,4 +63,13 @@ test('tenant style boundary is independent of platform theme and guards remain i
   assert.match(source, /max-w-\[880px\]/);
   assert.match(source, /max-w-\[360px\]/);
   assert.match(source, /h-\[72px\]/);
+});
+
+test('partners follow contact and precede platform footer; empty partners omit the section', () => {
+  assert.doesNotMatch(render(), /data-testid="tenant-partners"/);
+  const id='11111111-1111-1111-1111-111111111111';
+  const html=render({...tenant,name:'CSK Krutla'},{partners:[{id,media_id:id,name:'Synthetic cooperation',kind:'partner',display_format:'logo',target_url:null,short_description:null,display_order:0}]});
+  const contact=html.indexOf('Kontakt i lokalizacja'),partners=html.indexOf('Partnerzy CSK Krutla'),footer=html.indexOf('StrzelajTu.pl — znajdź strzelnicę');
+  assert.ok(contact<partners&&partners<footer);assert.match(html,/alt="Logo Synthetic cooperation"/);assert.doesNotMatch(html,/Materiał reklamowy/);
+  assert.equal((html.match(/data-testid="tenant-partners"/g)||[]).length,1);
 });

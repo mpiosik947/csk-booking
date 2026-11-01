@@ -21,6 +21,7 @@ import AdminHomePage from "@/app/admin/page";
 import AdminCheckInPage from "@/app/admin/check-in/page";
 import AdminCalendarPage from "@/app/admin/calendar/page";
 import TenantAdminSettings from "@/app/admin/settings/TenantAdminSettings";
+import TenantPartnersAdmin from "@/app/admin/partners/TenantPartnersAdmin";
 
 import { getTenantPublicAccess } from "@/lib/server/tenant-public-access";
 import TenantComingSoon from "@/app/_components/TenantComingSoon";
@@ -101,6 +102,9 @@ export default async function TenantModuleShell({
   }
   if (route.kind === "staff" && route.path === "admin/settings") {
     return <TenantAdminSettings tenantSlug={slug} />;
+  }
+  if (route.kind === "staff" && route.path === "admin/partners") {
+    return <TenantPartnersAdmin tenantSlug={slug} />;
   }
 
   notFound();

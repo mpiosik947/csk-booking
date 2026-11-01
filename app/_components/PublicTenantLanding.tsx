@@ -5,6 +5,8 @@ import type { PublicTenantLanding as PublicTenantLandingData } from "@/lib/serve
 import { PLATFORM_BASE_URL } from "@/lib/platform-domain";
 import PublicAuthControls from "./PublicAuthControls";
 import TenantActionTiles from "./TenantActionTiles";
+import TenantPartners from "./TenantPartners";
+import type { PublicPartner } from "@/lib/tenant-partners";
 
 function LandingLink({ href, className, children, preview, label }: { href: string; className?: string; children: ReactNode; preview: boolean; label?: string }) {
   return preview ? <span className={className} aria-disabled="true">{children}</span>
@@ -38,7 +40,7 @@ function InformationLabel({ title, description, soon = false }: { title: string;
   </>;
 }
 
-export function PublicTenantLanding({ tenant, preview = false, customDomain = false }: Readonly<{ tenant: PublicTenantLandingData; preview?: boolean; customDomain?: boolean }>) {
+export function PublicTenantLanding({ tenant, preview = false, customDomain = false, partners = [] }: Readonly<{ tenant: PublicTenantLandingData; preview?: boolean; customDomain?: boolean; partners?: readonly PublicPartner[] }>) {
   const bookingHref = `${customDomain ? PLATFORM_BASE_URL : ""}/t/${tenant.tenantSlug}/booking`;
   const eventsHref = `${customDomain ? PLATFORM_BASE_URL : ""}/t/${tenant.tenantSlug}/events`;
   const publicBase = customDomain ? "" : `/${tenant.publicSlug}`;
@@ -83,6 +85,7 @@ export function PublicTenantLanding({ tenant, preview = false, customDomain = fa
           {rows.filter(row => row.visible).map(row => <div key={row.title} data-testid="information-row"><LandingLink preview={preview} href={row.href} className={`${infoRow} ${infoHover}`}><InformationLabel title={row.title} description={row.description} /></LandingLink></div>)}
         </div>
       </section>}
+      <TenantPartners name={tenant.name} items={partners} />
       <footer className="mt-5 text-center text-xs text-[#858c7f]"><LandingLink preview={preview} href={customDomain ? PLATFORM_BASE_URL : "/"} className="inline-flex min-h-11 items-center hover:text-[#d7c895]">StrzelajTu.pl — znajdź strzelnicę</LandingLink></footer>
     </section>
   </main>;

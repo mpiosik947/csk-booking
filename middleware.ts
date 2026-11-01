@@ -60,6 +60,16 @@ export async function middleware(
     });
     const { data, error } = await client.rpc("resolve_public_tenant_domain_v1", { p_hostname: host });
     if (error || !data || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(data.tenant_slug ?? "")) return unavailable();
+    if (/^\/api\/tenant-partners\/media\/[0-9a-f-]{36}$/i.test(requestedPath)) {
+      // Same-origin public media only. The handler independently binds the image
+      // to this verified domain's tenant and never accepts custom-host identity.
+      const headers = new Headers(request.headers);
+      headers.delete("cookie");
+      headers.delete("authorization");
+      headers.delete("x-forwarded-host");
+      headers.delete("forwarded");
+      return NextResponse.next({ request: { headers } });
+    }
     if (isCustomPublicPath(requestedPath)) {
       // Use the unnormalized framework server origin, NOT a caller-supplied host,
       // to keep this an internal route rewrite rather than an outbound proxy request.
