@@ -29,6 +29,16 @@ create function pg_temp.conflict_membership() returns trigger language plpgsql a
  insert into public.tenant_memberships(tenant_id,user_id,role,status) values(new.tenant_id,new.user_id,'user','active');
  return new;
 end;$$;
+-- Explicit historical fixture, never a replacement for the RPC under test.
+create function pg_temp.seed_historical_bundle(actor uuid,owner_id uuid,key uuid,slug text,plan text default 'booking_only_v1') returns uuid language plpgsql as $$
+declare tid uuid:=gen_random_uuid();begin
+ insert into public.tenants(id,name,slug,status) values(tid,'Synthetic',slug,'dormant');
+ insert into public.tenant_public_profiles(tenant_id,display_name,city,public_slug,is_public,show_booking,show_pricing,show_instructor,show_events,show_about,show_contact,show_regulations) values(tid,'Synthetic','City',slug||'-public',false,false,false,false,false,false,false,false);
+ insert into public.tenant_plan_assignments(tenant_id,plan_id,status) select tid,id,'active' from public.saas_plans where plan_key=plan;
+ insert into public.tenant_memberships(tenant_id,user_id,role,status) values(tid,owner_id,'admin','active');
+ insert into public.platform_tenant_creation_requests(actor_user_id,creation_request_id,payload_hash,tenant_id,creation_kind) values(actor,key,encode(sha256(convert_to(jsonb_build_object('name','Synthetic','city','City','tenant_slug',slug,'public_slug',slug||'-public','plan_key',plan,'admin',owner_id)::text,'UTF8')),'hex'),tid,'legacy');
+ insert into public.platform_audit_logs(actor_user_id,tenant_id,action,details) values(actor,tid,'tenant_created','{}'),(actor,tid,'plan_assigned',jsonb_build_object('plan_key',plan)),(actor,tid,'tenant_admin_assigned',jsonb_build_object('user_id',owner_id));
+ return tid;end;$$;
 do $test$
 declare pa uuid:=gen_random_uuid(); owner_a uuid:=gen_random_uuid(); owner_b uuid:=gen_random_uuid();
  regular uuid:=gen_random_uuid(); ta uuid:=gen_random_uuid(); emp uuid:=gen_random_uuid(); inst uuid:=gen_random_uuid();
@@ -50,12 +60,15 @@ begin
  delete from public.platform_admins where user_id=pa;
  perform pg_temp.ok('removed PA denied',pg_temp.bundle(pa,owner_a,key,slug)->>'state'='42501');
  insert into public.platform_admins(user_id,status) values(pa,'active');
- legacy:=(pg_temp.rpc(pa,format('select to_jsonb(public.platform_create_tenant_v1(%L,%L,%L,%L))','Legacy',slug||'-legacy',slug||'-legacy-public','City'))->>'value')::uuid;
+ -- Historical pre-handover tenant fixture; all tested RPCs remain real.
+ legacy:=gen_random_uuid();
+ insert into public.tenants(id,name,slug,status) values(legacy,'Legacy',slug||'-legacy','dormant');
+ insert into public.tenant_public_profiles(tenant_id,display_name,city,public_slug,is_public,show_booking,show_pricing,show_instructor,show_events,show_about,show_contact,show_regulations) values(legacy,'Legacy','City',slug||'-legacy-public',false,false,false,false,false,false,false,false);
  select count(*) into count_before from public.tenants;
  perform pg_temp.ok('missing request id denied',pg_temp.bundle(pa,owner_a,null,slug)->>'state'='22023');
  perform pg_temp.ok('zero request id denied',pg_temp.bundle(pa,owner_a,'00000000-0000-0000-0000-000000000000',slug)->>'state'='22023');
- perform pg_temp.ok('nonexistent admin denied',pg_temp.bundle(pa,gen_random_uuid(),key,slug)->>'state'='22023');
- perform pg_temp.ok('invalid plan denied',pg_temp.bundle(pa,owner_a,key,slug,'missing')->>'state'='22023');
+ perform pg_temp.ok('nonexistent admin denied',pg_temp.bundle(pa,gen_random_uuid(),key,slug)->>'state'='55000');
+ perform pg_temp.ok('invalid plan denied',pg_temp.bundle(pa,owner_a,key,slug,'missing')->>'state'='55000');
  perform pg_temp.ok('invalid plan rolls back', (select count(*)=count_before from public.tenants));
  foreach eligibility_state in array array['unconfirmed','banned','deleted','anonymous','profile'] loop
   update auth.users set email_confirmed_at=case when eligibility_state='unconfirmed' then null else now() end,
@@ -63,17 +76,17 @@ begin
    deleted_at=case when eligibility_state='deleted' then now() else null end,
    is_anonymous=eligibility_state='anonymous' where id=owner_a;
   if eligibility_state='profile' then delete from public.profiles where user_id=owner_a; end if;
-  perform pg_temp.ok('eligibility denied '||eligibility_state,pg_temp.bundle(pa,owner_a,key,slug)->>'state'='22023');
+  perform pg_temp.ok('eligibility denied '||eligibility_state,pg_temp.bundle(pa,owner_a,key,slug)->>'state'='55000');
   perform pg_temp.ok('lookup hidden '||eligibility_state,pg_temp.rpc(pa,format('select public.platform_lookup_initial_admin_v1(%L)','o1a-'||owner_a||'@example.invalid'))->'value'='null'::jsonb);
   perform pg_temp.ok('legacy assign eligibility denied '||eligibility_state,pg_temp.rpc(pa,format('select to_jsonb(public.platform_assign_initial_admin_v1(%L,%L))',legacy,owner_a))->>'state'='22023');
   perform pg_temp.ok('eligibility rollback '||eligibility_state,(select count(*)=count_before from public.tenants));
  end loop;
  insert into public.profiles(id,user_id,email,role) values(owner_a,owner_a,'o1a-'||owner_a||'@example.invalid','user');
  update auth.users set email_confirmed_at=now(),banned_until=null,deleted_at=null,is_anonymous=false where id=owner_a;
- -- Failures at late persistence boundaries must not leave any bundle records.
+ -- Retired new-request path must stop before every persistence boundary.
  foreach relation in array array['platform_audit_logs','platform_tenant_creation_requests'] loop
   execute format('create trigger onboard_failure before insert on public.%I for each row execute function pg_temp.reject_insert()',relation);
-  perform pg_temp.ok('injected failure '||relation,pg_temp.bundle(pa,owner_a,key,slug)->>'state'<>'00000');
+  perform pg_temp.ok('closed before persistence '||relation,pg_temp.bundle(pa,owner_a,key,slug)->>'state'='55000');
   perform pg_temp.ok('full rollback '||relation,(select count(*)=count_before from public.tenants)
    and not exists(select 1 from public.platform_tenant_creation_requests where actor_user_id=pa));
   execute format('drop trigger onboard_failure on public.%I',relation);
@@ -82,11 +95,12 @@ begin
  execute format('create function pg_temp.inject_membership() returns trigger language plpgsql as %L',
   'begin insert into public.tenant_memberships(tenant_id,user_id,role,status) values(new.tenant_id,'||quote_literal(owner_a)||',''user'',''active''); return new; end;');
  create trigger onboard_conflict after insert on public.tenant_public_profiles for each row execute function pg_temp.inject_membership();
- perform pg_temp.ok('membership conflict denied',pg_temp.bundle(pa,owner_a,key,slug)->>'state'='23505');
+ perform pg_temp.ok('retired bundle writes nothing despite fixture collision trigger',pg_temp.bundle(pa,owner_a,key,slug)->>'state'='55000');
  perform pg_temp.ok('membership conflict rollback',(select count(*)=count_before from public.tenants));
  drop trigger onboard_conflict on public.tenant_public_profiles;
+ a:=pg_temp.seed_historical_bundle(pa,owner_a,key,slug);
  result:=pg_temp.bundle(pa,owner_a,key,slug); receipt:=result->'value'; a:=(receipt->>'tenant_id')::uuid;
- perform pg_temp.ok('PA atomic bundle',result->>'state'='00000' and a is not null);
+ perform pg_temp.ok('historical bundle receipt replay',result->>'state'='00000' and a is not null);
  perform pg_temp.ok('safe receipt keys', (select array_agg(k order by k) from jsonb_object_keys(receipt) k)=
   array['city','creation_request_id','initial_admin_user_id','initial_is_public','initial_status','name','plan_key','public_slug','tenant_id','tenant_slug']);
  perform pg_temp.ok('dormant private flags',exists(select 1 from public.tenants t join public.tenant_public_profiles p on p.tenant_id=t.id
@@ -94,7 +108,7 @@ begin
  perform pg_temp.ok('plan and exact admin',exists(select 1 from public.tenant_plan_assignments x join public.saas_plans p on p.id=x.plan_id
   where x.tenant_id=a and x.status='active' and p.plan_key='booking_only_v1') and exists(select 1 from public.tenant_memberships where tenant_id=a and user_id=owner_a and role='admin' and status='active'));
  select count(*) into audit_before from public.platform_audit_logs where tenant_id=a;
- perform pg_temp.ok('three canonical audits',audit_before=3);
+ perform pg_temp.ok('three historical audit rows preserved',audit_before=3);
  perform pg_temp.ok('replay identical',pg_temp.bundle(pa,owner_a,key,slug)->'value'=receipt);
  perform pg_temp.ok('canonical whitespace replay',pg_temp.bundle(pa,owner_a,key,slug,'booking_only_v1',' Synthetic ')->'value'=receipt);
  perform pg_temp.ok('replay no duplicate', (select count(*)=count_before+1 from public.tenants) and (select count(*)=audit_before from public.platform_audit_logs where tenant_id=a));
@@ -105,7 +119,7 @@ begin
  update auth.users set banned_until=now()+interval '1 day' where id=owner_a;
  perform pg_temp.ok('readiness rechecks assigned admin eligibility',not (public.platform_tenant_readiness_core_v1(a)->>'admin_ready')::boolean);
  update auth.users set banned_until=null where id=owner_a;
- perform pg_temp.ok('slug conflict rollback',pg_temp.bundle(pa,owner_a,gen_random_uuid(),slug)->>'state'='23505' and (select count(*)=count_before+1 from public.tenants));
+ perform pg_temp.ok('new request closed even for prior slug',pg_temp.bundle(pa,owner_a,gen_random_uuid(),slug)->>'state'='55000' and (select count(*)=count_before+1 from public.tenants));
  perform pg_temp.ok('cross namespace conflict rollback',pg_temp.bundle(pa,owner_a,gen_random_uuid(),slug||'-public')->>'state'<>'00000' and (select count(*)=count_before+1 from public.tenants));
  perform pg_temp.ok('readiness booking not yet ready',pg_temp.rpc(pa,format('select public.platform_get_tenant_onboarding_readiness_v2(%L)',a))->'value'->>'booking_ready'='false');
  family:='{"root":{"name":"Synthetic lane","is_active":true,"online_bookable":true,"max_shooters":2,"max_people_online":2,"booking_step_minutes":60,"durations_minutes":[60,120],"whole_lane_bookable":true,"positions_bookable":false,"pricing":[{"day_group":"mon_thu","min_shooters":1,"max_shooters":2,"label":"Weekday","hourly_price":100},{"day_group":"fri_sun","min_shooters":1,"max_shooters":2,"label":"Weekend","hourly_price":120}]},"positions":[]}'::jsonb;
@@ -132,8 +146,8 @@ begin
  perform pg_temp.ok('draft customer booking denied despite membership',pg_temp.rpc(regular,format('select public.create_reservation_v2(%L,current_date+7,''10:00'',60,1,%L)',root_a,gen_random_uuid()))->'value'->>'ok'='false');
  perform pg_temp.ok('draft booking writes zero reservations',not exists(select 1 from public.reservations where tenant_id=a));
  perform pg_temp.ok('draft reports denied',pg_temp.rpc(owner_a,format('select public.admin_get_reservation_report_v3(%L,current_date,current_date+7)',a))->>'state'='42501');
- result:=pg_temp.bundle(pa,owner_b,key_b,slug||'-b','current_full_v1'); b:=(result->'value'->>'tenant_id')::uuid;
- perform pg_temp.ok('B bundle',b is not null);
+ b:=pg_temp.seed_historical_bundle(pa,owner_b,key_b,slug||'-b','current_full_v1');
+ perform pg_temp.ok('historical B fixture',b is not null);
  result:=pg_temp.rpc(owner_b,format('select public.tenant_setup_create_lane_family_v1(%L,%L::jsonb)',b,family)); root_b:=(result->'value'->>'root_lane_id')::uuid;
  perform pg_temp.ok('B own setup',root_b is not null);
  perform pg_temp.ok('foreign root denied',pg_temp.rpc(owner_a,format('select public.tenant_setup_set_lane_configuration_v1(%L,%L,1,%L::jsonb)',a,root_b,resources))->>'state'='42501');
@@ -176,8 +190,7 @@ begin
  and not has_function_privilege('service_role','public.platform_create_tenant_bundle_v2(text,text,text,text,text,uuid,uuid)','EXECUTE'));
  insert into public.saas_plans(plan_key,status) values('o1a_events_'||left(replace(gen_random_uuid()::text,'-',''),12),'active') returning id into events_plan;
  insert into public.saas_plan_features(plan_id,feature_key) values(events_plan,'events');
- result:=pg_temp.bundle(pa,owner_b,gen_random_uuid(),slug||'-events-only',(select plan_key from public.saas_plans where id=events_plan));
- no_booking:=(result->'value'->>'tenant_id')::uuid;
+ no_booking:=pg_temp.seed_historical_bundle(pa,owner_b,gen_random_uuid(),slug||'-events-only',(select plan_key from public.saas_plans where id=events_plan));
  perform pg_temp.ok('nonbooking plan does not require lanes',(public.tenant_onboarding_readiness_core_v2(no_booking)->>'activation_ready')::boolean
   and not (public.tenant_onboarding_readiness_core_v2(no_booking)->>'booking_required')::boolean);
  perform pg_temp.ok('draft booking config respects plan',pg_temp.rpc(owner_b,format('select public.tenant_setup_create_lane_family_v1(%L,%L::jsonb)',no_booking,family))->>'state'='42501');

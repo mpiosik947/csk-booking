@@ -43,7 +43,7 @@ test('concurrent deletes and racing edit have exactly one delete success',async(
  await login(context,'admin');const row=await archived(context);const results=await Promise.all([deletion(context,row),deletion(context,row),save(context,A,values('forbidden edit'),row,null)]);expect(results.slice(0,2).filter(r=>r.status()===200)).toHaveLength(1);expect(results[2].status()).not.toBe(200);expect(dbsql("select count(*) from app_private.tenant_partner_changes where partner_id='"+row.id+"' and actions @> array['permanent_delete'];")).toBe('1');
 });
 test('real Storage outage retains recoverable archived record and retry completes',async({context})=>{
- await login(context,'admin');const row=await archived(context);const storage=process.env.PARTNER_TEST_STORAGE_CONTAINER;assert.match(storage,/^partners4a_storage_[a-f0-9]{8}$/);
+ await login(context,'admin');const row=await archived(context);const storage=process.env.PARTNER_TEST_STORAGE_CONTAINER;assert.match(storage,/^(?:partners4a|draft2b|draft2c|draft2d)_storage_[a-f0-9]{8}$/);
  try{execFileSync('docker',['stop',storage],{stdio:'pipe'});const failed=await deletion(context,row);expect(failed.status()).toBe(502);expect(dbsql("select count(*) from public.tenant_partners where id='"+row.id+"';")).toBe('1');expect(dbsql("select count(*) from app_private.tenant_partner_media where id='"+row.media_id+"';")).toBe('1');}finally{execFileSync('docker',['start',storage],{stdio:'pipe'});}
  await expect.poll(async()=>{try{return(await fetch(fixture.origin+'/storage/v1/status')).status;}catch{return 0;}},{timeout:20000}).toBe(200);expect((await deletion(context,row)).status()).toBe(200);expect(dbsql("select count(*) from storage.objects where name like '%/"+row.media_id+".webp';")).toBe('0');
 });

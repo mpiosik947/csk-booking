@@ -57,6 +57,15 @@ begin
  perform pg_temp.assert_true('duplicate slug denied',pg_temp.rpc(pa,call)->>'state'='23505');
  perform pg_temp.assert_true('reserved slug denied',pg_temp.rpc(pa,format('select to_jsonb(public.platform_create_tenant_v1(%L,%L,%L,%L))','Reserved','platform-admin','safe-other','City'))->>'state'='22023');
  perform pg_temp.assert_true('incomplete activation denied',pg_temp.rpc(pa,format('select to_jsonb(public.platform_set_tenant_state_v1(%L,%L))',t,'activate'))->>'state'='55000');
+ perform pg_temp.assert_true('new legacy-create draft cannot skip handover',pg_temp.rpc(pa,format('select to_jsonb(public.platform_assign_initial_admin_v1(%L,%L))',t,ta))->>'state'='55000');
+ -- The remaining legacy lifecycle/continuity regression uses a pre-existing tenant.
+ insert into fixture_ids(tenant_id) values(t);
+ slug:=slug||'-legacy';
+ -- Historical pre-handover tenant fixture; all tested RPCs remain real.
+ t:=gen_random_uuid();
+ insert into public.tenants(id,name,slug,status) values(t,'Synthetic historical',slug,'dormant');
+ insert into public.tenant_public_profiles(tenant_id,display_name,city,public_slug,is_public,show_booking,show_pricing,show_instructor,show_events,show_about,show_contact,show_regulations) values(t,'Synthetic historical','City',slug||'-public',false,false,false,false,false,false,false,false);
+ update fixture_ids set tenant_id=t where user_id=pa;
  perform pg_temp.assert_true('invalid plan denied',pg_temp.rpc(pa,format('select to_jsonb(public.platform_set_tenant_plan_v1(%L,%L))',t,'missing'))->>'state'='22023');
  perform pg_temp.assert_true('explicit booking plan',pg_temp.rpc(pa,format('select to_jsonb(public.platform_set_tenant_plan_v1(%L,%L))',t,'booking_only_v1'))->>'state'='00000');
  perform pg_temp.assert_true('exact lookup allowed',pg_temp.rpc(pa,format('select public.platform_lookup_initial_admin_v1(%L)','admin-'||ta||'@example.invalid'))->'value'->>'user_id'=ta::text);

@@ -34,7 +34,10 @@ declare pa uuid:=gen_random_uuid(); other_user uuid:=gen_random_uuid(); t uuid; 
 begin
  insert into auth.users(id,email)values(pa,pa||'@example.invalid'),(other_user,other_user||'@example.invalid');
  insert into public.platform_admins(user_id,status)values(pa,'active');
- t:=(pg_temp.rpc(pa,format('select to_jsonb(public.platform_create_tenant_v1(%L,%L,%L,%L))','PAM local','pam-local','pam-local-public','Local'))->>'value')::uuid;
+ -- Historical pre-handover tenant fixture; all tested RPCs remain real.
+ t:=gen_random_uuid();
+ insert into public.tenants(id,name,slug,status) values(t,'PAM local','pam-local','dormant');
+ insert into public.tenant_public_profiles(tenant_id,display_name,city,public_slug,is_public,show_booking,show_pricing,show_instructor,show_events,show_about,show_contact,show_regulations) values(t,'PAM local','Local','pam-local-public',false,false,false,false,false,false,false,false);
  p:=pg_temp.rpc(pa,format('select public.platform_get_tenant_plan_change_preview_v1(%L,%L)',t,'booking_only_v1'));
  perform pg_temp.assert_true('preview allowed',p->>'state'='00000');
  initial_revision:=p->'value'->>'revision';

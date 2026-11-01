@@ -1,0 +1,35 @@
+import {spawn,spawnSync} from 'node:child_process';import {randomUUID,randomBytes} from 'node:crypto';import assert from 'node:assert/strict';
+const template=process.argv[2];assert.match(template??'',/^sbr3_[a-f0-9]{16}$/);const db='sbr3_'+randomBytes(8).toString('hex');
+const base=['exec','-i','supabase_db_csk-booking','psql','-X','-qAt','-v','ON_ERROR_STOP=1','-U','postgres'];
+const q=s=>"'"+String(s).replaceAll("'","''")+"'";
+const sql=(s,database=db)=>{assert.ok(database==='postgres'||database===db);const r=spawnSync('docker',[...base,'-d',database],{input:s,encoding:'utf8',windowsHide:true});assert.equal(r.status,0,r.stderr);return r.stdout.trim();};
+const pa=randomUUID(),x=randomUUID(),y=randomUUID(),claims=`select set_config('request.jwt.claim.sub',${q(pa)},true);set local role authenticated;`;
+const rpc=(s,commit=false)=>sql('begin;'+claims+s+(commit?'commit;':'rollback;')).split('\n').at(-1);
+let tid,created=false,count=0;const check=(label,value)=>{assert.ok(value,label);console.log('PASS '+label);count++;};
+function run(statement){const p=spawn('docker',[...base,'-d',db],{windowsHide:true});let out='',err='',notify;const ready=new Promise(r=>notify=r),done=new Promise(r=>{p.stdout.on('data',b=>{out+=b;if(out.includes('LOCKED'))notify();});p.stderr.on('data',b=>err+=b);p.on('close',code=>{notify();r({code,out,err});});});p.stdin.end("set statement_timeout='8s';"+statement);return {ready,done};}
+const read=()=>JSON.parse(rpc(`select public.platform_get_draft_readiness_v1(${q(tid)});`));
+const save=(revision,text)=>`select public.platform_save_draft_configuration_v1(${q(tid)},${q(revision)},${q(randomUUID())},'profile',${q(JSON.stringify({description:text}))}::jsonb);`;
+const hand=(user,revision,key)=>`select public.platform_handover_tenant_v1(${q(tid)},${q(user)},${q(revision)},${q(key)});`;
+const validate=()=>JSON.parse(rpc(`select public.platform_validate_draft_readiness_v1(${q(tid)},${q(read().current_revision)});`,true));
+const members=()=>sql(`select count(*) from public.tenant_memberships where tenant_id=${q(tid)};`);
+async function fresh(){const slug='handoverrace-'+randomUUID().slice(0,8);tid=JSON.parse(rpc(`select public.platform_create_tenant_draft_v1('Race',${q(slug)},${q(slug+'-public')},'City','booking_only_v1',${q(randomUUID())});`,true)).tenant_id;
+ const family={root:{name:'Lane',is_active:true,max_shooters:2,whole_lane_bookable:true,positions_bookable:false,online_bookable:true,max_people_online:2,booking_step_minutes:60,durations_minutes:[60],pricing:['mon_thu','fri_sun'].map(day_group=>({day_group,min_shooters:1,max_shooters:2,label:'Price',hourly_price:10}))},positions:[]};
+ rpc(`select public.platform_save_draft_configuration_v1(${q(tid)},${q(read().current_revision)},${q(randomUUID())},'create_lane',${q(JSON.stringify(family))}::jsonb);`,true);check('fresh ready zero-member tenant',validate().validation_current&&members()==='0');return read().current_revision;}
+try{
+ sql(`create database ${db} template ${template};`,'postgres');created=true;
+ sql(`insert into auth.users(id,email,email_confirmed_at,is_anonymous) select id,id||'@example.invalid',now(),false from unnest(array[${[pa,x,y].map(v=>q(v)+'::uuid').join(',')}]) id;insert into public.platform_admins(user_id,status) values(${q(pa)},'active');`);
+ for(const type of ['same key','different key','different user']){const revision=await fresh(),key=randomUUID();const first=run('begin;'+claims+hand(x,revision,key)+"select 'LOCKED';select pg_sleep(0.8);commit;");await first.ready;
+  const otherKey=type==='same key'?key:randomUUID(),otherUser=type==='different user'?y:x;
+  const second=run('begin;'+claims+hand(otherUser,revision,otherKey)+'commit;');const [a,b]=await Promise.all([first.done,second.done]);check(type+' has one winner',a.code===0&&b.code!==0&&/BUSY|lock/.test(b.err)&&members()==='1');
+  const replay=await run('begin;'+claims+hand(otherUser,revision,otherKey)+'commit;').done;check(type+' retry exact or safe conflict',type==='same key'?replay.code===0:replay.code!==0&&/HANDOVER_ALREADY_COMPLETED/.test(replay.err));
+  check('committed winner and two audits exact',sql(`select (select selected_admin_user_id=${q(x)}::uuid from app_private.tenant_handovers where tenant_id=${q(tid)}) and (select count(*)=2 from public.platform_audit_logs where tenant_id=${q(tid)} and action in('tenant_admin_assigned','tenant_handed_over'));`)==='t');
+ }
+ let revision=await fresh(),key=randomUUID();let first=run('begin;'+claims+save(revision,'save-first')+"select 'LOCKED';select pg_sleep(0.8);commit;");await first.ready;let second=run('begin;'+claims+hand(x,revision,key)+'commit;');let [a,b]=await Promise.all([first.done,second.done]);
+ check('save first blocks concurrent handover',a.code===0&&b.code!==0&&/lock/.test(b.err)&&members()==='0');const stale=await run('begin;'+claims+hand(x,revision,key)+'commit;').done;check('stale screen retry denied',stale.code!==0&&/HANDOVER_REVISION_STALE/.test(stale.err)&&members()==='0');
+ validate();revision=read().current_revision;first=run('begin;'+claims+hand(x,revision,key)+"select 'LOCKED';select pg_sleep(0.8);commit;");await first.ready;second=run('begin;'+claims+save(revision,'loser')+'commit;');[a,b]=await Promise.all([first.done,second.done]);check('handover first excludes stale PA draft write',a.code===0&&b.code!==0&&members()==='1');
+ revision=await fresh();first=run(`begin;update auth.users set banned_until=now()+interval '1 day' where id=${q(x)};select 'LOCKED';select pg_sleep(0.8);commit;`);await first.ready;second=run('begin;'+claims+hand(x,revision,randomUUID())+'commit;');[a,b]=await Promise.all([first.done,second.done]);check('concurrent account disable blocks handover',a.code===0&&b.code!==0&&/lock/.test(b.err)&&members()==='0');const banned=await run('begin;'+claims+hand(x,revision,randomUUID())+'commit;').done;check('disabled account remains rejected',banned.code!==0&&/HANDOVER_ACCOUNT_UNAVAILABLE/.test(banned.err));
+ sql(`update auth.users set banned_until=null where id=${q(x)};`);
+ first=run('begin;'+claims+hand(x,revision,randomUUID())+"select 'LOCKED';select pg_sleep(0.8);commit;");await first.ready;second=run('begin;'+claims+`select public.platform_assign_initial_admin_v1(${q(tid)},${q(y)});commit;`);[a,b]=await Promise.all([first.done,second.done]);check('legacy first admin cannot win concurrent bypass',a.code===0&&b.code!==0&&members()==='1');
+ check('all handovers leave lifecycle/public state untouched',sql("select bool_and(t.status='dormant' and not p.is_public and c.public_access_state='coming_soon') from public.tenants t join public.tenant_public_profiles p on p.tenant_id=t.id join public.tenant_public_access_controls c on c.tenant_id=t.id where t.slug like 'handoverrace-%';")==='t');
+}finally{if(created){sql(`drop database ${db} with(force);`,'postgres');check('scratch database and every fixture removed',sql(`select count(*) from pg_database where datname=${q(db)};`,'postgres')==='0');}}
+console.log('HANDOVER CONCURRENCY PASS '+count);

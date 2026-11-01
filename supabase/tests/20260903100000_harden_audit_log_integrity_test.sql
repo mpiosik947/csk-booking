@@ -244,7 +244,7 @@ begin
     from pg_catalog.pg_proc procedure
     join pg_catalog.pg_namespace namespace on namespace.oid=procedure.pronamespace
     join pg_catalog.pg_roles owner_role on owner_role.oid=procedure.proowner
-    where namespace.nspname='public' and procedure.prokind='f'
+    where namespace.nspname in ('public','app_private') and procedure.prokind='f'
   )
   select pg_catalog.count(*),
          pg_catalog.count(*) filter (
@@ -261,6 +261,7 @@ begin
                   (procedure.proname ~ '__saas9d(1|2a|3c)_core$'
                    or procedure.proname='admin_create_lane_booking_family_v2__saas9ec2b_core'
                    or procedure.proname in ('tenant_draft_create_lane_family_core_v1','tenant_draft_set_lane_configuration_core_v1')
+                   or procedure.oid in ('app_private.tenant_public_settings_write_v1(uuid,jsonb,timestamptz,text)'::regprocedure,'app_private.tenant_content_write_v1(uuid,jsonb,jsonb,timestamptz,text)'::regprocedure)
                    or procedure.proname='_apply_tenant_user_verification_v1'
                    or procedure.proname='operator_bootstrap_platform_admin_v1'
                    or procedure.proname='operator_verify_tenant_domain_v1'
@@ -279,7 +280,7 @@ begin
     and pg_catalog.strpos(pg_catalog.lower(pg_catalog.pg_get_functiondef(procedure.oid)),'insert into')>0;
 
   perform pg_temp.record_result(17,'All current audit writers are trusted database functions',
-    v_writer_count=35 and v_untrusted_writer_count=0,
+    v_writer_count=37 and v_untrusted_writer_count=0,
     'Oczekiwano 20 zaufanych writerów po dodaniu tenant public settings: SECURITY DEFINER albo zamknięte nieklienckie cores/helpers, owner=postgres, auth.uid() i explicit search_path.');
 
   perform pg_temp.record_result(18,'All fixture remains transaction-scoped',

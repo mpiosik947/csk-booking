@@ -6,7 +6,7 @@ import { supabase } from "@/lib/supabase";
 import AdminShell from "../admin/_components/AdminShell";
 import TenantDomains from "./TenantDomains";
 
-type Tenant = { id: string; name: string; tenant_slug: string; public_slug: string; city: string;
+type Tenant = { is_platform_draft?: boolean; id: string; name: string; tenant_slug: string; public_slug: string; city: string;
   status: string; is_public: boolean; plan_key: string | null; created_at: string; readiness: Record<string, boolean> };
 const control = "min-h-12 rounded-lg border border-[#626b55] bg-[#161c14] px-3 py-2 disabled:opacity-40";
 
@@ -44,13 +44,13 @@ export default function PlatformTenants() {
       {items.map(tenant => <section key={tenant.id} className="min-w-0 rounded-xl border border-[#48523c] p-4">
         <h2 className="break-words text-xl font-bold">{tenant.name}</h2>
         <p className="break-all">{tenant.tenant_slug} / {tenant.public_slug}</p>
-        <p>{tenant.city} · {tenant.status} · {tenant.is_public ? "Opublikowany" : "Niepubliczny"}</p>
+        <p>{tenant.city} · {tenant.is_platform_draft && tenant.status === "dormant" ? "Konfiguracja" : tenant.status} · {tenant.is_public ? "Opublikowany" : "Niepubliczny"}</p>
         <p>Plan: {tenant.plan_key ?? "Nieprzypisany"} · Utworzono: {new Date(tenant.created_at).toLocaleDateString("pl-PL")}</p>
         <p className="my-2">Gotowość: {Object.values(tenant.readiness).every(Boolean) ? "Kompletna" : Object.entries(tenant.readiness).filter(([, ready]) => !ready).map(([key]) => ({ identity_ready: "nazwa", slug_ready: "identyfikatory", settings_ready: "ustawienia", plan_ready: "plan", admin_ready: "admin" })[key] ?? key).join(", ")}</p>
         <div className="flex flex-wrap gap-2">
           <Link className={control} href={`/platform-admin/tenants/${tenant.id}`}>Zarządzaj obiektem</Link>
           <Link className={control} href={`/platform-admin/tenants/${tenant.id}/preview`}>Prywatny podgląd</Link>
-          <Link className={control} href={`/tenant-setup/${tenant.tenant_slug}`}>Ustawienia (wymagany tenant admin)</Link>
+          {tenant.is_platform_draft ? <Link className={control} href={`/platform-admin/tenants/${tenant.id}/setup`}>Kontynuuj konfigurację</Link> : <Link className={control} href={`/tenant-setup/${tenant.tenant_slug}`}>Ustawienia (wymagany tenant admin)</Link>}
           <button disabled={busy} className={control} onClick={() => { setSelected(selected === tenant.id ? null : tenant.id); }}>Konfiguruj</button>
         </div>
         {selected === tenant.id && <div className="mt-4 space-y-4">
@@ -59,7 +59,7 @@ export default function PlatformTenants() {
           <p>Aktywacja nie publikuje obiektu. Zawieszenie wyłącza nowy biznes, ale zachowuje historię i obsługę istniejących zobowiązań.</p>
           <div className="flex flex-wrap gap-2">
 
-            {(tenant.status === "dormant" || tenant.status === "suspended") && <button disabled={busy} className={control} onClick={() => void mutate("platform_set_tenant_state_v1", { p_tenant_id: tenant.id, p_action: "activate" })}>Aktywuj po sprawdzeniu gotowości</button>}
+            {!tenant.is_platform_draft && (tenant.status === "dormant" || tenant.status === "suspended") && <button disabled={busy} className={control} onClick={() => void mutate("platform_set_tenant_state_v1", { p_tenant_id: tenant.id, p_action: "activate" })}>Aktywuj po sprawdzeniu gotowości</button>}
             {tenant.status === "active" && <><button disabled={busy} className={control} onClick={() => void mutate("platform_set_tenant_state_v1", { p_tenant_id: tenant.id, p_action: tenant.is_public ? "unpublish" : "publish" })}>{tenant.is_public ? "Wycofaj publikację" : "Opublikuj"}</button><button disabled={busy} className={control} onClick={() => { if (window.confirm("Zawiesić nowy biznes tego obiektu i wycofać publikację?")) void mutate("platform_set_tenant_state_v1", { p_tenant_id: tenant.id, p_action: "suspend" }); }}>Zawieś</button></>}
           </div>
         </div>}

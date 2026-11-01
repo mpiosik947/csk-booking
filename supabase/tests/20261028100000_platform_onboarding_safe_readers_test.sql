@@ -89,7 +89,7 @@ begin
  perform pg_temp.ok('feature DTO allowlist',not exists(select 1 from jsonb_array_elements(item->'features') x where (select array_agg(k order by k) from jsonb_object_keys(x) k)<>array['description','feature_key']));
  r:=pg_temp.rpc(pa,format('select public.platform_get_tenant_onboarding_detail_v1(%L)',b));d:=r->'value';
  perform pg_temp.ok('PA detail allowed',r->>'state'='00000');
- perform pg_temp.ok('detail top DTO allowlist',(select array_agg(k order by k)=array['admins','plan','public_profile','readiness','tenant'] from jsonb_object_keys(d) k));
+ perform pg_temp.ok('detail top DTO allowlist',(select array_agg(k order by k)=array['admins','is_platform_draft','plan','public_profile','readiness','tenant'] from jsonb_object_keys(d) k));
  perform pg_temp.ok('exact tenant B binding',d#>>'{tenant,tenant_id}'=b::text and d#>>'{tenant,name}'='Tenant B' and d#>>'{public_profile,city}'='City B');
  perform pg_temp.ok('tenant DTO allowlist',(select array_agg(k order by k)=array['name','status','technical_slug','tenant_id'] from jsonb_object_keys(d->'tenant') k));
  perform pg_temp.ok('profile DTO allowlist',(select array_agg(k order by k)=array['city','display_name','is_public','public_slug'] from jsonb_object_keys(d->'public_profile') k));

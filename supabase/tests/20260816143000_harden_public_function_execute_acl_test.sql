@@ -302,6 +302,13 @@ insert into pg_temp.expected_function_acl values
  ('public.tenant_draft_create_lane_family_core_v1(uuid,jsonb)','C',false,false,false),
  ('public.tenant_draft_set_lane_configuration_core_v1(uuid,bigint,jsonb,boolean)','C',false,false,false),
  ('public.tenant_onboarding_readiness_core_v2(uuid)','C',false,false,false),
+ ('public.platform_get_draft_configuration_v1(uuid)','C',false,true,false),
+ ('public.platform_save_draft_configuration_v1(uuid,text,uuid,text,jsonb)','C',false,true,false),
+ ('public.platform_get_draft_readiness_v1(uuid)','C',false,true,false),
+ ('public.platform_validate_draft_readiness_v1(uuid,text)','C',false,true,false),
+ ('public.platform_get_tenant_handover_v1(uuid)','C',false,true,false),
+ ('public.platform_handover_tenant_v1(uuid,uuid,text,uuid)','C',false,true,false),
+ ('public.platform_create_tenant_draft_v1(text,text,text,text,text,uuid)','C',false,true,false),
  ('public.platform_create_tenant_bundle_v2(text,text,text,text,text,uuid,uuid)','C',false,true,false),
  ('public.tenant_setup_get_lane_configuration_v1(uuid)','C',false,true,false),
  ('public.tenant_setup_create_lane_family_v1(uuid,jsonb)','C',false,true,false),
@@ -409,8 +416,8 @@ begin
     and procedure.proname<>'csk_sec002_default_acl_probe';
 
   perform pg_temp.record_result(1,'Complete public function inventory',
-    (select pg_catalog.count(*)=271 from pg_temp.expected_function_acl)
-    and v_actual_count=271
+    (select pg_catalog.count(*)=278 from pg_temp.expected_function_acl)
+    and v_actual_count=278
     and not exists(
       select 1 from pg_temp.expected_function_acl expected
       where pg_catalog.to_regprocedure(expected.signature) is null
@@ -456,7 +463,7 @@ begin
       where pg_catalog.has_function_privilege('authenticated',expected.signature,'EXECUTE')
         is distinct from expected.authenticated_execute
     )
-    and (select pg_catalog.count(*)=142 from pg_temp.expected_function_acl where authenticated_execute),
+    and (select pg_catalog.count(*)=149 from pg_temp.expected_function_acl where authenticated_execute),
     'authenticated has exactly 131 independently authorized RPC grants including narrow instructor email authorization.');
 
   perform pg_temp.record_result(5,'Exact service_role ACL matrix',
@@ -514,7 +521,7 @@ begin
     'Future functions created by postgres receive no client or PUBLIC EXECUTE.');
 
   perform pg_temp.record_result(8,'Application function creator scope is exact',
-    (select pg_catalog.count(*)=271
+    (select pg_catalog.count(*)=278
       from pg_catalog.pg_proc procedure
       join pg_catalog.pg_namespace namespace on namespace.oid=procedure.pronamespace
       join pg_catalog.pg_roles owner_role on owner_role.oid=procedure.proowner
