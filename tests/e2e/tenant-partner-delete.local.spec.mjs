@@ -1,0 +1,49 @@
+import {test,expect} from '@playwright/test';import fs from 'node:fs';import assert from 'node:assert/strict';import {randomUUID} from 'node:crypto';import {createServerClient} from '@supabase/ssr';import sharp from 'sharp';import{execFileSync}from'node:child_process';
+const fixture=JSON.parse(fs.readFileSync(process.env.PUBLIC_TEST_MODE_FIXTURE_FILE,'utf8'));
+for(const v of [fixture.app,fixture.origin])assert.equal(new URL(v).hostname,'127.0.0.1');assert.match(fixture.scratchDatabase,/^sbr3_[a-f0-9]{16}$/);
+const emails={admin:'ptm2-0@example.invalid',employee:'ptm2-1@example.invalid',instructor:'ptm2-2@example.invalid',suspended:'ptm2-3@example.invalid',pending:'ptm2-4@example.invalid',foreign:'ptm2-5@example.invalid',pa:'ptm2-6@example.invalid',removed:'ptm2-7@example.invalid',customer:'ptm1-customer@example.invalid'};
+const A='ptm1-synthetic-a';let image;
+async function login(context,actor){const cookies=[];const c=createServerClient(fixture.origin,fixture.anonKey,{cookieOptions:{secure:true},cookies:{getAll:()=>[],setAll:v=>cookies.push(...v)}});const{data,error}=await c.auth.signInWithPassword({email:emails[actor],password:fixture.password});expect(error).toBeNull();await context.addCookies(cookies.map(({name,value})=>({name,value,domain:'127.0.0.1',path:'/',secure:true,sameSite:'Lax'})));return data.session.access_token;}
+async function rpc(name,args,token=fixture.anonKey){const r=await fetch(fixture.origin+'/rest/v1/rpc/'+name,{method:'POST',headers:{apikey:fixture.anonKey,authorization:'Bearer '+token,'content-type':'application/json'},body:JSON.stringify(args)});return{status:r.status,body:await r.json()};}
+const values=(name,extra={})=>({name,kind:'partner',display_format:'logo',is_active:true,display_order:0,target_url:null,short_description:null,starts_at:null,ends_at:null,...extra});
+async function save(context,slug,props,record=null,upload=image){return context.request.post(fixture.app+'/api/tenant-partners/'+slug,{headers:{origin:fixture.app},multipart:{payload:JSON.stringify({id:record?.id??randomUUID(),revision:record?.revision??null,media_id:record?.media_id??null,archive:false,values:props}),...(upload?{image:{name:'synthetic.png',mimeType:'image/png',buffer:upload}}:{})}});}
+
+const dbsql=q=>execFileSync('docker',['exec','-i','supabase_db_csk-booking','psql','-X','-At','-v','ON_ERROR_STOP=1','-U','postgres','-d',fixture.scratchDatabase],{input:'BEGIN READ ONLY;\n'+q+'\nROLLBACK;',encoding:'utf8'}).trim().split('\n').filter(x=>!['BEGIN','ROLLBACK'].includes(x)).join('\n');
+const deletion=(context,row,extra={})=>context.request.post(fixture.app+'/api/tenant-partners/'+A+'/permanent-delete',{headers:{origin:fixture.app},data:{id:row.id,revision:row.revision,...extra}});
+async function create(context,active=true){const name='DELETE '+randomUUID();const r=await save(context,A,values(name,{is_active:active}));expect(r.status(),await r.text()).toBe(200);return(await r.json()).items.find(x=>x.name===name);}
+async function archive(context,row){const r=await context.request.post(fixture.app+'/api/tenant-partners/'+A,{headers:{origin:fixture.app},multipart:{payload:JSON.stringify({id:row.id,revision:row.revision,media_id:row.media_id,archive:true,values:values(row.name)})}});expect(r.status()).toBe(200);return(await r.json()).items.find(x=>x.id===row.id);}
+async function archived(context){return archive(context,await create(context));}
+test.beforeAll(async()=>{image=await sharp({create:{width:120,height:60,channels:3,background:'#118811'}}).png().toBuffer();});
+test('real UI confirmation, cancel, complete delete preserves audit and zero media/storage',async({page,context})=>{
+ await page.setViewportSize({width:320,height:900});await login(context,'admin');const row=await archived(context);const previous=dbsql("select coalesce(jsonb_agg(to_jsonb(c) order by id),'[]') from app_private.tenant_partner_changes c where partner_id='"+row.id+"';");
+ await page.goto('/t/'+A+'/admin/partners');const item=page.locator('li').filter({has:page.getByRole('heading',{name:row.name,exact:true})});await item.getByRole('button',{name:'Usuń trwale',exact:true}).click();
+ const dialog=page.getByRole('dialog');expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);await expect(dialog.getByRole('heading',{name:'Trwale usunąć partnera?'})).toBeVisible();await expect(dialog.getByRole('button',{name:'Anuluj'})).toBeFocused();await dialog.getByRole('button',{name:'Anuluj'}).click();await expect(dialog).not.toBeVisible();await expect(item).toBeVisible();
+ await item.getByRole('button',{name:'Usuń trwale',exact:true}).click();await dialog.getByRole('button',{name:'Usuń trwale',exact:true}).click();await expect(item).toHaveCount(0);await expect(page.getByRole('status')).toHaveText('Trwale usunięto partnera i grafikę.');
+ expect(dbsql("select count(*) from public.tenant_partners where id='"+row.id+"';")).toBe('0');expect(dbsql("select count(*) from app_private.tenant_partner_media where id='"+row.media_id+"';")).toBe('0');expect(dbsql("select count(*) from storage.objects where bucket_id='tenant-partners' and name like '%/"+row.media_id+".webp';")).toBe('0');
+ expect(dbsql("select coalesce(jsonb_agg(to_jsonb(c) order by id),'[]') from app_private.tenant_partner_changes c where partner_id='"+row.id+"' and not actions @> array['permanent_delete'];")).toBe(previous);
+ expect(dbsql("select count(*) from app_private.tenant_partner_changes where partner_id='"+row.id+"' and actions @> array['permanent_delete'] and partner_name is not null;")).toBe('1');
+ expect((await context.request.get(fixture.app+'/api/tenant-partners/media/'+row.media_id)).status()).toBe(404);
+});
+for(const active of [true,false])test('non-archived deletion denied, UI action absent '+active,async({page,context})=>{
+ await login(context,'admin');const row=await create(context,active);expect((await deletion(context,row)).status()).toBe(400);await page.goto('/t/'+A+'/admin/partners');const item=page.locator('li').filter({has:page.getByRole('heading',{name:row.name,exact:true})});await expect(item).toBeVisible();await expect(item.getByRole('button',{name:'Usuń trwale'})).toHaveCount(0);
+ expect((await deletion(context,await archive(context,row))).status()).toBe(200);
+});
+for(const actor of ['anon','employee','instructor','customer','foreign','suspended','pending','removed','pa'])test('delete authority denies '+actor,async({browser})=>{
+ const owner=await browser.newContext({ignoreHTTPSErrors:true}),other=await browser.newContext({ignoreHTTPSErrors:true});try{await login(owner,'admin');const row=await archived(owner);if(actor!=='anon')await login(other,actor);expect([401,403]).toContain((await deletion(other,row)).status());expect((await deletion(owner,row)).status()).toBe(200);}finally{await owner.close();await other.close();}
+});
+test('stale, forged payload, CSRF and shared media fail closed',async({context})=>{
+ const token=await login(context,'admin');let row=await create(context);const shared=await save(context,A,values('SHARED '+randomUUID()),{id:randomUUID(),revision:null,media_id:row.media_id},null);expect(shared.status()).toBe(200);const second=(await shared.json()).items.find(x=>x.name.startsWith('SHARED '));row=await archive(context,row);
+ expect((await deletion(context,{...row,revision:randomUUID()})).status()).toBe(409);expect((await deletion(context,row,{tenant_id:randomUUID()})).status()).toBe(400);
+ const csrf=await context.request.post(fixture.app+'/api/tenant-partners/'+A+'/permanent-delete',{headers:{origin:'https://foreign.invalid'},data:{id:row.id,revision:row.revision}});expect(csrf.status()).toBe(403);
+ const denied=await deletion(context,row);expect(denied.status()).toBe(400);expect((await denied.json()).error).toBe('media_shared');expect((await context.request.get(fixture.app+'/api/tenant-partners/media/'+row.media_id)).status()).toBe(200);
+ const replaced=await save(context,A,values(second.name),second,image);expect(replaced.status()).toBe(200);expect((await deletion(context,row)).status()).toBe(200);
+ const current=(await rpc('admin_get_tenant_partners_v1',{p_tenant_slug:A},token)).body.items.find(x=>x.id===second.id);expect((await deletion(context,await archive(context,current))).status()).toBe(200);
+});
+test('concurrent deletes and racing edit have exactly one delete success',async({context})=>{
+ await login(context,'admin');const row=await archived(context);const results=await Promise.all([deletion(context,row),deletion(context,row),save(context,A,values('forbidden edit'),row,null)]);expect(results.slice(0,2).filter(r=>r.status()===200)).toHaveLength(1);expect(results[2].status()).not.toBe(200);expect(dbsql("select count(*) from app_private.tenant_partner_changes where partner_id='"+row.id+"' and actions @> array['permanent_delete'];")).toBe('1');
+});
+test('real Storage outage retains recoverable archived record and retry completes',async({context})=>{
+ await login(context,'admin');const row=await archived(context);const storage=process.env.PARTNER_TEST_STORAGE_CONTAINER;assert.match(storage,/^partners4a_storage_[a-f0-9]{8}$/);
+ try{execFileSync('docker',['stop',storage],{stdio:'pipe'});const failed=await deletion(context,row);expect(failed.status()).toBe(502);expect(dbsql("select count(*) from public.tenant_partners where id='"+row.id+"';")).toBe('1');expect(dbsql("select count(*) from app_private.tenant_partner_media where id='"+row.media_id+"';")).toBe('1');}finally{execFileSync('docker',['start',storage],{stdio:'pipe'});}
+ await expect.poll(async()=>{try{return(await fetch(fixture.origin+'/storage/v1/status')).status;}catch{return 0;}},{timeout:20000}).toBe(200);expect((await deletion(context,row)).status()).toBe(200);expect(dbsql("select count(*) from storage.objects where name like '%/"+row.media_id+".webp';")).toBe('0');
+});

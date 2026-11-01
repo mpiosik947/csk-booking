@@ -27,6 +27,9 @@ create temporary table expected_function_acl(
 ) on commit drop;
 
 insert into expected_function_acl values
+  ('public.admin_prepare_partner_delete_v1(text,uuid,uuid)','C',false,true,false),
+  ('public.admin_finish_partner_delete_v1(text,uuid,uuid,uuid)','C',false,true,false),
+  ('public.admin_release_partner_delete_v1(text,uuid,uuid,uuid)','C',false,true,false),
   ('public.admin_get_tenant_partners_v1(text)','C',false,true,false),
   ('public.admin_save_tenant_partner_v1(text,uuid,uuid,jsonb,uuid,boolean)','C',false,true,false),
   ('public.get_public_tenant_partners_v1(text)','B',true,true,false),
@@ -406,8 +409,8 @@ begin
     and procedure.proname<>'csk_sec002_default_acl_probe';
 
   perform pg_temp.record_result(1,'Complete public function inventory',
-    (select pg_catalog.count(*)=268 from pg_temp.expected_function_acl)
-    and v_actual_count=268
+    (select pg_catalog.count(*)=271 from pg_temp.expected_function_acl)
+    and v_actual_count=271
     and not exists(
       select 1 from pg_temp.expected_function_acl expected
       where pg_catalog.to_regprocedure(expected.signature) is null
@@ -453,7 +456,7 @@ begin
       where pg_catalog.has_function_privilege('authenticated',expected.signature,'EXECUTE')
         is distinct from expected.authenticated_execute
     )
-    and (select pg_catalog.count(*)=139 from pg_temp.expected_function_acl where authenticated_execute),
+    and (select pg_catalog.count(*)=142 from pg_temp.expected_function_acl where authenticated_execute),
     'authenticated has exactly 131 independently authorized RPC grants including narrow instructor email authorization.');
 
   perform pg_temp.record_result(5,'Exact service_role ACL matrix',
@@ -511,7 +514,7 @@ begin
     'Future functions created by postgres receive no client or PUBLIC EXECUTE.');
 
   perform pg_temp.record_result(8,'Application function creator scope is exact',
-    (select pg_catalog.count(*)=268
+    (select pg_catalog.count(*)=271
       from pg_catalog.pg_proc procedure
       join pg_catalog.pg_namespace namespace on namespace.oid=procedure.pronamespace
       join pg_catalog.pg_roles owner_role on owner_role.oid=procedure.proowner

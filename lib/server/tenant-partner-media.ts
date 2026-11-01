@@ -18,10 +18,14 @@ export async function normalizePartnerImage(bytes: Buffer, mime: string) {
   if (data.length > PARTNER_MEDIA_LIMIT) throw new Error("image_too_large");
   return { bytes: data, width: info.width, height: info.height };
 }
-export function partnerStorageClient() {
+export function partnerStorageClient(timeoutMs?: number) {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL, key = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!url || !key) throw new Error("storage_unavailable");
   // Infrastructure only. Never use this client for the admin content writer.
-  return createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } });
+  return createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false },
+    ...(timeoutMs ? { global: { fetch: (input: RequestInfo | URL, init?: RequestInit) => fetch(input, {
+      ...init, signal: AbortSignal.any([AbortSignal.timeout(timeoutMs), ...(init?.signal ? [init.signal] : [])]),
+    }) } } : {}),
+  });
 }
 export const partnerHeaders = { "Cache-Control": "private, no-store, max-age=0, must-revalidate", "X-Content-Type-Options": "nosniff", "Vary": "Cookie" };

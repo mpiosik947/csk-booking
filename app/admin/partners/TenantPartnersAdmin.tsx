@@ -18,6 +18,12 @@ export default function TenantPartnersAdmin({ tenantSlug }: { tenantSlug: string
   const [list, setList] = useState<PartnerList | null>(null), [error, setError] = useState(""), [message, setMessage] = useState("");
   const [denied, setDenied] = useState(false), [busy, setBusy] = useState(false), [editing, setEditing] = useState<{ id: string; record: AdminPartner | null } | null>(null);
   const [values, setValues] = useState<PartnerValues>(empty), [file, setFile] = useState<File | null>(null);
+  const [deleting, setDeleting] = useState<AdminPartner | null>(null);
+  const deleteDialog = useRef<HTMLDialogElement>(null);
+  useEffect(() => {
+    if (deleting) deleteDialog.current?.showModal();
+    else deleteDialog.current?.close();
+  }, [deleting]);
   const epoch = useRef(0), actor = useRef<string | null | undefined>(undefined), lock = useRef(false);
   const load = useCallback(async () => {
     const generation = ++epoch.current;
@@ -39,7 +45,7 @@ export default function TenantPartnersAdmin({ tenantSlug }: { tenantSlug: string
     const { data } = supabase.auth.onAuthStateChange((event, session) => {
       if (event === "SIGNED_OUT" || (actor.current !== undefined && actor.current !== (session?.user.id ?? null))) {
         ++epoch.current; actor.current = session?.user.id ?? null;
-        setDenied(true); setList(null); setEditing(null); setFile(null);
+        setDenied(true); setList(null); setEditing(null); setFile(null); setDeleting(null);
       }
     });
     return () => { ++sessionEpoch.current; clearTimeout(task); data.subscription.unsubscribe(); };
@@ -69,6 +75,29 @@ export default function TenantPartnersAdmin({ tenantSlug }: { tenantSlug: string
     finally { lock.current = false; setBusy(false); }
   }
   function submit(event: FormEvent) { event.preventDefault(); if (editing) void save(editing, values, file); }
+  async function permanentlyDelete() {
+    if (!deleting?.archived_at || lock.current || denied || !list) return;
+    lock.current = true; setBusy(true); setError(""); setMessage("");
+    const generation = epoch.current, record = deleting;
+    try {
+      const response = await fetch(`/api/tenant-partners/${tenantSlug}/permanent-delete`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: record.id, revision: record.revision }), signal: AbortSignal.timeout(30000),
+      });
+      if (generation !== epoch.current) return;
+      const data = await response.json();
+      setDeleting(null);
+      if (response.status === 401 || response.status === 403) { setDenied(true); setList(null); return; }
+      if (!response.ok || data.deleted !== true) {
+        setError(data.error === "media_shared" ? "Grafika jest używana także przez innego partnera. Usunięcie zostało zablokowane."
+          : "Nie potwierdzono pełnego usunięcia. Odśwież listę. Jeśli wpis pozostał, ponów usunięcie; trwająca operacja może wymagać odczekania dwóch minut.");
+        return;
+      }
+      await load();
+      if (actor.current) setMessage("Trwale usunięto partnera i grafikę.");
+    } catch { if (generation === epoch.current) { setDeleting(null); setError("Nie potwierdzono pełnego usunięcia. Odśwież listę przed ponowieniem."); } }
+    finally { lock.current = false; setBusy(false); }
+  }
   return <AdminShell eyebrow="Treści obiektu" title="Partnerzy i sponsorzy" description="Logotypy i banery widoczne pod informacjami o obiekcie."
     actions={<Link className={button} href={`/t/${tenantSlug}/admin/settings`}>Ustawienia publiczne</Link>}>
     {denied ? <p role="alert">Brak dostępu. Wymagane aktywne konto administratora tego obiektu.</p> : <>
@@ -101,8 +130,20 @@ export default function TenantPartnersAdmin({ tenantSlug }: { tenantSlug: string
         {!p.archived_at && <div className="flex flex-wrap gap-2"><button className={button} disabled={busy} onClick={() => edit(p)}>Edytuj</button>
           <button className={button} disabled={busy} onClick={() => void save({ id: p.id, record: p }, { ...partnerValues(p), is_active: !p.is_active }, null)}>{p.is_active ? "Wyłącz" : "Aktywuj"}</button>
           <button className={button} disabled={busy} onClick={() => { if (window.confirm(`Archiwizować partnera „${p.name}”? Zniknie ze strony publicznej.`)) void save({ id: p.id, record: p }, partnerValues(p), null, true); }}>Archiwizuj</button></div>}
+        {p.archived_at && <button className={`${button} border-red-400 text-red-200`} disabled={busy} onClick={() => setDeleting(p)}>Usuń trwale</button>}
         <details className="mt-3"><summary className="cursor-pointer py-2">Podgląd grafiki i oznaczeń</summary><TenantPartners name="— podgląd" items={[p]} /></details>
       </li>)}</ul>
     </>}
+    <dialog ref={deleteDialog} aria-labelledby="partner-delete-title" aria-describedby="partner-delete-description"
+      className="m-auto w-[calc(100%-2rem)] max-w-lg rounded-xl border border-[#536143] bg-[#141914] p-5 text-white backdrop:bg-black/70"
+      onCancel={event => { if (busy) event.preventDefault(); else setDeleting(null); }}>
+      <h2 id="partner-delete-title" className="text-xl font-semibold">Trwale usunąć partnera?</h2>
+      <p className="my-3 break-words">{deleting?.name}</p>
+      <p id="partner-delete-description">Partner oraz powiązana z nim grafika zostaną usunięte. Tej operacji nie można cofnąć.</p>
+      <div className="mt-5 flex flex-wrap gap-3">
+        <button autoFocus className={button} disabled={busy} onClick={() => setDeleting(null)}>Anuluj</button>
+        <button className={`${button} border-red-400 text-red-200`} disabled={busy} onClick={() => void permanentlyDelete()}>{busy ? "Usuwanie…" : "Usuń trwale"}</button>
+      </div>
+    </dialog>
   </AdminShell>;
 }
