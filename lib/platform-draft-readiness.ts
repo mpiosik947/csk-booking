@@ -25,5 +25,5 @@ export function readReadiness(value: unknown, tenantId: string): Readiness | nul
 }
 
 export function readinessNotice(r: Readiness): string {
-  return r.current ? "Konfiguracja zweryfikowana" : r.stale ? "Konfiguracja zmieniła się od ostatniej weryfikacji" : r.state === "READY" ? "Konfiguracja spełnia wymagania — uruchom weryfikację" : "Konfiguracja wymaga uzupełnienia";
+  return r.current ? "✓ Obiekt gotowy do przekazania" : r.stale ? "Konfiguracja zmieniła się od ostatniego sprawdzenia. Sprawdź gotowość ponownie przed przekazaniem obiektu." : r.state === "READY" ? "Konfiguracja spełnia wymagania — uruchom weryfikację" : "Konfiguracja wymaga uzupełnienia";
 }

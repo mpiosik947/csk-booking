@@ -4,6 +4,7 @@ import { candidateActions, expectedState, fallback, managementError, readAdmins,
 export type Rpc = (name: string, args: Record<string, unknown>) => PromiseLike<{ data: unknown; error: unknown; status?: number }>;
 export type Section<T> = { data: T | null; loading: boolean; error: string };
 const section = <T>(data: T | null = null): Section<T> => ({ data, loading: true, error: "" });
+const unchecked = (): Section<Eligibility> => ({ data: null, loading: false, error: "" });
 export const adminRpc = { add: "platform_add_tenant_admin_v1", reactivate: "platform_reactivate_tenant_admin_v1", demote: "platform_demote_tenant_admin_v1", suspend: "platform_suspend_tenant_admin_v1" } as const;
 export type Operation = "plan" | AdminAction | "archive" | "restore" | "public-access";
 export const actionLabels: Record<Operation, string> = { plan: "Zmień plan", add: "Dodaj jako administratora", reactivate: "Reaktywuj administratora", demote: "Usuń uprawnienia administratora", suspend: "Zawieś administratora", archive: "Archiwizuj obiekt", restore: "Przywróć obiekt do konfiguracji", "public-access": "Zmień publiczną dostępność" };
@@ -28,7 +29,7 @@ export class ManagementSession {
   private requestId: () => string;
   constructor(id: string, rpc: Rpc, initial: Detail | null, requestId: () => string = () => crypto.randomUUID()) {
     this.id = id; this.rpc = rpc; this.requestId = requestId;
-    this.state = { detail: section(initial), plans: section(), admins: section(), lifecycle: section(), eligibility: section(), publicAccess: section(), preview: { ...section<PlanPreview>(), loading: false }, candidate: { ...section<Candidate>(), loading: false }, target: "", email: "", busy: false, denied: false, message: "", attempt: null };
+    this.state = { detail: section(initial), plans: section(), admins: section(), lifecycle: section(), eligibility: unchecked(), publicAccess: section(), preview: { ...section<PlanPreview>(), loading: false }, candidate: { ...section<Candidate>(), loading: false }, target: "", email: "", busy: false, denied: false, message: "", attempt: null };
   }
   subscribe = (listener: () => void) => { this.listeners.add(listener); return () => { this.listeners.delete(listener); }; };
   snapshot = () => this.state;
@@ -36,7 +37,7 @@ export class ManagementSession {
   invalidate = () => { this.generation++; };
   deny = () => {
     this.generation++;
-    this.update({ denied: true, busy: false, message: managementError({ code: "42501" }).message, attempt: null, detail: section(), plans: section(), admins: section(), lifecycle: section(), eligibility: section(), publicAccess: section(), candidate: section(), preview: section(), email: "", target: "" });
+    this.update({ denied: true, busy: false, message: managementError({ code: "42501" }).message, attempt: null, detail: section(), plans: section(), admins: section(), lifecycle: section(), eligibility: unchecked(), publicAccess: section(), candidate: section(), preview: section(), email: "", target: "" });
   };
   private live(token: number) { return !this.state.denied && token === this.generation; }
   private async call(name: string, args: Record<string, unknown>) {
@@ -58,17 +59,23 @@ export class ManagementSession {
   }
   private async canonical(token: number) {
     const s = this.state;
-    this.update({ detail: { ...s.detail, loading: true }, plans: section(), admins: section(), lifecycle: section(), eligibility: section(), publicAccess: section(), preview: { ...section<PlanPreview>(), loading: false }, candidate: { ...section<Candidate>(), loading: false } });
+    this.update({ detail: { ...s.detail, loading: true }, plans: section(), admins: section(), lifecycle: section(), eligibility: unchecked(), publicAccess: section(), preview: { ...section<PlanPreview>(), loading: false }, candidate: { ...section<Candidate>(), loading: false } });
     const args = { p_tenant_id: this.id };
-    const [detail, plans, admins, lifecycle, eligibility, publicAccess] = await Promise.all([
+    const [detail, plans, admins, lifecycle, publicAccess] = await Promise.all([
       this.read(token, "platform_get_tenant_onboarding_detail_v1", args, v => readDetail(v, this.id)),
       this.read(token, "platform_list_active_plans_v1", {}, readPlans),
       this.read(token, "platform_get_tenant_admin_management_v1", args, v => readAdmins(v, this.id)),
       this.read(token, "platform_get_tenant_archive_preview_v1", args, v => readLifecycle(v, this.id)),
-      this.read(token, "platform_get_tenant_delete_eligibility_v1", args, v => readEligibility(v, this.id)),
       this.read(token, "platform_get_tenant_public_access_v1", args, readPublicAccess),
     ]);
-    if (this.live(token)) this.update({ detail, plans, admins, lifecycle, eligibility, publicAccess });
+    if (this.live(token)) this.update({ detail, plans, admins, lifecycle, publicAccess });
+  }
+  async checkDeleteEligibility() {
+    if (this.locked) return;
+    const token = ++this.generation;
+    this.update({ busy: true, eligibility: section() });
+    const eligibility = await this.read(token, "platform_get_tenant_delete_eligibility_v1", { p_tenant_id: this.id }, v => readEligibility(v, this.id));
+    if (this.live(token)) this.update({ eligibility, busy: false });
   }
   async refresh() {
     if (this.state.busy || this.state.denied || this.state.attempt) return;

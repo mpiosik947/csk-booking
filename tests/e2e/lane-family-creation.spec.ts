@@ -166,12 +166,12 @@ async function fillPricingGroup(
   price: number
 ) {
   const group = sectionForHeading(resource, dayGroup);
-  await group.getByLabel("Od osób", { exact: true }).fill("1");
-  await group.getByLabel("Do osób", { exact: true }).fill(String(maxPeople));
+  await group.getByLabel("Liczba osób — od", { exact: true }).fill("1");
+  await group.getByLabel("Liczba osób — do", { exact: true }).fill(String(maxPeople));
   await group
-    .getByLabel("Opis progu", { exact: true })
+    .getByLabel("Nazwa wariantu ceny", { exact: true })
     .fill(maxPeople === 1 ? "1 osoba" : `1–${maxPeople} osób`);
-  await group.getByLabel("Cena PLN/h", { exact: true }).fill(String(price));
+  await group.getByLabel(/^Cena (całej osi|stanowiska) za godzinę$/, { exact: true }).fill(String(price));
 }
 
 async function fillResource(
@@ -200,10 +200,10 @@ async function fillResource(
     )
     .fill(String(options.capacity));
   await resource
-    .getByLabel("Maks. osób w jednej rezerwacji", { exact: true })
+    .getByLabel("Limit osób w jednej rezerwacji", { exact: true })
     .fill(String(options.maxPeople));
-  await resource.getByLabel("Krok rezerwacji (min)", { exact: true }).fill("60");
-  await setCheckbox(resource, "Aktywny zasób", options.active);
+  await resource.getByLabel("Odstęp między godzinami rozpoczęcia (minuty)", { exact: true }).fill("60");
+  await setCheckbox(resource, options.kind === "lane" ? "Oś w użyciu" : "Stanowisko w użyciu", options.active);
   await setCheckbox(resource, "Rezerwacje online", options.online);
 
   let durationInputs = resource.getByLabel("Czas rezerwacji w minutach", {
@@ -376,10 +376,10 @@ test.describe.serial("local admin lane-family creation", () => {
     await expect(review).toContainText("Wyłączone");
     await expect(review).toContainText("Rezerwacja całej osi: Włączona");
     await expect(review).toContainText("Rezerwacja stanowisk: Wyłączona");
-    await review.getByRole("button", { name: "Utwórz rodzinę osi" }).click();
+    await review.getByRole("button", { name: "Utwórz oś" }).click();
 
     await expect(page.getByRole("status")).toContainText(
-      "Nowa rodzina osi została utworzona."
+      "Utworzono oś wraz z jej stanowiskami."
     );
     const card = page
       .getByRole("heading", { name: standaloneName, exact: true })
@@ -480,9 +480,9 @@ test.describe.serial("local admin lane-family creation", () => {
     for (const name of [hierarchyName, ...positionNames]) {
       await expect(review).toContainText(name);
     }
-    await review.getByRole("button", { name: "Utwórz rodzinę osi" }).click();
+    await review.getByRole("button", { name: "Utwórz oś" }).click();
     await expect(page.getByRole("status")).toContainText(
-      "Nowa rodzina osi została utworzona."
+      "Utworzono oś wraz z jej stanowiskami."
     );
     await page.reload();
     const card = page
@@ -536,20 +536,20 @@ test.describe.serial("local admin lane-family creation", () => {
         name: invalidNames[2],
         mutate: async (_dialog, root) => {
           await root.getByLabel("Pojemność osi").fill("4");
-          await root.getByLabel("Maks. osób w jednej rezerwacji").fill("5");
+          await root.getByLabel("Limit osób w jednej rezerwacji").fill("5");
         },
         expected: /nie może przekraczać pojemności/u,
       },
       {
         name: invalidNames[3],
         mutate: async (_dialog, root) =>
-          sectionForHeading(root, "Pon–Czw").getByLabel("Cena PLN/h").fill(""),
+          sectionForHeading(root, "Pon–Czw").getByLabel(/^Cena (całej osi|stanowiska) za godzinę$/).fill(""),
         expected: /cena musi być/u,
       },
       {
         name: invalidNames[4],
         mutate: async (_dialog, root) =>
-          sectionForHeading(root, "Pon–Czw").getByLabel("Od osób").fill("2"),
+          sectionForHeading(root, "Pon–Czw").getByLabel("Liczba osób — od").fill("2"),
         expected: /zawiera lukę/u,
       },
       {
@@ -557,10 +557,10 @@ test.describe.serial("local admin lane-family creation", () => {
         mutate: async (_dialog, root) => {
           const group = sectionForHeading(root, "Pon–Czw");
           await group.getByRole("button", { name: "+ Dodaj próg" }).click();
-          await group.getByLabel("Od osób").nth(1).fill("3");
-          await group.getByLabel("Do osób").nth(1).fill("4");
-          await group.getByLabel("Opis progu").nth(1).fill("3–4 osoby");
-          await group.getByLabel("Cena PLN/h").nth(1).fill("55");
+          await group.getByLabel("Liczba osób — od").nth(1).fill("3");
+          await group.getByLabel("Liczba osób — do").nth(1).fill("4");
+          await group.getByLabel("Nazwa wariantu ceny").nth(1).fill("3–4 osoby");
+          await group.getByLabel(/^Cena (całej osi|stanowiska) za godzinę$/).nth(1).fill("55");
         },
         expected: /nakładają się/u,
       },

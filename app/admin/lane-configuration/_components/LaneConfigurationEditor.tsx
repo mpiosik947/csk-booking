@@ -1,5 +1,6 @@
 "use client";
 
+import FieldGuide from "@/app/_components/FieldGuide";
 import {
   useCallback,
   useEffect,
@@ -52,7 +53,7 @@ type Props = {
 
 const CONTROLLED_RESULT_MESSAGES: Record<string, string> = {
   not_allowed: "Nie masz uprawnień do zmiany konfiguracji osi.",
-  family_not_found: "Nie znaleziono wskazanej rodziny zasobów.",
+  family_not_found: "Nie znaleziono wybranej osi.",
   invalid_payload: "Nie udało się przygotować bezpiecznego zestawu zmian.",
   invalid_hierarchy: "Hierarchia osi zmieniła się. Odśwież dane przed ponowną edycją.",
   invalid_configuration: "Konfiguracja nie spełnia wymagań systemu rezerwacji.",
@@ -101,35 +102,13 @@ function updatePositionActivation(
   });
 }
 
-function ToggleField({
-  id,
-  label,
-  checked,
-  disabled,
-  onChange,
-}: {
-  id: string;
-  label: string;
-  checked: boolean;
-  disabled: boolean;
-  onChange: (checked: boolean) => void;
+function ToggleField({ id, label, help, checked, disabled, onChange }: {
+  id: string; label: string; help: string; checked: boolean; disabled: boolean; onChange: (checked: boolean) => void;
 }) {
-  return (
-    <label
-      htmlFor={id}
-      className="flex min-h-11 items-center justify-between gap-4 rounded-xl border border-[#3d4638] bg-[#101310] px-4 py-3"
-    >
-      <span className="text-sm font-semibold text-[#e3dfd2]">{label}</span>
-      <input
-        id={id}
-        type="checkbox"
-        checked={checked}
-        disabled={disabled}
-        onChange={(event) => onChange(event.target.checked)}
-        className="h-6 w-6 accent-[#8b7b48] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d7c895] disabled:cursor-not-allowed disabled:opacity-50"
-      />
-    </label>
-  );
+  return <FieldGuide label={label} help={help}>
+    <input id={id} type="checkbox" checked={checked} disabled={disabled}
+      onChange={e => onChange(e.target.checked)} className="h-6 w-6 accent-[#8b7b48] focus-visible:ring-2" />
+  </FieldGuide>;
 }
 
 function PositionActivationControls({
@@ -175,7 +154,7 @@ function PositionActivationControls({
       <div className="grid gap-3 sm:grid-cols-2">
         <ToggleField
           id={`active-${resource.lane_id}`}
-          label="Aktywne"
+          label="Aktywne" help="Włącz, gdy stanowisko jest gotowe do użytkowania."
           checked={edit.is_active}
           disabled={disabled}
           onChange={(checked) =>
@@ -191,7 +170,7 @@ function PositionActivationControls({
         />
         <ToggleField
           id={`position-online-${resource.lane_id}`}
-          label="Rezerwacje online"
+          label="Rezerwacje online" help="Udostępnia to miejsce do rezerwacji po otwarciu dostępu publicznego."
           checked={edit.online_bookable}
           disabled={
             disabled ||
@@ -250,9 +229,8 @@ function LimitFields({
 
   return (
     <div className="grid gap-4 sm:grid-cols-2">
-      <label className="block">
-        <span className="text-sm font-semibold text-[#e3dfd2]">{capacityLabel}</span>
-        <input
+      <FieldGuide label={capacityLabel} help={capacityDescription} required>
+          <input
           type="number"
           inputMode="numeric"
           min="1"
@@ -271,15 +249,9 @@ function LimitFields({
           }
           className="mt-2 min-h-11 w-full rounded-xl border border-[#3d4638] bg-[#101310] px-3 text-[#f2efe4] outline-none focus:border-[#7a6a3c] focus:ring-2 focus:ring-[#d7c895]/25 disabled:cursor-not-allowed disabled:opacity-60"
         />
-        <span className="mt-2 block text-xs leading-5 text-[#92988c]">
-          {capacityDescription}
-        </span>
-      </label>
-      <label className="block">
-        <span className="text-sm font-semibold text-[#e3dfd2]">
-          Maks. osób w jednej rezerwacji
-        </span>
-        <input
+        </FieldGuide>
+      <FieldGuide label="Limit osób w jednej rezerwacji" help="Największa grupa, jaką klient może zarezerwować jednorazowo." required>
+          <input
           type="number"
           inputMode="numeric"
           min="1"
@@ -298,11 +270,7 @@ function LimitFields({
           }
           className="mt-2 min-h-11 w-full rounded-xl border border-[#3d4638] bg-[#101310] px-3 text-[#f2efe4] outline-none focus:border-[#7a6a3c] focus:ring-2 focus:ring-[#d7c895]/25 disabled:cursor-not-allowed disabled:opacity-60"
         />
-        <span className="mt-2 block text-xs leading-5 text-[#92988c]">
-          Największa liczba osób, którą klient może wskazać w jednej nowej rezerwacji
-          online.
-        </span>
-      </label>
+        </FieldGuide>
     </div>
   );
 }
@@ -323,9 +291,8 @@ function ResourceNameField({
   const label = resource.resource_kind === "position" ? "Nazwa stanowiska" : "Nazwa osi";
 
   return (
-    <label className="block">
-      <span className="text-sm font-semibold text-[#e3dfd2]">{label}</span>
-      <input
+    <FieldGuide label={label} help="Nazwa widoczna w panelu i podczas rezerwacji." example={resource.resource_kind === "position" ? "Stanowisko 1" : "Oś kryta"} required>
+          <input
         type="text"
         value={edit.name}
         maxLength={LANE_RESOURCE_NAME_MAX_LENGTH}
@@ -341,10 +308,7 @@ function ResourceNameField({
         }
         className="mt-2 min-h-11 w-full rounded-xl border border-[#3d4638] bg-[#101310] px-3 text-[#f2efe4] outline-none focus:border-[#7a6a3c] focus:ring-2 focus:ring-[#d7c895]/25 disabled:cursor-not-allowed disabled:opacity-60"
       />
-      <span className="mt-2 block text-xs leading-5 text-[#92988c]">
-        Nazwa wyświetlana klientom i obsłudze. Techniczna tożsamość zasobu pozostaje bez zmian.
-      </span>
-    </label>
+        </FieldGuide>
   );
 }
 
@@ -427,8 +391,7 @@ function DurationEditor({
         ))}
       </div>
       <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:items-end">
-        <label className="min-w-0 flex-1" htmlFor={`new-duration-${resource.lane_id}`}>
-          <span className="text-sm font-semibold text-[#e3dfd2]">Nowy czas (minuty)</span>
+        <FieldGuide className="flex-1" label="Nowy czas (minuty)" help={`Dodaj długość rezerwacji będącą wielokrotnością ${resource.booking_step_minutes} minut.`} example="60" error={inputError}>
           <input
             id={`new-duration-${resource.lane_id}`}
             type="number"
@@ -444,7 +407,7 @@ function DurationEditor({
             }}
             className="mt-2 min-h-11 w-full rounded-xl border border-[#3d4638] bg-[#101310] px-3 text-[#f2efe4] outline-none focus:border-[#7a6a3c] focus:ring-2 focus:ring-[#d7c895]/25 disabled:opacity-50"
           />
-        </label>
+        </FieldGuide>
         <button
           type="button"
           disabled={disabled || newDuration === ""}
@@ -454,10 +417,9 @@ function DurationEditor({
           + Dodaj czas
         </button>
       </div>
-      {inputError && <p role="alert" className="mt-2 text-sm text-[#e1c477]">{inputError}</p>}
       {resource.durations.some((duration) => !duration.is_active) && (
         <p className="mt-3 text-xs text-[#858c7f]">
-          Historyczne nieaktywne czasy pozostają zachowane poza aktywnym snapshotem.
+          Wcześniejsze, wyłączone długości rezerwacji są zachowane w historii.
         </p>
       )}
     </section>
@@ -575,13 +537,8 @@ function PricingEditor({
     )}`;
     return (
       <div className="min-w-0 rounded-xl border border-[#30372c] bg-[#101310] p-3">
-        <label
-          htmlFor={`${idBase}-price`}
-          className="block min-w-0 text-sm font-semibold text-[#c7cbbf]"
-        >
-          <span className="md:sr-only">Cena {groupLabel}</span>
-          <span className="flex min-h-11 items-center rounded-xl border border-[#3d4638] bg-[#161a16] px-3 focus-within:ring-2 focus-within:ring-[#d7c895]/25">
-            <input
+        <FieldGuide label={`${resource.resource_kind === "lane" ? "Cena całej osi" : "Cena stanowiska"} · ${groupLabel} (${resource.currency_code}/h)`} help="Podaj stawkę za godzinę dla wskazanej liczby osób." required>
+          <input
               id={`${idBase}-price`}
               type="text"
               inputMode="decimal"
@@ -590,13 +547,9 @@ function PricingEditor({
               onChange={(event) =>
                 updateRule(rule.edit_key, "hourly_price", event.target.value)
               }
-              className="min-w-0 flex-1 bg-transparent text-right text-[#f2efe4] outline-none disabled:opacity-50"
+              className="min-h-11 w-full min-w-0 max-w-52 rounded-lg border bg-transparent px-2 text-right focus-visible:ring-2 disabled:opacity-50"
             />
-            <span className="ml-2 shrink-0 text-xs text-[#92988c]">
-              {resource.currency_code}/h
-            </span>
-          </span>
-        </label>
+        </FieldGuide>
         <p className="mt-2 truncate text-xs text-[#a9ada4]" title={rule.label}>
           {rule.label}
         </p>
@@ -606,12 +559,8 @@ function PricingEditor({
           </summary>
           <div className="space-y-3 pb-3">
             <div className="grid gap-3 sm:grid-cols-2">
-              <label
-                htmlFor={`${idBase}-min`}
-                className="text-xs text-[#c7cbbf]"
-              >
-                Liczba osób — od
-                <input
+              <FieldGuide label="Liczba osób — od" help="Najmniejsza grupa objęta tą stawką." required>
+          <input
                   id={`${idBase}-min`}
                   type="number"
                   inputMode="numeric"
@@ -623,13 +572,9 @@ function PricingEditor({
                   }
                   className="mt-1 min-h-11 w-full rounded-xl border border-[#3d4638] bg-[#101310] px-3 text-[#f2efe4] outline-none focus:ring-2 focus:ring-[#d7c895]/25 disabled:opacity-50"
                 />
-              </label>
-              <label
-                htmlFor={`${idBase}-max`}
-                className="text-xs text-[#c7cbbf]"
-              >
-                Liczba osób — do
-                <input
+        </FieldGuide>
+              <FieldGuide label="Liczba osób — do" help="Największa grupa objęta tą stawką." required>
+          <input
                   id={`${idBase}-max`}
                   type="number"
                   inputMode="numeric"
@@ -641,14 +586,10 @@ function PricingEditor({
                   }
                   className="mt-1 min-h-11 w-full rounded-xl border border-[#3d4638] bg-[#101310] px-3 text-[#f2efe4] outline-none focus:ring-2 focus:ring-[#d7c895]/25 disabled:opacity-50"
                 />
-              </label>
+        </FieldGuide>
             </div>
-            <label
-              htmlFor={`${idBase}-label`}
-              className="block text-xs text-[#c7cbbf]"
-            >
-              Opis / nazwa progu
-              <input
+            <FieldGuide label="Nazwa wariantu ceny" help="Krótka nazwa stawki dla tego przedziału osób." required>
+          <input
                 id={`${idBase}-label`}
                 type="text"
                 value={rule.label}
@@ -658,7 +599,7 @@ function PricingEditor({
                 }
                 className="mt-1 min-h-11 w-full rounded-xl border border-[#3d4638] bg-[#101310] px-3 text-[#f2efe4] outline-none focus:ring-2 focus:ring-[#d7c895]/25 disabled:opacity-50"
               />
-            </label>
+        </FieldGuide>
             <button
               type="button"
               disabled={disabled}
@@ -1176,18 +1117,18 @@ function CopySettingsPanel({
           >
             <input
               type="checkbox"
+              aria-describedby="copy-target-help"
               checked={selectedTargetIds.includes(target.lane_id)}
               disabled={disabled}
               onChange={() => onToggleTarget(target.lane_id)}
               className="h-5 w-5 accent-[#8b7b48] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#e1c477]"
             />
-            <span className="min-w-0 truncate">{target.name}</span>
+            <span className="min-w-0 break-words">{target.name}</span>
           </label>
         ))}
       </div>
-      <p className="mt-4 text-xs leading-5 text-[#b9ae8a]">
-        Kopiowanie zmienia tylko lokalny formularz. Nie zmienia identyfikatorów,
-        nazw, statusu, dostępności online ani wersji i nie wykonuje zapisu RPC.
+      <p id="copy-target-help" className="mt-4 text-sm leading-5 text-[#c2c8bb]">
+        Opcjonalne · Wybierz stanowiska, do których skopiować limity, czasy i ceny. Zmiany potwierdzisz przy zapisie.
       </p>
       <div className="mt-5 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
         <button
@@ -1299,6 +1240,13 @@ export default function LaneConfigurationEditor({
     dirtyRef.current = dirty;
     onDirtyChange(dirty);
   }, [dirty, onDirtyChange]);
+
+  useEffect(() => {
+    const opener = document.activeElement;
+    return () => {
+      if (opener instanceof HTMLElement && opener.isConnected) opener.focus({ preventScroll: true });
+    };
+  }, []);
 
   const requestClose = useCallback(() => {
     if (
@@ -1579,7 +1527,7 @@ export default function LaneConfigurationEditor({
                     <div className="grid gap-3 sm:grid-cols-2">
                       <ToggleField
                         id={`online-${family.root_lane_id}`}
-                        label="Rezerwacje online"
+                        label="Rezerwacje online" help="Udostępnia to miejsce do rezerwacji po otwarciu dostępu publicznego."
                         checked={state.root_online_bookable}
                         disabled={locked}
                         onChange={(checked) =>
@@ -1591,7 +1539,7 @@ export default function LaneConfigurationEditor({
                       />
                       <ToggleField
                         id={`whole-${family.root_lane_id}`}
-                        label="Rezerwacja całej osi"
+                        label="Rezerwacja całej osi" help="Pozwala jednej grupie zarezerwować całą oś."
                         checked={state.root_whole_lane_bookable}
                         disabled={locked}
                         onChange={(checked) =>
@@ -1603,7 +1551,7 @@ export default function LaneConfigurationEditor({
                       />
                       <ToggleField
                         id={`positions-${family.root_lane_id}`}
-                        label="Rezerwacja stanowisk"
+                        label="Rezerwacja stanowisk" help="Pozwala klientowi zarezerwować pojedyncze stanowisko."
                         checked={state.root_positions_bookable}
                         disabled={
                           locked ||
@@ -1762,7 +1710,7 @@ export default function LaneConfigurationEditor({
 
         {step === "stale" && (
           <p className="mt-6 text-sm text-[#c7cbbf]">
-            Zamknij edytor i użyj przycisku „Odśwież”, aby pobrać aktualny snapshot.
+            Zamknij edytor i użyj przycisku „Odśwież”, aby wczytać aktualne ustawienia.
           </p>
         )}
 

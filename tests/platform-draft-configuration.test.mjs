@@ -20,5 +20,13 @@ test('configuration parser enforces draft safety and selector while projecting o
  const id=randomUUID(),profile={...Object.fromEntries(profileTextKeys.map(k=>[k,null])),...Object.fromEntries(profileFlagKeys.map(k=>[k,false])),display_name:'C',city:'City',social_links:{},is_public:false,public_slug:'c-public'};
  const row={tenant_id:id,name:'C',tenant_slug:'tenant-c',status:'dormant',revision:'a'.repeat(64),memberships:0,public_access_state:'coming_soon',profile,pricing_items:[],lanes:{contract_version:2,families:[]},plan:null,feature_access:{booking:false,events:false,instructors:false},customer_email:'PRIVATE'};
  assert.equal(parseConfiguration(row,id).name,'C');assert.doesNotMatch(JSON.stringify(parseConfiguration(row,id)),/PRIVATE|customer_email/);
+ const plan={plan_key:'example',status:'active',plan_status:'active',features:[{key:'booking',active:true},{key:'events',active:false}]};
+ const assigned=parseConfiguration({...row,plan,partners:[{name:'internal-only'}]},id);
+ assert.deepEqual(assigned.planFeatures,['booking']);assert.equal(assigned.partnerCount,1);
+ assert.doesNotMatch(JSON.stringify(assigned),/internal-only/);
+ for(const disabled of [{status:'suspended'},{plan_status:'inactive'}]){
+   assert.deepEqual(parseConfiguration({...row,plan:{...plan,...disabled}},id).planFeatures,[]);
+ }
+ assert.equal(parseConfiguration({...row,plan:{...plan,features:[{key:'booking',active:'false'}]}},id),null);
  for(const patch of [{tenant_id:randomUUID()},{memberships:1},{status:'active'},{public_access_state:'live'},{profile:{...profile,is_public:true}},{lanes:{}}])assert.equal(parseConfiguration({...row,...patch},id),null);
 });

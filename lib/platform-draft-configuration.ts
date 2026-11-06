@@ -5,7 +5,7 @@ export const profileTextKeys = ["display_name", "city", "logo_path", "hero_image
 export const profileFlagKeys = ["show_booking", "show_pricing", "show_instructor", "show_events", "show_about", "show_contact", "show_regulations"] as const;
 export type Profile = Record<typeof profileTextKeys[number], string | null> & Record<typeof profileFlagKeys[number], boolean> & { social_links: Record<string, string> };
 export type PricingItem = { id: string | null; title: string; price: number; currency: string; unit: string; short_description: string | null; display_order: number; is_active: boolean };
-export type Configuration = { tenantId: string; name: string; slug: string; publicSlug: string; status: "dormant" | "archived"; revision: string; profile: Profile; pricing: PricingItem[]; lanes: AdminLaneConfigurationSnapshot; planKey: string | null; features: Record<"booking" | "events" | "instructors", boolean> };
+export type Configuration = { tenantId: string; name: string; slug: string; publicSlug: string; status: "dormant" | "archived"; revision: string; profile: Profile; pricing: PricingItem[]; lanes: AdminLaneConfigurationSnapshot; planKey: string | null; planFeatures: string[]; partnerCount: number | null; features: Record<"booking" | "events" | "instructors", boolean> };
 export type Section = "identity" | "profile" | "pricing" | "create_lane" | "update_lane" | "plan";
 export type ConfigAttempt = { tenantId: string; revision: string; requestId: string; section: Section; payload: Record<string, unknown> };
 const record = (v: unknown): v is Record<string, unknown> => !!v && typeof v === "object" && !Array.isArray(v);
@@ -17,11 +17,20 @@ export function parseConfiguration(v: unknown, tenantId: string): Configuration 
   if (profileTextKeys.some(k => p[k] !== null && typeof p[k] !== "string") || profileFlagKeys.some(k => typeof p[k] !== "boolean") || !record(p.social_links) || Object.values(p.social_links).some(x => typeof x !== "string") || ["booking", "events", "instructors"].some(k => typeof flags[k] !== "boolean")) return null;
   if (!Array.isArray(v.pricing_items) || v.pricing_items.some(i => !record(i) || !uuid(i.id) || typeof i.title !== "string" || typeof i.price !== "number" || typeof i.currency !== "string" || typeof i.unit !== "string" || (i.short_description !== null && typeof i.short_description !== "string") || !Number.isInteger(i.display_order) || typeof i.is_active !== "boolean")) return null;
   if (v.plan !== null && (!record(v.plan) || typeof v.plan.plan_key !== "string")) return null;
+  const planFeatures: string[] = [];
+  if (record(v.plan) && v.plan.status === "active" && v.plan.plan_status === "active") {
+    if (!Array.isArray(v.plan.features)) return null;
+    for (const item of v.plan.features) {
+      if (!record(item) || typeof item.key !== "string" || typeof item.active !== "boolean") return null;
+      if (item.active) planFeatures.push(item.key);
+    }
+  }
   try {
     return { tenantId, name: v.name, slug: v.tenant_slug, publicSlug: p.public_slug as string, status: v.status as Configuration["status"], revision: v.revision,
       profile: Object.fromEntries([...profileTextKeys, ...profileFlagKeys, "social_links"].map(k => [k, p[k]])) as Profile,
       pricing: v.pricing_items.map(i => Object.fromEntries(["id", "title", "price", "currency", "unit", "short_description", "display_order", "is_active"].map(k => [k, i[k]])) as PricingItem),
       lanes: parseAdminLaneConfigurationSnapshot(v.lanes), planKey: record(v.plan) ? v.plan.plan_key as string : null,
+      planFeatures, partnerCount: Array.isArray(v.partners) ? v.partners.length : null,
       features: { booking: flags.booking as boolean, events: flags.events as boolean, instructors: flags.instructors as boolean } };
   } catch { return null; }
 }
@@ -34,8 +43,8 @@ export function configReceipt(v: unknown, a: ConfigAttempt): Record<string, unkn
   return record(v) && v.tenant_id === a.tenantId && v.request_id === a.requestId && v.section === a.section && revision(v.revision) && record(v.mutation) && v.mutation.ok === true ? v.mutation : null;
 }
 export function configError(error: { code?: string; status?: number }): { kind: "denied" | "conflict" | "invalid" | "uncertain"; message: string } {
-  if ([401, 403].includes(error.status ?? 0) || ["401", "403", "42501", "PGRST301", "PGRST302", "PGRST303"].includes(error.code ?? "")) return { kind: "denied", message: "Dostęp do konfiguracji wygasł albo draft został zarchiwizowany. Wróć do listy obiektów." };
-  if (error.code === "PT409") return { kind: "conflict", message: "Konfiguracja zmieniła się w innej sesji. Zachowano wpisane wartości. Odczytaj bieżące dane przed kolejnym zapisem." };
+  if ([401, 403].includes(error.status ?? 0) || ["401", "403", "42501", "PGRST301", "PGRST302", "PGRST303"].includes(error.code ?? "")) return { kind: "denied", message: "Nie masz dostępu do edycji tego obiektu. Wróć do listy i sprawdź jego status." };
+  if (error.code === "PT409") return { kind: "conflict", message: "Konfiguracja została zmieniona w innym oknie lub przez innego użytkownika. Odśwież dane przed ponownym zapisaniem." };
   if (["22023", "23514", "22P02", "23505", "55000"].includes(error.code ?? "")) return { kind: "invalid", message: "Zapis odrzucony. Sprawdź format pól, kompletny cennik i zakres ustawień." };
-  return { kind: "uncertain", message: "Nie potwierdzono wyniku zapisu. Odczytano stan serwera; ponów tę samą próbę, aby potwierdzić wynik." };
+  return { kind: "uncertain", message: "Nie potwierdzono wyniku zapisu. Wybierz „Sprawdź / ponów zapis”, aby ustalić wynik tej samej próby." };
 }

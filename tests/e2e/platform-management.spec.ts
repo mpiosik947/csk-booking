@@ -227,11 +227,38 @@ test('plan stale refresh requires fresh explicit confirmation',async({page})=>{
 test('archive confirmation, stale refresh, success then dormant/private restore',async({page})=>{
  let stale=true;const h=await mount(page,fixture(),c=>c.name==='platform_archive_tenant_v1'&&stale?{data:null,error:{code:'PT409',message:'TENANT_REVISION_STALE'}}:undefined);
  await expect(page.getByRole('button',{name:'Przywróć obiekt do konfiguracji',exact:true})).toHaveCount(0);await page.getByRole('button',{name:'Archiwizuj obiekt',exact:true}).click();await expect(page.getByRole('dialog').getByText('Dane i historyczne rekordy nie zostaną usunięte.')).toBeVisible();await confirm(page);await expect(page.getByText('Status obiektu zmienił się. Dane zostały odświeżone.')).toBeVisible();stale=false;await page.getByRole('button',{name:'Archiwizuj obiekt',exact:true}).click();await confirm(page);await expect(section(page,'Status obiektu')).toContainText('Zarchiwizowany');await expect(page.getByRole('button',{name:/Aktywuj|Opublikuj/})).toHaveCount(0);
- await page.getByRole('button',{name:'Przywróć obiekt do konfiguracji',exact:true}).click();await expect(page.getByRole('dialog').getByText('Obiekt zostanie przywrócony jako nieaktywny obiekt w przygotowaniu. Nie zostanie automatycznie opublikowany.')).toBeVisible();await confirm(page);await expect(section(page,'Status obiektu')).toContainText('W przygotowaniu');await expect(section(page,'Status obiektu')).toContainText('Niepubliczny');await expect(page.getByRole('link',{name:'Ustawienia — wymagany tenant admin'})).toHaveAttribute('href','/tenant-setup/local-range');expect(h.calls.some(c=>c.name==='platform_set_tenant_state_v1')).toBe(false);
+ await page.getByRole('button',{name:'Przywróć obiekt do konfiguracji',exact:true}).click();await expect(page.getByRole('dialog').getByText('Przywrócenie nie publikuje obiektu.')).toBeVisible();await confirm(page);await expect(section(page,'Status obiektu')).toContainText('W przygotowaniu');await expect(section(page,'Status obiektu')).toContainText('Niepubliczny');await expect(page.getByRole('link',{name:'Ustawienia — wymagany administrator obiektu'})).toHaveAttribute('href','/tenant-setup/local-range');expect(h.calls.some(c=>c.name==='platform_set_tenant_state_v1')).toBe(false);
  const restores=h.calls.filter(c=>c.name==='platform_restore_archived_tenant_v1');expect(restores).toHaveLength(1);expect(restores[0].args.p_expected_revision).toBe(18);
 });
-test('read-only delete policy; unknown blocker safe; no customer fields or delete controls',async({page})=>{
- const f=fixture();f.eligibility.blockers.push({code:'INTERNAL_SECRET_TABLE',count:5,category:'schema',hard_blocker:true});Object.assign(f.detail,{customer_phone:'PRIVATE',customer_notes:'PRIVATE'});await mount(page,f);const card=section(page,'Możliwość trwałego usunięcia');await expect(card.getByText('Trwałe usuwanie obiektów nie jest obecnie dostępne.')).toBeVisible();await expect(card.getByText('Zależność techniczna blokuje trwałe usunięcie.',{exact:false})).toBeVisible();await expect(card.getByRole('button')).toHaveCount(0);await expect(page.locator('body')).not.toContainText(/PRIVATE|INTERNAL_SECRET_TABLE/);
+for(const width of [320,375,768,1440]){
+ test(`danger zone: explicit keyboard check and scoped aggregate blockers at ${width}px`,async({page},info)=>{
+  await page.setViewportSize({width,height:900});const f=fixture(),reader='platform_get_tenant_delete_eligibility_v1';
+  f.eligibility.blockers.push({code:'INTERNAL_SECRET_TABLE',count:5,category:'schema',hard_blocker:true},{code:'RESERVATIONS_EXIST',count:24,category:'business',hard_blocker:true});
+  f.eligibility.eligibility.blocker_count=f.eligibility.blockers.length;
+  Object.assign(f.detail,{customer_phone:'PRIVATE',customer_notes:'PRIVATE'});
+  const h=await mount(page,f),zone=section(page,'Strefa niebezpieczna'),check=zone.getByRole('button',{name:'Sprawdź możliwość usunięcia'});
+  expect(h.calls.some(c=>c.name===reader)).toBe(false);await expect(check).toHaveAccessibleDescription(/nieodwracalne/);
+  await check.focus();await page.keyboard.press('Enter');
+  await expect(zone.getByRole('status')).toHaveText('Nie można trwale usunąć tego obiektu.');await expect(check).toBeFocused();
+  await expect(zone).toContainText('Istnieją rezerwacje (liczba: 24)');await expect(zone).toContainText('Zależność techniczna blokuje trwałe usunięcie.');
+  await expect(zone.getByRole('button')).toHaveCount(1);await expect(zone.getByRole('textbox')).toHaveCount(0);
+  await expect(page.locator('body')).not.toContainText(/PRIVATE|INTERNAL_SECRET_TABLE/);
+  expect(await zone.evaluate(el=>el.scrollWidth<=el.clientWidth&&el.getBoundingClientRect().right<=innerWidth)).toBe(true);
+  await zone.screenshot({path:info.outputPath('danger-'+width+'.png')});
+  await page.keyboard.press('Tab');await expect(zone.getByRole('link',{name:'Zarchiwizuj obiekt'})).toBeFocused();
+  await page.keyboard.press('Enter');await expect(page).toHaveURL(/#archiwizacja$/);await expect(page.getByRole('dialog')).toHaveCount(0);
+  expect(h.calls.filter(c=>c.name===reader)).toEqual([{name:reader,args:{p_tenant_id:tenantId}}]);expect(h.calls.every(c=>readerNames.includes(c.name))).toBe(true);
+ });
+}
+test('danger zone discards stale results, rejects malformed positives and closes on authority loss',async({page})=>{
+ const reader='platform_get_tenant_delete_eligibility_v1',b=secondTenant();let mode='ok';
+ await mount(page,fixture(),c=>{if(c.name===reader && mode==='deny')return {error:{code:'42501'},data:null};
+  if(c.name===reader && mode==='forged')return {data:{...b.eligibility,eligibility:{can_hard_delete:true}},error:null};
+  if(c.args.p_tenant_id===tenantB)return rpcResponse(b,c.name,c.args);});
+ const zone=section(page,'Strefa niebezpieczna'),check=zone.getByRole('button');
+ await check.click();await expect(zone).toContainText('Istnieje historia audytowa');await navigateTenantB(page);
+ await expect(zone).not.toContainText('Istnieje historia audytowa');mode='forged';await check.click();await expect(zone.getByRole('alert')).toContainText('Nie udało się sprawdzić');
+ await expect(zone.getByRole('button')).toHaveCount(1);mode='deny';await check.click();await expect(page.getByRole('heading',{name:'Brak dostępu'})).toBeVisible();await expect(zone).toHaveCount(0);
 });
 test('section failure disables that section; authority failure closes entire page',async({page})=>{
  let deny=false;await mount(page,fixture(),c=>c.name==='platform_get_tenant_admin_management_v1'?{data:null,error:{code:deny?'42501':'XX000',message:'PRIVATE'}}:undefined);await expect(section(page,'Administratorzy obiektu').getByRole('alert')).toBeVisible();await expect(page.getByRole('button',{name:'Znajdź konto'})).toHaveCount(0);await expect(page.getByLabel('Docelowy plan')).toBeEnabled();deny=true;await page.getByRole('button',{name:'Odśwież stan',exact:true}).click();await expect(page.getByRole('heading',{name:'Brak dostępu',exact:true})).toBeVisible();await expect(page.getByRole('region')).toHaveCount(0);await expect(page.locator('body')).not.toContainText(email);
@@ -239,5 +266,38 @@ test('section failure disables that section; authority failure closes entire pag
 for(const width of [320,375,768,1440]){
  test(`responsive cards and dialog at ${width}px`,async({page})=>{
   await page.setViewportSize({width,height:900});await mount(page);await expect(page.getByRole('heading',{name:'Strzelnica testowa'})).toBeVisible();expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);await page.getByRole('button',{name:'Archiwizuj obiekt',exact:true}).click();expect(await page.getByRole('dialog').evaluate(el=>el.scrollWidth<=el.clientWidth)).toBe(true);const bounds=await page.getByRole('dialog').boundingBox();expect(Math.abs(bounds!.x+bounds!.width/2-width/2)).toBeLessThan(2);await page.screenshot({path:test.info().outputPath(`management-${width}.png`),fullPage:true});await page.keyboard.press('Escape');await expect(page.getByRole('button',{name:'Archiwizuj obiekt',exact:true})).toBeFocused();
+ });
+}
+
+for(const width of [320,375,768,1440]){
+ test('long admin email wraps without overflow and keyboard lookup remains usable at '+width+'px',async({page},info)=>{
+  const longEmail='administrator.bardzo.dlugiego.adresu.testowego.dla.strzelnicy@example.invalid';
+  await page.setViewportSize({width,height:950});const f=fixture();
+  f.admins.admins[0].email=longEmail;f.detail.admins[0].email=longEmail;f.candidate.email=longEmail;
+  Object.assign(f.candidate.membership,{exists:true,role:'admin',status:'active'});
+  const h=await mount(page,f),card=section(page,'Administratorzy obiektu');
+  const trigger=card.getByRole('button',{name:'Zarządzaj uprawnieniami: '+longEmail,exact:true});
+  await expect(trigger).toHaveAccessibleName('Zarządzaj uprawnieniami: '+longEmail);
+  await trigger.scrollIntoViewIfNeeded();
+  const widths=await page.evaluate(()=>({document:document.documentElement.scrollWidth,client:document.documentElement.clientWidth,viewport:innerWidth}));
+  expect(widths.document).toBeLessThanOrEqual(widths.client);
+  expect(await trigger.evaluate(el=>el.scrollWidth<=el.clientWidth)).toBe(true);
+  const bounds=await trigger.boundingBox();expect(bounds!.height).toBeGreaterThanOrEqual(44);
+  expect(bounds!.x).toBeGreaterThanOrEqual(0);expect(bounds!.x+bounds!.width).toBeLessThanOrEqual(width);
+  await trigger.focus();await expect(trigger).toBeFocused();
+  expect(await trigger.evaluate(el=>el.matches(':focus-visible'))).toBe(true);
+  for(const key of ['Enter','Space']){
+   await trigger.focus();await page.keyboard.press(key);
+   await expect.poll(()=>h.calls.filter(c=>c.name==='platform_lookup_tenant_admin_candidate_v1').length).toBe(key==='Enter'?1:2);
+   await expect(card.getByText('Konto: '+longEmail,{exact:true})).toBeVisible();
+   await expect(trigger).toBeEnabled();
+  }
+  expect(h.calls.filter(c=>c.name==='platform_lookup_tenant_admin_candidate_v1').map(c=>c.args)).toEqual([
+   {p_tenant_id:tenantId,p_email:longEmail},{p_tenant_id:tenantId,p_email:longEmail}
+  ]);
+  expect(h.calls.every(c=>readerNames.includes(c.name)||c.name==='platform_lookup_tenant_admin_candidate_v1')).toBe(true);
+  expect(h.unexpected).toEqual([]);expect(h.errors).toEqual([]);
+  await trigger.scrollIntoViewIfNeeded();await page.screenshot({path:info.outputPath('long-admin-email-'+width+'.png')});
+  await info.attach('widths',{body:JSON.stringify(widths),contentType:'application/json'});
  });
 }

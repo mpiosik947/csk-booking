@@ -17,9 +17,9 @@ test('real PA handover: stale gate, confirmation, lost response, first TA access
  const save=async(section,payload)=>{const c=await get();const r=await rpc('platform_save_draft_configuration_v1',{p_tenant_id:id,p_expected_revision:c.revision,p_request_id:randomUUID(),p_section:section,p_payload:payload},token);expect(r.status,JSON.stringify(r.body)).toBe(200);return r.body;};
  const validate=async()=>{const r=await rpc('platform_validate_draft_readiness_v1',{p_tenant_id:id,p_expected_revision:(await get()).revision},token);expect(r.status).toBe(200);return r.body;};
  const pane=()=>page.getByRole('region',{name:'Przekazanie obiektu'}),refresh=()=>pane().getByRole('button',{name:'Odśwież przekazanie'}).click();
- const primary=()=>pane().getByRole('button',{name:'Przekaż obiekt administratorowi',exact:true});
- const open=async()=>{await page.goto('/platform-admin/tenants/'+id+'/setup');await page.getByRole('navigation',{name:'Sekcje konfiguracji'}).getByRole('button').nth(8).click();await expect(pane()).toBeVisible();};
- const find=async()=>{await pane().getByLabel('Dokładny e-mail istniejącego konta').fill(email);await pane().getByRole('button',{name:'Znajdź administratora'}).click();await expect(pane().getByText('Wybrany administrator:',{exact:false})).toContainText(email);};
+ const primary=()=>pane().getByRole('button',{name:'Przekaż administratorowi',exact:true});
+ const open=async()=>{await page.goto('/platform-admin/tenants/'+id+'/setup');await page.getByRole('navigation',{name:'Sekcje konfiguracji'}).getByRole('button').nth(6).click();await expect(pane()).toBeVisible();};
+ const find=async()=>{await pane().getByLabel('E-mail pierwszego administratora').fill(email);await pane().getByRole('button',{name:'Znajdź administratora'}).click();await expect(pane().getByText('Wybrany administrator:',{exact:false})).toContainText(email);};
  const safe=count=>expect(sql(`select t.status||'|'||p.is_public||'|'||c.public_access_state||'|'||(select count(*) from public.tenant_memberships where tenant_id=t.id) from public.tenants t join public.tenant_public_profiles p on p.tenant_id=t.id join public.tenant_public_access_controls c on c.tenant_id=t.id where t.id='${id}'`)).toBe('dormant|false|coming_soon|'+count);
  await open();await find();await expect(primary()).toBeDisabled();expect((await validate()).overall).toBe('FAIL');safe(0);
  await save('plan',{plan_key:'current_full_v1'});await save('create_lane',{root:{name:'Oś C',is_active:true,max_shooters:2,whole_lane_bookable:true,positions_bookable:false,online_bookable:true,max_people_online:2,booking_step_minutes:60,durations_minutes:[60],pricing:['mon_thu','fri_sun'].map(day_group=>({day_group,min_shooters:1,max_shooters:2,label:'Cena',hourly_price:30}))},positions:[]});
@@ -34,13 +34,36 @@ test('real PA handover: stale gate, confirmation, lost response, first TA access
  await expect(pane().getByRole('status')).toHaveText('Obiekt przekazany administratorowi');expect(writes).toBe(1);safe(1);await page.unroute('**/rpc/platform_handover_tenant_v1');
  expect(sql(`select user_id||'|'||role||'|'||status from public.tenant_memberships where tenant_id='${id}'`)).toBe(user+'|admin|active');expect(sql(`select count(*) from public.platform_audit_logs where tenant_id='${id}' and action='tenant_handed_over'`)).toBe('1');
  const replay=await rpc('platform_handover_tenant_v1',sent,token);expect(replay.status).toBe(200);expect(replay.body.configuration_revision).toBe(rev);expect((await rpc('platform_handover_tenant_v1',{...sent,p_request_id:randomUUID(),p_user_id:other},token)).status).toBe(409);safe(1);
- await page.reload();await expect(pane().getByRole('status')).toHaveText('Obiekt przekazany administratorowi');await expect(pane().getByRole('button',{name:'Przekaż obiekt administratorowi'})).toHaveCount(0);await expect(pane().getByRole('link',{name:'Zarządzaj obiektem'})).toBeVisible();
+ await page.reload();await expect(pane().getByRole('status')).toHaveText('Obiekt przekazany administratorowi');await expect(pane().getByRole('button',{name:'Przekaż administratorowi'})).toHaveCount(0);await expect(pane().getByRole('link',{name:'Zarządzaj obiektem'})).toBeVisible();
  for(const width of [320,375,768,1440]){await page.setViewportSize({width,height:950});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);await page.screenshot({path:info.outputPath('handover-'+width+'.png'),fullPage:true});}
  const ta=await browser.newContext({ignoreHTTPSErrors:true});try{const taToken=await auth(ta,email),p=await ta.newPage();await p.goto(fixture.app+'/dashboard');await expect(p.locator(`a[href="/tenant-setup/${slug}"]`)).toBeVisible();await expect(p.locator('a[href="/platform-admin"]')).toHaveCount(0);await p.goto(fixture.app+'/tenant-setup/'+slug);await expect(p.locator('[data-field="city"]')).toHaveValue('Testowo');await p.locator('[data-field="city"]').fill('Changed by own admin');await p.getByRole('button',{name:'Zapisz i zostań',exact:true}).click();await expect(p.getByRole('status')).toContainText('Ustawienia zapisane.');safe(1);
   expect((await rpc('platform_get_tenant_handover_v1',{p_tenant_id:id},taToken)).status).toBe(403);expect((await rpc('admin_get_tenant_public_settings_v1',{p_tenant_slug:'ptm2-b'},taToken)).status).toBe(403);expect((await p.goto(fixture.app+'/platform-admin')).status()).toBe(404);
   for(const feature of ['booking','events'])expect((await rpc('get_my_tenant_feature_access_v1',{p_tenant_id:id,p_feature_key:feature},taToken)).body).toBe(false);
  }finally{await ta.close();}
  expect((await rpc('platform_handover_tenant_v1',sent,token)).body).toEqual(replay.body);expect((await rpc('platform_get_tenant_admin_management_v1',{p_tenant_id:id},token)).status).toBe(200);expect((await rpc('platform_get_tenant_public_access_v1',{p_tenant_id:id},token)).status).toBe(200);
+ const list=await context.newPage();await list.goto('/platform-admin');
+ await expect(list.getByRole('link',{name:'Otwórz obiekt',exact:true}).and(list.locator(`a[href="/platform-admin/tenants/${id}"]`))).toBeVisible();
+ await expect(list.getByRole('link',{name:'Kontynuuj konfigurację'}).and(list.locator(`a[href*="${id}"]`))).toHaveCount(0);const card=list.locator('article').filter({has:list.locator(`[id="name-${id}"]`)});
+ await expect(card).toContainText('Przekazany administratorowi');await expect(card).toContainText(email);
+ await expect(card).toContainText('Dostępna wkrótce');
+ await card.locator('summary').click();await card.getByRole('link',{name:'Archiwizuj',exact:true}).click();
+ await list.getByRole('button',{name:'Archiwizuj obiekt',exact:true}).click();
+ await list.getByRole('dialog').getByRole('button',{name:'Potwierdź operację'}).click();
+ await expect(list.getByRole('button',{name:'Przywróć obiekt do konfiguracji'})).toBeVisible();
+ await list.goto('/platform-admin');await list.getByLabel('Stan obiektu').selectOption('archived');
+ await expect(card).toContainText('Zarchiwizowany');await expect(card).toContainText(email);await expect(card).toContainText('Dostępna wkrótce');
+ await expect(card.locator('div').filter({has:list.locator('dt').filter({hasText:/^Publicznie$/})}).last()).toContainText('Nie');
+ await card.locator('summary').click();await card.getByRole('link',{name:'Strefa niebezpieczna'}).click();
+ const zone=list.getByRole('region',{name:'Strefa niebezpieczna'});await zone.getByRole('button',{name:'Sprawdź możliwość usunięcia'}).click();
+ await expect(zone.getByRole('status')).toHaveText('Nie można trwale usunąć tego obiektu.');
+ for(const reason of ['Zachowano potwierdzenie przekazania obiektu administratorowi (liczba: 1)','Istnieją członkostwa obiektu (liczba: 1)','Istnieje historia operacji platformowych','Obiekt jest już zarchiwizowany'])await expect(zone).toContainText(reason);
+ await expect(zone.getByRole('button')).toHaveCount(1);await expect(zone.getByRole('link',{name:'Zarchiwizuj obiekt'})).toHaveCount(0);
+ expect(sql(`select t.status||'|'||p.is_public||'|'||c.public_access_state||'|'||(select count(*) from public.tenant_memberships where tenant_id=t.id and role='admin' and status='active') from public.tenants t join public.tenant_public_profiles p on p.tenant_id=t.id join public.tenant_public_access_controls c on c.tenant_id=t.id where t.id='${id}'`)).toBe('archived|false|coming_soon|1');
+ await list.goto('/platform-admin');await list.getByLabel('Stan obiektu').selectOption('archived');
+ await card.getByRole('link',{name:'Przywróć',exact:true}).click();await list.getByRole('button',{name:'Przywróć obiekt do konfiguracji'}).click();
+ await expect(list.getByRole('dialog')).toContainText('Przywrócenie nie publikuje obiektu.');
+ await list.getByRole('dialog').getByRole('button',{name:'Potwierdź operację'}).click();await expect(list.getByRole('button',{name:'Archiwizuj obiekt',exact:true})).toBeVisible();safe(1);
+ await list.close();
  const anon=await browser.newContext({ignoreHTTPSErrors:true});try{const p=await anon.newPage();for(const path of ['/'+slug+'-public','/t/'+slug+'/booking','/t/'+slug+'/events'])expect((await p.goto(fixture.app+path)).status()).toBe(404);}finally{await anon.close();}
  for(const name of ['get_public_booking_configuration_v2','get_public_event_list_v3'])expect((await rpc(name,{p_tenant_id:id})).status).toBe(423);
  const after=sql(`select md5(jsonb_build_object('tenants',(select jsonb_agg(to_jsonb(t) order by id) from public.tenants t where slug in('ptm1-synthetic-a','ptm2-b')),'members',(select jsonb_agg(to_jsonb(m) order by tenant_id,user_id) from public.tenant_memberships m where tenant_id<>'${id}'),'plans',(select jsonb_agg(to_jsonb(p) order by tenant_id) from public.tenant_plan_assignments p where tenant_id<>'${id}'),'profiles',(select jsonb_agg(to_jsonb(p) order by tenant_id) from public.tenant_public_profiles p where tenant_id<>'${id}'),'states',(select jsonb_agg(to_jsonb(c) order by tenant_id) from public.tenant_public_access_controls c where tenant_id<>'${id}'))::text)`);expect(after).toBe(baseline);

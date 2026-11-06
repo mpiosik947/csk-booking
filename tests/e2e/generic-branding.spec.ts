@@ -171,7 +171,7 @@ for (const width of [320, 375, 1440]) {
     await page.setViewportSize({ width, height: 1000 });
     await login(page, "pa");
     await page.goto(fixture.app + "/platform-admin");
-    await expect(page.getByRole("heading", { name: "Obiekty i onboarding", exact: true })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Obiekty", exact: true })).toBeVisible();
     // A CSK tenant row in the directory is legitimate data; only the shared header is global.
     await expect(page.getByTestId("admin-panel").locator("header").first()).toContainText("StrzelajTu.pl");
     for (const header of await page.locator("header").all()) await expect(header).not.toContainText(/CSK|Krutla/);

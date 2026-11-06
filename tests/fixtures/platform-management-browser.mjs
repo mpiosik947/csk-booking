@@ -17,7 +17,7 @@ export async function startManagementBrowser() {
  };
  let server;
  try {
-  for(const file of ['lib/platform-wizard.ts','lib/platform-management.ts','lib/platform-management-session.ts','app/admin/_components/AdminShell.tsx','app/platform-admin/tenants/[id]/ManagementCards.tsx','app/platform-admin/tenants/[id]/TenantDetail.tsx']){
+  for(const file of ['lib/platform-wizard.ts','lib/platform-management.ts','lib/platform-management-session.ts','app/admin/_components/AdminShell.tsx','app/_components/FieldGuide.tsx','app/platform-admin/tenants/[id]/ManagementCards.tsx','app/platform-admin/tenants/[id]/TenantDangerZone.tsx','app/platform-admin/tenants/[id]/TenantDetail.tsx']){
    const dest=path.join(folder,file);mkdirSync(path.dirname(dest),{recursive:true});
    writeFileSync(dest,ts.transpileModule(readFileSync(path.join(root,file),'utf8'),{fileName:file,compilerOptions:{module:ts.ModuleKind.ESNext,target:ts.ScriptTarget.ES2022,jsx:ts.JsxEmit.ReactJSX}}).outputText);
   }

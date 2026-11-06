@@ -39,8 +39,8 @@ test("platform onboarding is private, explicit, responsive and separate from ten
     expect(sql(`select public.operator_bootstrap_platform_admin_v1('${users[0]}');`).trim()).toBe("already_assigned");
     await page.goto("/login?redirectTo=%2Fdashboard"); await page.getByLabel("E-mail").fill(platformEmail); await page.getByLabel("Hasło").fill(password);
     await page.getByRole("button", { name: "Zaloguj się" }).click(); await expect(page).toHaveURL(/\/dashboard$/);
-    await page.goto("/platform-admin"); await expect(page.getByRole("heading", { name: "Obiekty i onboarding" })).toBeVisible();
-    await page.getByRole("link", { name: "Dodaj nową strzelnicę" }).click();
+    await page.goto("/platform-admin"); await expect(page.getByRole("heading", { name: "Obiekty" })).toBeVisible();
+    await page.getByRole("link", { name: "Dodaj nowy obiekt" }).click();
     await page.getByLabel("Nazwa obiektu", { exact: true }).fill(`Synthetic ${run}`);
     await page.getByLabel("Miejscowość", { exact: true }).fill("Testowo");
     await page.getByRole("button", { name: "Dalej", exact: true }).click();

@@ -99,7 +99,7 @@ test("editor exposes controlled root and position display-name fields", async ()
   assert.match(editor, /resource\.resource_kind === "position" \? "Nazwa stanowiska" : "Nazwa osi"/);
   assert.match(editor, /value=\{edit\.name\}/);
   assert.match(editor, /maxLength=\{LANE_RESOURCE_NAME_MAX_LENGTH\}/);
-  assert.match(editor, /Techniczna tożsamość zasobu pozostaje bez zmian/);
+  assert.match(editor, /Nazwa widoczna w panelu i podczas rezerwacji/);
   assert.match(helper, /trimmedName = typeof edit\.name === "string" \? edit\.name\.trim\(\) : ""/);
   assert.match(helper, /label: resource\.resource_kind === "position" \? "Nazwa stanowiska" : "Nazwa osi"/);
 });
@@ -202,7 +202,7 @@ test("pricing UI uses the existing hourly model, day groups and read-only curren
   assert.match(editor, /Pt–Nd/);
   assert.match(editor, /Liczba osób — od/);
   assert.match(editor, /Liczba osób — do/);
-  assert.match(editor, /Opis \/ nazwa progu/);
+  assert.match(editor, /Nazwa wariantu ceny/);
   assert.match(editor, /\{resource\.currency_code\}\/h/);
   assert.match(editor, /Waluta: \{resource\.currency_code\} — tylko odczyt/);
   assert.match(editor, /Edytuj zakres i opis/);
@@ -221,7 +221,7 @@ test("duration and pricing editors are mobile-safe, labelled and keyboard access
   assert.match(editor, /min-w-0/);
   assert.match(editor, /aria-label=\{`Usuń czas/);
   assert.match(editor, /aria-label=\{`Usuń próg/);
-  assert.match(editor, /htmlFor=\{`new-duration-/);
+  assert.match(editor, /id=\{`new-duration-/);
   assert.match(editor, /inputMode="decimal"/);
   assert.match(editor, /min-h-11/);
   assert.match(editor, /focus-visible:ring-2/);
@@ -230,7 +230,7 @@ test("duration and pricing editors are mobile-safe, labelled and keyboard access
 test("inactive history is diagnostic only and position flags come from local family state", async () => {
   const [, editor, , , helper] = await sources();
 
-  assert.match(editor, /Historyczne nieaktywne czasy pozostają zachowane/);
+  assert.match(editor, /Wcześniejsze, wyłączone długości rezerwacji są zachowane/);
   assert.match(editor, /Historyczne nieaktywne progi pozostają zachowane/);
   assert.match(helper, /\.filter\(\(duration\) => duration\.is_active\)/);
   assert.match(helper, /\.filter\(\(rule\) => rule\.is_active\)/);
@@ -244,7 +244,7 @@ test("uses business-friendly capacity and reservation labels without changing fi
   assert.match(page, /Pojemność osi/);
   assert.match(page, /Pojemność stanowiska/);
   assert.match(editor, /Pojemność stanowiska/);
-  assert.match(editor, /Maks\. osób w jednej rezerwacji/);
+  assert.match(editor, /Limit osób w jednej rezerwacji/);
   assert.match(
     editor,
     /Maksymalna liczba osób, które mogą jednocześnie korzystać z tej osi\./
@@ -255,7 +255,7 @@ test("uses business-friendly capacity and reservation labels without changing fi
   );
   assert.match(
     editor,
-    /Największa liczba osób, którą klient może wskazać w jednej nowej rezerwacji/
+    /Największa grupa, jaką klient może zarezerwować jednorazowo/
   );
   assert.match(helper, /max_shooters/);
   assert.match(helper, /max_people_online/);
@@ -403,14 +403,14 @@ test("new lane workflow is explicit, dynamic and safe by default", async () => {
   assert.match(page, /admin_create_lane_booking_family_v2/);
   assert.match(page, /p_family: payload/);
   assert.match(createDialog, /createInitialLaneFamilyCreateState/);
-  assert.match(createDialog, /Nowa rodzina startuje bezpiecznie jako nieaktywna i offline/);
-  assert.match(createDialog, /<legend[^>]*>Rodzaj<\/legend>/);
+  assert.match(createDialog, /Nowa oś początkowo jest wyłączona z użytkowania i rezerwacji online/);
+  assert.match(createDialog, /<legend[^>]*>Rodzaj osi · Wymagane<\/legend>/);
   assert.match(createDialog, />Samodzielna<\/strong>/);
   assert.match(createDialog, />Ze stanowiskami<\/strong>/);
   assert.match(createDialog, /\+ Dodaj stanowisko/);
   assert.match(createDialog, /`Stanowisko \$\{nextNumber\}`|Stanowisko \{index \+ 1\}/);
   assert.match(createDialog, /Przejdź do podsumowania/);
-  assert.match(createDialog, /Utwórz rodzinę osi/);
+  assert.match(createDialog, /Utwórz oś/);
   assert.match(createDialog, /await onCreate\(payload\)/);
   assert.doesNotMatch(createDialog, /\.rpc\(/);
   assert.match(helper, /root_lane_id|configurationVersion/);
@@ -437,7 +437,7 @@ test("create workflow validates full pricing and remains mobile-safe", async () 
 
   assert.match(helper, /pricingCoverageErrors\(resourceLabel, pricing, maxPeopleOnline\)/);
   assert.match(helper, /Suma pojemności stanowisk online przekracza pojemność osi/);
-  assert.match(createDialog, /max-h-\[94vh\] w-full overflow-y-auto overflow-x-hidden/);
+  assert.match(createDialog, /max-h-\[94dvh\] w-full overflow-y-auto overflow-x-hidden/);
   assert.match(createDialog, /grid min-w-0 gap-3/);
   assert.match(createDialog, /sm:grid-cols-2/);
   assert.match(createDialog, /min-h-11/);

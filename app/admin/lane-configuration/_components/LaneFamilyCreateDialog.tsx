@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import FieldGuide from "@/app/_components/FieldGuide";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   LANE_RESOURCE_NAME_MAX_LENGTH,
   addPositionToLaneFamilyCreateState,
@@ -16,6 +17,7 @@ import {
 } from "../../../../lib/admin/lane-configuration";
 
 type Props = {
+  onDirtyChange?: (dirty: boolean) => void;
   onClose: () => void;
   onCreate: (payload: LaneFamilyCreateWritePayload) => Promise<LaneFamilyCreateResult>;
   onCompleted: (message: string) => Promise<void>;
@@ -25,41 +27,20 @@ const inputClass =
   "min-h-11 w-full min-w-0 rounded-xl border border-[#3d4638] bg-[#101310] px-3 text-[#f2efe4] outline-none focus:border-[#7a6a3c] focus:ring-2 focus:ring-[#d7c895]/25";
 const INITIAL_CREATE_STATE_JSON = JSON.stringify(createInitialLaneFamilyCreateState());
 
-function FieldLabel({ children }: { children: React.ReactNode }) {
-  return <span className="mb-2 block text-sm font-semibold text-[#c7cbbf]">{children}</span>;
-}
-
-function BooleanField({
-  label,
-  checked,
-  onChange,
-  help,
-}: {
-  label: string;
-  checked: boolean;
-  onChange: (checked: boolean) => void;
-  help?: string;
+function BooleanField({ label, checked, onChange, help }: {
+  label: string; checked: boolean; onChange: (checked: boolean) => void; help: string;
 }) {
-  return (
-    <label className="flex min-h-11 items-start gap-3 rounded-xl border border-[#3d4638] bg-[#141814] p-3">
-      <input
-        type="checkbox"
-        checked={checked}
-        onChange={(event) => onChange(event.target.checked)}
-        className="mt-1 h-4 w-4 accent-[#d7c895]"
-      />
-      <span className="min-w-0">
-        <strong className="block text-sm text-[#f2efe4]">{label}</strong>
-        {help && <span className="mt-1 block text-xs text-[#858c7f]">{help}</span>}
-      </span>
-    </label>
-  );
+  return <FieldGuide label={label} help={help}>
+    <input type="checkbox" checked={checked} onChange={e => onChange(e.target.checked)} className="h-5 w-5 accent-[#d7c895]" />
+  </FieldGuide>;
 }
 
 function PricingEditor({
+  kind,
   resource,
   onChange,
 }: {
+  kind: "lane" | "position";
   resource: LaneFamilyCreateResourceEdit;
   onChange: (resource: LaneFamilyCreateResourceEdit) => void;
 }) {
@@ -120,8 +101,7 @@ function PricingEditor({
                   key={rule.edit_key}
                   className="grid min-w-0 gap-3 rounded-xl border border-[#30372c] bg-[#171b17] p-3 md:grid-cols-[minmax(5rem,0.65fr)_minmax(5rem,0.65fr)_minmax(0,1.4fr)_minmax(6rem,0.8fr)_auto]"
                 >
-                  <label className="min-w-0">
-                    <FieldLabel>Od osób</FieldLabel>
+                  <FieldGuide label="Liczba osób — od" help="Najmniejsza grupa objęta tą stawką." required>
                     <input
                       value={rule.min_shooters}
                       inputMode="numeric"
@@ -130,9 +110,8 @@ function PricingEditor({
                       }
                       className={inputClass}
                     />
-                  </label>
-                  <label className="min-w-0">
-                    <FieldLabel>Do osób</FieldLabel>
+                  </FieldGuide>
+                  <FieldGuide label="Liczba osób — do" help="Największa grupa objęta tą stawką." required>
                     <input
                       value={rule.max_shooters}
                       inputMode="numeric"
@@ -141,9 +120,8 @@ function PricingEditor({
                       }
                       className={inputClass}
                     />
-                  </label>
-                  <label className="min-w-0">
-                    <FieldLabel>Opis progu</FieldLabel>
+                  </FieldGuide>
+                  <FieldGuide label="Nazwa wariantu ceny" help="Krótka nazwa stawki dla tego przedziału osób." required>
                     <input
                       value={rule.label}
                       onChange={(event) =>
@@ -151,9 +129,8 @@ function PricingEditor({
                       }
                       className={inputClass}
                     />
-                  </label>
-                  <label className="min-w-0">
-                    <FieldLabel>Cena PLN/h</FieldLabel>
+                  </FieldGuide>
+                  <FieldGuide label={kind === "lane" ? "Cena całej osi za godzinę" : "Cena stanowiska za godzinę"} help="Podaj kwotę w PLN za godzinę dla wskazanej liczby osób." required>
                     <input
                       value={rule.hourly_price}
                       inputMode="decimal"
@@ -162,7 +139,7 @@ function PricingEditor({
                       }
                       className={inputClass}
                     />
-                  </label>
+                  </FieldGuide>
                   <button
                     type="button"
                     aria-label={`Usuń próg ${groupLabel}`}
@@ -200,18 +177,16 @@ function ResourceCreateFields({
   return (
     <div className="space-y-5">
       <div className="grid min-w-0 gap-4 sm:grid-cols-2">
-        <label className="min-w-0 sm:col-span-2">
-          <FieldLabel>{kind === "lane" ? "Nazwa osi" : "Nazwa stanowiska"}</FieldLabel>
-          <input
+        <FieldGuide label={kind === "lane" ? "Nazwa osi" : "Nazwa stanowiska"} help="Nazwa widoczna dla obsługi i klientów podczas rezerwacji." example={kind === "lane" ? "Oś kryta" : "Stanowisko 1"} required>
+                    <input
             value={resource.name}
             maxLength={LANE_RESOURCE_NAME_MAX_LENGTH}
             onChange={(event) => onChange({ ...resource, name: event.target.value })}
             className={inputClass}
           />
-        </label>
-        <label className="min-w-0">
-          <FieldLabel>{kind === "lane" ? "Pojemność osi" : "Pojemność stanowiska"}</FieldLabel>
-          <input
+                  </FieldGuide>
+        <FieldGuide label={kind === "lane" ? "Pojemność osi" : "Pojemność stanowiska"} help="Maksymalna liczba osób, które mogą korzystać z tego miejsca jednocześnie." required>
+                    <input
             value={resource.max_shooters}
             inputMode="numeric"
             onChange={(event) =>
@@ -219,10 +194,9 @@ function ResourceCreateFields({
             }
             className={inputClass}
           />
-        </label>
-        <label className="min-w-0">
-          <FieldLabel>Maks. osób w jednej rezerwacji</FieldLabel>
-          <input
+                  </FieldGuide>
+        <FieldGuide label="Limit osób w jednej rezerwacji" help="Największa grupa, jaką klient może zarezerwować jednorazowo." required>
+                    <input
             value={resource.max_people_online}
             inputMode="numeric"
             onChange={(event) =>
@@ -230,10 +204,9 @@ function ResourceCreateFields({
             }
             className={inputClass}
           />
-        </label>
-        <label className="min-w-0">
-          <FieldLabel>Krok rezerwacji (min)</FieldLabel>
-          <input
+                  </FieldGuide>
+        <FieldGuide label="Odstęp między godzinami rozpoczęcia (minuty)" help="Podaj, co ile minut może rozpoczynać się rezerwacja." example="30" required>
+                    <input
             value={resource.booking_step_minutes}
             inputMode="numeric"
             onChange={(event) =>
@@ -241,21 +214,21 @@ function ResourceCreateFields({
             }
             className={inputClass}
           />
-        </label>
+                  </FieldGuide>
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2">
         <BooleanField
-          label="Aktywny zasób"
+          label={kind === "lane" ? "Oś w użyciu" : "Stanowisko w użyciu"}
           checked={resource.is_active}
           onChange={(checked) => onChange({ ...resource, is_active: checked })}
-          help="Nowe zasoby domyślnie pozostają nieaktywne."
+          help="Włącz, gdy to miejsce jest gotowe do użytkowania."
         />
         <BooleanField
           label="Rezerwacje online"
           checked={resource.online_bookable}
           onChange={(checked) => onChange({ ...resource, online_bookable: checked })}
-          help="Wymaga aktywnego zasobu i kompletnej konfiguracji sprzedaży."
+          help="Pozwala klientom rezerwować to miejsce po otwarciu dostępu publicznego."
         />
       </div>
 
@@ -278,8 +251,7 @@ function ResourceCreateFields({
         <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {resource.durations_minutes.map((duration, index) => (
             <div key={`${resource.edit_key}:duration:${index}`} className="flex min-w-0 gap-2">
-              <label className="min-w-0 flex-1">
-                <span className="sr-only">Czas rezerwacji w minutach</span>
+              <FieldGuide className="flex-1" label="Czas rezerwacji w minutach" help="Podaj długość rezerwacji będącą wielokrotnością odstępu rozpoczęcia." example="60" required>
                 <input
                   value={duration}
                   inputMode="numeric"
@@ -293,7 +265,7 @@ function ResourceCreateFields({
                   }
                   className={inputClass}
                 />
-              </label>
+              </FieldGuide>
               <button
                 type="button"
                 aria-label={`Usuń czas ${duration || index + 1}`}
@@ -316,7 +288,7 @@ function ResourceCreateFields({
 
       <section>
         <h4 className="mb-3 font-semibold text-[#f2efe4]">Cennik</h4>
-        <PricingEditor resource={resource} onChange={onChange} />
+        <PricingEditor kind={kind} resource={resource} onChange={onChange} />
       </section>
     </div>
   );
@@ -327,8 +299,7 @@ function CreationReview({ state }: { state: LaneFamilyCreateState }) {
   return (
     <div className="space-y-4">
       <div className="rounded-2xl border border-[#536143] bg-[#20271e] p-4 text-sm text-[#b9c9a5]">
-        Zostanie utworzona jedna rodzina: oś główna i {state.positions.length} stanowisk.
-        Zapis nastąpi atomowo w jednym wywołaniu RPC.
+        Zapiszesz oś wraz ze stanowiskami. Liczba stanowisk: {state.positions.length}.
       </div>
       {resources.map((resource, index) => (
         <section
@@ -360,15 +331,31 @@ function CreationReview({ state }: { state: LaneFamilyCreateState }) {
   );
 }
 
-export default function LaneFamilyCreateDialog({ onClose, onCreate, onCompleted }: Props) {
+export default function LaneFamilyCreateDialog({ onClose, onCreate, onCompleted, onDirtyChange }: Props) {
   const [state, setState] = useState(createInitialLaneFamilyCreateState);
+  const dialogRef = useRef<HTMLDialogElement>(null);
+  useEffect(() => {
+    const dialog = dialogRef.current;
+    const opener = document.activeElement;
+    dialog?.showModal();
+    return () => {
+      dialog?.close();
+      if (opener instanceof HTMLElement && opener.isConnected) opener.focus({ preventScroll: true });
+    };
+  }, []);
   const [step, setStep] = useState<"edit" | "review">("edit");
   const [saving, setSaving] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
   const validation = useMemo(() => validateLaneFamilyCreateState(state), [state]);
   const dirty = JSON.stringify(state) !== INITIAL_CREATE_STATE_JSON;
 
+  useEffect(() => {
+    onDirtyChange?.(dirty);
+    return () => onDirtyChange?.(false);
+  }, [dirty, onDirtyChange]);
+
   function requestClose() {
+    if (saving) return;
     if (dirty && !window.confirm("Masz niezapisany formularz nowej osi. Czy go odrzucić?")) {
       return;
     }
@@ -392,7 +379,7 @@ export default function LaneFamilyCreateDialog({ onClose, onCreate, onCompleted 
       const payload = buildLaneFamilyCreatePayload(state);
       const result = await onCreate(payload);
       if (result.code === "created") {
-        await onCompleted("Nowa rodzina osi została utworzona.");
+        await onCompleted("Utworzono oś wraz z jej stanowiskami.");
         return;
       }
       setErrorMessage(
@@ -408,22 +395,22 @@ export default function LaneFamilyCreateDialog({ onClose, onCreate, onCompleted 
   }
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-end justify-center bg-black/75 p-0 sm:items-center sm:p-5"
+    <dialog
+      ref={dialogRef}
+      aria-labelledby="lane-family-create-title"
+      onCancel={event => { event.preventDefault(); requestClose(); }}
+      className="fixed inset-0 m-0 h-dvh max-h-none w-full max-w-none items-end justify-center bg-transparent p-0 text-inherit backdrop:bg-black/75 open:flex sm:items-center sm:p-5"
       onMouseDown={(event) => {
         if (event.target === event.currentTarget) requestClose();
       }}
     >
       <section
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="lane-family-create-title"
-        className="max-h-[94vh] w-full overflow-y-auto overflow-x-hidden rounded-t-3xl border border-[#3d4638] bg-[#141814] p-4 shadow-2xl sm:max-w-5xl sm:rounded-3xl sm:p-7"
+        className="max-h-[94dvh] w-full overflow-y-auto overflow-x-hidden rounded-t-3xl border border-[#3d4638] bg-[#141814] p-4 shadow-2xl sm:max-w-5xl sm:rounded-3xl sm:p-7"
       >
         <header className="flex items-start justify-between gap-4 border-b border-[#30372c] pb-5">
           <div className="min-w-0">
             <p className="text-xs font-bold uppercase tracking-[0.2em] text-[#d7c895]">
-              {step === "edit" ? "Nowa rodzina osi" : "Potwierdzenie utworzenia"}
+              {step === "edit" ? "Nowa oś" : "Potwierdzenie utworzenia"}
             </p>
             <h2 id="lane-family-create-title" className="mt-2 text-2xl font-bold text-[#f2efe4]">
               {step === "edit" ? "Dodaj nową oś" : "Sprawdź pełną konfigurację"}
@@ -432,6 +419,7 @@ export default function LaneFamilyCreateDialog({ onClose, onCreate, onCompleted 
           <button
             type="button"
             onClick={requestClose}
+            disabled={saving}
             aria-label="Zamknij formularz nowej osi"
             className="min-h-11 min-w-11 rounded-xl border border-[#3d4638] text-xl text-[#c7cbbf] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d7c895]"
           >
@@ -451,15 +439,16 @@ export default function LaneFamilyCreateDialog({ onClose, onCreate, onCompleted 
           ) : (
             <div className="space-y-6">
               <p className="rounded-2xl border border-[#3d4638] bg-[#191e19] p-4 text-sm text-[#a9ada4]">
-                Nowa rodzina startuje bezpiecznie jako nieaktywna i offline. Nazwa jest etykietą prezentacyjną; techniczne UUID wygeneruje baza.
+                Nowa oś początkowo jest wyłączona z użytkowania i rezerwacji online.
               </p>
               <fieldset className="rounded-2xl border border-[#3d4638] bg-[#191e19] p-4 sm:p-5">
-                <legend className="px-1 text-sm font-bold text-[#f2efe4]">Rodzaj</legend>
+                <legend className="px-1 text-sm font-bold text-[#f2efe4]">Rodzaj osi · Wymagane</legend>
                 <div className="mt-2 grid min-w-0 gap-3 sm:grid-cols-2">
                   <label className="flex min-h-11 items-start gap-3 rounded-xl border border-[#3d4638] bg-[#141814] p-3">
                     <input
                       type="radio"
                       name="lane-family-kind"
+                      aria-label="Samodzielna" aria-describedby="lane-kind-single"
                       checked={state.positions.length === 0}
                       onChange={() => {
                         if (
@@ -475,8 +464,8 @@ export default function LaneFamilyCreateDialog({ onClose, onCreate, onCompleted 
                     />
                     <span className="min-w-0">
                       <strong className="block text-sm text-[#f2efe4]">Samodzielna</strong>
-                      <span className="mt-1 block text-xs text-[#858c7f]">
-                        Jedna oś bez zasobów podrzędnych.
+                      <span id="lane-kind-single" className="mt-1 block text-sm text-[#c2c8bb]">
+                        Jedna oś bez osobnych stanowisk.
                       </span>
                     </span>
                   </label>
@@ -484,6 +473,7 @@ export default function LaneFamilyCreateDialog({ onClose, onCreate, onCompleted 
                     <input
                       type="radio"
                       name="lane-family-kind"
+                      aria-label="Ze stanowiskami" aria-describedby="lane-kind-positions"
                       checked={state.positions.length > 0}
                       onChange={() => {
                         if (state.positions.length === 0) {
@@ -494,8 +484,8 @@ export default function LaneFamilyCreateDialog({ onClose, onCreate, onCompleted 
                     />
                     <span className="min-w-0">
                       <strong className="block text-sm text-[#f2efe4]">Ze stanowiskami</strong>
-                      <span className="mt-1 block text-xs text-[#858c7f]">
-                        Oś główna z dowolną liczbą edytowalnych stanowisk.
+                      <span id="lane-kind-positions" className="mt-1 block text-sm text-[#c2c8bb]">
+                        Dodaj stanowiska, które można rezerwować oddzielnie.
                       </span>
                     </span>
                   </label>
@@ -511,6 +501,7 @@ export default function LaneFamilyCreateDialog({ onClose, onCreate, onCompleted 
                 <div className="mt-5 grid gap-3 sm:grid-cols-2">
                   <BooleanField
                     label="Rezerwacja całej osi"
+                    help="Pozwala jednej grupie zarezerwować oś jako całość."
                     checked={state.root_whole_lane_bookable}
                     onChange={(checked) =>
                       setState((current) => ({
@@ -521,6 +512,7 @@ export default function LaneFamilyCreateDialog({ onClose, onCreate, onCompleted 
                   />
                   <BooleanField
                     label="Rezerwacja stanowisk"
+                    help="Pozwala klientowi wybrać pojedyncze stanowisko na tej osi."
                     checked={state.root_positions_bookable}
                     onChange={(checked) =>
                       setState((current) => ({
@@ -628,11 +620,11 @@ export default function LaneFamilyCreateDialog({ onClose, onCreate, onCompleted 
               disabled={saving}
               className="min-h-11 rounded-xl bg-[#d7c895] px-4 py-2 font-bold text-[#171a15] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#f2efe4] disabled:cursor-not-allowed disabled:opacity-50"
             >
-              {saving ? "Tworzenie…" : "Utwórz rodzinę osi"}
+              {saving ? "Tworzenie…" : "Utwórz oś"}
             </button>
           )}
         </footer>
       </section>
-    </div>
+    </dialog>
   );
 }

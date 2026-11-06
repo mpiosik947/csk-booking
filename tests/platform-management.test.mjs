@@ -45,7 +45,7 @@ for(const [action,role,status]of[['add',null,null],['add','user','active'],['add
  test(`admin writer shape, receipt, canonical refresh: ${action}/${role}/${status}`,async()=>{
   const h=harness();h.f.candidate.membership={exists:!!role,role,status};await h.session.refresh();await h.session.findCandidate(email);h.session.prepareAdmin(action);await h.session.confirm();
   const call=h.calls.find(c=>c.name===adminRpc[action]);assert.deepEqual(Object.keys(call.args).sort(),['p_expected_state','p_request_id','p_tenant_id','p_user_id']);assert.equal(call.args.p_user_id,userId);assert.equal(call.args.p_tenant_id,tenantId);assert.match(call.args.p_request_id,/^[0-9a-f-]{36}$/);assert.deepEqual(call.args.p_expected_state,role?{role,status}:null);
-  assert.equal(h.session.snapshot().attempt,null);for(const name of readerNames)assert.equal(h.calls.filter(c=>c.name===name).length,2);
+  assert.equal(h.session.snapshot().attempt,null);for(const name of readerNames)assert.equal(h.calls.filter(c=>c.name===name).length,name==='platform_get_tenant_delete_eligibility_v1'?0:2);
  });
 }
 for(const status of ['suspended','pending']){
@@ -126,8 +126,23 @@ test('archive/restore exact revision and fresh dormant/nonpublic state without a
 test('reader failures isolate sections; any authority denial wipes whole page even with concurrent readers',async()=>{
  const h=harness(name=>name==='platform_get_tenant_admin_management_v1'?{data:null,error:{code:'XX000',message:'PRIVATE'}}:undefined);await h.session.refresh();assert.equal(h.session.snapshot().admins.data,null);assert.ok(h.session.snapshot().plans.data);h.session.prepareAdmin('add');assert.equal(h.session.snapshot().attempt,null);
  for(const rpc of [...readerNames,'platform_lookup_tenant_admin_candidate_v1','platform_get_tenant_plan_change_preview_v1',adminRpc.add]){
-  const denied=harness(name=>name===rpc?{data:null,error:{code:'42501',message:'PRIVATE'}}:undefined);await denied.session.refresh();await denied.session.findCandidate(email);await denied.session.selectPlan('booking_only_v1');denied.session.prepareAdmin('add');await denied.session.confirm();assert.equal(denied.session.snapshot().denied,true,rpc);for(const k of ['detail','plans','admins','lifecycle','eligibility','candidate','preview'])assert.equal(denied.session.snapshot()[k].data,null,rpc);
+  const denied=harness(name=>name===rpc?{data:null,error:{code:'42501',message:'PRIVATE'}}:undefined);await denied.session.refresh();await denied.session.checkDeleteEligibility();await denied.session.findCandidate(email);await denied.session.selectPlan('booking_only_v1');denied.session.prepareAdmin('add');await denied.session.confirm();assert.equal(denied.session.snapshot().denied,true,rpc);for(const k of ['detail','plans','admins','lifecycle','eligibility','candidate','preview'])assert.equal(denied.session.snapshot()[k].data,null,rpc);
  }
+});
+test('eligibility is read on demand, coalesces repeated checks, clears stale data and never writes',async()=>{
+ const reader='platform_get_tenant_delete_eligibility_v1';let release,held=true,invalid=false;
+ const h=harness(async name=>{if(name!==reader)return;if(held)await new Promise(r=>release=r);if(invalid)return {data:{...h.f.eligibility,eligibility:{can_hard_delete:true}},error:null};});
+ await h.session.refresh();assert.ok(!h.calls.some(c=>c.name===reader));
+ const first=h.session.checkDeleteEligibility();await h.session.checkDeleteEligibility();
+ assert.equal(h.session.snapshot().eligibility.loading,true);assert.equal(h.calls.filter(c=>c.name===reader).length,1);held=false;release();await first;
+ assert.equal(h.session.snapshot().eligibility.data.can_hard_delete,false);await h.session.refresh();assert.equal(h.session.snapshot().eligibility.data,null);
+ invalid=true;await h.session.checkDeleteEligibility();assert.ok(h.session.snapshot().eligibility.error);assert.equal(h.session.snapshot().eligibility.data,null);
+ assert.ok(h.calls.every(c=>readerNames.includes(c.name)));assert.deepEqual(h.calls.filter(c=>c.name===reader).map(c=>c.args),[{p_tenant_id:tenantId},{p_tenant_id:tenantId}]);
+});
+test('pending check cannot restore any history after session denial',async()=>{
+ let release;const h=harness(async name=>{if(name==='platform_get_tenant_delete_eligibility_v1')await new Promise(r=>release=r);});
+ await h.session.refresh();const pending=h.session.checkDeleteEligibility();h.session.deny();release();await pending;
+ assert.equal(h.session.snapshot().denied,true);assert.equal(h.session.snapshot().eligibility.data,null);
 });
 test('safe mapper never renders raw error or unknown reason',()=>{
  assert.equal(managementError({code:'22023',message:'secret SQL',details:'PRIVATE'}).message,fallback);assert.equal(noticeLabel('UNKNOWN_DEPENDENCY',true),'Zależność techniczna blokuje trwałe usunięcie.');assert.equal(managementError({message:'Failed to fetch'}).kind,'uncertain');

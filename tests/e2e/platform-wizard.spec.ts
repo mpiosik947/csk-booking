@@ -48,7 +48,7 @@ test.afterAll(async () => {
 });
 
 test("wizard commits once, recovers a lost response after reload, and reads fresh detail", async ({ page }) => {
-  await login(page); await page.goto("/platform-admin"); await page.getByRole("link", { name: "Dodaj nową strzelnicę" }).click();
+  await login(page); await page.goto("/platform-admin"); await page.getByRole("link", { name: "Dodaj nowy obiekt" }).click();
   const slug=`w-${randomUUID()}`; slugs.push(slug); await fillWizard(page,slug);
   const seen: string[]=[]; page.on("request",r=> { if(r.url().includes('/rest/v1/')) seen.push(r.url()); });
   let sent: ReturnType<typeof payload> | undefined;
